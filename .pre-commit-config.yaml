@@ -1,0 +1,77 @@
+repos:
+  # uv hooks
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    # uv version
+    rev: 0.7.13
+    hooks:
+      # Keep uv.lock in sync with pyproject.toml
+      - id: uv-lock
+
+  # Code formatting and linting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version
+    rev: v0.12.0
+    hooks:
+      # Run the linter
+      - id: ruff
+        args: [--fix]
+      # Run the formatter
+      - id: ruff-format
+
+  # Basic file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: debug-statements
+
+  # Security checks
+  - repo: https://github.com/PyCQA/bandit
+    rev: '1.7.9'
+    hooks:
+      - id: bandit
+        args: ['-r', 'src/']
+        pass_filenames: false
+        types: [python]
+
+  # Unit tests with coverage
+  - repo: local
+    hooks:
+      - id: pytest-cov
+        name: pytest with coverage
+        entry: uv run pytest
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+        args: [
+          --cov=src,
+          --cov-report=term-missing,
+          --cov-report=html,
+          --cov-fail-under=90,
+          --cov-branch,
+          tests/
+        ]
+
+default_language_version:
+  python: python3.10
+
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit.com hooks
+
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false
+
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit, pre-push]

@@ -1,0 +1,15 @@
+# Default owners for everything
+* @aws/bedrock-agentcore-maintainers
+
+# Python code
+*.py @aws/bedrock-agentcore-python-reviewers
+
+# Documentation
+*.md @aws/bedrock-agentcore-docs-reviewers
+/docs/ @aws/bedrock-agentcore-docs-reviewers
+
+# CI/CD
+/.github/ @aws/bedrock-agentcore-devops
+
+# Wheelhouse (custom dependencies)
+/wheelhouse/ @aws/bedrock-agentcore-security

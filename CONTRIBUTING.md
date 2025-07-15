@@ -1,59 +1,88 @@
-# Contributing Guidelines
+# Contributing to Bedrock AgentCore SDK Python
 
-Thank you for your interest in contributing to our project. Whether it's a bug report, new feature, correction, or additional
-documentation, we greatly value feedback and contributions from our community.
+👋 Welcome! We're glad you're interested in the Bedrock AgentCore SDK Python.
 
-Please read through this document before submitting any issues or pull requests to ensure we have all the necessary
-information to effectively respond to your bug report or contribution.
+## 🔒 Code Contribution Policy
 
+**This repository is maintained exclusively by the AWS Bedrock AgentCore team and is not currently accepting external pull requests.**
 
-## Reporting Bugs/Feature Requests
+While we appreciate your interest in contributing code, we maintain this policy to:
+- Ensure code quality and security standards
+- Maintain consistency with internal AWS development practices
+- Align with our product roadmap and architecture decisions
+- Comply with AWS security and compliance requirements
 
-We welcome you to use the GitHub issue tracker to report bugs or suggest features.
+## How You Can Help
 
-When filing an issue, please check existing open, or recently closed, issues to make sure somebody else hasn't already
-reported the issue. Please try to include as much information as you can. Details like these are incredibly useful:
+Although we don't accept code contributions, your feedback is invaluable! Here's how you can help improve the CLI Starter Toolkit:
 
-* A reproducible test case or series of steps
-* The version of our code being used
-* Any modifications you've made relevant to the bug
-* Anything unusual about your environment or deployment
+### Report Bugs
+Found something that doesn't work as expected? Please [open an issue](https://github.com/aws/bedrock-agentcore-sdk-python/issues/new?template=bug_report.md) with:
+- A clear description of the problem
+- Steps to reproduce the issue
+- Expected vs actual behavior
+- Environment details (OS, Python version, SDK version)
+- Relevant code snippets and error messages
 
+### Request Features
+Have an idea for a new feature? Please [open a feature request](https://github.com/aws/bedrock-agentcore-sdk-python/issues/new?template=feature_request.md) with:
+- Description of the problem you're trying to solve
+- Proposed solution or feature
+- Use cases and examples
+- Any alternative solutions you've considered
 
-## Contributing via Pull Requests
-Contributions via pull requests are much appreciated. Before sending us a pull request, please ensure that:
+### Improve Documentation
+Spot an error or unclear explanation in our docs? Please [open a documentation issue](https://github.com/aws/bedrock-agentcore-sdk-python/issues/new?template=documentation.md) with:
+- Link to the documentation page
+- Description of the issue or improvement
+- Suggested changes (if applicable)
 
-1. You are working against the latest source on the *main* branch.
-2. You check existing open, and recently merged, pull requests to make sure someone else hasn't addressed the problem already.
-3. You open an issue to discuss any significant work - we would hate for your time to be wasted.
+### Share Examples
+While we can't accept code PRs, we'd love to hear about your use cases:
+- Open a "Show and Tell" discussion in our [Discussions forum](https://github.com/aws/bedrock-agentcore-sdk-python/discussions)
+- Share your experience and learnings
+- Help other users with questions
 
-To send us a pull request, please:
+## Issue Guidelines
 
-1. Fork the repository.
-2. Modify the source; please focus on the specific change you are contributing. If you also reformat all the code, it will be hard for us to focus on your change.
-3. Ensure local tests pass.
-4. Commit to your fork using clear commit messages.
-5. Send us a pull request, answering any default questions in the pull request interface.
-6. Pay attention to any automated CI failures reported in the pull request, and stay involved in the conversation.
+When creating an issue:
 
-GitHub provides additional document on [forking a repository](https://help.github.com/articles/fork-a-repo/) and
-[creating a pull request](https://help.github.com/articles/creating-a-pull-request/).
+1. **Search first**: Check if a similar issue already exists
+2. **Use templates**: Select the appropriate issue template
+3. **Be specific**: Provide as much detail as possible
+4. **Stay on topic**: Keep discussions focused on the issue
+5. **Be respectful**: Follow our Code of Conduct
 
+## Security Issues
 
-## Finding contributions to work on
-Looking at the existing issues is a great way to find something to contribute on. As our projects, by default, use the default GitHub issue labels (enhancement/bug/duplicate/help wanted/invalid/question/wontfix), looking at any 'help wanted' issues is a great place to start.
+For security vulnerabilities, please **DO NOT** open a public issue. Instead:
+- Email: aws-security@amazon.com
+- Or use GitHub's private security advisory feature
 
+See our [Security Policy](SECURITY.md) for more details.
+
+## Questions and Discussions
+
+- For questions about using the CLI Starter Toolkit, please use [GitHub Discussions](https://github.com/aws/bedrock-agentcore-sdk-python/discussions)
+- For AWS Bedrock service questions, visit [AWS re:Post](https://repost.aws/)
+- For urgent AWS support, use your [AWS Support](https://aws.amazon.com/support/) plan
 
 ## Code of Conduct
-This project has adopted the [Amazon Open Source Code of Conduct](https://aws.github.io/code-of-conduct).
-For more information see the [Code of Conduct FAQ](https://aws.github.io/code-of-conduct-faq) or contact
-opensource-codeofconduct@amazon.com with any additional questions or comments.
 
+This project adheres to the [Amazon Open Source Code of Conduct](https://aws.github.io/code-of-conduct). By participating, you're expected to uphold this code.
 
-## Security issue notifications
-If you discover a potential security issue in this project we ask that you notify AWS/Amazon Security via our [vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/). Please do **not** create a public github issue.
+## Governance
 
+This project is governed by the AWS Bedrock AgentCore team. Decisions about the project's direction, features, and releases are made internally by AWS.
 
-## Licensing
+## License
 
-See the [LICENSE](LICENSE) file for our project's licensing. We will ask you to confirm the licensing of your contribution.
+By engaging with this project, you agree that your contributions (issues, discussions, etc.) are submitted under the [Apache 2.0 License](LICENSE).
+
+## 🙏 Thank You
+
+Even though we can't accept code contributions at this time, your feedback, bug reports, and feature requests help us make the Bedrock AgentCore CLI Starter Toolkit better for everyone. We truly appreciate your involvement and support!
+
+---
+
+**Note**: This policy may change in the future. If we open the repository to external contributions, we'll update this document and announce the change.

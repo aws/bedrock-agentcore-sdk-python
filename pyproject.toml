@@ -1,0 +1,145 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bedrock-agentcore"
+version = "0.1.0"
+description = "An SDK for using Bedrock AgentCore"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [
+    { name = "AWS", email = "opensource@amazon.com" }
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "boto3",
+    "botocore",
+    "pydantic>=2.0.0,<3.0.0",
+    "urllib3>=1.26.0",
+    "starlette>=0.46.2",
+    "typing-extensions>=4.13.2,<5.0.0",
+    "uvicorn>=0.34.2",
+]
+
+[project.scripts]
+bedrock-agentcore = "bedrock_agentcore.cli:main"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[project.urls]
+Homepage = "https://github.com/aws/bedrock-agentcore-sdk-python"
+"Bug Tracker" = "https://github.com/aws/bedrock-agentcore-sdk-python/issues"
+Documentation = "https://github.com/aws/bedrock-agentcore-sdk-python"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bedrock_agentcore"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+follow_untyped_imports = true
+ignore_missing_imports = false
+
+[tool.ruff]
+line-length = 120
+include = ["examples/**/*.py", "src/**/*.py", "tests/**/*.py", "tests-integ/**/*.py"]
+
+[tool.ruff.lint]
+select = [
+  "B", # flake8-bugbear
+  "D", # pydocstyle
+  "E", # pycodestyle
+  "F", # pyflakes
+  "G", # logging format
+  "I", # isort
+  "LOG", # logging
+]
+
+[tool.ruff.lint.per-file-ignores]
+"!src/**/*.py" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests"
+]
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+context = "thread"
+parallel = true
+concurrency = ["thread", "multiprocessing"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 56
+skip_covered = false
+skip_empty = false
+
+[tool.coverage.html]
+directory = "build/coverage/html"
+
+[tool.coverage.xml]
+output = "build/coverage/coverage.xml"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "v$version"
+bump_message = "chore(release): bump version $current_version -> $new_version"
+version_files = [
+    "pyproject.toml:version",
+]
+update_changelog_on_bump = true
+style = [
+    ["qmark", "fg:#ff9d00 bold"],
+    ["question", "bold"],
+    ["answer", "fg:#ff9d00 bold"],
+    ["pointer", "fg:#ff9d00 bold"],
+    ["highlighted", "fg:#ff9d00 bold"],
+    ["selected", "fg:#cc5454"],
+    ["separator", "fg:#cc5454"],
+    ["instruction", ""],
+    ["text", ""],
+    ["disabled", "fg:#858585 italic"]
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "moto>=5.1.6",
+    "mypy>=1.16.1",
+    "pre-commit>=4.2.0",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.12.0",
+    "wheel>=0.45.1",
+]
