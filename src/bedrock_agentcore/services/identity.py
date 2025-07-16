@@ -65,6 +65,9 @@ class IdentityClient:
         self.cp_client = boto3.client(
             "bedrock-agentcore-control", region_name=region, endpoint_url=get_control_plane_endpoint(region)
         )
+        self.identity_client = boto3.client(
+            "bedrock-agentcore-control", region_name=region, endpoint_url=get_data_plane_endpoint(region)
+        )
         self.dp_client = boto3.client(
             "bedrock-agentcore", region_name=region, endpoint_url=get_data_plane_endpoint(region)
         )
@@ -104,7 +107,7 @@ class IdentityClient:
         self.logger.info("Creating workload identity...")
         if not name:
             name = f"workload-{uuid.uuid4().hex[:8]}"
-        return self.cp_client.create_workload_identity(name=name)
+        return self.identity_client.create_workload_identity(name=name)
 
     async def get_token(
         self,
