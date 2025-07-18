@@ -152,7 +152,7 @@ class IdentityClient:
 
         # Add optional parameters
         if callback_url:
-            req["callBackUrl"] = callback_url
+            req["resourceOauth2ReturnUrl"] = callback_url
         if force_authentication:
             req["forceAuthentication"] = force_authentication
 

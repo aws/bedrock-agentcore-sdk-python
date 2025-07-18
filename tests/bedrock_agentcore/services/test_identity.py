@@ -258,7 +258,7 @@ class TestIdentityClient:
                 scopes=scopes,
                 oauth2Flow="USER_FEDERATION",
                 workloadIdentityToken=agent_identity_token,
-                callBackUrl=callback_url,
+                resourceOauth2ReturnUrl=callback_url,
                 forceAuthentication=force_authentication,
             )
 
