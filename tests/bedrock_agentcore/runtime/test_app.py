@@ -309,12 +309,8 @@ class TestConcurrentInvocations:
         # Third invocation should get 503
         result3 = await app._invoke_handler(handler, context, False, {"id": 3})
 
-        # Verify it's a JSONResponse with 503 status
-        from starlette.responses import JSONResponse
-
-        assert isinstance(result3, JSONResponse)
-        assert result3.status_code == 503
-        assert result3.body == b'{"error":"Server busy - maximum concurrent requests reached"}'
+        assert isinstance(result3, Exception)
+        assert str(result3) == "Server busy - maximum concurrent requests reached"
 
         # Clean up the running tasks
         await task1
@@ -471,19 +467,9 @@ class TestConcurrentInvocations:
 
         # Try to invoke when semaphore is full
         result = await app._invoke_handler(handler, context, False, {})
+        assert isinstance(result, Exception)
 
-        # Check response format
-        from starlette.responses import JSONResponse
-
-        assert isinstance(result, JSONResponse)
-        assert result.status_code == 503
-
-        # Parse the JSON body
-        import json
-
-        body = json.loads(result.body)
-        assert body == {"error": "Server busy - maximum concurrent requests reached"}
-
+        assert str(result) == "Server busy - maximum concurrent requests reached"
         # Release semaphore
         app._invocation_semaphore.release()
         app._invocation_semaphore.release()

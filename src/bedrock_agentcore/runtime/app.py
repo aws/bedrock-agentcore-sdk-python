@@ -345,7 +345,7 @@ class BedrockAgentCoreApp(Starlette):
 
     async def _invoke_handler(self, handler, request_context, takes_context, payload):
         if self._invocation_semaphore.locked():
-            return JSONResponse({"error": "Server busy - maximum concurrent requests reached"}, status_code=503)
+            return Exception("Server busy - maximum concurrent requests reached")
 
         async with self._invocation_semaphore:
             try:
