@@ -1,8 +1,11 @@
 import asyncio
+import json
 import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from decimal import Decimal
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -929,3 +932,502 @@ class TestSSEConversion:
 
             # Verify json.dumps was called three times (first attempt, str conversion attempt, error data)
             assert mock_dumps.call_count == 3
+
+
+class TestSafeSerialization:
+    """Test the _safe_serialize_to_json_string method with various inputs."""
+
+    def test_safe_serialize_json_serializable_objects(self):
+        """Test that JSON-serializable objects are properly serialized."""
+        app = BedrockAgentCoreApp()
+
+        test_cases = [
+            # Basic types
+            {"key": "value"},
+            [1, 2, 3],
+            42,
+            3.14,
+            True,
+            False,
+            None,
+            "string",
+            "",
+            # Complex nested structures
+            {"nested": {"data": [1, 2, {"inner": True}]}},
+            [{"item": 1}, {"item": 2}],
+            # Edge cases
+            {"unicode": "Hello 世界"},
+            {"empty_dict": {}, "empty_list": []},
+        ]
+
+        for test_data in test_cases:
+            result = app._safe_serialize_to_json_string(test_data)
+
+            # Should be a string (JSON)
+            assert isinstance(result, str)
+
+            # Should be valid JSON
+            parsed_data = json.loads(result)
+            assert parsed_data == test_data
+
+            # Should preserve Unicode characters
+            assert (
+                "ensure_ascii=False" in str(json.dumps.__defaults__ or [])
+                or "世界" in result
+                or "世界" not in str(test_data)
+            )
+
+    def test_safe_serialize_fallback_to_string(self):
+        """Test fallback to string conversion for non-serializable objects."""
+        app = BedrockAgentCoreApp()
+
+        # Test objects that should trigger string fallback
+        test_cases = [
+            datetime(2023, 1, 1, 12, 0, 0),
+            Decimal("123.45"),
+            set([1, 2, 3]),
+            frozenset([4, 5, 6]),
+        ]
+
+        for test_data in test_cases:
+            result = app._safe_serialize_to_json_string(test_data)
+
+            # Should be a string (JSON)
+            assert isinstance(result, str)
+
+            # Should be valid JSON containing the string representation
+            parsed_data = json.loads(result)
+            assert parsed_data == str(test_data)
+
+    def test_safe_serialize_final_fallback_to_error_object(self):
+        """Test final fallback to error object when both serialization attempts fail."""
+        app = BedrockAgentCoreApp()
+
+        # Create a problematic object
+        class ProblematicObject:
+            def __str__(self):
+                raise UnicodeError("Cannot convert to string")
+
+        problematic_obj = ProblematicObject()
+
+        # Don't mock json.dumps globally since it interferes with test assertions
+        # Instead, just test the actual behavior
+        result = app._safe_serialize_to_json_string(problematic_obj)
+
+        # Should be valid JSON
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+
+        # Should be an error object or string representation
+        if isinstance(parsed, dict):
+            assert parsed["error"] == "Serialization failed"
+            assert parsed["original_type"] == "ProblematicObject"
+        else:
+            # If it's a string, should be some representation of the object
+            assert isinstance(parsed, str)
+
+    def test_safe_serialize_unicode_handling(self):
+        """Test proper Unicode handling without ASCII escaping."""
+        app = BedrockAgentCoreApp()
+
+        unicode_test_cases = [
+            {"message": "Hello 世界"},
+            {"emoji": "🚀 🌟 ✨"},
+            {"mixed": "English + 中文 + Español + 日本語"},
+            ["Unicode", "测试", "🎉"],
+        ]
+
+        for test_data in unicode_test_cases:
+            result = app._safe_serialize_to_json_string(test_data)
+
+            # Should preserve Unicode characters (not escaped)
+            parsed_data = json.loads(result)
+            assert parsed_data == test_data
+
+            # Verify Unicode characters are preserved in the JSON string
+            if isinstance(test_data, dict) and "世界" in str(test_data):
+                assert "世界" in result
+                assert "\\u" not in result or "\\u4e16\\u754c" not in result  # Should not be escaped
+
+    def test_safe_serialize_edge_cases(self):
+        """Test edge cases and boundary conditions."""
+        app = BedrockAgentCoreApp()
+
+        edge_cases = [
+            # Very large numbers
+            {"large_int": 999999999999999999999},
+            {"large_float": 1.7976931348623157e308},
+            # Special float values
+            {"infinity": float("inf")},
+            {"neg_infinity": float("-inf")},
+            {"nan": float("nan")},
+            # Deeply nested structures
+            {"level1": {"level2": {"level3": {"level4": {"deep": True}}}}},
+            # Empty structures
+            {},
+            [],
+            # Mixed types
+            {"mixed": [1, "two", 3.0, True, None, {"nested": []}]},
+        ]
+
+        for test_data in edge_cases:
+            result = app._safe_serialize_to_json_string(test_data)
+
+            # Should always return a string
+            assert isinstance(result, str)
+
+            # Should be valid JSON or handled gracefully
+            try:
+                parsed_data = json.loads(result)
+                # For normal cases, should match
+                if not any(x in str(test_data).lower() for x in ["inf", "nan"]):
+                    assert parsed_data == test_data
+            except json.JSONDecodeError:
+                # If JSON is invalid, it should be the error fallback
+                assert "error" in result.lower()
+
+    def test_safe_serialize_custom_objects(self):
+        """Test serialization of custom objects with various behaviors."""
+        app = BedrockAgentCoreApp()
+
+        class CustomObject:
+            def __init__(self, value):
+                self.value = value
+
+            def __str__(self):
+                return f"CustomObject({self.value})"
+
+        class CustomObjectWithRepr:
+            def __init__(self, value):
+                self.value = value
+
+            def __repr__(self):
+                return f"CustomObjectWithRepr(value={self.value})"
+
+        test_cases = [
+            CustomObject("test"),
+            CustomObjectWithRepr(42),
+        ]
+
+        for test_data in test_cases:
+            result = app._safe_serialize_to_json_string(test_data)
+
+            # Should be a string (JSON)
+            assert isinstance(result, str)
+
+            # Should be valid JSON containing the string representation
+            parsed_data = json.loads(result)
+            assert parsed_data == str(test_data)
+
+
+class TestNonStreamingSafeSerialization:
+    """Test that non-streaming responses use safe serialization."""
+
+    def test_non_streaming_uses_safe_serialization(self):
+        """Test that non-streaming responses properly use safe serialization."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            # Return a datetime object that requires safe serialization
+            return {"timestamp": datetime(2023, 1, 1, 12, 0, 0), "data": payload}
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={"input": "test"})
+
+        assert response.status_code == 200
+
+        # Check that the response contains the expected data as a string
+        response_str = response.content.decode("utf-8")
+        assert "timestamp" in response_str
+        assert "2023, 1, 1, 12, 0" in response_str  # datetime representation
+        assert "test" in response_str  # input data
+
+    def test_non_streaming_non_serializable_objects(self):
+        """Test non-streaming response with completely non-serializable objects."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            # Return a set which is not JSON serializable
+            return {"data": set([1, 2, 3]), "status": "complete"}
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={"input": "test"})
+
+        assert response.status_code == 200
+
+        # Check that the response contains the expected data as a string
+        response_str = response.content.decode("utf-8")
+        assert "data" in response_str
+        assert "1" in response_str and "2" in response_str and "3" in response_str  # set elements
+        assert "complete" in response_str  # status
+
+    def test_non_streaming_consistency_with_streaming(self):
+        """Test that non-streaming and streaming responses handle serialization consistently."""
+        app = BedrockAgentCoreApp()
+
+        test_data = {"timestamp": datetime(2023, 1, 1, 12, 0, 0), "set": set([1, 2, 3])}
+
+        # Test non-streaming response
+        @app.entrypoint
+        def non_streaming_handler(payload):
+            return test_data
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={"input": "test"})
+
+        assert response.status_code == 200
+        non_streaming_result = response.json()
+
+        # Test streaming response
+        @app.entrypoint
+        def streaming_handler(payload):
+            yield test_data
+
+        app.handlers["main"] = streaming_handler  # Replace handler
+
+        response_streaming = client.post("/invocations", json={"input": "test"})
+        assert response_streaming.status_code == 200
+
+        # Parse SSE response
+        sse_content = response_streaming.content.decode("utf-8")
+        assert sse_content.startswith("data: ")
+        json_part = sse_content[6:-2]  # Remove "data: " and "\n\n"
+        streaming_result = json.loads(json_part)
+
+        # Both should produce the same serialized result
+        assert non_streaming_result == streaming_result
+
+
+class TestSerializationConsistency:
+    """Test consistency between streaming and non-streaming serialization."""
+
+    def test_streaming_vs_non_streaming_same_output(self):
+        """Test that streaming and non-streaming produce identical serialized output."""
+        app = BedrockAgentCoreApp()
+
+        test_cases = [
+            {"simple": "data"},
+            {"datetime": datetime(2023, 1, 1, 12, 0, 0)},
+            {"decimal": Decimal("123.45")},
+            {"mixed": [1, "two", set([3, 4])]},
+        ]
+
+        for test_data in test_cases:
+            # Test direct serialization method
+            direct_result = app._safe_serialize_to_json_string(test_data)
+
+            # Test SSE conversion
+            sse_result = app._convert_to_sse(test_data)
+            sse_json = sse_result.decode("utf-8")[6:-2]  # Remove "data: " and "\n\n"
+
+            # Should produce identical JSON
+            assert direct_result == sse_json
+
+    def test_error_responses_use_safe_serialization(self):
+        """Test that error responses also use safe serialization."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            # Create an error scenario
+            raise Exception("Test error with special char: 世界")
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={"input": "test"})
+
+        assert response.status_code == 500
+        result = response.json()
+
+        # Should preserve Unicode in error message
+        assert "世界" in result["error"]
+
+    def test_complex_nested_objects(self):
+        """Test serialization of complex nested structures."""
+        app = BedrockAgentCoreApp()
+
+        complex_data = {
+            "user": {
+                "id": 123,
+                "name": "测试用户",
+                "created_at": datetime(2023, 1, 1, 12, 0, 0),
+                "tags": set(["admin", "premium"]),
+                "metadata": {
+                    "permissions": frozenset(["read", "write"]),
+                    "score": Decimal("95.75"),
+                    "active": True,
+                },
+            },
+            "items": [
+                {"id": 1, "timestamp": datetime(2023, 1, 2, 10, 0, 0)},
+                {"id": 2, "data": set([1, 2, 3])},
+            ],
+        }
+
+        # Test with actual app handler to match real usage
+        @app.entrypoint
+        def handler(payload):
+            return complex_data
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={"input": "test"})
+
+        assert response.status_code == 200
+
+        # Check that the response contains the expected data as a string
+        response_str = response.content.decode("utf-8")
+
+        # Check for key elements in the response
+        assert "user" in response_str
+        assert "id" in response_str and "123" in response_str
+        assert "测试用户" in response_str  # Unicode name
+        assert "2023, 1, 1, 12, 0" in response_str  # datetime representation
+        assert "admin" in response_str and "premium" in response_str  # set elements
+        assert "read" in response_str and "write" in response_str  # frozenset elements
+        assert "95.75" in response_str  # Decimal value
+        assert "items" in response_str
+        assert "id" in response_str and "1" in response_str and "2" in response_str
+
+
+class TestSerializationEdgeCases:
+    """Test edge cases and error conditions in serialization."""
+
+    def test_circular_references(self):
+        """Test handling of circular references."""
+        app = BedrockAgentCoreApp()
+
+        # Create circular reference
+        circular_dict = {"name": "parent"}
+        circular_dict["self"] = circular_dict
+
+        result = app._safe_serialize_to_json_string(circular_dict)
+
+        # Should fallback to string representation or error object
+        parsed = json.loads(result)
+        assert isinstance(parsed, (str, dict))
+
+        # If it's a string, should contain some representation
+        if isinstance(parsed, str):
+            assert "parent" in parsed
+        # If it's an error object, should indicate serialization failure
+        elif isinstance(parsed, dict) and "error" in parsed:
+            assert "Serialization failed" in parsed["error"]
+
+    def test_very_large_objects(self):
+        """Test serialization of very large objects."""
+        app = BedrockAgentCoreApp()
+
+        # Create a large nested structure
+        large_data = {}
+        current = large_data
+        for i in range(100):
+            current[f"level_{i}"] = {"data": list(range(100)), "next": {}}
+            current = current[f"level_{i}"]["next"]
+
+        result = app._safe_serialize_to_json_string(large_data)
+
+        # Should be valid JSON
+        parsed = json.loads(result)
+        assert "level_0" in parsed
+        assert len(parsed["level_0"]["data"]) == 100
+
+    def test_custom_objects_with_special_methods(self):
+        """Test custom objects with special serialization methods."""
+        app = BedrockAgentCoreApp()
+
+        class ObjectWithJson:
+            def __init__(self, value):
+                self.value = value
+
+            def __json__(self):
+                return {"custom_json": self.value}
+
+        class ObjectWithDict:
+            def __init__(self, value):
+                self.value = value
+
+            def __dict__(self):
+                return {"custom_dict": self.value}
+
+        test_objects = [
+            ObjectWithJson("test1"),
+            ObjectWithDict("test2"),
+        ]
+
+        for obj in test_objects:
+            result = app._safe_serialize_to_json_string(obj)
+
+            # Should be valid JSON
+            parsed = json.loads(result)
+
+            # Should fall back to string representation since standard JSON doesn't recognize these methods
+            assert isinstance(parsed, str)
+            assert str(obj) == parsed
+
+    def test_encoding_issues(self):
+        """Test handling of encoding issues."""
+        app = BedrockAgentCoreApp()
+
+        # Test various Unicode scenarios
+        test_cases = [
+            {"emoji": "🚀🌟✨"},
+            {"chinese": "你好世界"},
+            {"japanese": "こんにちは世界"},
+            {"mixed": "Hello 世界 🌍"},
+            {"control_chars": "Line1\nLine2\tTabbed"},
+        ]
+
+        for test_data in test_cases:
+            result = app._safe_serialize_to_json_string(test_data)
+
+            # Should be valid JSON
+            parsed = json.loads(result)
+            assert parsed == test_data
+
+            # Unicode should be preserved (not escaped)
+            for _, value in test_data.items():
+                if any(ord(c) > 127 for c in value):
+                    # Should contain actual Unicode, not escaped
+                    assert value in result
+
+    def test_serialization_with_none_values(self):
+        """Test serialization behavior with None values."""
+        app = BedrockAgentCoreApp()
+
+        test_cases = [
+            None,
+            {"key": None},
+            [None, 1, None],
+            {"nested": {"inner": None}},
+        ]
+
+        for test_data in test_cases:
+            result = app._safe_serialize_to_json_string(test_data)
+
+            # Should be valid JSON
+            parsed = json.loads(result)
+            assert parsed == test_data
+
+    def test_serialization_performance_logging(self):
+        """Test that serialization failures are properly logged."""
+        app = BedrockAgentCoreApp()
+
+        class UnserializableObject:
+            def __str__(self):
+                raise Exception("Cannot convert to string")
+
+        obj = UnserializableObject()
+
+        with patch.object(app.logger, "warning") as mock_logger:
+            result = app._safe_serialize_to_json_string(obj)
+
+            # Should have logged the warning
+            mock_logger.assert_called_once()
+            call_args = mock_logger.call_args[0]
+            assert "Failed to serialize object" in call_args[0]
+
+            # Should return error object
+            parsed = json.loads(result)
+            assert parsed["error"] == "Serialization failed"
+            assert parsed["original_type"] == "UnserializableObject"

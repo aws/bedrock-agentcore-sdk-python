@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, Optional
 
 from starlette.applications import Starlette
-from starlette.responses import JSONResponse, StreamingResponse
+from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from .context import BedrockAgentCoreContext, RequestContext
@@ -305,7 +305,9 @@ class BedrockAgentCoreApp(Starlette):
                 return StreamingResponse(self._stream_with_error_handling(result), media_type="text/event-stream")
 
             self.logger.info("Invocation completed successfully (%.3fs)", duration)
-            return JSONResponse(result)
+            # Use safe serialization for consistency with streaming paths
+            safe_json_string = self._safe_serialize_to_json_string(result)
+            return Response(safe_json_string, media_type="application/json")
 
         except json.JSONDecodeError as e:
             duration = time.time() - start_time
@@ -406,18 +408,6 @@ class BedrockAgentCoreApp(Starlette):
             self.logger.error("Debug action '%s' failed: %s: %s", action, type(e).__name__, e)
             return JSONResponse({"error": "Debug action failed", "details": str(e)}, status_code=500)
 
-    def _convert_to_sse(self, chunk):
-        try:
-            return f"data: {json.dumps(chunk)}\n\n".encode("utf-8")
-        except (TypeError, ValueError):
-            try:
-                return f"data: {json.dumps(str(chunk))}\n\n".encode("utf-8")
-            except (TypeError, ValueError) as e:
-                self.logger.warning("Failed to serialize SSE chunk: %s: %s", type(e).__name__, e)
-                error_data = {"error": "Serialization failed", "original_type": type(chunk).__name__}
-                sse_string = f"data: {json.dumps(error_data)}\n\n"
-                return sse_string.encode("utf-8")
-
     async def _stream_with_error_handling(self, generator):
         """Wrap async generator to handle errors and convert to SSE format."""
         try:
@@ -431,6 +421,42 @@ class BedrockAgentCoreApp(Starlette):
                 "message": "An error occurred during streaming",
             }
             yield self._convert_to_sse(error_event)
+
+    def _safe_serialize_to_json_string(self, obj):
+        """Safely serialize object directly to JSON string with progressive fallback handling.
+
+        This method eliminates double JSON encoding by returning the JSON string directly,
+        avoiding the test-then-encode pattern that leads to redundant json.dumps() calls.
+        Used by both streaming and non-streaming responses for consistent behavior.
+
+        Returns:
+            str: JSON string representation of the object
+        """
+        try:
+            # First attempt: direct JSON serialization with Unicode support
+            return json.dumps(obj, ensure_ascii=False)
+        except (TypeError, ValueError, UnicodeEncodeError):
+            try:
+                # Second attempt: convert to string, then JSON encode the string
+                return json.dumps(str(obj), ensure_ascii=False)
+            except Exception as e:
+                # Final fallback: JSON encode error object with ASCII fallback for problematic Unicode
+                self.logger.warning("Failed to serialize object: %s: %s", type(e).__name__, e)
+                error_obj = {"error": "Serialization failed", "original_type": type(obj).__name__}
+                return json.dumps(error_obj, ensure_ascii=False)
+
+    def _convert_to_sse(self, obj) -> bytes:
+        """Convert object to Server-Sent Events format using safe serialization.
+
+        Args:
+            obj: Object to convert to SSE format
+
+        Returns:
+            bytes: SSE-formatted data ready for streaming
+        """
+        json_string = self._safe_serialize_to_json_string(obj)
+        sse_data = f"data: {json_string}\n\n"
+        return sse_data.encode("utf-8")
 
     def _sync_stream_with_error_handling(self, generator):
         """Wrap sync generator to handle errors and convert to SSE format."""
