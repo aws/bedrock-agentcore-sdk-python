@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional
 import boto3
 
 from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
+from bedrock_agentcore._utils.security import SecurityValidator, TokenManager
 
 
 class TokenPoller(ABC):
@@ -61,17 +62,36 @@ class IdentityClient:
 
     def __init__(self, region: str):
         """Initialize the identity client with the specified region."""
+        if not region:
+            raise ValueError("Region cannot be empty")
+        
         self.region = region
+        self.token_manager = TokenManager()
+        
+        # Validate endpoints before creating clients
+        cp_endpoint = get_control_plane_endpoint(region)
+        dp_endpoint = get_data_plane_endpoint(region)
+        
         self.cp_client = boto3.client(
-            "bedrock-agentcore-control", region_name=region, endpoint_url=get_control_plane_endpoint(region)
+            "bedrock-agentcore-control", region_name=region, endpoint_url=cp_endpoint
         )
         self.identity_client = boto3.client(
-            "bedrock-agentcore-control", region_name=region, endpoint_url=get_data_plane_endpoint(region)
+            "bedrock-agentcore-control", region_name=region, endpoint_url=dp_endpoint
         )
         self.dp_client = boto3.client(
-            "bedrock-agentcore", region_name=region, endpoint_url=get_data_plane_endpoint(region)
+            "bedrock-agentcore", region_name=region, endpoint_url=dp_endpoint
         )
+        
         self.logger = logging.getLogger("bedrock_agentcore.identity_client")
+        
+        # Configure secure logging
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
 
     def create_oauth2_credential_provider(self, req):
         """Create an OAuth2 credential provider."""
@@ -87,18 +107,30 @@ class IdentityClient:
         self, workload_name: str, user_token: Optional[str] = None, user_id: Optional[str] = None
     ) -> Dict:
         """Get a workload access token using workload name and optionally user token."""
+        # Input validation
+        if not SecurityValidator.validate_workload_name(workload_name):
+            raise ValueError(f"Invalid workload name format: {workload_name}")
+        
         if user_token:
             if user_id is not None:
                 self.logger.warning("Both user token and user id are supplied, using user token")
             self.logger.info("Getting workload access token for JWT...")
             resp = self.dp_client.get_workload_access_token_for_jwt(workloadName=workload_name, userToken=user_token)
         elif user_id:
+            if not user_id.strip():
+                raise ValueError("User ID cannot be empty")
             self.logger.info("Getting workload access token for user id...")
             resp = self.dp_client.get_workload_access_token_for_user_id(workloadName=workload_name, userId=user_id)
         else:
             self.logger.info("Getting workload access token...")
             resp = self.dp_client.get_workload_access_token(workloadName=workload_name)
 
+        # Track token for cleanup
+        if 'accessToken' in resp:
+            token_id = f"workload_{workload_name}_{uuid.uuid4().hex[:8]}"
+            self.token_manager.register_token(token_id)
+            resp['_token_id'] = token_id
+        
         self.logger.info("Successfully retrieved workload access token")
         return resp
 
@@ -107,6 +139,11 @@ class IdentityClient:
         self.logger.info("Creating workload identity...")
         if not name:
             name = f"workload-{uuid.uuid4().hex[:8]}"
+        
+        # Validate workload name
+        if not SecurityValidator.validate_workload_name(name):
+            raise ValueError(f"Invalid workload identity name format: {name}")
+        
         return self.identity_client.create_workload_identity(name=name)
 
     async def get_token(
@@ -140,7 +177,15 @@ class IdentityClient:
             RequiresUserConsentException: When user consent is needed
             Various other exceptions for error conditions
         """
-        self.logger.info("Getting OAuth2 token...")
+        # Input validation
+        if not provider_name or not provider_name.strip():
+            raise ValueError("Provider name cannot be empty")
+        if not agent_identity_token or not agent_identity_token.strip():
+            raise ValueError("Agent identity token cannot be empty")
+        if auth_flow not in ["M2M", "USER_FEDERATION"]:
+            raise ValueError(f"Invalid auth flow: {auth_flow}")
+        
+        self.logger.info(SecurityValidator.sanitize_log_data(f"Getting OAuth2 token for provider: {provider_name}"))
 
         # Build parameters
         req = {
@@ -160,6 +205,8 @@ class IdentityClient:
 
         # If we got a token directly, return it
         if "accessToken" in response:
+            token_id = f"oauth_{provider_name}_{uuid.uuid4().hex[:8]}"
+            self.token_manager.register_token(token_id)
             return response["accessToken"]
 
         # If we got an authorization URL, handle the OAuth flow
@@ -186,7 +233,24 @@ class IdentityClient:
 
     async def get_api_key(self, *, provider_name: str, agent_identity_token: str) -> str:
         """Programmatically retrieves an API key from the Identity service."""
-        self.logger.info("Getting API key...")
+        # Input validation
+        if not provider_name or not provider_name.strip():
+            raise ValueError("Provider name cannot be empty")
+        if not agent_identity_token or not agent_identity_token.strip():
+            raise ValueError("Agent identity token cannot be empty")
+        
+        self.logger.info(SecurityValidator.sanitize_log_data(f"Getting API key for provider: {provider_name}"))
         req = {"resourceCredentialProviderName": provider_name, "workloadIdentityToken": agent_identity_token}
 
-        return self.dp_client.get_resource_api_key(**req)["apiKey"]
+        response = self.dp_client.get_resource_api_key(**req)
+        
+        # Track API key for cleanup
+        token_id = f"apikey_{provider_name}_{uuid.uuid4().hex[:8]}"
+        self.token_manager.register_token(token_id)
+        
+        return response["apiKey"]
+    
+    def cleanup_tokens(self) -> None:
+        """Cleanup all tracked tokens."""
+        self.logger.info(f"Cleaning up {self.token_manager.active_count} tracked tokens")
+        self.token_manager.cleanup_all()
