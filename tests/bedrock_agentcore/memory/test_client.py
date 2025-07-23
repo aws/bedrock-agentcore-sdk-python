@@ -44,7 +44,7 @@ def test_client_initialization_region_mismatch():
 
             # When region_name is provided, environment variable should still take precedence
             client1 = MemoryClient(region_name="us-west-2")
-            assert client1.region_name == "us-west-2"  # Environment wins over explicit param
+            assert client1.region_name == "us-west-2"
 
         # Second test - no environment variable, explicit param is used
         with patch("boto3.Session") as mock_session:
