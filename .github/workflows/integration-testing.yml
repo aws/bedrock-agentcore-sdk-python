@@ -22,22 +22,31 @@ jobs:
           result-encoding: string
           script: |
             try {
+              let username;
+              if (context.payload.pull_request) {
+                username = context.payload.pull_request.user.login;
+              } else {
+                // For non-PRs (eg. merge), check the actor (person who merged)
+                username = context.actor;
+                console.log(`No pull request context found, checking permissions for actor: ${username}`);
+              }
+
               const permissionResponse = await github.rest.repos.getCollaboratorPermissionLevel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                username: context.payload.pull_request.user.login,
+                username: username,
               });
               const permission = permissionResponse.data.permission;
               const hasWriteAccess = ['write', 'admin'].includes(permission);
               if (!hasWriteAccess) {
-                console.log(`User ${context.payload.pull_request.user.login} does not have write access to the repository (permission: ${permission})`);
+                console.log(`User ${username} does not have write access to the repository (permission: ${permission})`);
                 return "manual-approval"
               } else {
-                console.log(`Verifed ${context.payload.pull_request.user.login} has write access. Auto Approving PR Checks.`)
+                console.log(`Verifed ${username} has write access. Auto Approving PR Checks.`)
                 return "auto-approve"
               }
             } catch (error) {
-              console.log(`${context.payload.pull_request.user.login} does not have write access. Requiring Manual Approval to run PR Checks.`)
+              console.log(`${username} does not have write access. Requiring Manual Approval to run PR Checks.`)
               return "manual-approval"
             }
   check-access-and-checkout:
