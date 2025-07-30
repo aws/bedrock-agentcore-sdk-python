@@ -974,7 +974,7 @@ class MemoryClient:
 
             # Return the last k turns
             if len(turns) > k:
-                result = turns[-k:]  # Get last k turns
+                result = turns[:k]  # Get last k turns
             else:
                 result = turns
 
