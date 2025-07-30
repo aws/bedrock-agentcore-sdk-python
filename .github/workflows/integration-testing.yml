@@ -1,9 +1,12 @@
 name: Secure Integration test
 
 on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
   pull_request:
-  pull_request_target:
-    branches: main
+    branches: [ main ]
 
 jobs:
   authorization-check:
