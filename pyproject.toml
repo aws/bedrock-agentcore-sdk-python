@@ -100,7 +100,7 @@ concurrency = ["thread", "multiprocessing"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 56
+fail_under = 90
 skip_covered = false
 skip_empty = false
 
