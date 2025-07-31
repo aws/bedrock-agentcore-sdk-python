@@ -32,40 +32,40 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.bump.outputs.version }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      
+
       - name: Configure git
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-      
+
       - name: Get current version
         id: current
         run: |
           VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Current version: $VERSION"
-      
+
       - name: Test version bump
         id: bump
         run: |
           # Make script executable
           chmod +x scripts/bump_version.py
-          
+
           # First run with --dry-run to test
           echo "=== DRY RUN TEST ==="
           python scripts/bump_version.py ${{ github.event.inputs.bump_type }} --dry-run
-          
+
           # If not a dry run, do actual bump
           if [ "${{ github.event.inputs.dry_run }}" != "true" ]; then
             echo "=== ACTUAL VERSION BUMP ==="
@@ -75,7 +75,7 @@ jobs:
             else
               python scripts/bump_version.py ${{ github.event.inputs.bump_type }}
             fi
-            
+
             NEW_VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml)
             echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
             echo "New version: $NEW_VERSION"
@@ -83,7 +83,7 @@ jobs:
             echo "DRY RUN - No changes made"
             echo "version=$VERSION-dryrun" >> $GITHUB_OUTPUT
           fi
-      
+
       - name: Create release branch and PR
         if: github.event.inputs.dry_run != 'true'
         run: |
@@ -91,40 +91,40 @@ jobs:
           git checkout -b $BRANCH_NAME
           git add -A
           git commit -m "chore: bump version to ${{ steps.bump.outputs.version }}
-          
+
           Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
           git push origin $BRANCH_NAME
-          
+
           # Create PR using GitHub CLI
           gh pr create \
             --base main \
             --head $BRANCH_NAME \
             --title "Release v${{ steps.bump.outputs.version }}" \
             --body "## 🚀 Release v${{ steps.bump.outputs.version }}
-            
+
             ### ⚠️ TESTING MODE
             This workflow is running in testing mode with PyPI publishing disabled.
-            
+
             ### Changes
             - Version bumped from ${{ steps.current.outputs.version }} to ${{ steps.bump.outputs.version }}
             - Updated CHANGELOG.md
-            
+
             ### Testing Checklist
             - [ ] Version bump is correct
             - [ ] CHANGELOG.md looks good
             - [ ] All files updated properly
             - [ ] PR created successfully
-            
+
             ### Next Steps
             1. Review this PR but DO NOT MERGE if just testing
             2. Close this PR after verification
             3. Once comfortable, enable PyPI publishing in workflow
-            
+
             ---
             *Triggered by @${{ github.actor }}*"
         env:
           GH_TOKEN: ${{ github.token }}
-      
+
       - name: Summary
         run: |
           echo "## Release Preparation Summary" >> $GITHUB_STEP_SUMMARY
@@ -144,13 +144,13 @@ jobs:
   # ============================================================
   # PYPI PUBLISHING DISABLED FOR TESTING
   # ============================================================
-  # 
+  #
   # The following jobs are commented out for safe testing.
   # Once you're comfortable with the PR creation process,
   # uncomment these sections in stages:
   #
   # Stage 1: Uncomment test-and-build job
-  # Stage 2: Uncomment publish-testpypi job  
+  # Stage 2: Uncomment publish-testpypi job
   # Stage 3: Uncomment release-approval and publish-pypi jobs
   #
   # ============================================================
@@ -160,28 +160,28 @@ jobs:
   #   needs: prepare-release
   #   if: github.event.inputs.dry_run != 'true'
   #   runs-on: ubuntu-latest
-  #   
+  #
   #   steps:
   #     - uses: actions/checkout@v4
   #       with:
   #         ref: release/v${{ needs.prepare-release.outputs.version }}
-  #     
+  #
   #     - name: Set up Python
   #       uses: actions/setup-python@v5
   #       with:
   #         python-version: '3.10'
-  #     
+  #
   #     - name: Install uv
   #       run: |
   #         curl -LsSf https://astral.sh/uv/install.sh | sh
   #         echo "$HOME/.local/bin" >> $GITHUB_PATH
-  #     
+  #
   #     - name: Build package
   #       run: |
   #         uv build
   #         uv pip install twine
   #         uv run twine check dist/*
-  #     
+  #
   #     - name: Upload artifacts
   #       uses: actions/upload-artifact@v4
   #       with:
@@ -194,14 +194,14 @@ jobs:
   #   runs-on: ubuntu-latest
   #   environment:
   #     name: test-pypi
-  #   
+  #
   #   steps:
   #     - name: Download artifacts
   #       uses: actions/download-artifact@v4
   #       with:
   #         name: dist
   #         path: dist/
-  #     
+  #
   #     - name: Publish to TestPyPI
   #       uses: pypa/gh-action-pypi-publish@release/v1
   #       with:
@@ -214,7 +214,7 @@ jobs:
   #   runs-on: ubuntu-latest
   #   environment:
   #     name: pypi-approval
-  #   
+  #
   #   steps:
   #     - name: Approval checkpoint
   #       run: |
@@ -227,13 +227,13 @@ jobs:
   #   runs-on: ubuntu-latest
   #   environment:
   #     name: pypi
-  #   
+  #
   #   steps:
   #     - name: Download artifacts
   #       uses: actions/download-artifact@v4
   #       with:
   #         name: dist
   #         path: dist/
-  #     
+  #
   #     - name: Publish to PyPI
   #       uses: pypa/gh-action-pypi-publish@release/v1
