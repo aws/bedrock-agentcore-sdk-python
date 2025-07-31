@@ -1,122 +1,239 @@
-name: Release to PyPI
+name: Release (Safe Testing Version)
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
-      test_release:
-        description: 'Test release (TestPyPI only)'
+      bump_type:
+        description: 'Version bump type'
         required: true
-        default: 'true'
         type: choice
         options:
-          - 'true'
-          - 'false'
+          - patch
+          - minor
+          - major
+          - pre
+      changelog:
+        description: 'Custom changelog entry (optional)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run (no PR creation)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
-  id-token: write
+  pull-requests: write
 
 jobs:
-  build:
-    name: Build Release
+  prepare-release:
+    name: Prepare Release
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+    
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-
-      - name: Install uv
+      
+      - name: Configure git
         run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      # Add virtual environment creation
-      - name: Create virtual environment
-        run: uv venv
-
-      - name: Build package
-        run: uv build
-
-      - name: Check package
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Get current version
+        id: current
         run: |
-          uv pip install twine
-          uv run twine check dist/*
+          VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+      
+      - name: Test version bump
+        id: bump
+        run: |
+          # Make script executable
+          chmod +x scripts/bump_version.py
+          
+          # First run with --dry-run to test
+          echo "=== DRY RUN TEST ==="
+          python scripts/bump_version.py ${{ github.event.inputs.bump_type }} --dry-run
+          
+          # If not a dry run, do actual bump
+          if [ "${{ github.event.inputs.dry_run }}" != "true" ]; then
+            echo "=== ACTUAL VERSION BUMP ==="
+            if [ -n "${{ github.event.inputs.changelog }}" ]; then
+              python scripts/bump_version.py ${{ github.event.inputs.bump_type }} \
+                --changelog "${{ github.event.inputs.changelog }}"
+            else
+              python scripts/bump_version.py ${{ github.event.inputs.bump_type }}
+            fi
+            
+            NEW_VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml)
+            echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "New version: $NEW_VERSION"
+          else
+            echo "DRY RUN - No changes made"
+            echo "version=$VERSION-dryrun" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create release branch and PR
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          BRANCH_NAME="release/v${{ steps.bump.outputs.version }}"
+          git checkout -b $BRANCH_NAME
+          git add -A
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.version }}
+          
+          Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+          git push origin $BRANCH_NAME
+          
+          # Create PR using GitHub CLI
+          gh pr create \
+            --base main \
+            --head $BRANCH_NAME \
+            --title "Release v${{ steps.bump.outputs.version }}" \
+            --body "## 🚀 Release v${{ steps.bump.outputs.version }}
+            
+            ### ⚠️ TESTING MODE
+            This workflow is running in testing mode with PyPI publishing disabled.
+            
+            ### Changes
+            - Version bumped from ${{ steps.current.outputs.version }} to ${{ steps.bump.outputs.version }}
+            - Updated CHANGELOG.md
+            
+            ### Testing Checklist
+            - [ ] Version bump is correct
+            - [ ] CHANGELOG.md looks good
+            - [ ] All files updated properly
+            - [ ] PR created successfully
+            
+            ### Next Steps
+            1. Review this PR but DO NOT MERGE if just testing
+            2. Close this PR after verification
+            3. Once comfortable, enable PyPI publishing in workflow
+            
+            ---
+            *Triggered by @${{ github.actor }}*"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      
+      - name: Summary
+        run: |
+          echo "## Release Preparation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "✅ **DRY RUN COMPLETED**" >> $GITHUB_STEP_SUMMARY
+            echo "No changes were made" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **Release PR Created**" >> $GITHUB_STEP_SUMMARY
+            echo "- Previous version: ${{ steps.current.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo "- New version: ${{ steps.bump.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Branch: release/v${{ steps.bump.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Note:** PyPI publishing is currently disabled for testing" >> $GITHUB_STEP_SUMMARY
+          fi
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
+  # ============================================================
+  # PYPI PUBLISHING DISABLED FOR TESTING
+  # ============================================================
+  # 
+  # The following jobs are commented out for safe testing.
+  # Once you're comfortable with the PR creation process,
+  # uncomment these sections in stages:
+  #
+  # Stage 1: Uncomment test-and-build job
+  # Stage 2: Uncomment publish-testpypi job  
+  # Stage 3: Uncomment release-approval and publish-pypi jobs
+  #
+  # ============================================================
 
-  test-pypi:
-    name: Upload to TestPyPI
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: test-pypi
-      url: https://test.pypi.org/project/bedrock-agentcore/
+  # test-and-build:
+  #   name: Test and Build
+  #   needs: prepare-release
+  #   if: github.event.inputs.dry_run != 'true'
+  #   runs-on: ubuntu-latest
+  #   
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         ref: release/v${{ needs.prepare-release.outputs.version }}
+  #     
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.10'
+  #     
+  #     - name: Install uv
+  #       run: |
+  #         curl -LsSf https://astral.sh/uv/install.sh | sh
+  #         echo "$HOME/.local/bin" >> $GITHUB_PATH
+  #     
+  #     - name: Build package
+  #       run: |
+  #         uv build
+  #         uv pip install twine
+  #         uv run twine check dist/*
+  #     
+  #     - name: Upload artifacts
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: dist
+  #         path: dist/
 
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
+  # publish-testpypi:
+  #   name: Publish to TestPyPI
+  #   needs: test-and-build
+  #   runs-on: ubuntu-latest
+  #   environment:
+  #     name: test-pypi
+  #   
+  #   steps:
+  #     - name: Download artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: dist
+  #         path: dist/
+  #     
+  #     - name: Publish to TestPyPI
+  #       uses: pypa/gh-action-pypi-publish@release/v1
+  #       with:
+  #         repository-url: https://test.pypi.org/legacy/
+  #         skip-existing: true
 
-      - name: Publish to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-          skip-existing: true
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+  # release-approval:
+  #   name: Release Approval
+  #   needs: publish-testpypi
+  #   runs-on: ubuntu-latest
+  #   environment:
+  #     name: pypi-approval
+  #   
+  #   steps:
+  #     - name: Approval checkpoint
+  #       run: |
+  #         echo "✓ TestPyPI deployment successful"
+  #         echo "This job requires manual approval to proceed"
 
-  pypi:
-    name: Upload to PyPI
-    needs: test-pypi
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.inputs.test_release == 'false'
-    environment:
-      name: pypi
-      url: https://pypi.org/project/bedrock-agentcore/
-
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
-
-  github-release:
-    name: Create GitHub Release
-    needs: pypi
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+  # publish-pypi:
+  #   name: Publish to PyPI
+  #   needs: release-approval
+  #   runs-on: ubuntu-latest
+  #   environment:
+  #     name: pypi
+  #   
+  #   steps:
+  #     - name: Download artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: dist
+  #         path: dist/
+  #     
+  #     - name: Publish to PyPI
+  #       uses: pypa/gh-action-pypi-publish@release/v1
