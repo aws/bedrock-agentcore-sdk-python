@@ -1,7 +1,8 @@
 """Tests for Bedrock AgentCore authentication decorators and functions."""
 
+import json
 import os
-from unittest.mock import AsyncMock, Mock, mock_open, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -332,60 +333,67 @@ class TestSetUpLocalAuth:
     """Test _set_up_local_auth function."""
 
     @pytest.mark.asyncio
-    async def test_existing_config(self):
+    async def test_existing_config(self, tmp_path):
         """Test when config file exists with both workload_identity_name and user_id."""
         config_content = {"workload_identity_name": "existing-workload-123", "user_id": "existing-user-456"}
         mock_client = Mock()
         mock_client.get_workload_access_token = Mock(return_value={"workloadAccessToken": "test-access-token-456"})
 
-        with patch("pathlib.Path") as mock_path_class:
-            mock_path = Mock()
-            mock_path.exists.return_value = True
-            mock_path.absolute.return_value = "/test/.agentcore.yaml"
-            mock_path_class.return_value = mock_path
+        # Create the config file in the temp directory
+        config_file = tmp_path / ".agentcore.json"
+        config_file.write_text(json.dumps(config_content))
 
-            with patch("builtins.open", mock_open()):
-                with patch("yaml.safe_load", return_value=config_content):
-                    result = await _set_up_local_auth(mock_client)
+        # Change to the temp directory for the test
+        import os
 
-                    # Should use existing workload identity and user_id
-                    assert result == "test-access-token-456"
-                    mock_client.create_workload_identity.assert_not_called()
-                    mock_client.get_workload_access_token.assert_called_once_with(
-                        "existing-workload-123", user_id="existing-user-456"
-                    )
+        original_dir = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            result = await _set_up_local_auth(mock_client)
+
+            # Should use existing workload identity and user_id
+            assert result == "test-access-token-456"
+            mock_client.create_workload_identity.assert_not_called()
+            mock_client.get_workload_access_token.assert_called_once_with(
+                "existing-workload-123", user_id="existing-user-456"
+            )
+        finally:
+            os.chdir(original_dir)
 
     @pytest.mark.asyncio
-    async def test_no_config(self):
+    async def test_no_config(self, tmp_path):
         """Test when config file doesn't exist."""
         mock_client = Mock()
         mock_client.create_workload_identity = Mock(return_value={"name": "test-workload-123"})
         mock_client.get_workload_access_token = Mock(return_value={"workloadAccessToken": "test-access-token-456"})
 
-        with patch("pathlib.Path") as mock_path_class:
-            mock_path = Mock()
-            mock_path.exists.return_value = False
-            mock_path_class.return_value = mock_path
+        # Change to the temp directory for the test
+        import os
 
-            with patch("builtins.open", mock_open()):
-                with patch("yaml.dump") as mock_yaml_dump:
-                    with patch("uuid.uuid4") as mock_uuid:
-                        mock_uuid.return_value.hex = "abcd1234efgh5678"
+        original_dir = os.getcwd()
+        try:
+            os.chdir(tmp_path)
 
-                        result = await _set_up_local_auth(mock_client)
+            with patch("uuid.uuid4") as mock_uuid:
+                mock_uuid.return_value.hex = "abcd1234efgh5678"
 
-                        # Should create new workload identity and user_id
-                        assert result == "test-access-token-456"
-                        mock_client.create_workload_identity.assert_called_once()
-                        mock_client.get_workload_access_token.assert_called_once_with(
-                            "test-workload-123", user_id="abcd1234"
-                        )
+                result = await _set_up_local_auth(mock_client)
 
-                        # Should create and save new config
-                        mock_yaml_dump.assert_called_once()
-                        saved_config = mock_yaml_dump.call_args[0][0]
-                        assert saved_config["workload_identity_name"] == "test-workload-123"
-                        assert saved_config["user_id"] == "abcd1234"
+                # Should create new workload identity and user_id
+                assert result == "test-access-token-456"
+                mock_client.create_workload_identity.assert_called_once()
+                mock_client.get_workload_access_token.assert_called_once_with("test-workload-123", user_id="abcd1234")
+
+                # Verify that the config file was created
+                config_file = tmp_path / ".agentcore.json"
+                assert config_file.exists()
+
+                # Verify the config file content
+                saved_config = json.loads(config_file.read_text())
+                assert saved_config["workload_identity_name"] == "test-workload-123"
+                assert saved_config["user_id"] == "abcd1234"
+        finally:
+            os.chdir(original_dir)
 
 
 class TestGetRegion:

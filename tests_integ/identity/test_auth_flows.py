@@ -30,6 +30,7 @@ async def need_api_key(*, api_key: str):
     print(f"received api key for async func: {api_key}")
 
 
-asyncio.run(need_api_key(api_key=""))
-asyncio.run(need_token_2LO_async(access_token=""))
-asyncio.run(need_token_3LO_async(access_token=""))
+if __name__ == "__main__":
+    asyncio.run(need_api_key(api_key=""))
+    asyncio.run(need_token_2LO_async(access_token=""))
+    asyncio.run(need_token_3LO_async(access_token=""))

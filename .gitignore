@@ -167,6 +167,7 @@ cython_debug/
 # macOS
 .DS_Store
 .agentcore.yaml
+.agentcore.json
 .AppleDouble
 .LSOverride
 

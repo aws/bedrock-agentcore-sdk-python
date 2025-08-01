@@ -157,18 +157,17 @@ async def _get_workload_access_token(client: IdentityClient) -> str:
 
 
 async def _set_up_local_auth(client: IdentityClient) -> str:
+    import json
     import uuid
     from pathlib import Path
 
-    import yaml
-
-    config_path = Path(".agentcore.yaml")
+    config_path = Path(".agentcore.json")
     workload_identity_name = None
     config = {}
     if config_path.exists():
         try:
             with open(config_path, "r", encoding="utf-8") as file:
-                config = yaml.safe_load(file) or {}
+                config = json.load(file) or {}
         except Exception:
             print("Could not find existing workload identity and user id")
 
@@ -189,7 +188,7 @@ async def _set_up_local_auth(client: IdentityClient) -> str:
     try:
         config = {"workload_identity_name": workload_identity_name, "user_id": user_id}
         with open(config_path, "w", encoding="utf-8") as file:
-            yaml.dump(config, file, default_flow_style=False, indent=2)
+            json.dump(config, file, indent=2)
     except Exception:
         print("Warning: could not write the created workload identity to file")
 
