@@ -62,11 +62,6 @@ jobs:
           # Make script executable
           chmod +x scripts/bump_version.py
 
-          # First run with --dry-run to test
-          echo "=== DRY RUN TEST ==="
-          python scripts/bump_version.py ${{ github.event.inputs.bump_type }} --dry-run
-
-          # If not a dry run, do actual bump
           if [ "${{ github.event.inputs.dry_run }}" != "true" ]; then
             echo "=== ACTUAL VERSION BUMP ==="
             if [ -n "${{ github.event.inputs.changelog }}" ]; then
@@ -75,6 +70,8 @@ jobs:
             else
               python scripts/bump_version.py ${{ github.event.inputs.bump_type }}
             fi
+
+            uv lock --no-progress || echo "Note: uv.lock update failed"
 
             NEW_VERSION=$(grep -m1 -oP '^version = "\K[^"]+' pyproject.toml)
             echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
