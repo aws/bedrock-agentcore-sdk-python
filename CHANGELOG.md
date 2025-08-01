@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.2] - 2025-08-01
+
+### Changes
+
+- enable test pypi publishing (48c8649)
+- fix: version grep in bump step (6e2e95c)
+- feat: enable Test PyPI publishing (539cd35)
+- fix: use correct SDK bump_version.py without requests dependency (fcaf606)
+- fix: version extraction to handle multiple matches (47da6cb)
+- fix: trigger workflow recognition (e9f6456)
+- add automated release workflows (PyPI disabled for testing) (e321162)
+- add automated release workflows (PyPI disabled for testing) (e4ab526)
+- add automated release workflows (PyPI disabled for testing) (56747fd)
+- fix collaborator check (1574b6a)
+- update trigger for integration tests (ede33f4)
+- add simple agent test (77d95d6)
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
