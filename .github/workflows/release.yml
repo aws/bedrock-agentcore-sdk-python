@@ -140,37 +140,55 @@ jobs:
 
 
   test-and-build:
-     name: Test and Build
-     needs: prepare-release
-     if: github.event.inputs.dry_run != 'true'
-     runs-on: ubuntu-latest
-
-     steps:
-       - uses: actions/checkout@v4
-         with:
-           ref: release/v${{ needs.prepare-release.outputs.version }}
-
-       - name: Set up Python
-         uses: actions/setup-python@v5
-         with:
-           python-version: '3.10'
-
-       - name: Install uv
-         run: |
-           curl -LsSf https://astral.sh/uv/install.sh | sh
-           echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-       - name: Build package
-         run: |
-           uv build
-           uv pip install twine
-           uv run twine check dist/*
-
-       - name: Upload artifacts
-         uses: actions/upload-artifact@v4
-         with:
-           name: dist
-           path: dist/
+    name: Test and Build
+    needs: prepare-release
+    if: github.event.inputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v${{ needs.prepare-release.outputs.version }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      
+      - name: Setup build environment
+        run: |
+          # Create virtual environment
+          uv venv
+          
+          # Install build dependencies
+          source .venv/bin/activate
+          uv pip install build twine
+      
+      - name: Build and check package
+        run: |
+          # Ensure we're in the venv
+          source .venv/bin/activate
+          
+          # Build the package
+          uv build
+          
+          # Check with twine
+          twine check dist/*
+          
+          # Show package contents
+          echo "=== Package contents ==="
+          python -m zipfile -l dist/*.whl | head -20
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
 
   publish-testpypi:
      name: Publish to TestPyPI
