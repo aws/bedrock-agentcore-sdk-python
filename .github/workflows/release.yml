@@ -76,7 +76,7 @@ jobs:
               python scripts/bump_version.py ${{ github.event.inputs.bump_type }}
             fi
 
-            NEW_VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml)
+            NEW_VERSION=$(grep -m1 -oP '^version = "\K[^"]+' pyproject.toml)
             echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
             echo "New version: $NEW_VERSION"
           else
@@ -147,28 +147,28 @@ jobs:
      needs: prepare-release
      if: github.event.inputs.dry_run != 'true'
      runs-on: ubuntu-latest
-  
+
      steps:
        - uses: actions/checkout@v4
          with:
            ref: release/v${{ needs.prepare-release.outputs.version }}
-  
+
        - name: Set up Python
          uses: actions/setup-python@v5
          with:
            python-version: '3.10'
-  
+
        - name: Install uv
          run: |
            curl -LsSf https://astral.sh/uv/install.sh | sh
            echo "$HOME/.local/bin" >> $GITHUB_PATH
-  
+
        - name: Build package
          run: |
            uv build
            uv pip install twine
            uv run twine check dist/*
-  
+
        - name: Upload artifacts
          uses: actions/upload-artifact@v4
          with:
@@ -181,14 +181,14 @@ jobs:
      runs-on: ubuntu-latest
      environment:
        name: test-pypi
-  
+
      steps:
        - name: Download artifacts
          uses: actions/download-artifact@v4
          with:
            name: dist
            path: dist/
-  
+
        - name: Publish to TestPyPI
          uses: pypa/gh-action-pypi-publish@release/v1
          with:
