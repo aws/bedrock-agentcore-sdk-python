@@ -141,100 +141,57 @@ jobs:
             echo "**Note:** PyPI publishing is currently disabled for testing" >> $GITHUB_STEP_SUMMARY
           fi
 
-  # ============================================================
-  # PYPI PUBLISHING DISABLED FOR TESTING
-  # ============================================================
-  #
-  # The following jobs are commented out for safe testing.
-  # Once you're comfortable with the PR creation process,
-  # uncomment these sections in stages:
-  #
-  # Stage 1: Uncomment test-and-build job
-  # Stage 2: Uncomment publish-testpypi job
-  # Stage 3: Uncomment release-approval and publish-pypi jobs
-  #
-  # ============================================================
 
-  # test-and-build:
-  #   name: Test and Build
-  #   needs: prepare-release
-  #   if: github.event.inputs.dry_run != 'true'
-  #   runs-on: ubuntu-latest
-  #
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         ref: release/v${{ needs.prepare-release.outputs.version }}
-  #
-  #     - name: Set up Python
-  #       uses: actions/setup-python@v5
-  #       with:
-  #         python-version: '3.10'
-  #
-  #     - name: Install uv
-  #       run: |
-  #         curl -LsSf https://astral.sh/uv/install.sh | sh
-  #         echo "$HOME/.local/bin" >> $GITHUB_PATH
-  #
-  #     - name: Build package
-  #       run: |
-  #         uv build
-  #         uv pip install twine
-  #         uv run twine check dist/*
-  #
-  #     - name: Upload artifacts
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: dist
-  #         path: dist/
+  test-and-build:
+     name: Test and Build
+     needs: prepare-release
+     if: github.event.inputs.dry_run != 'true'
+     runs-on: ubuntu-latest
+  
+     steps:
+       - uses: actions/checkout@v4
+         with:
+           ref: release/v${{ needs.prepare-release.outputs.version }}
+  
+       - name: Set up Python
+         uses: actions/setup-python@v5
+         with:
+           python-version: '3.10'
+  
+       - name: Install uv
+         run: |
+           curl -LsSf https://astral.sh/uv/install.sh | sh
+           echo "$HOME/.local/bin" >> $GITHUB_PATH
+  
+       - name: Build package
+         run: |
+           uv build
+           uv pip install twine
+           uv run twine check dist/*
+  
+       - name: Upload artifacts
+         uses: actions/upload-artifact@v4
+         with:
+           name: dist
+           path: dist/
 
-  # publish-testpypi:
-  #   name: Publish to TestPyPI
-  #   needs: test-and-build
-  #   runs-on: ubuntu-latest
-  #   environment:
-  #     name: test-pypi
-  #
-  #   steps:
-  #     - name: Download artifacts
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: dist
-  #         path: dist/
-  #
-  #     - name: Publish to TestPyPI
-  #       uses: pypa/gh-action-pypi-publish@release/v1
-  #       with:
-  #         repository-url: https://test.pypi.org/legacy/
-  #         skip-existing: true
-
-  # release-approval:
-  #   name: Release Approval
-  #   needs: publish-testpypi
-  #   runs-on: ubuntu-latest
-  #   environment:
-  #     name: pypi-approval
-  #
-  #   steps:
-  #     - name: Approval checkpoint
-  #       run: |
-  #         echo "✓ TestPyPI deployment successful"
-  #         echo "This job requires manual approval to proceed"
-
-  # publish-pypi:
-  #   name: Publish to PyPI
-  #   needs: release-approval
-  #   runs-on: ubuntu-latest
-  #   environment:
-  #     name: pypi
-  #
-  #   steps:
-  #     - name: Download artifacts
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: dist
-  #         path: dist/
-  #
-  #     - name: Publish to PyPI
-  #       uses: pypa/gh-action-pypi-publish@release/v1
-# trigger recognition
+  publish-testpypi:
+     name: Publish to TestPyPI
+     needs: test-and-build
+     runs-on: ubuntu-latest
+     environment:
+       name: test-pypi
+  
+     steps:
+       - name: Download artifacts
+         uses: actions/download-artifact@v4
+         with:
+           name: dist
+           path: dist/
+  
+       - name: Publish to TestPyPI
+         uses: pypa/gh-action-pypi-publish@release/v1
+         with:
+           repository-url: https://test.pypi.org/legacy/
+           skip-existing: true
+           password: ${{ secrets.TEST_PYPI_API_TOKEN }}
