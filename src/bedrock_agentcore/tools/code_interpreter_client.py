@@ -30,14 +30,19 @@ class CodeInterpreter:
         session_id (str, optional): The active session ID.
     """
 
-    def __init__(self, region: str) -> None:
+    def __init__(self, region: str, session: Optional[boto3.Session] = None) -> None:
         """Initialize a Code Interpreter client for the specified AWS region.
 
         Args:
             region (str): The AWS region to use for the Code Interpreter service.
+            session (Optional[boto3.Session]): Optional boto3 session to use.
+                If not provided, a new session will be created. This is useful
+                for cases where you need to use custom credentials or assume roles.
         """
         self.data_plane_service_name = "bedrock-agentcore"
-        self.client = boto3.client(
+        if session is None:
+            session = boto3.Session()
+        self.client = session.client(
             self.data_plane_service_name, region_name=region, endpoint_url=get_data_plane_endpoint(region)
         )
         self._identifier = None
@@ -160,7 +165,7 @@ class CodeInterpreter:
 
 
 @contextmanager
-def code_session(region: str) -> Generator[CodeInterpreter, None, None]:
+def code_session(region: str, session: Optional[boto3.Session] = None) -> Generator[CodeInterpreter, None, None]:
     """Context manager for creating and managing a code interpreter session.
 
     This context manager handles creating a client, starting a session, and
@@ -168,16 +173,18 @@ def code_session(region: str) -> Generator[CodeInterpreter, None, None]:
 
     Args:
         region (str): The AWS region to use for the Code Interpreter service.
+        session (Optional[boto3.Session]): Optional boto3 session to use.
+            If not provided, a new session will be created.
 
     Yields:
-        CodeInterpreterClient: An initialized and started code interpreter client.
+        CodeInterpreter: An initialized and started code interpreter client.
 
     Example:
         >>> with code_session('us-west-2') as client:
         ...     result = client.invoke('listFiles')
         ...     # Process result here
     """
-    client = CodeInterpreter(region)
+    client = CodeInterpreter(region, session=session)
     client.start()
 
     try:
