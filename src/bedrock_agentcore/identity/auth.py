@@ -4,6 +4,7 @@ import asyncio
 import contextvars
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from typing import Any, Callable, List, Literal, Optional
 
@@ -16,6 +17,74 @@ logger = logging.getLogger("bedrock_agentcore.auth")
 logger.setLevel("INFO")
 if not logger.handlers:
     logger.addHandler(logging.StreamHandler())
+
+# Module-level cached executor for better resource management
+_executor_pool: Optional[ThreadPoolExecutor] = None
+
+
+def _get_thread_pool() -> ThreadPoolExecutor:
+    """Get or create cached thread pool executor for better resource management."""
+    global _executor_pool
+    if _executor_pool is None:
+        _executor_pool = ThreadPoolExecutor(
+            max_workers=2, 
+            thread_name_prefix="auth-bridge"
+        )
+    return _executor_pool
+
+
+def _run_async_in_sync_context(async_func: Callable) -> Any:
+    """Run async function in sync context with proper resource management."""
+    if _has_running_loop():
+        # Async environment - use thread pool (compatible with existing tests)
+        ctx = contextvars.copy_context()
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(ctx.run, asyncio.run, async_func())
+            return future.result()
+    else:
+        # Sync environment - direct async run
+        return asyncio.run(async_func())
+
+
+def _create_credential_decorator(
+    credential_fetcher: Callable[[IdentityClient], Any],
+    into: str = "credential"
+) -> Callable:
+    """Base factory for creating credential decorators.
+    
+    This eliminates code duplication between requires_access_token and requires_api_key
+    by providing a common pattern for credential injection decorators.
+    
+    Args:
+        credential_fetcher: Async function that takes IdentityClient and returns credentials
+        into: Parameter name to inject credential into
+        
+    Returns:
+        Decorator function that handles both sync and async functions
+    """
+    
+    def decorator(func: Callable) -> Callable:
+        client = IdentityClient(_get_region())
+        
+        @wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            credential = await credential_fetcher(client)
+            kwargs[into] = credential
+            return await func(*args, **kwargs)
+        
+        @wraps(func)  
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            credential = _run_async_in_sync_context(
+                lambda: credential_fetcher(client)
+            )
+            kwargs[into] = credential
+            return func(*args, **kwargs)
+            
+        # Return appropriate wrapper based on function type
+        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+    
+    return decorator
 
 
 def requires_access_token(
@@ -44,53 +113,21 @@ def requires_access_token(
     Returns:
         Decorator function
     """
-
-    def decorator(func: Callable) -> Callable:
-        client = IdentityClient(_get_region())
-
-        async def _get_token() -> str:
-            """Common token fetching logic."""
-            return await client.get_token(
-                provider_name=provider_name,
-                agent_identity_token=await _get_workload_access_token(client),
-                scopes=scopes,
-                on_auth_url=on_auth_url,
-                auth_flow=auth_flow,
-                callback_url=callback_url,
-                force_authentication=force_authentication,
-                token_poller=token_poller,
-            )
-
-        @wraps(func)
-        async def async_wrapper(*args: Any, **kwargs_func: Any) -> Any:
-            token = await _get_token()
-            kwargs_func[into] = token
-            return await func(*args, **kwargs_func)
-
-        @wraps(func)
-        def sync_wrapper(*args: Any, **kwargs_func: Any) -> Any:
-            if _has_running_loop():
-                # for async env, eg. runtime
-                ctx = contextvars.copy_context()
-                import concurrent.futures
-
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(ctx.run, asyncio.run, _get_token())
-                    token = future.result()
-            else:
-                # for sync env, eg. local dev
-                token = asyncio.run(_get_token())
-
-            kwargs_func[into] = token
-            return func(*args, **kwargs_func)
-
-        # Return appropriate wrapper based on function type
-        if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        else:
-            return sync_wrapper
-
-    return decorator
+    
+    async def fetch_access_token(client: IdentityClient) -> str:
+        """Fetch OAuth2 access token using the identity client."""
+        return await client.get_token(
+            provider_name=provider_name,
+            agent_identity_token=await _get_workload_access_token(client),
+            scopes=scopes,
+            on_auth_url=on_auth_url,
+            auth_flow=auth_flow,
+            callback_url=callback_url,
+            force_authentication=force_authentication,
+            token_poller=token_poller,
+        )
+    
+    return _create_credential_decorator(fetch_access_token, into)
 
 
 def requires_api_key(*, provider_name: str, into: str = "api_key") -> Callable:
@@ -103,45 +140,15 @@ def requires_api_key(*, provider_name: str, into: str = "api_key") -> Callable:
     Returns:
         Decorator function
     """
-
-    def decorator(func: Callable) -> Callable:
-        client = IdentityClient(_get_region())
-
-        async def _get_api_key():
-            return await client.get_api_key(
-                provider_name=provider_name,
-                agent_identity_token=await _get_workload_access_token(client),
-            )
-
-        @wraps(func)
-        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            api_key = await _get_api_key()
-            kwargs[into] = api_key
-            return await func(*args, **kwargs)
-
-        @wraps(func)
-        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-            if _has_running_loop():
-                # for async env, eg. runtime
-                ctx = contextvars.copy_context()
-                import concurrent.futures
-
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(ctx.run, asyncio.run, _get_api_key())
-                    api_key = future.result()
-            else:
-                # for sync env, eg. local dev
-                api_key = asyncio.run(_get_api_key())
-
-            kwargs[into] = api_key
-            return func(*args, **kwargs)
-
-        if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        else:
-            return sync_wrapper
-
-    return decorator
+    
+    async def fetch_api_key(client: IdentityClient) -> str:
+        """Fetch API key using the identity client."""
+        return await client.get_api_key(
+            provider_name=provider_name,
+            agent_identity_token=await _get_workload_access_token(client),
+        )
+    
+    return _create_credential_decorator(fetch_api_key, into)
 
 
 async def _get_workload_access_token(client: IdentityClient) -> str:
