@@ -13,14 +13,9 @@ on:
           - major
           - pre
       changelog:
-        description: 'Custom changelog entry (optional)'
+        description: 'Custom changelog entry (optional - leave empty to auto-generate)'
         required: false
         type: string
-      dry_run:
-        description: 'Dry run (no PR creation)'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -34,6 +29,13 @@ jobs:
       version: ${{ steps.bump.outputs.version }}
 
     steps:
+      - name: Validate running from main
+        run: |
+          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
+            echo "⚠️  WARNING: Running from ${{ github.ref }}"
+            echo "⚠️  Production releases should only run from main branch"
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -56,78 +58,63 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Current version: $VERSION"
 
-      - name: Test version bump
+      - name: Bump version
         id: bump
         run: |
           chmod +x scripts/bump_version.py
 
-          if [ "${{ github.event.inputs.dry_run }}" != "true" ]; then
-            echo "=== ACTUAL VERSION BUMP ==="
-            if [ -n "${{ github.event.inputs.changelog }}" ]; then
-              python scripts/bump_version.py ${{ github.event.inputs.bump_type }} \
-                --changelog "${{ github.event.inputs.changelog }}"
-            else
-              python scripts/bump_version.py ${{ github.event.inputs.bump_type }}
-            fi
-
-            uv lock --no-progress
-
-            NEW_VERSION=$(grep -m1 -oP '^version = "\K[^"]+' pyproject.toml)
-            echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-            echo "New version: $NEW_VERSION"
-          else
-            echo "DRY RUN - No changes made"
-            echo "version=$VERSION-dryrun" >> $GITHUB_OUTPUT
+          # If no custom changelog, provide guidance
+          if [ -z "${{ github.event.inputs.changelog }}" ]; then
+            echo "ℹ️  No custom changelog provided. Will auto-generate from commits."
+            echo "💡 Tip: Provide a meaningful changelog message for better release notes"
           fi
 
+          if [ -n "${{ github.event.inputs.changelog }}" ]; then
+            python scripts/bump_version.py ${{ github.event.inputs.bump_type }} \
+              --changelog "${{ github.event.inputs.changelog }}"
+          else
+            python scripts/bump_version.py ${{ github.event.inputs.bump_type }}
+          fi
+
+          uv lock --no-progress
+
+          NEW_VERSION=$(grep -m1 -oP '^version = "\K[^"]+' pyproject.toml)
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
       - name: Create release branch and PR
-        if: github.event.inputs.dry_run != 'true'
         run: |
           BRANCH_NAME="release/v${{ steps.bump.outputs.version }}"
 
-          # Clean up any existing branch from previous attempts
           if git ls-remote --exit-code --heads origin $BRANCH_NAME; then
             echo "⚠️  Branch $BRANCH_NAME already exists. Deleting it first..."
             git push origin --delete $BRANCH_NAME
           fi
 
-          # Clean up local branch if exists
           if git show-ref --verify --quiet refs/heads/$BRANCH_NAME; then
             git branch -D $BRANCH_NAME
           fi
 
-          # Create fresh branch
           git checkout -b $BRANCH_NAME
-
-          # Add all changes (version bump, CHANGELOG, etc.)
           git add -A
-
-          # Commit with co-author
           git commit -m "chore: bump version to ${{ steps.bump.outputs.version }}
 
           Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
 
-          # Push the branch
           git push origin $BRANCH_NAME
 
-          # Verify the version was committed correctly
-          echo "=== Verifying committed version ==="
           COMMITTED_VERSION=$(git show HEAD:pyproject.toml | grep -m1 -oP '^version = "\K[^"]+')
-          echo "Committed version: $COMMITTED_VERSION"
           if [ "$COMMITTED_VERSION" != "${{ steps.bump.outputs.version }}" ]; then
             echo "❌ ERROR: Version not committed correctly!"
             exit 1
           fi
-          echo "✓ Version correctly committed"
 
       - name: Create Pull Request
-        if: github.event.inputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           BRANCH_NAME="release/v${{ steps.bump.outputs.version }}"
 
-          # Create PR using GitHub CLI
           gh pr create \
             --base main \
             --head $BRANCH_NAME \
@@ -136,48 +123,33 @@ jobs:
 
           This PR was automatically created by the release workflow.
 
-          ### Changes
-          - Version bumped from ${{ steps.current.outputs.version }} to ${{ steps.bump.outputs.version }}
-          - Updated CHANGELOG.md
-          - Updated uv.lock
+          ### ⚠️  Pre-merge Checklist
+          - [ ] Review CHANGELOG.md - ensure it has meaningful release notes
+          - [ ] Verify version numbers are correct in all files
+          - [ ] All CI checks are passing
 
-          ### Pre-release Checklist
-          - [ ] Review CHANGELOG.md entries
-          - [ ] Verify version numbers are correct
-          - [ ] All tests passing
-          - [ ] Documentation updated (if needed)
+          ### 📝 How to improve changelog
+          If the auto-generated changelog isn't good enough:
+          1. Edit CHANGELOG.md in this PR
+          2. Commit the changes
+          3. Then approve and merge
 
-          ### Release Process
-          1. Approve and merge this PR
-          2. The release workflow will automatically:
-             - Build and test the package
-             - Publish to Test PyPI
-             - Wait for approval
-             - Publish to PyPI
-             - Create a GitHub release
-             - Tag the release
+          ### 🔄 Release Process
+          After merging this PR:
+          1. Package will be built and tested
+          2. Published to Test PyPI automatically
+          3. **Manual approval required** before production PyPI
+          4. GitHub release and tag created after production
+
+          ### 🚨 Running from: ${{ github.ref }}
+          ${{ github.ref != 'refs/heads/main' && '**WARNING**: Not running from main branch!' || '✅ Running from main branch' }}
 
           ---
           *Triggered by @${{ github.actor }}*"
 
-      - name: Summary
-        run: |
-          echo "## Release Preparation Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
-            echo "✅ **DRY RUN COMPLETED**" >> $GITHUB_STEP_SUMMARY
-            echo "No changes were made" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "✅ **Release PR Created**" >> $GITHUB_STEP_SUMMARY
-            echo "- Previous version: ${{ steps.current.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "- New version: ${{ steps.bump.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "- Branch: release/v${{ steps.bump.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          fi
-
   test-and-build:
     name: Test and Build
     needs: prepare-release
-    if: github.event.inputs.dry_run != 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -195,7 +167,6 @@ jobs:
 
           if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
             echo "❌ ERROR: Version mismatch!"
-            echo "Expected $EXPECTED_VERSION but found $ACTUAL_VERSION"
             exit 1
           fi
 
@@ -257,31 +228,32 @@ jobs:
     name: Release Approval
     needs: publish-testpypi
     runs-on: ubuntu-latest
+    # IMPORTANT: Always run if test PyPI succeeded
+    if: always() && needs.publish-testpypi.result == 'success'
     environment:
       name: pypi-approval
 
     steps:
       - name: Approval checkpoint
         run: |
-          echo "✓ TestPyPI deployment successful"
-          echo "✓ Package available at: https://test.pypi.org/project/bedrock-agentcore/"
+          echo "✅ TestPyPI deployment successful"
+          echo "📦 Package available at: https://test.pypi.org/project/bedrock-agentcore/"
           echo ""
-          echo "⚠️  MANUAL APPROVAL REQUIRED"
+          echo "⚠️  MANUAL APPROVAL REQUIRED FOR PRODUCTION"
           echo ""
-          echo "Before approving production release:"
-          echo "1. Test the package from TestPyPI:"
-          echo "   pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bedrock-agentcore"
+          echo "Before approving:"
+          echo "1. Test package: pip install -i https://test.pypi.org/simple/ bedrock-agentcore"
+          echo "2. Verify functionality works"
+          echo "3. Check version is correct"
           echo ""
-          echo "2. Verify the package works correctly"
-          echo "3. Check version number is correct"
-          echo "4. Review package contents"
-          echo ""
-          echo "Only approve if everything looks good!"
+          echo "🚨 Only approve if everything works correctly!"
 
   publish-pypi:
     name: Publish to PyPI
     needs: release-approval
     runs-on: ubuntu-latest
+    # CRITICAL: Only run from main branch
+    if: github.ref == 'refs/heads/main'
     environment:
       name: pypi
       url: https://pypi.org/project/bedrock-agentcore/
@@ -297,6 +269,15 @@ jobs:
           name: dist
           path: dist/
 
+      - name: Verify PyPI token exists
+        run: |
+          if [ -z "${{ secrets.PYPI_API_TOKEN }}" ]; then
+            echo "❌ ERROR: PYPI_API_TOKEN not configured!"
+            echo "Please add your PyPI API token to GitHub Secrets"
+            exit 1
+          fi
+          echo "✓ PyPI token is configured"
+
       - name: Get version
         id: version
         run: |
@@ -306,7 +287,9 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
+          # MUST specify password to avoid Trusted Publishing
           password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: false
 
       - name: Create and push tag
         run: |

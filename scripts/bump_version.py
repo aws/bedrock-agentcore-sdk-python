@@ -186,28 +186,28 @@ def update_changelog(new_version: str, changes: str = None):
     changelog_path = Path("CHANGELOG.md")
 
     if not changelog_path.exists():
-        # Create new changelog
         content = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\n"
     else:
         content = changelog_path.read_text()
 
-    # Generate entry
     date = datetime.now().strftime("%Y-%m-%d")
     entry = f"\n## [{new_version}] - {date}\n\n"
 
     if changes:
-        # Use custom changelog entry
+        # Use provided changelog
+        entry += "### Changes\n\n"
         entry += changes + "\n"
     else:
-        # Auto-generate from git log with formatting
+        # Warn about auto-generation
+        print("\n⚠️  No changelog provided. Auto-generating from commits.")
+        print("💡 Tip: Use --changelog to provide meaningful release notes")
+        print('   Example: --changelog "Added new CLI commands for gateway management"')
+
         git_log = get_git_log()
         if git_log:
-            formatted_log = format_git_log(git_log)
-            if formatted_log:
-                entry += formatted_log + "\n"
-            else:
-                entry += "### Changes\n\n"
-                entry += git_log + "\n"
+            entry += "### Changes (auto-generated from commits)\n\n"
+            entry += git_log + "\n"
+            entry += "\n*Note: Consider providing a custom changelog for better release notes*\n"
 
     # Insert after header
     if "# Changelog" in content:
