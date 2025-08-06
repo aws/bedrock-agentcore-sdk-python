@@ -9,9 +9,12 @@ from typing import Optional, Tuple
 def get_current_version() -> str:
     """Get current version from pyproject.toml."""
     content = Path("pyproject.toml").read_text()
-    match = re.search(r'version = "([^"]+)"', content)
+    # More robust regex that matches the project version specifically
+    # Look for version under [project] or [tool.poetry] sections
+    pattern = r'(?:^\[project\]|\[tool\.poetry\])[\s\S]*?^version\s*=\s*"([^"]+)"'
+    match = re.search(pattern, content, re.MULTILINE)
     if not match:
-        raise ValueError("Version not found in pyproject.toml")
+        raise ValueError("Version not found in pyproject.toml under [project] or [tool.poetry]")
     return match.group(1)
 
 
@@ -50,13 +53,19 @@ def bump_version(current: str, bump_type: str) -> str:
 
 
 def update_version_in_file(file_path: Path, old_version: str, new_version: str) -> bool:
-    """Update version in a file."""
+    """Update version in a file.
+
+    Note: Currently only bedrock_agentcore/__init__.py contains version.
+    This function is kept for potential future use.
+    """
     if not file_path.exists():
         return False
 
     content = file_path.read_text()
-    pattern = rf'(__version__|version)\s*=\s*["\']({re.escape(old_version)})["\']'
-    new_content = re.sub(pattern, r'\1 = "\2"'.replace(r"\2", new_version), content)
+
+    # Only update __version__ assignments, not imports or other references
+    pattern = rf'^(__version__\s*=\s*["\'])({re.escape(old_version)})(["\'])'
+    new_content = re.sub(pattern, rf"\1{new_version}\3", content, flags=re.MULTILINE)
 
     if new_content != content:
         file_path.write_text(new_content)
@@ -66,17 +75,90 @@ def update_version_in_file(file_path: Path, old_version: str, new_version: str) 
 
 def update_all_versions(old_version: str, new_version: str):
     """Update version in all relevant files."""
-    # Update pyproject.toml
+    # Update pyproject.toml - be specific about which version field
     pyproject = Path("pyproject.toml")
     content = pyproject.read_text()
-    content = re.sub(f'version = "{re.escape(old_version)}"', f'version = "{new_version}"', content)
-    pyproject.write_text(content)
+
+    # Only update the version in [project] or [tool.poetry] section
+    # This prevents accidentally updating version constraints in dependencies
+    lines = content.split("\n")
+    in_project_section = False
+    updated_lines = []
+    version_updated = False
+
+    for line in lines:
+        if line.strip() == "[project]" or line.strip() == "[tool.poetry]":
+            in_project_section = True
+        elif line.strip().startswith("[") and line.strip() != "[project]":
+            in_project_section = False
+
+        if in_project_section and line.strip().startswith("version = "):
+            updated_lines.append(f'version = "{new_version}"')
+            version_updated = True
+        else:
+            updated_lines.append(line)
+
+    if not version_updated:
+        raise ValueError("Failed to update version in pyproject.toml")
+
+    pyproject.write_text("\n".join(updated_lines))
     print("✓ Updated pyproject.toml")
 
-    # Update __init__.py files
-    for init_file in Path("src").rglob("__init__.py"):
-        if update_version_in_file(init_file, old_version, new_version):
-            print(f"✓ Updated {init_file}")
+    # Update __init__.py files that contain version
+    # Currently only bedrock_agentcore/__init__.py has __version__
+    init_file = Path("src/bedrock_agentcore/__init__.py")
+    if init_file.exists() and update_version_in_file(init_file, old_version, new_version):
+        print(f"✓ Updated {init_file}")
+
+
+def format_git_log(git_log: str) -> str:
+    """Format git log entries for changelog.
+
+    Groups commits by type and formats them nicely.
+    """
+    if not git_log.strip():
+        return ""
+
+    # Parse commit messages
+    fixes = []
+    features = []
+    docs = []
+    other = []
+
+    for line in git_log.strip().split("\n"):
+        line = line.strip()
+        if not line or not line.startswith("-"):
+            continue
+
+        # Remove the leading "- " and extract commit message
+        commit_msg = line[2:].strip()
+
+        # Categorize by conventional commit type
+        if commit_msg.startswith("fix:") or commit_msg.startswith("bugfix:"):
+            fixes.append(commit_msg)
+        elif commit_msg.startswith("feat:") or commit_msg.startswith("feature:"):
+            features.append(commit_msg)
+        elif commit_msg.startswith("docs:") or commit_msg.startswith("doc:"):
+            docs.append(commit_msg)
+        else:
+            other.append(commit_msg)
+
+    # Build formatted output
+    sections = []
+
+    if features:
+        sections.append("### Added\n" + "\n".join(f"- {msg}" for msg in features))
+
+    if fixes:
+        sections.append("### Fixed\n" + "\n".join(f"- {msg}" for msg in fixes))
+
+    if docs:
+        sections.append("### Documentation\n" + "\n".join(f"- {msg}" for msg in docs))
+
+    if other:
+        sections.append("### Other Changes\n" + "\n".join(f"- {msg}" for msg in other))
+
+    return "\n\n".join(sections)
 
 
 def get_git_log(since_tag: Optional[str] = None) -> str:
@@ -105,7 +187,7 @@ def update_changelog(new_version: str, changes: str = None):
 
     if not changelog_path.exists():
         # Create new changelog
-        content = "# Changelog\n\n"
+        content = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\n"
     else:
         content = changelog_path.read_text()
 
@@ -114,13 +196,18 @@ def update_changelog(new_version: str, changes: str = None):
     entry = f"\n## [{new_version}] - {date}\n\n"
 
     if changes:
+        # Use custom changelog entry
         entry += changes + "\n"
     else:
-        # Auto-generate from git log
+        # Auto-generate from git log with formatting
         git_log = get_git_log()
         if git_log:
-            entry += "### Changes\n\n"
-            entry += git_log + "\n"
+            formatted_log = format_git_log(git_log)
+            if formatted_log:
+                entry += formatted_log + "\n"
+            else:
+                entry += "### Changes\n\n"
+                entry += git_log + "\n"
 
     # Insert after header
     if "# Changelog" in content:

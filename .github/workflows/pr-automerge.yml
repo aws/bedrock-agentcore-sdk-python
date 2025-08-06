@@ -1,15 +1,8 @@
 name: PR Auto-merge
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
   pull_request_review:
     types: [submitted]
-  check_suite:
-    types: [completed]
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
 
 permissions:
   contents: write
@@ -19,30 +12,14 @@ jobs:
   auto-merge:
     name: Auto-merge Release PRs
     runs-on: ubuntu-latest
+    # Only run when PR is approved and it's a release PR
     if: |
+      github.event.review.state == 'approved' &&
       github.event.pull_request.user.login == 'github-actions[bot]' &&
       startsWith(github.event.pull_request.head.ref, 'release/') &&
       github.event.pull_request.base.ref == 'main'
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Check PR approval status
-        id: approval
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { data: reviews } = await github.rest.pulls.listReviews({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number
-            });
-
-            const approved = reviews.some(review => review.state === 'APPROVED');
-            console.log(`PR approved: ${approved}`);
-            return approved;
-
       - name: Check CI status
         id: ci-status
         uses: actions/github-script@v7
@@ -54,7 +31,16 @@ jobs:
               ref: context.payload.pull_request.head.sha
             });
 
-            const requiredChecks = ['Lint', 'Test Python 3.10'];
+            // Include ALL required checks
+            const requiredChecks = [
+              'Lint',
+              'Test Python 3.10',
+              'Test Python 3.11',
+              'Test Python 3.12',
+              'Test Python 3.13',
+              'Build Package'
+            ];
+
             const allPassed = requiredChecks.every(checkName => {
               const check = checkRuns.check_runs.find(run => run.name === checkName);
               return check && check.conclusion === 'success';
@@ -64,7 +50,7 @@ jobs:
             return allPassed;
 
       - name: Auto-merge PR
-        if: steps.approval.outputs.result == 'true' && steps.ci-status.outputs.result == 'true'
+        if: steps.ci-status.outputs.result == 'true'
         uses: actions/github-script@v7
         with:
           script: |
