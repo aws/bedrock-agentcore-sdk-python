@@ -54,13 +54,13 @@ def update_version_in_file(file_path: Path, old_version: str, new_version: str) 
         return False
 
     content = file_path.read_text()
-    
+
     # Fix: Use re.sub with a function to avoid group reference issues
     pattern = rf'^(__version__\s*=\s*["\'])({re.escape(old_version)})(["\'])'
-    
+
     def replacer(match):
         return f"{match.group(1)}{new_version}{match.group(3)}"
-    
+
     new_content = re.sub(pattern, replacer, content, flags=re.MULTILINE)
 
     if new_content != content:
@@ -74,17 +74,17 @@ def update_all_versions(old_version: str, new_version: str):
     # Update pyproject.toml - use simple string replacement to avoid regex issues
     pyproject = Path("pyproject.toml")
     content = pyproject.read_text()
-    
+
     # Simple string replacement instead of regex
     old_version_line = f'version = "{old_version}"'
     new_version_line = f'version = "{new_version}"'
-    
+
     if old_version_line in content:
         content = content.replace(old_version_line, new_version_line, 1)
         pyproject.write_text(content)
         print("✓ Updated pyproject.toml")
     else:
-        raise ValueError(f"Could not find version = \"{old_version}\" in pyproject.toml")
+        raise ValueError(f'Could not find version = "{old_version}" in pyproject.toml')
 
     # Update __init__.py files that contain version
     init_file = Path("src/bedrock_agentcore/__init__.py")
@@ -96,43 +96,43 @@ def format_git_log(git_log: str) -> str:
     """Format git log entries for changelog."""
     if not git_log.strip():
         return ""
-    
+
     fixes = []
     features = []
     docs = []
     other = []
-    
-    for line in git_log.strip().split('\n'):
+
+    for line in git_log.strip().split("\n"):
         line = line.strip()
-        if not line or not line.startswith('-'):
+        if not line or not line.startswith("-"):
             continue
-            
+
         commit_msg = line[2:].strip()
-        
-        if commit_msg.startswith('fix:') or commit_msg.startswith('bugfix:'):
+
+        if commit_msg.startswith("fix:") or commit_msg.startswith("bugfix:"):
             fixes.append(commit_msg)
-        elif commit_msg.startswith('feat:') or commit_msg.startswith('feature:'):
+        elif commit_msg.startswith("feat:") or commit_msg.startswith("feature:"):
             features.append(commit_msg)
-        elif commit_msg.startswith('docs:') or commit_msg.startswith('doc:'):
+        elif commit_msg.startswith("docs:") or commit_msg.startswith("doc:"):
             docs.append(commit_msg)
         else:
             other.append(commit_msg)
-    
+
     sections = []
-    
+
     if features:
-        sections.append("### Added\n" + '\n'.join(f"- {msg}" for msg in features))
-    
+        sections.append("### Added\n" + "\n".join(f"- {msg}" for msg in features))
+
     if fixes:
-        sections.append("### Fixed\n" + '\n'.join(f"- {msg}" for msg in fixes))
-    
+        sections.append("### Fixed\n" + "\n".join(f"- {msg}" for msg in fixes))
+
     if docs:
-        sections.append("### Documentation\n" + '\n'.join(f"- {msg}" for msg in docs))
-    
+        sections.append("### Documentation\n" + "\n".join(f"- {msg}" for msg in docs))
+
     if other:
-        sections.append("### Other Changes\n" + '\n'.join(f"- {msg}" for msg in other))
-    
-    return '\n\n'.join(sections)
+        sections.append("### Other Changes\n" + "\n".join(f"- {msg}" for msg in other))
+
+    return "\n\n".join(sections)
 
 
 def get_git_log(since_tag: Optional[str] = None) -> str:
@@ -143,8 +143,7 @@ def get_git_log(since_tag: Optional[str] = None) -> str:
     else:
         try:
             last_tag = subprocess.run(
-                ["git", "describe", "--tags", "--abbrev=0"], 
-                capture_output=True, text=True, check=True
+                ["git", "describe", "--tags", "--abbrev=0"], capture_output=True, text=True, check=True
             ).stdout.strip()
             cmd.append(f"{last_tag}..HEAD")
         except subprocess.CalledProcessError:
@@ -172,7 +171,7 @@ def update_changelog(new_version: str, changes: str = None):
     else:
         print("\n⚠️  No changelog provided. Auto-generating from commits.")
         print("💡 Tip: Use --changelog to provide meaningful release notes")
-        
+
         git_log = get_git_log()
         if git_log:
             formatted_log = format_git_log(git_log)
