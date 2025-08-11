@@ -1,4 +1,9 @@
 # Changelog
+## [0.1.2] - 2025-08-11
+
+### Fixed
+- Remove concurrency checks and simplify thread pool handling (#46)
+
 
 All notable changes to this project will be documented in this file.
 
