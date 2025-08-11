@@ -50,5 +50,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TLS 1.2+ enforcement for all communications
 - AWS SigV4 signing for API authentication
 - Secure credential handling via AWS credential chain
-
-
