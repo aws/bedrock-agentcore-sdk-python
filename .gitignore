@@ -223,3 +223,7 @@ config
 local_config.py
 local_settings.py
 .ruff_cache
+
+.bedrock_agentcore.yaml
+.dockerignore
+Dockerfile

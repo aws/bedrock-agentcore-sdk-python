@@ -7,20 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - 2025-07-16
+## [0.1.2] - 2025-08-11
 
-### Added
-- Initial release of Bedrock AgentCore Python SDK
-- Runtime framework for building AI agents
-- Memory client for conversation management
-- Authentication decorators for OAuth2 and API keys
-- Browser and Code Interpreter tool integrations
-- Comprehensive documentation and examples
-
-### Security
-- TLS 1.2+ enforcement for all communications
-- AWS SigV4 signing for API authentication
-- Secure credential handling via AWS credential chain
+### Fixed
+- Remove concurrency checks and simplify thread pool handling (#46)
 
 ## [0.1.1] - 2025-07-23
 
@@ -45,3 +35,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Handles datetime, Decimal, sets, and Unicode characters consistently
   - Ensures both streaming (SSE) and regular responses use identical serialization logic
   - Improved error handling for non-serializable objects
+
+## [0.1.0] - 2025-07-16
+
+### Added
+- Initial release of Bedrock AgentCore Python SDK
+- Runtime framework for building AI agents
+- Memory client for conversation management
+- Authentication decorators for OAuth2 and API keys
+- Browser and Code Interpreter tool integrations
+- Comprehensive documentation and examples
+
+### Security
+- TLS 1.2+ enforcement for all communications
+- AWS SigV4 signing for API authentication
+- Secure credential handling via AWS credential chain

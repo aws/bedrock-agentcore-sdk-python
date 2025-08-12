@@ -11,7 +11,6 @@ import logging
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, Optional
 
 from starlette.applications import Starlette
@@ -62,8 +61,6 @@ class BedrockAgentCoreApp(Starlette):
         self._task_counter_lock: threading.Lock = threading.Lock()
         self._forced_ping_status: Optional[PingStatus] = None
         self._last_status_update_time: float = time.time()
-        self._invocation_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="invocation")
-        self._invocation_semaphore = asyncio.Semaphore(2)
 
         routes = [
             Route("/invocations", self._handle_invocation, methods=["POST"]),
@@ -346,21 +343,18 @@ class BedrockAgentCoreApp(Starlette):
         uvicorn.run(self, host=host, port=port)
 
     async def _invoke_handler(self, handler, request_context, takes_context, payload):
-        if self._invocation_semaphore.locked():
-            return JSONResponse({"error": "Server busy - maximum concurrent requests reached"}, status_code=503)
+        try:
+            args = (payload, request_context) if takes_context else (payload,)
 
-        async with self._invocation_semaphore:
-            try:
-                args = (payload, request_context) if takes_context else (payload,)
-                if asyncio.iscoroutinefunction(handler):
-                    return await handler(*args)
-                else:
-                    loop = asyncio.get_event_loop()
-                    return await loop.run_in_executor(self._invocation_executor, handler, *args)
-            except Exception as e:
-                handler_name = getattr(handler, "__name__", "unknown")
-                self.logger.error("Handler '%s' execution failed: %s: %s", handler_name, type(e).__name__, e)
-                raise
+            if asyncio.iscoroutinefunction(handler):
+                return await handler(*args)
+            else:
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(None, handler, *args)
+        except Exception as e:
+            handler_name = getattr(handler, "__name__", "unknown")
+            self.logger.error("Handler '%s' execution failed: %s: %s", handler_name, type(e).__name__, e)
+            raise
 
     def _handle_task_action(self, payload: dict) -> Optional[JSONResponse]:
         """Handle task management actions if present in payload."""

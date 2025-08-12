@@ -25,7 +25,7 @@ jobs:
 
       # Only TruffleHog - Gitleaks requires license
       - name: TruffleHog OSS
-        uses: trufflesecurity/trufflehog@v3.90.0
+        uses: trufflesecurity/trufflehog@v3.90.2
         with:
           path: ./
           extra_args: --debug --only-verified
