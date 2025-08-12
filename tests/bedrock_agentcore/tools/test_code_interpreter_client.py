@@ -54,7 +54,7 @@ class TestCodeInterpreterClient:
         mock_client = MagicMock()
         mock_session.client.return_value = mock_client
         mock_boto3.Session.return_value = mock_session
-        
+
         client = CodeInterpreter("us-west-2")
         test_identifier = "test.identifier"
         test_session_id = "test-session-id"
