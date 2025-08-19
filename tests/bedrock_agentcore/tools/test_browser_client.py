@@ -1,7 +1,11 @@
 import datetime
 from unittest.mock import MagicMock, patch
 
-from bedrock_agentcore.tools.browser_client import BrowserClient, browser_session
+from bedrock_agentcore.tools.browser_client import (
+    MAX_LIVE_VIEW_PRESIGNED_URL_TIMEOUT,
+    BrowserClient,
+    browser_session,
+)
 
 
 class TestBrowserClient:
@@ -249,7 +253,7 @@ class TestBrowserClient:
                 mock_signer.add_auth.return_value = None
 
                 # Act
-                result_url = client.generate_live_view_url(expires=600)
+                result_url = client.generate_live_view_url(expires=MAX_LIVE_VIEW_PRESIGNED_URL_TIMEOUT)
 
                 # Assert
                 assert (
@@ -260,8 +264,63 @@ class TestBrowserClient:
                     credentials=mock_frozen_creds,
                     service_name="bedrock-agentcore",
                     region_name="us-west-2",
-                    expires=600,
+                    expires=MAX_LIVE_VIEW_PRESIGNED_URL_TIMEOUT,
                 )
+
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    def test_generate_live_view_url_expires_validation_valid(self, mock_boto3):
+        # Arrange
+        client = BrowserClient("us-west-2")
+        client.identifier = "test-browser-id"
+        client.session_id = "test-session-id"
+
+        # Mock the dependencies for URL generation
+        with (
+            patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint") as mock_get_endpoint,
+            patch("bedrock_agentcore.tools.browser_client.SigV4QueryAuth") as mock_sigv4_query,
+            patch("bedrock_agentcore.tools.browser_client.AWSRequest") as mock_aws_request,
+        ):
+            mock_get_endpoint.return_value = "https://api.example.com"
+
+            # Mock boto3 session and credentials
+            mock_boto_session = MagicMock()
+            mock_credentials = MagicMock()
+            mock_frozen_creds = MagicMock()
+            mock_credentials.get_frozen_credentials.return_value = mock_frozen_creds
+            mock_boto_session.get_credentials.return_value = mock_credentials
+            mock_boto3.Session.return_value = mock_boto_session
+
+            # Mock the signer and request
+            mock_signer = MagicMock()
+            mock_sigv4_query.return_value = mock_signer
+
+            mock_request = MagicMock()
+            mock_request.url = "https://api.example.com/signed-url"
+            mock_aws_request.return_value = mock_request
+
+            # Act - test valid expires values
+            for valid_expires in [1, 150, MAX_LIVE_VIEW_PRESIGNED_URL_TIMEOUT]:
+                result = client.generate_live_view_url(expires=valid_expires)
+                # Assert
+                assert result == "https://api.example.com/signed-url"
+
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    def test_generate_live_view_url_expires_validation_invalid(self, mock_boto3):
+        # Arrange
+        client = BrowserClient("us-west-2")
+        client.identifier = "test-browser-id"
+        client.session_id = "test-session-id"
+
+        # Act & Assert - test invalid expires values
+        for invalid_expires in [MAX_LIVE_VIEW_PRESIGNED_URL_TIMEOUT + 1, 500, 1000]:
+            try:
+                client.generate_live_view_url(expires=invalid_expires)
+                raise AssertionError(f"Expected ValueError for expires={invalid_expires}")
+            except ValueError as e:
+                expected_msg = (
+                    f"Expiry timeout cannot exceed {MAX_LIVE_VIEW_PRESIGNED_URL_TIMEOUT} seconds, got {invalid_expires}"
+                )
+                assert expected_msg in str(e)
 
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     def test_take_control(self, mock_boto3):

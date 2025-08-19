@@ -25,6 +25,7 @@ from .._utils.endpoints import (
 DEFAULT_IDENTIFIER = "aws.browser.v1"
 DEFAULT_SESSION_TIMEOUT = 3600
 DEFAULT_LIVE_VIEW_PRESIGNED_URL_TIMEOUT = 300
+MAX_LIVE_VIEW_PRESIGNED_URL_TIMEOUT = 300
 
 
 class BrowserClient:
@@ -214,14 +215,21 @@ class BrowserClient:
         Args:
             expires (int, optional): The number of seconds until the pre-signed URL expires.
                 Defaults to DEFAULT_LIVE_VIEW_PRESIGNED_URL_TIMEOUT (300 seconds).
+                Maximum allowed value is MAX_LIVE_VIEW_PRESIGNED_URL_TIMEOUT seconds.
 
         Returns:
             str: The pre-signed URL for viewing the browser session.
 
         Raises:
+            ValueError: If expires exceeds MAX_LIVE_VIEW_PRESIGNED_URL_TIMEOUT seconds.
             RuntimeError: If the URL generation fails.
         """
         self.logger.info("Generating live view url...")
+
+        if expires > MAX_LIVE_VIEW_PRESIGNED_URL_TIMEOUT:
+            raise ValueError(
+                f"Expiry timeout cannot exceed {MAX_LIVE_VIEW_PRESIGNED_URL_TIMEOUT} seconds, got {expires}"
+            )
 
         if not self.identifier or not self.session_id:
             self.start()
