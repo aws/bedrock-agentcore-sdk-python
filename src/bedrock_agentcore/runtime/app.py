@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, Optional
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
+from starlette.types import Lifespan
 
 from .context import BedrockAgentCoreContext, RequestContext
 from .models import (
@@ -49,11 +50,12 @@ class RequestContextFormatter(logging.Formatter):
 class BedrockAgentCoreApp(Starlette):
     """Bedrock AgentCore application class that extends Starlette for AI agent deployment."""
 
-    def __init__(self, debug: bool = False):
+    def __init__(self, debug: bool = False, lifespan: Lifespan | None = None):
         """Initialize Bedrock AgentCore application.
 
         Args:
             debug: Enable debug actions for task management (default: False)
+            lifespan: used as the Starlette lifespan
         """
         self.handlers: Dict[str, Callable] = {}
         self._ping_handler: Optional[Callable] = None
@@ -66,7 +68,7 @@ class BedrockAgentCoreApp(Starlette):
             Route("/invocations", self._handle_invocation, methods=["POST"]),
             Route("/ping", self._handle_ping, methods=["GET"]),
         ]
-        super().__init__(routes=routes)
+        super().__init__(routes=routes, lifespan=lifespan)
         self.debug = debug  # Set after super().__init__ to avoid override
 
         self.logger = logging.getLogger("bedrock_agentcore.app")
