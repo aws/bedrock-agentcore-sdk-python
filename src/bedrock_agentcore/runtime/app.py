@@ -28,6 +28,7 @@ from .models import (
     TASK_ACTION_PING_STATUS,
     PingStatus,
 )
+from .utils import convert_complex_objects
 
 # Request context for logging
 request_id_context: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("request_id", default=None)
@@ -430,14 +431,31 @@ class BedrockAgentCoreApp(Starlette):
             # First attempt: direct JSON serialization with Unicode support
             return json.dumps(obj, ensure_ascii=False)
         except (TypeError, ValueError, UnicodeEncodeError):
-            try:
-                # Second attempt: convert to string, then JSON encode the string
-                return json.dumps(str(obj), ensure_ascii=False)
-            except Exception as e:
-                # Final fallback: JSON encode error object with ASCII fallback for problematic Unicode
-                self.logger.warning("Failed to serialize object: %s: %s", type(e).__name__, e)
-                error_obj = {"error": "Serialization failed", "original_type": type(obj).__name__}
-                return json.dumps(error_obj, ensure_ascii=False)
+            # For certain types like sets and frozensets, skip complex object conversion
+            # and go directly to string representation
+            if isinstance(obj, (set, frozenset)):
+                try:
+                    # Convert set to string, then JSON encode the string
+                    return json.dumps(str(obj), ensure_ascii=False)
+                except Exception as e:
+                    # Final fallback: JSON encode error object with ASCII fallback for problematic Unicode
+                    self.logger.warning("Failed to serialize object: %s: %s", type(e).__name__, e)
+                    error_obj = {"error": "Serialization failed", "original_type": type(obj).__name__}
+                    return json.dumps(error_obj, ensure_ascii=False)
+            else:
+                try:
+                    # Second attempt: convert to serializable dictionaries, then JSON encode the dictionaries
+                    converted_obj = convert_complex_objects(obj)
+                    return json.dumps(converted_obj, ensure_ascii=False)
+                except Exception:
+                    try:
+                        # Third attempt: convert to string, then JSON encode the string
+                        return json.dumps(str(obj), ensure_ascii=False)
+                    except Exception as e:
+                        # Final fallback: JSON encode error object with ASCII fallback for problematic Unicode
+                        self.logger.warning("Failed to serialize object: %s: %s", type(e).__name__, e)
+                        error_obj = {"error": "Serialization failed", "original_type": type(obj).__name__}
+                        return json.dumps(error_obj, ensure_ascii=False)
 
     def _convert_to_sse(self, obj) -> bytes:
         """Convert object to Server-Sent Events format using safe serialization.
