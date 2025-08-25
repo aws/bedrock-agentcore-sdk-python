@@ -718,8 +718,8 @@ class TestSSEConversion:
         # Second event: valid list
         assert parsed_events[1] == [1, 2, 3]
 
-        # Third event: error event for set
-        assert parsed_events[2] == "{1, 2, 3}"
+        # Third event: set converted to list by convert_complex_objects
+        assert parsed_events[2] == [1, 2, 3]
 
         # Fourth event: valid dict
         assert parsed_events[3] == {"more": "valid_data"}
@@ -880,9 +880,19 @@ class TestSafeSerialization:
             # Should be a string (JSON)
             assert isinstance(result, str)
 
-            # Should be valid JSON containing the string representation
+            # Should be valid JSON
             parsed_data = json.loads(result)
-            assert parsed_data == str(test_data)
+
+            if isinstance(test_data, set):
+                # Sets are converted to lists by convert_complex_objects
+                assert isinstance(parsed_data, list)
+                assert len(parsed_data) == len(test_data)
+                # Check that all elements from the set are in the list
+                for item in test_data:
+                    assert item in parsed_data
+            else:
+                # Other objects (including frozensets) fall back to string representation
+                assert parsed_data == str(test_data)
 
     def test_safe_serialize_final_fallback_to_error_object(self):
         """Test final fallback to error object when both serialization attempts fail."""
