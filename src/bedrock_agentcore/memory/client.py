@@ -92,18 +92,18 @@ class MemoryClient:
             logger.error("Failed to create memory: %s", e)
             raise
 
-    def create_or_get_memory_id(
+    def create_or_get_memory(
         self,
         name: str,
         strategies: Optional[List[Dict[str, Any]]] = None,
         description: Optional[str] = None,
         event_expiry_days: int = 90,
         memory_execution_role_arn: Optional[str] = None,
-    ) -> str:
-        """Create a memory resource or get existing the memory ID if it already exists.
+    ) -> Dict[str, Any]:
+        """Create a memory resource or fetch the existing memory details if it already exists.
 
         Returns:
-            Memory ID string
+            Memory object, either newly created or existing
         """
         try:
             memory = self.create_memory(
@@ -113,20 +113,17 @@ class MemoryClient:
                 event_expiry_days=event_expiry_days,
                 memory_execution_role_arn=memory_execution_role_arn,
             )
-            memory_id = memory.get("memoryId", memory.get("id"))
-            return memory_id
+            return memory
         except ClientError as e:
             if e.response["Error"][
                 "Code"
             ] == "ValidationException" and "already exists" in str(e):
                 memories = self.list_memories()
-                memory_id = next(
-                    (m["id"] for m in memories if m["id"].startswith(name)), None
-                )
+                memory = next((m for m in memories if m["id"].startswith(name)), None)
                 logger.info(
-                    "Memory already exists. Using existing memory ID: %s", memory_id
+                    "Memory already exists. Using existing memory ID: %s", memory["id"]
                 )
-                return memory_id
+                return memory
             else:
                 logger.error("ClientError: Failed to create or get memory: %s", e)
                 raise
