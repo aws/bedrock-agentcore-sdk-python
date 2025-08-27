@@ -106,7 +106,7 @@ class MemoryClient:
             Memory object, either newly created or existing
         """
         try:
-            memory = self.create_memory(
+            memory = self.create_memory_and_wait(
                 name=name,
                 strategies=strategies,
                 description=description,
