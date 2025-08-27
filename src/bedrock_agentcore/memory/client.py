@@ -644,6 +644,7 @@ class MemoryClient:
                     "actorId": actor_id,
                     "sessionId": session_id,
                     "maxResults": min(100, max_results - len(all_events)),
+                    "includePayloads": include_payload,
                 }
 
                 if next_token:
@@ -955,7 +956,7 @@ class MemoryClient:
             current_turn = []
 
             # Process events in chronological order
-            for _, event in enumerate(events):
+            for event in events:
                 if "payload" in event and event["payload"]:
                     for payload_item in event["payload"]:
                         if "conversational" in payload_item:
@@ -973,12 +974,7 @@ class MemoryClient:
                 turns.append(current_turn)
 
             # Return the last k turns
-            if len(turns) > k:
-                result = turns[-k:]  # Get last k turns
-            else:
-                result = turns
-
-            return result
+            return turns[:k] if len(turns) > k else turns
 
         except ClientError as e:
             logger.error("Failed to get last K turns: %s", e)
