@@ -383,6 +383,66 @@ class MemoryClient:
             logger.error("Failed to create event: %s", e)
             raise
 
+    def create_blob_event(
+        self,
+        memory_id: str,
+        actor_id: str,
+        session_id: str,
+        blob_data: Any,
+        event_timestamp: Optional[datetime] = None,
+        branch: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        """Save a blob event to AgentCore Memory.
+
+        Args:
+            memory_id: Memory resource ID
+            actor_id: Actor identifier
+            session_id: Session identifier
+            blob_data: Binary or structured data to store
+            event_timestamp: Optional timestamp for the event
+            branch: Optional branch info
+
+        Returns:
+            Created event
+
+        Example:
+            # Store binary data
+            event = client.create_blob_event(
+                memory_id="mem-xyz",
+                actor_id="user-123",
+                session_id="session-456",
+                blob_data={"file_content": "base64_encoded_data", "metadata": {"type": "image"}}
+            )
+        """
+        try:
+            
+            payload = [{"blob": blob_data}]
+
+            if event_timestamp is None:
+                event_timestamp = datetime.utcnow()
+
+            params = {
+                "memoryId": memory_id,
+                "actorId": actor_id,
+                "sessionId": session_id,
+                "eventTimestamp": event_timestamp,
+                "payload": payload,
+            }
+
+            if branch:
+                params["branch"] = branch
+
+            response = self.gmdp_client.create_event(**params)
+
+            event = response["event"]
+            logger.info("Created blob event: %s", event["eventId"])
+
+            return event
+
+        except ClientError as e:
+            logger.error("Failed to create blob event: %s", e)
+            raise
+
     def save_conversation(
         self,
         memory_id: str,
