@@ -2329,9 +2329,7 @@ def test_create_blob_event():
         client.gmdp_client = mock_gmdp
 
         # Mock create_event response
-        mock_gmdp.create_event.return_value = {
-            "event": {"eventId": "event-blob-123", "memoryId": "mem-123"}
-        }
+        mock_gmdp.create_event.return_value = {"event": {"eventId": "event-blob-123", "memoryId": "mem-123"}}
 
         # Test create_blob_event
         blob_data = {"file_content": "base64_encoded_data", "metadata": {"type": "image"}}
@@ -2364,9 +2362,7 @@ def test_create_blob_event_with_branch():
         client.gmdp_client = mock_gmdp
 
         # Mock create_event response
-        mock_gmdp.create_event.return_value = {
-            "event": {"eventId": "event-blob-branch-123", "memoryId": "mem-123"}
-        }
+        mock_gmdp.create_event.return_value = {"event": {"eventId": "event-blob-branch-123", "memoryId": "mem-123"}}
 
         # Test create_blob_event with branch
         blob_data = {"data": "test_data"}
@@ -2422,11 +2418,8 @@ def test_create_or_get_memory_creates_new():
         client = MemoryClient()
 
         # Mock create_memory_and_wait to return successful result
-        with patch.object(client, 'create_memory_and_wait') as mock_create_and_wait:
-            mock_create_and_wait.return_value = {
-                "memoryId": "new-memory-123", 
-                "status": "ACTIVE"
-            }
+        with patch.object(client, "create_memory_and_wait") as mock_create_and_wait:
+            mock_create_and_wait.return_value = {"memoryId": "new-memory-123", "status": "ACTIVE"}
 
             result = client.create_or_get_memory(
                 name="TestMemory",
@@ -2457,15 +2450,11 @@ def test_create_or_get_memory_gets_existing():
 
         # Mock list_memories response
         mock_gmcp.list_memories.return_value = {
-            "memories": [
-                {"id": "ExistingMemory-456", "name": "ExistingMemory", "status": "ACTIVE"}
-            ],
+            "memories": [{"id": "ExistingMemory-456", "name": "ExistingMemory", "status": "ACTIVE"}],
             "nextToken": None,
         }
 
-        with patch(
-            "uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")
-        ):
+        with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
             result = client.create_or_get_memory(
                 name="ExistingMemory",
                 strategies=[{StrategyType.SEMANTIC.value: {"name": "TestStrategy"}}],
@@ -2494,9 +2483,7 @@ def test_create_or_get_memory_other_client_error():
         }
         mock_gmcp.create_memory.side_effect = ClientError(error_response, "CreateMemory")
 
-        with patch(
-            "uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")
-        ):
+        with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
             try:
                 client.create_or_get_memory(
                     name="TestMemory",
@@ -2520,9 +2507,7 @@ def test_create_or_get_memory_general_exception():
         # Mock general exception
         mock_gmcp.create_memory.side_effect = Exception("Unexpected error")
 
-        with patch(
-            "uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")
-        ):
+        with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
             try:
                 client.create_or_get_memory(
                     name="TestMemory",

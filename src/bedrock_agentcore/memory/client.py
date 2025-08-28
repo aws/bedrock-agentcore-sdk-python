@@ -115,19 +115,15 @@ class MemoryClient:
             )
             return memory
         except ClientError as e:
-            if e.response["Error"][
-                "Code"
-            ] == "ValidationException" and "already exists" in str(e):
+            if e.response["Error"]["Code"] == "ValidationException" and "already exists" in str(e):
                 memories = self.list_memories()
                 memory = next((m for m in memories if m["id"].startswith(name)), None)
-                logger.info(
-                    "Memory already exists. Using existing memory ID: %s", memory["id"]
-                )
+                logger.info("Memory already exists. Using existing memory ID: %s", memory["id"])
                 return memory
             else:
                 logger.error("ClientError: Failed to create or get memory: %s", e)
                 raise
-        except Exception as e:
+        except Exception:
             raise
 
     def create_memory_and_wait(
@@ -412,7 +408,6 @@ class MemoryClient:
             )
         """
         try:
-            
             payload = [{"blob": blob_data}]
 
             if event_timestamp is None:
