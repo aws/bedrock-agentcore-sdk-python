@@ -55,8 +55,9 @@ print(basic_memory.get('id'))
 
 ```python
 MEM_ID = basic_memory.get('id')
-ACTOR_ID = f"actor_id_test_{str(date.today()).replace('-', '_')}_day"
-SESSION_ID = f'testing_session_id_{str(date.today()).replace("-", "_")}_day'
+ACTOR_ID = "actor_id_test_%s" % datetime.now().strftime("%Y%m%d%H%M%S")
+SESSION_ID = "testing_session_id_%s" % datetime.now().strftime("%Y%m%d%H%M%S")
+
 
 # Configure memory
 agentcore_memory_config = AgentCoreMemoryConfig(
@@ -100,6 +101,7 @@ agent("What should I buy for lunch today?")
 ```python
 from bedrock_agentcore.memory.integrations.config import AgentCoreMemoryConfig, RetrievalConfig
 from bedrock_agentcore.memory.integrations.session_manager import AgentCoreMemorySessionManager
+from datetime import datetime
 
 # Create comprehensive memory with all built-in strategies
 client = MemoryClient(region_name="us-east-1")
@@ -128,9 +130,8 @@ comprehensive_memory = client.create_memory_and_wait(
     ]
 )
 MEM_ID = comprehensive_memory.get('id')
-ACTOR_ID = f"actor_id_test_{str(date.today()).replace('-', '_')}_day"
-SESSION_ID = f'testing_session_id_{str(date.today()).replace("-", "_")}_day'
-
+ACTOR_ID = "actor_id_test_%s" % datetime.now().strftime("%Y%m%d%H%M%S")
+SESSION_ID = "testing_session_id_%s" % datetime.now().strftime("%Y%m%d%H%M%S")
 
 ```
 
@@ -138,7 +139,7 @@ SESSION_ID = f'testing_session_id_{str(date.today()).replace("-", "_")}_day'
 
 ```python
 config = AgentCoreMemoryConfig(
-    memory_id="ComprehensiveAgentMemory-B3CwQ09ahO",
+    memory_id=MEM_ID,
     session_id=SESSION_ID,
     actor_id=ACTOR_ID,
     retrieval_config={
@@ -156,7 +157,7 @@ ltm_agent = Agent(session_manager=session_manager)
 
 ```python
 config = AgentCoreMemoryConfig(
-    memory_id="ComprehensiveAgentMemory-B3CwQ09ahO",
+    memory_id=MEM_ID,
     session_id=SESSION_ID,
     actor_id=ACTOR_ID,
     retrieval_config={
@@ -188,8 +189,11 @@ agent_with_multiple_namespaces = Agent(session_manager=session_manager)
 from strands import Agent, tool
 from strands_tools import generate_image, image_reader
 
+ACTOR_ID = "actor_id_test_%s" % datetime.now().strftime("%Y%m%d%H%M%S")
+SESSION_ID = "testing_session_id_%s" % datetime.now().strftime("%Y%m%d%H%M%S")
+
 config = AgentCoreMemoryConfig(
-    memory_id="ComprehensiveAgentMemory-B3CwQ09ahO",
+    memory_id=MEM_ID,
     session_id=SESSION_ID,
     actor_id=ACTOR_ID,
 )
