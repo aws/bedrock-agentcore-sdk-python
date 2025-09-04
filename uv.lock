@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10"
 
 [[package]]
@@ -58,6 +58,11 @@ dependencies = [
     { name = "uvicorn" },
 ]
 
+[package.optional-dependencies]
+strands-agents = [
+    { name = "strands-agents" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "httpx" },
@@ -78,10 +83,12 @@ requires-dist = [
     { name = "botocore", specifier = ">=1.39.7" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
     { name = "starlette", specifier = ">=0.46.2" },
+    { name = "strands-agents", marker = "extra == 'strands-agents'", specifier = ">=1.1.0" },
     { name = "typing-extensions", specifier = ">=4.13.2,<5.0.0" },
     { name = "urllib3", specifier = ">=1.26.0" },
     { name = "uvicorn", specifier = ">=0.34.2" },
 ]
+provides-extras = ["strands-agents"]
 
 [package.metadata.requires-dev]
 dev = [
