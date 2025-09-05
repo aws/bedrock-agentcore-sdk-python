@@ -76,10 +76,12 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e .
-          pip install --no-cache-dir pytest requests strands-agents
+          pip install --no-cache-dir pytest requests strands-agents uvicorn httpx starlette
       - name: Run integration tests
         env:
           AWS_REGION: us-west-2
+          PYTHONUNBUFFERED: 1
         id: tests
+        timeout-minutes: 5
         run: |
           pytest tests_integ/runtime -s --log-cli-level=INFO
