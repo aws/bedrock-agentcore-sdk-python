@@ -227,3 +227,4 @@ local_settings.py
 .bedrock_agentcore.yaml
 .dockerignore
 Dockerfile
+CLAUDE.md

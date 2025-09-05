@@ -168,9 +168,9 @@ class DataProcessor:
             time.sleep(300)
             if os.path.exists(self.result_file):
                 os.remove(self.result_file)
-                print(f"[Processor {self.task_id}] Cleaned up result file")
+                logger.info("Processor %s: Cleaned up result file", self.task_id)
         except Exception as e:
-            print(f"[Processor {self.task_id}] Error during cleanup: {e}")
+            logger.error("Processor %s: Error during cleanup: %s", self.task_id, e)
 
 
 def run_data_processing(task_id: int, dataset_size: str, processing_type: str, duration_minutes: int, batch_size: int):
@@ -192,7 +192,7 @@ def run_data_processing(task_id: int, dataset_size: str, processing_type: str, d
             # Break if we've exceeded our time limit (safety check)
             elapsed_minutes = (datetime.now() - processor.start_time).total_seconds() / 60
             if elapsed_minutes > duration_minutes * 1.2:  # 20% buffer
-                print(f"[Processor {task_id}] Time limit exceeded, completing processing")
+                logger.warning("Processor %s: Time limit exceeded, completing processing", task_id)
                 break
 
         # Mark as completed
@@ -216,7 +216,7 @@ def run_data_processing(task_id: int, dataset_size: str, processing_type: str, d
     finally:
         # Complete the async task
         success = app.complete_async_task(task_id)
-        print(f"[Processor {task_id}] Task completion: {'SUCCESS' if success else 'FAILED'}")
+        logger.info("Processor %s: Task completion: %s", task_id, "SUCCESS" if success else "FAILED")
 
         # Remove from active tasks
         active_tasks.pop(task_id, None)
@@ -524,41 +524,41 @@ def agent_invocation(payload):
 
 
 if __name__ == "__main__":
-    print("🤖 Interactive Async Strands Demo")
-    print("=" * 60)
-    print("🎯 Long-Running Data Processing with Real-Time Progress")
-    print("📊 Features: 30-min processing, file-based progress, agent interactivity")
-    print("🔄 Task Tracking: Proper async task lifecycle management")
-    print()
-    print("🧪 Example Commands:")
-    print()
-    print("1️⃣  **Start Processing:**")
-    print("curl -X POST http://localhost:8080/invocations \\")
-    print("  -H 'Content-Type: application/json' \\")
-    print('  -d \'{"prompt": "Start processing a medium dataset for data analysis"}\'')
-    print()
-    print("2️⃣  **Check Progress (anytime during processing):**")
-    print("curl -X POST http://localhost:8080/invocations \\")
-    print("  -H 'Content-Type: application/json' \\")
-    print('  -d \'{"prompt": "What is the processing progress?"}\'')
-    print()
-    print("3️⃣  **Test Interactivity (while processing):**")
-    print("curl -X POST http://localhost:8080/invocations \\")
-    print("  -H 'Content-Type: application/json' \\")
-    print('  -d \'{"prompt": "Tell me about the weather while we wait"}\'')
-    print()
-    print("4️⃣  **Quick Test (2 minutes):**")
-    print("curl -X POST http://localhost:8080/invocations \\")
-    print("  -H 'Content-Type: application/json' \\")
-    print('  -d \'{"prompt": "Start a small dataset analysis for 2 minutes"}\'')
-    print()
-    print("📊 **Expected Flow:**")
-    print("  • Health: HEALTHY → BUSY → HEALTHY")
-    print("  • Files: Progress saved every second to JSON")
-    print("  • Agent: Always responsive and interactive")
-    print("  • Processing: Realistic multi-stage simulation")
-    print()
-    print("🚀 Starting server on http://localhost:8080")
-    print("=" * 60)
+    app.logger.info("🤖 Interactive Async Strands Demo")
+    app.logger.info("=" * 60)
+    app.logger.info("🎯 Long-Running Data Processing with Real-Time Progress")
+    app.logger.info("📊 Features: 30-min processing, file-based progress, agent interactivity")
+    app.logger.info("🔄 Task Tracking: Proper async task lifecycle management")
+    app.logger.info("")
+    app.logger.info("🧪 Example Commands:")
+    app.logger.info("")
+    app.logger.info("1️⃣  **Start Processing:**")
+    app.logger.info("curl -X POST http://localhost:8080/invocations \\")
+    app.logger.info("  -H 'Content-Type: application/json' \\")
+    app.logger.info('  -d \'{"prompt": "Start processing a medium dataset for data analysis"}\'')
+    app.logger.info("")
+    app.logger.info("2️⃣  **Check Progress (anytime during processing):**")
+    app.logger.info("curl -X POST http://localhost:8080/invocations \\")
+    app.logger.info("  -H 'Content-Type: application/json' \\")
+    app.logger.info('  -d \'{"prompt": "What is the processing progress?"}\'')
+    app.logger.info("")
+    app.logger.info("3️⃣  **Test Interactivity (while processing):**")
+    app.logger.info("curl -X POST http://localhost:8080/invocations \\")
+    app.logger.info("  -H 'Content-Type: application/json' \\")
+    app.logger.info('  -d \'{"prompt": "Tell me about the weather while we wait"}\'')
+    app.logger.info("")
+    app.logger.info("4️⃣  **Quick Test (2 minutes):**")
+    app.logger.info("curl -X POST http://localhost:8080/invocations \\")
+    app.logger.info("  -H 'Content-Type: application/json' \\")
+    app.logger.info('  -d \'{"prompt": "Start a small dataset analysis for 2 minutes"}\'')
+    app.logger.info("")
+    app.logger.info("📊 **Expected Flow:**")
+    app.logger.info("  • Health: HEALTHY → BUSY → HEALTHY")
+    app.logger.info("  • Files: Progress saved every second to JSON")
+    app.logger.info("  • Agent: Always responsive and interactive")
+    app.logger.info("  • Processing: Realistic multi-stage simulation")
+    app.logger.info("")
+    app.logger.info("🚀 Starting server on http://localhost:8080")
+    app.logger.info("=" * 60)
 
     app.run(port=8080)

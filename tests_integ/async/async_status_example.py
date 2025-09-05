@@ -22,17 +22,17 @@ app = BedrockAgentCoreApp(debug=True)
 @app.async_task
 async def background_data_processing():
     """Simulate a long-running background task."""
-    print("Starting background data processing...")
+    app.logger.info("Starting background data processing...")
     await asyncio.sleep(200)  # Simulate work
-    print("Background data processing completed")
+    app.logger.info("Background data processing completed")
 
 
 @app.async_task
 async def database_cleanup():
     """Simulate database cleanup task."""
-    print("Starting database cleanup...")
+    app.logger.info("Starting database cleanup...")
     await asyncio.sleep(100)  # Simulate work
-    print("Database cleanup completed")
+    app.logger.info("Database cleanup completed")
 
 
 # Main entrypoint
@@ -83,21 +83,21 @@ async def handler(event):
 
 if __name__ == "__main__":
     # For local testing
-    print("Starting BedrockAgentCore app with async status functionality...")
-    print("Available endpoints:")
-    print("  GET /ping - Check current ping status")
-    print("  POST /invocations - Main handler")
-    print("")
-    print("Example debug action calls (debug=True is enabled):")
-    print("  {'_agent_core_app_action': 'ping_status'}")
-    print("  {'_agent_core_app_action': 'job_status'}")
-    print("  {'_agent_core_app_action': 'force_healthy'}")
-    print("  {'_agent_core_app_action': 'force_busy'}")
-    print("  {'_agent_core_app_action': 'clear_forced_status'}")
-    print("")
-    print("Example regular calls:")
-    print("  {'action': 'start_background_task'}")
-    print("  {'action': 'get_task_info'}")
-    print("  {'action': 'force_status', 'ping_status': 'HealthyBusy'}")
+    app.logger.info("Starting BedrockAgentCore app with async status functionality...")
+    app.logger.info("Available endpoints:")
+    app.logger.info("  GET /ping - Check current ping status")
+    app.logger.info("  POST /invocations - Main handler")
+    app.logger.info("")
+    app.logger.info("Example debug action calls (debug=True is enabled):")
+    app.logger.info("  {'_agent_core_app_action': 'ping_status'}")
+    app.logger.info("  {'_agent_core_app_action': 'job_status'}")
+    app.logger.info("  {'_agent_core_app_action': 'force_healthy'}")
+    app.logger.info("  {'_agent_core_app_action': 'force_busy'}")
+    app.logger.info("  {'_agent_core_app_action': 'clear_forced_status'}")
+    app.logger.info("")
+    app.logger.info("Example regular calls:")
+    app.logger.info("  {'action': 'start_background_task'}")
+    app.logger.info("  {'action': 'get_task_info'}")
+    app.logger.info("  {'action': 'force_status', 'ping_status': 'HealthyBusy'}")
 
     app.run()

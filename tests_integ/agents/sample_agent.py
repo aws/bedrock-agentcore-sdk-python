@@ -7,10 +7,10 @@ app = BedrockAgentCoreApp()
 
 @app.entrypoint
 async def invoke(payload):
-    print(payload)
-    print("Starting long invoke...")
+    app.logger.info("Received payload: %s", payload)
+    app.logger.info("Starting long invoke...")
     await asyncio.sleep(60)  # 1 minute sleep
-    print("Finished long invoke")
+    app.logger.info("Finished long invoke")
     return {"message": "hello after 1 minute"}
 
 

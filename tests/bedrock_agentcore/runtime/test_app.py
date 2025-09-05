@@ -274,7 +274,7 @@ class TestBedrockAgentCoreApp:
             return {"status": "ok", "data": request}
 
         client = TestClient(bedrock_agentcore)
-        headers = {"X-Amzn-Bedrock-AgentCore-Request-Id": "custom-request-id"}
+        headers = {"X-Amzn-Bedrock-AgentCore-Runtime-Request-Id": "custom-request-id"}
         response = client.post("/invocations", json={"test": "data"}, headers=headers)
 
         assert response.status_code == 200
@@ -290,7 +290,7 @@ class TestBedrockAgentCoreApp:
 
         client = TestClient(bedrock_agentcore)
         headers = {
-            "X-Amzn-Bedrock-AgentCore-Request-Id": "custom-request",
+            "X-Amzn-Bedrock-AgentCore-Runtime-Request-Id": "custom-request",
             "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": "custom-session",
         }
         response = client.post("/invocations", json={"test": "data"}, headers=headers)

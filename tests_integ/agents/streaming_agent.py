@@ -14,7 +14,7 @@ async def agent_invocation(payload):
     )
     stream = agent.stream_async(user_message)
     async for event in stream:
-        print(event)
+        app.logger.info("Streaming event: %s", event)
         yield (event)
 
 

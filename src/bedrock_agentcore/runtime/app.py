@@ -4,6 +4,7 @@ Provides a Starlette-based web server that wraps user functions as HTTP endpoint
 """
 
 import asyncio
+import contextvars
 import inspect
 import json
 import logging
@@ -360,7 +361,8 @@ class BedrockAgentCoreApp(Starlette):
                 return await handler(*args)
             else:
                 loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(None, handler, *args)
+                ctx = contextvars.copy_context()
+                return await loop.run_in_executor(None, ctx.run, handler, *args)
         except Exception as e:
             handler_name = getattr(handler, "__name__", "unknown")
             self.logger.error("Handler '%s' execution failed: %s: %s", handler_name, type(e).__name__, e)
