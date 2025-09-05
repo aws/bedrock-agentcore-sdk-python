@@ -9,9 +9,9 @@ from strands.agent.agent import Agent
 from strands.types.exceptions import SessionException
 from strands.types.session import Session, SessionAgent, SessionMessage, SessionType
 
-from bedrock_agentcore.memory.integrations.session_manager import AgentCoreMemorySessionManager
-from bedrock_agentcore.memory.integrations.config import AgentCoreMemoryConfig, RetrievalConfig
-from bedrock_agentcore.memory.integrations.bedrock_converter import AgentCoreMemoryConverter
+from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
+from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
+from bedrock_agentcore.memory.integrations.strands.bedrock_converter import AgentCoreMemoryConverter
 
 
 @pytest.fixture
@@ -54,7 +54,7 @@ def mock_memory_client():
 @pytest.fixture
 def session_manager(agentcore_config, mock_memory_client):
     """Create an AgentCoreMemorySessionManager with mocked dependencies."""
-    with patch('bedrock_agentcore.memory.integrations.session_manager.MemoryClient', return_value=mock_memory_client):
+    with patch('bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient', return_value=mock_memory_client):
         with patch('boto3.Session') as mock_boto_session:
             mock_session = Mock()
             mock_session.region_name = "us-west-2"
@@ -82,7 +82,7 @@ class TestAgentCoreMemorySessionManager:
 
     def test_init_basic(self, agentcore_config):
         """Test basic initialization."""
-        with patch('bedrock_agentcore.memory.integrations.session_manager.MemoryClient') as mock_client_class:
+        with patch('bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient') as mock_client_class:
             mock_client = Mock()
             mock_client_class.return_value = mock_client
             
@@ -538,7 +538,7 @@ class TestAgentCoreMemorySessionManager:
             }
         )
         
-        with patch('bedrock_agentcore.memory.integrations.session_manager.MemoryClient', return_value=mock_memory_client):
+        with patch('bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient', return_value=mock_memory_client):
             with patch('boto3.Session') as mock_boto_session:
                 mock_session = Mock()
                 mock_session.region_name = "us-west-2"
@@ -640,7 +640,7 @@ class TestAgentCoreMemorySessionManager:
             {"content": "Less relevant memory", "relevanceScore": 0.2}
         ]
         
-        with patch('bedrock_agentcore.memory.integrations.session_manager.MemoryClient', return_value=mock_memory_client):
+        with patch('bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient', return_value=mock_memory_client):
             with patch('boto3.Session') as mock_boto_session:
                 mock_session = Mock()
                 mock_session.region_name = "us-west-2"
@@ -665,7 +665,7 @@ class TestAgentCoreMemorySessionManager:
             {"content": "User preference memory", "relevanceScore": 0.9}
         ]
         
-        with patch('bedrock_agentcore.memory.integrations.session_manager.MemoryClient', return_value=mock_memory_client):
+        with patch('bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient', return_value=mock_memory_client):
             with patch('boto3.Session') as mock_boto_session:
                 mock_session = Mock()
                 mock_session.region_name = "us-west-2"
@@ -697,7 +697,7 @@ class TestAgentCoreMemorySessionManager:
 
     def test_retrieve_contextual_memories_invalid_namespace(self, agentcore_config_with_retrieval, mock_memory_client):
         """Test contextual memory retrieval with invalid namespace."""
-        with patch('bedrock_agentcore.memory.integrations.session_manager.MemoryClient', return_value=mock_memory_client):
+        with patch('bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient', return_value=mock_memory_client):
             with patch('boto3.Session') as mock_boto_session:
                 mock_session = Mock()
                 mock_session.region_name = "us-west-2"
@@ -722,7 +722,7 @@ class TestAgentCoreMemorySessionManager:
             {"content": "User is in Pacific timezone", "relevanceScore": 0.7}
         ]
         
-        with patch('bedrock_agentcore.memory.integrations.session_manager.MemoryClient', return_value=mock_memory_client):
+        with patch('bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient', return_value=mock_memory_client):
             with patch('boto3.Session') as mock_boto_session:
                 mock_session = Mock()
                 mock_session.region_name = "us-west-2"
@@ -741,7 +741,7 @@ class TestAgentCoreMemorySessionManager:
         """Test exception handling during long-term memory loading."""
         mock_memory_client.retrieve_memories.side_effect = Exception("API Error")
         
-        with patch('bedrock_agentcore.memory.integrations.session_manager.MemoryClient', return_value=mock_memory_client):
+        with patch('bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient', return_value=mock_memory_client):
             with patch('boto3.Session') as mock_boto_session:
                 mock_session = Mock()
                 mock_session.region_name = "us-west-2"
@@ -837,7 +837,7 @@ class TestAgentCoreMemorySessionManager:
         
         mock_memory_client.retrieve_memories.side_effect = mock_retrieve_side_effect
         
-        with patch('bedrock_agentcore.memory.integrations.session_manager.MemoryClient', return_value=mock_memory_client):
+        with patch('bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient', return_value=mock_memory_client):
             with patch('boto3.Session') as mock_boto_session:
                 mock_session = Mock()
                 mock_session.region_name = "us-west-2"
@@ -883,7 +883,7 @@ class TestAgentCoreMemorySessionManager:
             {"content": "User prefers morning meetings", "relevanceScore": 0.8}
         ]
         
-        with patch('bedrock_agentcore.memory.integrations.session_manager.MemoryClient', return_value=mock_memory_client):
+        with patch('bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient', return_value=mock_memory_client):
             with patch('boto3.Session') as mock_boto_session:
                 mock_session = Mock()
                 mock_session.region_name = "us-west-2"
