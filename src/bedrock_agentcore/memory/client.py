@@ -435,6 +435,236 @@ class MemoryClient:
             logger.error("Failed to create blob event: %s", e)
             raise
 
+    def get_event(
+        self,
+        memory_id: str,
+        actor_id: str,
+        session_id: str,
+        event_id: str,
+    ) -> Dict[str, Any]:
+        """Retrieves information about a specific event in an AgentCore Memory resource.
+
+        Args:
+            memory_id: Memory resource ID
+            actor_id: Actor identifier
+            session_id: Session identifier
+            event_id: Event identifier to retrieve
+
+        Returns:
+            Dictionary containing the event information
+
+        Example:
+            event = client.get_event(
+                memory_id="mem-xyz",
+                actor_id="user-123",
+                session_id="session-456",
+                event_id="123#abc123"
+            )
+        """
+        try:
+            response = self.gmdp_client.get_event(
+                memoryId=memory_id,
+                actorId=actor_id,
+                sessionId=session_id,
+                eventId=event_id,
+            )
+
+            logger.info("Retrieved event: %s", event_id)
+            return response["event"]
+
+        except ClientError as e:
+            logger.error("Failed to get event: %s", e)
+            raise
+
+    def delete_event(
+        self,
+        memory_id: str,
+        actor_id: str,
+        session_id: str,
+        event_id: str,
+    ) -> None:
+        """Deletes an event from an AgentCore Memory resource.
+
+        When you delete an event, it is permanently removed.
+
+        Args:
+            memory_id: Memory resource ID
+            actor_id: Actor identifier
+            session_id: Session identifier
+            event_id: Event identifier to delete
+
+        Returns:
+            None
+
+        Example:
+            client.delete_event(
+                memory_id="mem-xyz",
+                actor_id="user-123",
+                session_id="session-456",
+                event_id="123#abc123"
+            )
+        """
+        try:
+            self.gmdp_client.delete_event(
+                memoryId=memory_id,
+                actorId=actor_id,
+                sessionId=session_id,
+                eventId=event_id,
+            )
+
+            logger.info("Deleted event: %s", event_id)
+
+        except ClientError as e:
+            logger.error("Failed to delete event: %s", e)
+            raise
+
+    def get_memory_record(
+        self,
+        memory_id: str,
+        memory_record_id: str,
+    ) -> Dict[str, Any]:
+        """Retrieves a specific memory record from an AgentCore Memory resource.
+
+        Args:
+            memory_id: Memory resource ID
+            memory_record_id: The identifier of the memory record to retrieve
+
+        Returns:
+            Dictionary containing the memory record information
+
+        Example:
+            memory_record = client.get_memory_record(
+                memory_id="mem-xyz",
+                memory_record_id="rec-123"
+            )
+        """
+        try:
+            response = self.gmdp_client.get_memory_record(
+                memoryId=memory_id,
+                memoryRecordId=memory_record_id,
+            )
+
+            logger.info("Retrieved memory record: %s", memory_record_id)
+            return response["memoryRecord"]
+
+        except ClientError as e:
+            logger.error("Failed to get memory record: %s", e)
+            raise
+
+    def delete_memory_record(
+        self,
+        memory_id: str,
+        memory_record_id: str,
+    ) -> str:
+        """Deletes a memory record from an AgentCore Memory resource.
+
+        When you delete a memory record, it is permanently removed.
+
+        Args:
+            memory_id: Memory resource ID
+            memory_record_id: The identifier of the memory record to delete
+
+        Returns:
+            The identifier of the memory record that was deleted
+
+        Example:
+            memory_record_id = client.delete_memory_record(
+                memory_id="mem-xyz",
+                memory_record_id="rec-123"
+            )
+        """
+        try:
+            response = self.gmdp_client.delete_memory_record(
+                memoryId=memory_id,
+                memoryRecordId=memory_record_id,
+            )
+
+            logger.info("Deleted memory record: %s", memory_record_id)
+            return response["memoryRecordId"]
+
+        except ClientError as e:
+            logger.error("Failed to delete memory record: %s", e)
+            raise
+
+    def list_memory_records(
+        self,
+        memory_id: str,
+        namespace: str,
+        memory_strategy_id: Optional[str] = None,
+        max_results: int = 20,
+        next_token: Optional[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+        """Lists memory records in an AgentCore Memory resource based on specified criteria.
+
+        Args:
+            memory_id: Memory resource ID
+            namespace: The namespace to filter memory records by
+            memory_strategy_id: Optional memory strategy identifier to filter memory records by
+            max_results: Maximum number of results to return (default: 20, max: 100)
+            next_token: Optional pagination token from a previous request
+
+        Returns:
+            Tuple containing (list of memory record summaries, next pagination token or None)
+
+        Example:
+            records, next_token = client.list_memory_records(
+                memory_id="mem-xyz",
+                namespace="user/preferences",
+                max_results=50
+            )
+
+            # Fetch next page if available
+            if next_token:
+                more_records, _ = client.list_memory_records(
+                    memory_id="mem-xyz",
+                    namespace="user/preferences",
+                    max_results=50,
+                    next_token=next_token
+                )
+        """
+        try:
+            # Build request parameters
+            params = {
+                "memoryId": memory_id,
+                "namespace": namespace,
+            }
+
+            if max_results is not None:
+                params["maxResults"] = min(max_results, 100)  # API limit is 100
+
+            if memory_strategy_id is not None:
+                params["memoryStrategyId"] = memory_strategy_id
+
+            if next_token is not None:
+                params["nextToken"] = next_token
+
+            response = self.gmdp_client.list_memory_records(**params)
+
+            memory_records = response.get("memoryRecordSummaries", [])
+            next_token = response.get("nextToken")
+
+            logger.info("Retrieved %d memory records from namespace: %s", len(memory_records), namespace)
+            return memory_records, next_token
+
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            error_msg = e.response["Error"]["Message"]
+
+            if error_code == "ResourceNotFoundException":
+                logger.warning(
+                    "Memory or namespace not found. Ensure memory %s exists and namespace '%s' is configured",
+                    memory_id,
+                    namespace,
+                )
+            elif error_code == "ValidationException":
+                logger.warning("Invalid parameters: %s", error_msg)
+            elif error_code == "ServiceException":
+                logger.warning("Service error: %s. This may be temporary - try again later", error_msg)
+            else:
+                logger.warning("Memory record listing failed (%s): %s", error_code, error_msg)
+
+            return [], None
+
     def save_conversation(
         self,
         memory_id: str,
