@@ -192,7 +192,9 @@ class TestBedrockAgentCoreApp:
         bedrock_agentcore = BedrockAgentCoreApp()
         bedrock_agentcore.run(port=8080)
 
-        mock_uvicorn.assert_called_once_with(bedrock_agentcore, host="0.0.0.0", port=8080)
+        mock_uvicorn.assert_called_once_with(
+            bedrock_agentcore, host="0.0.0.0", port=8080, access_log=False, log_level="warning"
+        )
 
     @patch("os.path.exists", return_value=True)
     @patch("uvicorn.run")
@@ -201,7 +203,9 @@ class TestBedrockAgentCoreApp:
         bedrock_agentcore = BedrockAgentCoreApp()
         bedrock_agentcore.run(port=8080)
 
-        mock_uvicorn.assert_called_once_with(bedrock_agentcore, host="0.0.0.0", port=8080)
+        mock_uvicorn.assert_called_once_with(
+            bedrock_agentcore, host="0.0.0.0", port=8080, access_log=False, log_level="warning"
+        )
 
     @patch("uvicorn.run")
     def test_serve_localhost(self, mock_uvicorn):
@@ -209,7 +213,9 @@ class TestBedrockAgentCoreApp:
         bedrock_agentcore = BedrockAgentCoreApp()
         bedrock_agentcore.run(port=8080)
 
-        mock_uvicorn.assert_called_once_with(bedrock_agentcore, host="127.0.0.1", port=8080)
+        mock_uvicorn.assert_called_once_with(
+            bedrock_agentcore, host="127.0.0.1", port=8080, access_log=False, log_level="warning"
+        )
 
     @patch("uvicorn.run")
     def test_serve_custom_host(self, mock_uvicorn):
@@ -217,7 +223,9 @@ class TestBedrockAgentCoreApp:
         bedrock_agentcore = BedrockAgentCoreApp()
         bedrock_agentcore.run(port=8080, host="custom-host.example.com")
 
-        mock_uvicorn.assert_called_once_with(bedrock_agentcore, host="custom-host.example.com", port=8080)
+        mock_uvicorn.assert_called_once_with(
+            bedrock_agentcore, host="custom-host.example.com", port=8080, access_log=False, log_level="warning"
+        )
 
     def test_entrypoint_serve_method(self):
         """Test that entrypoint decorator adds serve method that works."""
@@ -230,7 +238,32 @@ class TestBedrockAgentCoreApp:
         # Test that the serve method exists and can be called with mocked uvicorn
         with patch("uvicorn.run") as mock_uvicorn:
             handler.run(port=9000, host="test-host")
-            mock_uvicorn.assert_called_once_with(bedrock_agentcore, host="test-host", port=9000)
+            mock_uvicorn.assert_called_once_with(
+                bedrock_agentcore,
+                host="test-host",
+                port=9000,
+                access_log=False,  # Default production behavior
+                log_level="warning",
+            )
+
+    def test_debug_mode_uvicorn_config(self):
+        """Test that debug mode enables full uvicorn logging."""
+        bedrock_agentcore = BedrockAgentCoreApp(debug=True)
+
+        @bedrock_agentcore.entrypoint
+        def handler(payload):
+            return {"result": "success"}
+
+        # Test that debug mode uses full uvicorn logging
+        with patch("uvicorn.run") as mock_uvicorn:
+            handler.run(port=9000, host="test-host")
+            mock_uvicorn.assert_called_once_with(
+                bedrock_agentcore,
+                host="test-host",
+                port=9000,
+                access_log=True,  # Debug mode enables access logs
+                log_level="info",  # Debug mode uses info level
+            )
 
 
 class TestConcurrentInvocations:

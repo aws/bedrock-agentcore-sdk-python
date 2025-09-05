@@ -1,4 +1,10 @@
 <div align="center">
+  <div>
+    <a href="https://aws.amazon.com/bedrock/agentcore/">
+      <img width="150" height="150" alt="image" src="https://github.com/user-attachments/assets/b8b9456d-c9e2-45e1-ac5b-760f21f1ac18" />
+   </a>
+  </div>
+
   <h1>
     Bedrock AgentCore SDK
   </h1>
@@ -17,12 +23,18 @@
   </div>
 
   <p>
-    <a href="https://github.com/aws/bedrock-agentcore-sdk-python">Python SDK</a>
-    ◆ <a href="https://github.com/aws/bedrock-agentcore-starter-toolkit">Starter Toolkit</a>
+  <a href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html">Documentation</a>
     ◆ <a href="https://github.com/awslabs/amazon-bedrock-agentcore-samples">Samples</a>
     ◆ <a href="https://discord.gg/bedrockagentcore-preview">Discord</a>
+    ◆ <a href="https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-agentcore-control.html">Boto3 Python SDK</a>
+    ◆ <a href="https://github.com/aws/bedrock-agentcore-sdk-python">Runtime Python SDK</a>
+    ◆ <a href="https://github.com/aws/bedrock-agentcore-starter-toolkit">Starter Toolkit</a>
+
   </p>
 </div>
+
+## Overview
+Amazon Bedrock AgentCore enables you to deploy and operate highly effective agents securely, at scale using any framework and model. With Amazon Bedrock AgentCore, developers can accelerate AI agents into production with the scale, reliability, and security, critical to real-world deployment. AgentCore provides tools and capabilities to make agents more effective and capable, purpose-built infrastructure to securely scale agents, and controls to operate trustworthy agents. Amazon Bedrock AgentCore services are composable and work with popular open-source frameworks and any model, so you don’t have to choose between open-source flexibility and enterprise-grade security and reliability.
 
 ## 🚀 From Local Development to Bedrock AgentCore
 
@@ -52,37 +64,24 @@ app.run()  # Ready to run on Bedrock AgentCore
 - ✅ **Enterprise-grade platform** - Built-in auth, memory, observability, security
 - ✅ **Production-ready deployment** - Reliable, scalable, compliant hosting
 
-## ⚠️ Preview Status
-
-Bedrock AgentCore SDK is currently in public preview. APIs may change as we refine the SDK.
-
-## 🛠️ Built for AI Developers
-
-**Real-time Health Monitoring**
-```python
-@app.async_task  # Automatically tracks background work
-async def process_documents(files):
-    # Long-running AI processing
-    return results
-
-@app.ping  # Custom health status
-def health_check():
-    return "HEALTHY" if all_services_up() else "HEALTHY_BUSY"
-```
-
-**Enterprise Platform Services**
-- 🧠 **Memory** - Persistent knowledge across sessions
-- 🔗 **Gateway** - Transform APIs into MCP tools
-- 💻 **Code Interpreter** - Secure sandboxed execution
-- 🌐 **Browser** - Cloud-based web automation
-- 📊 **Observability** - OpenTelemetry tracing
-- 🔐 **Identity** - AWS & third-party auth
+## Amazon Bedrock AgentCore services
+- 🚀 **Runtime** - Secure and session isolated compute: **[Runtime Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/runtime/quickstart.html)**
+- 🧠 **Memory** - Persistent knowledge across sessions: **[Memory Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/memory/quickstart.html)**
+- 🔗 **Gateway** - Transform APIs into MCP tools: **[Gateway Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/gateway/quickstart.html)**
+- 💻 **Code Interpreter** - Secure sandboxed execution: **[Code Interpreter Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/builtin-tools/quickstart-code-interpreter.html)**
+- 🌐 **Browser** - Cloud-based web automation: **[Browser Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/builtin-tools/quickstart-browser.html)**
+- 📊 **Observability** - OpenTelemetry tracing: **[Observability Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/observability/quickstart.html)**
+- 🔐 **Identity** - AWS & third-party auth:
 
 ## 🏗️ Deployment
 
 **Quick Start:** Use the [Bedrock AgentCore Starter Toolkit](https://github.com/aws/bedrock-agentcore-starter-toolkit) for rapid prototyping.
 
 **Production:** [AWS CDK](https://aws.amazon.com/cdk/) - coming soon.
+
+## ⚠️ Preview Status
+
+Bedrock AgentCore SDK is currently in public preview. APIs may change as we refine the SDK.
 
 ## 📝 License & Contributing
 

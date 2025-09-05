@@ -76,7 +76,7 @@ class BedrockAgentCoreApp(Starlette):
             formatter = RequestContextFormatter("%(asctime)s - %(name)s - %(levelname)s - %(request_id)s%(message)s")
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
-            self.logger.setLevel(logging.INFO)
+            self.logger.setLevel(logging.DEBUG if self.debug else logging.INFO)
 
     def entrypoint(self, func: Callable) -> Callable:
         """Decorator to register a function as the main entrypoint.
@@ -341,7 +341,7 @@ class BedrockAgentCoreApp(Starlette):
                 host = "0.0.0.0"  # nosec B104 - Docker needs this to expose the port
             else:
                 host = "127.0.0.1"
-        uvicorn.run(self, host=host, port=port)
+        uvicorn.run(self, host=host, port=port, access_log=self.debug, log_level="info" if self.debug else "warning")
 
     async def _invoke_handler(self, handler, request_context, takes_context, payload):
         try:
