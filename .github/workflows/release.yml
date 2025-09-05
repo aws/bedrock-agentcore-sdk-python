@@ -37,7 +37,7 @@ jobs:
           fi
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -158,7 +158,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: release/v${{ needs.prepare-release.outputs.version }}
 
@@ -264,7 +264,7 @@ jobs:
       url: https://pypi.org/project/bedrock-agentcore/
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
