@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import os
 import threading
@@ -325,6 +326,42 @@ class TestBedrockAgentCoreApp:
         response = client.post("/invocations", json={}, headers=headers)
         assert response.status_code == 200
         assert response.json()["session_id"] == "UPPER-SESSION"
+
+    def test_initialization_with_lifespan(self):
+        """Test that BedrockAgentCoreApp accepts lifespan parameter."""
+
+        @contextlib.asynccontextmanager
+        async def lifespan(app):
+            yield
+
+        app = BedrockAgentCoreApp(lifespan=lifespan)
+        assert app is not None
+
+    def test_lifespan_startup_and_shutdown(self):
+        """Test that lifespan startup and shutdown are called."""
+        startup_called = False
+        shutdown_called = False
+
+        @contextlib.asynccontextmanager
+        async def lifespan(app):
+            nonlocal startup_called, shutdown_called
+            startup_called = True
+            yield
+            shutdown_called = True
+
+        app = BedrockAgentCoreApp(lifespan=lifespan)
+
+        with TestClient(app):
+            assert startup_called is True
+        assert shutdown_called is True
+
+    def test_initialization_without_lifespan(self):
+        """Test that BedrockAgentCoreApp still works without lifespan."""
+        app = BedrockAgentCoreApp()  # No lifespan parameter
+
+        with TestClient(app) as client:
+            response = client.get("/ping")
+            assert response.status_code == 200
 
 
 class TestConcurrentInvocations:
