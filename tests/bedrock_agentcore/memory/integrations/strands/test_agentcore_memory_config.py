@@ -6,7 +6,6 @@ from pydantic import ValidationError
 from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
 
 
-
 class TestRetrievalConfig:
     """Test RetrievalConfig validation."""
 
@@ -30,7 +29,7 @@ class TestRetrievalConfig:
         config = RetrievalConfig(
             initialization_query="custom query for memories",
         )
-        
+
         assert config.initialization_query == "custom query for memories"
 
     def test_all_fields(self):
@@ -41,7 +40,7 @@ class TestRetrievalConfig:
             strategy_id="test_strategy",
             initialization_query="test query",
         )
-        
+
         assert config.top_k == 15
         assert config.relevance_score == 0.7
         assert config.strategy_id == "test_strategy"
@@ -67,11 +66,7 @@ class TestAgentCoreMemoryConfig:
 
     def test_valid_config(self):
         """Test valid config creation."""
-        config = AgentCoreMemoryConfig(
-            memory_id="mem-123",
-            session_id="sess-456", 
-            actor_id="actor-789"
-        )
+        config = AgentCoreMemoryConfig(memory_id="mem-123", session_id="sess-456", actor_id="actor-789")
         assert config.memory_id == "mem-123"
         assert config.session_id == "sess-456"
         assert config.actor_id == "actor-789"
@@ -89,9 +84,6 @@ class TestAgentCoreMemoryConfig:
         """Test config with retrieval configuration."""
         retrieval = RetrievalConfig(top_k=5)
         config = AgentCoreMemoryConfig(
-            memory_id="mem-123",
-            session_id="sess-456",
-            actor_id="actor-789",
-            retrieval_config={"namespace1": retrieval}
+            memory_id="mem-123", session_id="sess-456", actor_id="actor-789", retrieval_config={"namespace1": retrieval}
         )
         assert config.retrieval_config["namespace1"].top_k == 5

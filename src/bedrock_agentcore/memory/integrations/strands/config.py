@@ -1,6 +1,7 @@
 """Configuration for AgentCore Memory Session Manager."""
 
 from typing import Dict, Optional
+
 from pydantic import BaseModel, Field
 
 

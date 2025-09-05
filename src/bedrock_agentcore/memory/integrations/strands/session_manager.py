@@ -3,22 +3,23 @@
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional, TYPE_CHECKING
-from typing_extensions import override
+from typing import TYPE_CHECKING, Any, Optional
 
 import boto3
 from botocore.config import Config as BotocoreConfig
-from bedrock_agentcore.memory.client import MemoryClient
+from strands.hooks import MessageAddedEvent
+from strands.hooks.registry import HookRegistry
+from strands.session.repository_session_manager import RepositorySessionManager
+from strands.session.session_repository import SessionRepository
 from strands.types.content import Message
 from strands.types.exceptions import SessionException
 from strands.types.session import Session, SessionAgent, SessionMessage
-from strands.session.repository_session_manager import RepositorySessionManager
-from strands.session.session_repository import SessionRepository
-from strands.hooks import MessageAddedEvent
-from strands.hooks.registry import HookRegistry
+from typing_extensions import override
 
-from .config import AgentCoreMemoryConfig
+from bedrock_agentcore.memory.client import MemoryClient
+
 from .bedrock_converter import AgentCoreMemoryConverter
+from .config import AgentCoreMemoryConfig
 
 if TYPE_CHECKING:
     from strands.agent.agent import Agent
@@ -59,7 +60,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             agentcore_memory_config (AgentCoreMemoryConfig): Configuration for AgentCore Memory integration.
             region_name (Optional[str], optional): AWS region for Bedrock AgentCore Memory. Defaults to None.
             boto_session (Optional[boto3.Session], optional): Optional boto3 session. Defaults to None.
-            boto_client_config (Optional[BotocoreConfig], optional): Optional boto3 client configuration. Defaults to None.
+            boto_client_config (Optional[BotocoreConfig], optional): Optional boto3 client configuration.
+               Defaults to None.
             **kwargs (Any): Additional keyword arguments.
         """
         self.config = agentcore_memory_config
@@ -149,7 +151,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             ],
             eventTimestamp=datetime.now(timezone.utc),
         )
-        logger.info(f"Created session: {session.session_id} with event: {event.get('event', {}).get('eventId')}")
+        logger.info("Created session: %s with event: %s", session.session_id, event.get("event", {}).get("eventId"))
         return session
 
     def read_session(self, session_id: str, **kwargs: Any) -> Optional[Session]:
@@ -191,7 +193,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             session_id (str): The session ID to delete.
             **kwargs (Any): Additional keyword arguments.
         """
-        logger.warning(f"Session deletion not supported in AgentCore Memory: {session_id}")
+        logger.warning("Session deletion not supported in AgentCore Memory: %s", session_id)
 
     def create_agent(self, session_id: str, session_agent: SessionAgent, **kwargs: Any) -> None:
         """Create a new agent in the session.
@@ -221,7 +223,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             eventTimestamp=datetime.now(timezone.utc),
         )
         logger.info(
-            f"Created agent: {session_agent.agent_id} in session: {session_id} with event {event.get('event', {}).get('eventId')}"
+            "Created agent: %s in session: %s with event %s",
+            session_agent.agent_id,
+            session_id,
+            event.get("event", {}).get("eventId"),
         )
 
     def read_agent(self, session_id: str, agent_id: str, **kwargs: Any) -> Optional[SessionAgent]:
@@ -253,7 +258,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             agent_data = json.loads(events[0].get("payload", {})[0].get("blob"))
             return SessionAgent.from_dict(agent_data)
         except Exception as e:
-            logger.error(f"Failed to read agent {agent_id}: {e}")
+            logger.error("Failed to read agent %s", e)
             return None
 
     def update_agent(self, session_id: str, session_agent: SessionAgent, **kwargs: Any) -> None:
@@ -283,7 +288,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         Args:
             session_id (str): The session ID to create the message in.
-            agent_id (str): The agent ID associated with the message (only here for the interface. we use the actorId for AgentCore).
+            agent_id (str): The agent ID associated with the message (only here for the interface.
+               We use the actorId for AgentCore).
             session_message (SessionMessage): The message to create.
             **kwargs (Any): Additional keyword arguments.
 
@@ -331,10 +337,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                     ],
                     eventTimestamp=datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00")),
                 )
-            logger.debug(f"Created event: {event.get('eventId')} for message: {session_message.message_id}")
+            logger.debug("Created event: %s for message: %s", event.get("eventId"), session_message.message_id)
             return event
         except Exception as e:
-            logger.error(f"Failed to create message in AgentCore Memory: {e}")
+            logger.error("Failed to create message in AgentCore Memory: %s", e)
             raise SessionException(f"Failed to create message: {e}") from e
 
     def read_message(self, session_id: str, agent_id: str, message_id: int, **kwargs: Any) -> Optional[SessionMessage]:
@@ -377,13 +383,14 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session_id}")
 
         logger.debug(
-            f"Message update requested for message: {session_message.message_id} (AgentCore Memory doesn't support updates)"
+            "Message update requested for message: %s (AgentCore Memory doesn't support updates)",
+            {session_message.message_id},
         )
 
     def list_messages(
         self, session_id: str, agent_id: str, limit: Optional[int] = None, offset: int = 0, **kwargs: Any
     ) -> list[SessionMessage]:
-        """list messages for an agent from AgentCore Memory with pagination.
+        """List messages for an agent from AgentCore Memory with pagination.
 
         Args:
             session_id (str): The session ID to list messages from.
@@ -416,7 +423,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 return messages[offset:]
 
         except Exception as e:
-            logger.error(f"Failed to list messages from AgentCore Memory: {e}")
+            logger.error("Failed to list messages from AgentCore Memory: %s", e)
             return []
 
     # endregion SessionRepository interface implementation
@@ -482,10 +489,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                     "content": [{"text": f"<user_context>{context_text}</user_context>"}],
                 }
                 event.agent.messages.append(ltm_msg)
-                logger.info(f"Retrieved {len(all_context)} customer context items")
+                logger.info("Retrieved %s customer context items", {len(all_context)})
 
         except Exception as e:
-            logger.error(f"Failed to retrieve customer context: {e}")
+            logger.error("Failed to retrieve customer context: %s", e)
 
     @override
     def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
@@ -502,7 +509,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def initialize(self, agent: "Agent", **kwargs: Any) -> None:
         if self.has_existing_agent:
             logger.warning(
-                f"An Agent already exists in session {self.session_id}. We currently support one agent per session."
+                "An Agent already exists in session %s. We currently support one agent per session.", self.session_id
             )
         else:
             self.has_existing_agent = True

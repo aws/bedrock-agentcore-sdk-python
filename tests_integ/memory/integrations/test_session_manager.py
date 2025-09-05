@@ -179,7 +179,7 @@ class TestAgentCoreMemorySessionManager:
 
     def test_session_manager_error_handling(self):
         """Test session manager error handling with invalid configuration."""
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             # Invalid memory ID should raise an error
             config = AgentCoreMemoryConfig(
                 memory_id="invalid-memory-id", session_id="test-session", actor_id="test-actor"

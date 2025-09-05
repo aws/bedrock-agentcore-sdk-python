@@ -61,8 +61,8 @@ SESSION_ID = "testing_session_id_%s" % datetime.now().strftime("%Y%m%d%H%M%S")
 
 # Configure memory
 agentcore_memory_config = AgentCoreMemoryConfig(
-    memory_id=MEM_ID, 
-    session_id=SESSION_ID, 
+    memory_id=MEM_ID,
+    session_id=SESSION_ID,
     actor_id=ACTOR_ID
 )
 
@@ -117,7 +117,7 @@ comprehensive_memory = client.create_memory_and_wait(
         },
         {
             "userPreferenceMemoryStrategy": {
-                "name": "PreferenceLearner", 
+                "name": "PreferenceLearner",
                 "namespaces": ["/preferences/{actorId}"]
             }
         },
@@ -201,7 +201,7 @@ session_manager = AgentCoreMemorySessionManager(config, region_name='us-east-1')
 agent_with_tools = Agent(
     tools=[image_reader],
     system_prompt="You will be provided with a filesystem path to an image. Describe the image in detail.",
-    session_manager=session_manager, 
+    session_manager=session_manager,
     agent_id='my_test_agent_id'
 )
 # Use with image

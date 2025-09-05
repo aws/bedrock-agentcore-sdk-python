@@ -32,7 +32,8 @@ class AgentCoreMemoryConverter:
         """Convert Bedrock AgentCore Memory events to SessionMessages.
 
         Args:
-            events (list[dict[str, Any]]): list of events from Bedrock AgentCore Memory. Each individual event looks as follows:
+            events (list[dict[str, Any]]): list of events from Bedrock AgentCore Memory.
+                Each individual event looks as follows:
                 ```
                 {
                     "memoryId": "unique_mem_id",
@@ -60,7 +61,7 @@ class AgentCoreMemoryConverter:
             for payload_item in event.get("payload", []):
                 if "conversational" in payload_item:
                     conv = payload_item["conversational"]
-                    messages.append(SessionMessage.from_dict(json.loads(conv['content']['text'])))
+                    messages.append(SessionMessage.from_dict(json.loads(conv["content"]["text"])))
                 elif "blob" in payload_item:
                     try:
                         blob_data = json.loads(payload_item["blob"])
@@ -68,9 +69,9 @@ class AgentCoreMemoryConverter:
                             try:
                                 messages.append(SessionMessage.from_dict(json.loads(blob_data[0])))
                             except (json.JSONDecodeError, ValueError):
-                                logger.error(f'This is not a SessionMessage but just a blob message. Ignoring')
+                                logger.error("This is not a SessionMessage but just a blob message. Ignoring")
                     except (json.JSONDecodeError, ValueError):
-                        logger.error(f'Failed to parse blob content: {payload_item["blob"]}')
+                        logger.error("Failed to parse blob content: %s", payload_item)
         return list(reversed(messages))
 
     @staticmethod
