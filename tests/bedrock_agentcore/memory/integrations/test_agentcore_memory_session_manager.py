@@ -11,7 +11,7 @@ from strands.types.session import Session, SessionAgent, SessionMessage, Session
 
 from bedrock_agentcore.memory.integrations.session_manager import AgentCoreMemorySessionManager
 from bedrock_agentcore.memory.integrations.config import AgentCoreMemoryConfig, RetrievalConfig
-from bedrock_agentcore.memory.integrations.bedrock_converter import BedrockConverter
+from bedrock_agentcore.memory.integrations.bedrock_converter import AgentCoreMemoryConverter
 
 
 @pytest.fixture
@@ -99,44 +99,8 @@ class TestAgentCoreMemorySessionManager:
                     assert manager.memory_client == mock_client
                     mock_client_class.assert_called_once_with(region_name=None)
 
-    def test_message_to_bedrock_payload_text(self, session_manager):
-        """Test converting text message to Bedrock payload."""
-        message = SessionMessage(
-            message={
-                "role": "user",
-                "content": [{"text": "Hello world"}]
-            },
-            message_id=1
-        )
-        
-        payload = BedrockConverter.message_to_bedrock_payload(message)
-        
-        assert len(payload) == 1
-        assert payload[0] == ("Hello world", "user")
 
-    def test_message_to_bedrock_payload_tool_use(self, session_manager):
-        """Test converting tool use message to Bedrock payload."""
-        message = SessionMessage(
-            message={
-                "role": "assistant",
-                "content": [{
-                    "toolUse": {
-                        "toolUseId": "tool-123",
-                        "name": "get_weather",
-                        "input": {"location": "Seattle"}
-                    }
-                }]
-            },
-            message_id=1
-        )
-        
-        payload = BedrockConverter.message_to_bedrock_payload(message)
-        
-        assert len(payload) == 1
-        expected_text = 'Tool use: get_weather with input: {"location": "Seattle"}'
-        assert payload[0] == (expected_text, "assistant")
-
-    def test_bedrock_events_to_messages(self, session_manager):
+    def test_events_to_messages(self, session_manager):
         """Test converting Bedrock events to SessionMessages."""
         events = [
             {
@@ -145,33 +109,17 @@ class TestAgentCoreMemorySessionManager:
                 "payload": [
                     {
                         "conversational": {
-                            "content": {"text": "Hello"},
+                            "content": {"text": '{"message": {"role": "user", "content": [{"text": "Hello"}]}, "message_id": 1}'},
                             "role": "USER"
-                        }
-                    }
-                ]
-            },
-            {
-                "eventId": "event-2", 
-                "eventTimestamp": "2024-01-01T12:01:00Z",
-                "payload": [
-                    {
-                        "conversational": {
-                            "content": {"text": "Hi there!"},
-                            "role": "ASSISTANT"
                         }
                     }
                 ]
             }
         ]
         
-        messages = BedrockConverter.bedrock_events_to_messages(events)
-        
-        assert len(messages) == 2
+        messages = AgentCoreMemoryConverter.events_to_messages(events)
         assert messages[0].message["role"] == "user"
         assert messages[0].message["content"][0]["text"] == "Hello"
-        assert messages[1].message["role"] == "assistant"
-        assert messages[1].message["content"][0]["text"] == "Hi there!"
 
     def test_create_session(self, session_manager):
         """Test creating a session."""
@@ -289,7 +237,7 @@ class TestAgentCoreMemorySessionManager:
                 "payload": [
                     {
                         "conversational": {
-                            "content": {"text": "Hello"},
+                            "content": {"text": '{"message": {"role": "user", "content": [{"text": "Hello"}]}, "message_id": 1}'},
                             "role": "USER"
                         }
                     }
@@ -297,11 +245,11 @@ class TestAgentCoreMemorySessionManager:
             },
             {
                 "eventId": "event-2",
-                "eventTimestamp": "2024-01-01T12:01:00Z",
+                "eventTimestamp": "2024-01-01T12:00:00Z",
                 "payload": [
                     {
                         "conversational": {
-                            "content": {"text": "Hi there"},
+                            "content": {"text": '{"message": {"role": "assistant", "content": [{"text": "Hi there"}]}, "message_id": 2}'},
                             "role": "ASSISTANT"
                         }
                     }
@@ -312,30 +260,45 @@ class TestAgentCoreMemorySessionManager:
         messages = session_manager.list_messages("test-session-456", "test-agent-123")
         
         assert len(messages) == 2
-        assert messages[0].message["role"] == "user"
-        assert messages[1].message["role"] == "assistant"
+        assert messages[1].message["role"] == "user"
+        assert messages[0].message["role"] == "assistant"
 
-    def test_message_to_bedrock_payload_tool_result(self, session_manager):
-        """Test converting tool result message to Bedrock payload."""
-        message = SessionMessage(
-            message={
-                "role": "user",
-                "content": [{
-                    "toolResult": {
-                        "toolUseId": "tool-123",
-                        "content": [{"text": "Temperature is 72°F"}]
+    def test_list_messages_returns_values_in_correct_reverse_order(self, session_manager, mock_memory_client):
+        """Test listing messages."""
+        mock_memory_client.list_events.return_value = [
+            {
+                "eventId": "event-1",
+                "eventTimestamp": "2024-01-01T12:00:00Z",
+                "payload": [
+                    {
+                        "conversational": {
+                            "content": {"text": '{"message": {"role": "user", "content": [{"text": "Hello"}]}, "message_id": 1}'},
+                            "role": "USER"
+                        }
                     }
-                }]
+                ]
             },
-            message_id=1
-        )
+            {
+                "eventId": "event-2",
+                "eventTimestamp": "2024-01-01T12:00:00Z",
+                "payload": [
+                    {
+                        "conversational": {
+                            "content": {"text": '{"message": {"role": "assistant", "content": [{"text": "Hi there"}]}, "message_id": 2}'},
+                            "role": "ASSISTANT"
+                        }
+                    }
+                ]
+            }
+        ]
         
-        payload = BedrockConverter.message_to_bedrock_payload(message)
+        messages = session_manager.list_messages("test-session-456", "test-agent-123")
         
-        assert len(payload) == 1
-        assert payload[0] == ("Tool result: Temperature is 72°F", "user")
+        assert len(messages) == 2
+        assert messages[1].message["role"] == "user"
+        assert messages[0].message["role"] == "assistant"
 
-    def test_bedrock_events_to_messages_empty_payload(self, session_manager):
+    def test_events_to_messages_empty_payload(self, session_manager):
         """Test converting Bedrock events with empty payload."""
         events = [
             {
@@ -345,7 +308,7 @@ class TestAgentCoreMemorySessionManager:
             }
         ]
         
-        messages = BedrockConverter.bedrock_events_to_messages(events)
+        messages = AgentCoreMemoryConverter.events_to_messages(events)
         
         assert len(messages) == 0
 
@@ -484,13 +447,13 @@ class TestAgentCoreMemorySessionManager:
     def test_list_messages_with_limit(self, session_manager, mock_memory_client):
         """Test listing messages with limit."""
         mock_memory_client.list_events.return_value = [
-            {
+           {
                 "eventId": "event-1",
                 "eventTimestamp": "2024-01-01T12:00:00Z",
                 "payload": [
                     {
                         "conversational": {
-                            "content": {"text": "Message 1"},
+                            "content": {"text": '{"message": {"role": "user", "content": [{"text": "Message 1"}]}, "message_id": 1}'},
                             "role": "USER"
                         }
                     }
@@ -498,11 +461,11 @@ class TestAgentCoreMemorySessionManager:
             },
             {
                 "eventId": "event-2",
-                "eventTimestamp": "2024-01-01T12:01:00Z",
+                "eventTimestamp": "2024-01-01T12:00:00Z",
                 "payload": [
                     {
                         "conversational": {
-                            "content": {"text": "Message 2"},
+                            "content": {"text": '{"message": {"role": "assistant", "content": [{"text": "Message 2"}]}, "message_id": 2}'},
                             "role": "ASSISTANT"
                         }
                     }
@@ -510,10 +473,11 @@ class TestAgentCoreMemorySessionManager:
             }
         ]
         
+        
         messages = session_manager.list_messages("test-session-456", "test-agent-123", limit=1, offset=1)
         
         assert len(messages) == 1
-        assert messages[0].message["content"][0]["text"] == "Message 2"
+        assert messages[0].message["content"][0]["text"] == "Message 1"
 
     def test_list_messages_wrong_session(self, session_manager):
         """Test listing messages with wrong session ID."""

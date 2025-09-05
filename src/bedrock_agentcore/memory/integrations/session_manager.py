@@ -18,7 +18,7 @@ from strands.hooks import MessageAddedEvent
 from strands.hooks.registry import HookRegistry
 
 from .config import AgentCoreMemoryConfig
-from .bedrock_converter import BedrockConverter
+from .bedrock_converter import AgentCoreMemoryConverter
 
 if TYPE_CHECKING:
     from strands.agent.agent import Agent
@@ -310,10 +310,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session_id}")
 
         try:
-            messages = BedrockConverter.message_to_bedrock_payload(session_message)
+            messages = AgentCoreMemoryConverter.message_to_payload(session_message)
             if not messages:
                 return
-            if not BedrockConverter.exceeds_conversational_limit(messages[0]):
+            if not AgentCoreMemoryConverter.exceeds_conversational_limit(messages[0]):
                 event = self.memory_client.create_event(
                     memory_id=self.config.memory_id,
                     actor_id=self.config.actor_id,
@@ -409,7 +409,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 session_id=session_id,
                 max_results=max_results,
             )
-            messages = BedrockConverter.bedrock_events_to_messages(events)
+            messages = AgentCoreMemoryConverter.events_to_messages(events)
             if limit is not None:
                 return messages[offset : offset + limit]
             else:
