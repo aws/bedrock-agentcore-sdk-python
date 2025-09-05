@@ -15,6 +15,7 @@ class PingStatus(str, Enum):
 
 # Header constants
 SESSION_HEADER = "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"
+REQUEST_ID_HEADER = "X-Amzn-Bedrock-AgentCore-Request-Id"
 ACCESS_TOKEN_HEADER = "WorkloadAccessToken"  # nosec
 
 # Task action constants

@@ -265,6 +265,67 @@ class TestBedrockAgentCoreApp:
                 log_level="info",  # Debug mode uses info level
             )
 
+    def test_invocation_with_request_id_header(self):
+        """Test that request ID from header is used."""
+        bedrock_agentcore = BedrockAgentCoreApp()
+
+        @bedrock_agentcore.entrypoint
+        def handler(request):
+            return {"status": "ok", "data": request}
+
+        client = TestClient(bedrock_agentcore)
+        headers = {"X-Amzn-Bedrock-AgentCore-Request-Id": "custom-request-id"}
+        response = client.post("/invocations", json={"test": "data"}, headers=headers)
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+
+    def test_invocation_with_both_ids(self):
+        """Test with both request and session ID headers."""
+        bedrock_agentcore = BedrockAgentCoreApp()
+
+        @bedrock_agentcore.entrypoint
+        def handler(request, context):
+            return {"session_id": context.session_id, "data": request}
+
+        client = TestClient(bedrock_agentcore)
+        headers = {
+            "X-Amzn-Bedrock-AgentCore-Request-Id": "custom-request",
+            "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": "custom-session",
+        }
+        response = client.post("/invocations", json={"test": "data"}, headers=headers)
+
+        assert response.status_code == 200
+        assert response.json()["session_id"] == "custom-session"
+
+    def test_headers_case_insensitive(self):
+        """Test that headers work with any case."""
+        bedrock_agentcore = BedrockAgentCoreApp()
+
+        @bedrock_agentcore.entrypoint
+        def handler(request, context):
+            return {"session_id": context.session_id}
+
+        client = TestClient(bedrock_agentcore)
+
+        # Test lowercase
+        headers = {
+            "x-amzn-bedrock-agentcore-request-id": "lower-request",
+            "x-amzn-bedrock-agentcore-runtime-session-id": "lower-session",
+        }
+        response = client.post("/invocations", json={}, headers=headers)
+        assert response.status_code == 200
+        assert response.json()["session_id"] == "lower-session"
+
+        # Test uppercase
+        headers = {
+            "X-AMZN-BEDROCK-AGENTCORE-REQUEST-ID": "UPPER-REQUEST",
+            "X-AMZN-BEDROCK-AGENTCORE-RUNTIME-SESSION-ID": "UPPER-SESSION",
+        }
+        response = client.post("/invocations", json={}, headers=headers)
+        assert response.status_code == 200
+        assert response.json()["session_id"] == "UPPER-SESSION"
+
 
 class TestConcurrentInvocations:
     """Test concurrent invocation handling simplified without limits."""
@@ -1359,3 +1420,57 @@ class TestSerializationEdgeCases:
             parsed = json.loads(result)
             assert parsed["error"] == "Serialization failed"
             assert parsed["original_type"] == "UnserializableObject"
+
+
+class TestRequestContextFormatter:
+    """Test the RequestContextFormatter log formatting."""
+
+    def test_request_context_formatter_with_both_ids(self):
+        """Test formatter with both request and session IDs."""
+        import logging
+
+        from bedrock_agentcore.runtime.app import RequestContextFormatter
+        from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+
+        formatter = RequestContextFormatter("%(request_id)s%(message)s")
+
+        BedrockAgentCoreContext.set_request_context("req-123", "sess-456")
+        record = logging.LogRecord("test", logging.INFO, "", 1, "Test message", (), None)
+        formatted = formatter.format(record)
+
+        assert "[rid:req-123] [sid:sess-456] Test message" == formatted
+
+    def test_request_context_formatter_with_only_request_id(self):
+        """Test formatter with only request ID."""
+        import logging
+
+        from bedrock_agentcore.runtime.app import RequestContextFormatter
+        from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+
+        formatter = RequestContextFormatter("%(request_id)s%(message)s")
+
+        BedrockAgentCoreContext.set_request_context("req-789", None)
+        record = logging.LogRecord("test", logging.INFO, "", 1, "Test message", (), None)
+        formatted = formatter.format(record)
+
+        assert "[rid:req-789] Test message" == formatted
+        assert "[sid:" not in formatted
+
+    def test_request_context_formatter_with_no_ids(self):
+        """Test formatter with no IDs set."""
+        import contextvars
+        import logging
+
+        from bedrock_agentcore.runtime.app import RequestContextFormatter
+
+        formatter = RequestContextFormatter("%(request_id)s%(message)s")
+
+        # Run in fresh context to ensure no IDs are set
+        ctx = contextvars.Context()
+
+        def format_in_new_context():
+            record = logging.LogRecord("test", logging.INFO, "", 1, "Test message", (), None)
+            return formatter.format(record)
+
+        formatted = ctx.run(format_in_new_context)
+        assert formatted == "Test message"

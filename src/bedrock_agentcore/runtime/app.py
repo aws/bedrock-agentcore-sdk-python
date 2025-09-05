@@ -4,7 +4,6 @@ Provides a Starlette-based web server that wraps user functions as HTTP endpoint
 """
 
 import asyncio
-import contextvars
 import inspect
 import json
 import logging
@@ -20,6 +19,7 @@ from starlette.routing import Route
 from .context import BedrockAgentCoreContext, RequestContext
 from .models import (
     ACCESS_TOKEN_HEADER,
+    REQUEST_ID_HEADER,
     SESSION_HEADER,
     TASK_ACTION_CLEAR_FORCED_STATUS,
     TASK_ACTION_FORCE_BUSY,
@@ -30,20 +30,22 @@ from .models import (
 )
 from .utils import convert_complex_objects
 
-# Request context for logging
-request_id_context: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("request_id", default=None)
-
 
 class RequestContextFormatter(logging.Formatter):
-    """Custom formatter that includes request ID in log messages."""
+    """Formatter including request and session IDs."""
 
     def format(self, record):
-        """Format log record with request ID context."""
-        request_id = request_id_context.get()
+        """Format log record with request and session ID context."""
+        request_id = BedrockAgentCoreContext.get_request_id()
+        session_id = BedrockAgentCoreContext.get_session_id()
+
+        parts = []
         if request_id:
-            record.request_id = f"[{request_id}] "
-        else:
-            record.request_id = ""
+            parts.append(f"[rid:{request_id}]")
+        if session_id:
+            parts.append(f"[sid:{session_id}]")
+
+        record.request_id = " ".join(parts) + " " if parts else ""
         return super().format(record)
 
 
@@ -246,17 +248,25 @@ class BedrockAgentCoreApp(Starlette):
                 return False
 
     def _build_request_context(self, request) -> RequestContext:
-        """Build request context and setup auth if present."""
+        """Build request context and setup all context variables."""
         try:
-            agent_identity_token = request.headers.get(ACCESS_TOKEN_HEADER) or request.headers.get(
-                ACCESS_TOKEN_HEADER.lower()
-            )
+            headers = request.headers
+            request_id = headers.get(REQUEST_ID_HEADER)
+            if not request_id:
+                request_id = str(uuid.uuid4())
+
+            session_id = headers.get(SESSION_HEADER)
+            BedrockAgentCoreContext.set_request_context(request_id, session_id)
+
+            agent_identity_token = headers.get(ACCESS_TOKEN_HEADER)
             if agent_identity_token:
                 BedrockAgentCoreContext.set_workload_access_token(agent_identity_token)
-            session_id = request.headers.get(SESSION_HEADER) or request.headers.get(SESSION_HEADER.lower())
+
             return RequestContext(session_id=session_id)
         except Exception as e:
             self.logger.warning("Failed to build request context: %s: %s", type(e).__name__, e)
+            request_id = str(uuid.uuid4())
+            BedrockAgentCoreContext.set_request_context(request_id, None)
             return RequestContext(session_id=None)
 
     def _takes_context(self, handler: Callable) -> bool:
@@ -267,8 +277,8 @@ class BedrockAgentCoreApp(Starlette):
             return False
 
     async def _handle_invocation(self, request):
-        request_id = str(uuid.uuid4())[:8]
-        request_id_context.set(request_id)
+        request_context = self._build_request_context(request)
+
         start_time = time.time()
 
         try:
@@ -287,7 +297,6 @@ class BedrockAgentCoreApp(Starlette):
                 self.logger.error("No entrypoint defined")
                 return JSONResponse({"error": "No entrypoint defined"}, status_code=500)
 
-            request_context = self._build_request_context(request)
             takes_context = self._takes_context(handler)
 
             handler_name = handler.__name__ if hasattr(handler, "__name__") else "unknown"
