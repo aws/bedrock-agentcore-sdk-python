@@ -2147,19 +2147,19 @@ def test_get_event():
         }
 
         # Test get_event
-        event = client.get_event(
-            memory_id="mem-123",
-            actor_id="user-123",
-            session_id="session-456",
-            event_id="123#abc123",
+        response = client.get_event(
+            memoryId="mem-123",
+            actorId="user-123",
+            sessionId="session-456",
+            eventId="123#abc123",
         )
 
-        assert event["eventId"] == "123#abc123"
-        assert event["memoryId"] == "mem-123"
-        assert event["actorId"] == "user-123"
-        assert event["sessionId"] == "session-456"
-        assert len(event["payload"]) == 1
-        assert event["payload"][0]["conversational"]["role"] == "USER"
+        assert response["event"]["eventId"] == "123#abc123"
+        assert response["event"]["memoryId"] == "mem-123"
+        assert response["event"]["actorId"] == "user-123"
+        assert response["event"]["sessionId"] == "session-456"
+        assert len(response["event"]["payload"]) == 1
+        assert response["event"]["payload"][0]["conversational"]["role"] == "USER"
 
         # Verify API call
         args, kwargs = mock_gmdp.get_event.call_args
@@ -2205,10 +2205,10 @@ def test_delete_event():
 
         # Test delete_event
         client.delete_event(
-            memory_id="mem-123",
-            actor_id="user-123",
-            session_id="session-456",
-            event_id="123#abc123",
+            memoryId="mem-123",
+            actorId="user-123",
+            sessionId="session-456",
+            eventId="123#abc123",
         )
 
         # Verify API call
@@ -2265,16 +2265,16 @@ def test_get_memory_record():
         }
 
         # Test get_memory_record
-        memory_record = client.get_memory_record(
-            memory_id="mem-123",
-            memory_record_id="rec-123",
+        response = client.get_memory_record(
+            memoryId="mem-123",
+            memoryRecordId="rec-123",
         )
 
-        assert memory_record["memoryRecordId"] == "rec-123"
-        assert memory_record["memoryStrategyId"] == "strat-456"
-        assert memory_record["content"]["text"] == "Memory record content"
-        assert "createdAt" in memory_record
-        assert memory_record["namespaces"] == ["test/namespace"]
+        assert response["memoryRecord"]["memoryRecordId"] == "rec-123"
+        assert response["memoryRecord"]["memoryStrategyId"] == "strat-456"
+        assert response["memoryRecord"]["content"]["text"] == "Memory record content"
+        assert "createdAt" in response["memoryRecord"]
+        assert response["memoryRecord"]["namespaces"] == ["test/namespace"]
 
         # Verify API call
         args, kwargs = mock_gmdp.get_memory_record.call_args
@@ -2318,12 +2318,12 @@ def test_delete_memory_record():
         mock_gmdp.delete_memory_record.return_value = {"memoryRecordId": "rec-123"}
 
         # Test delete_memory_record
-        memory_record_id = client.delete_memory_record(
-            memory_id="mem-123",
-            memory_record_id="rec-123",
+        response = client.delete_memory_record(
+            memoryId="mem-123",
+            memoryRecordId="rec-123",
         )
 
-        assert memory_record_id == "rec-123"
+        assert response == {"memoryRecordId": "rec-123"}
 
         # Verify API call
         args, kwargs = mock_gmdp.delete_memory_record.call_args
@@ -2387,16 +2387,15 @@ def test_list_memory_records():
         }
 
         # Test list_memory_records
-        memory_records, next_token = client.list_memory_records(
-            memory_id="mem-123", namespace="test/namespace", max_results=10
-        )
+        response = client.list_memory_records(memoryId="mem-123", namespace="test/namespace", maxResults=10)
 
-        assert len(memory_records) == 2
-        assert memory_records[0]["memoryRecordId"] == "rec-1"
-        assert memory_records[1]["memoryRecordId"] == "rec-2"
-        assert memory_records[0]["score"] == 0.95
-        assert memory_records[1]["score"] == 0.85
-        assert next_token == "next-page-token"
+        assert response["memoryRecordSummaries"]
+        assert len(response["memoryRecordSummaries"]) == 2
+        assert response["memoryRecordSummaries"][0]["memoryRecordId"] == "rec-1"
+        assert response["memoryRecordSummaries"][1]["memoryRecordId"] == "rec-2"
+        assert response["memoryRecordSummaries"][0]["score"] == 0.95
+        assert response["memoryRecordSummaries"][1]["score"] == 0.85
+        assert response["nextToken"] == "next-page-token"
 
         # Verify API call
         args, kwargs = mock_gmdp.list_memory_records.call_args
@@ -2429,14 +2428,15 @@ def test_list_memory_records_with_strategy_filter():
         }
 
         # Test list_memory_records with strategy filter
-        memory_records, next_token = client.list_memory_records(
-            memory_id="mem-123", namespace="test/namespace", memory_strategy_id="strat-123", max_results=10
+        response = client.list_memory_records(
+            memoryId="mem-123", namespace="test/namespace", memoryStrategyId="strat-123", maxResults=10
         )
 
-        assert len(memory_records) == 1
-        assert memory_records[0]["memoryRecordId"] == "rec-1"
-        assert memory_records[0]["memoryStrategyId"] == "strat-123"
-        assert next_token is None
+        assert response["memoryRecordSummaries"]
+        assert len(response["memoryRecordSummaries"]) == 1
+        assert response["memoryRecordSummaries"][0]["memoryRecordId"] == "rec-1"
+        assert response["memoryRecordSummaries"][0]["memoryStrategyId"] == "strat-123"
+        assert response["nextToken"] is None
 
         # Verify API call
         args, kwargs = mock_gmdp.list_memory_records.call_args
@@ -2462,20 +2462,20 @@ def test_list_memory_records_pagination():
         ]
 
         # Get first page
-        records1, next_token = client.list_memory_records(memory_id="mem-123", namespace="test/namespace")
+        response1 = client.list_memory_records(memoryId="mem-123", namespace="test/namespace")
 
-        assert len(records1) == 1
-        assert records1[0]["memoryRecordId"] == "rec-1"
-        assert next_token == "page2-token"
+        assert len(response1["memoryRecordSummaries"]) == 1
+        assert response1["memoryRecordSummaries"][0]["memoryRecordId"] == "rec-1"
+        assert response1["nextToken"] == "page2-token"
 
         # Get second page
-        records2, next_token2 = client.list_memory_records(
-            memory_id="mem-123", namespace="test/namespace", next_token=next_token
+        response2 = client.list_memory_records(
+            memoryId="mem-123", namespace="test/namespace", nextToken=response1["nextToken"]
         )
 
-        assert len(records2) == 1
-        assert records2[0]["memoryRecordId"] == "rec-2"
-        assert next_token2 is None
+        assert len(response2["memoryRecordSummaries"]) == 1
+        assert response2["memoryRecordSummaries"][0]["memoryRecordId"] == "rec-2"
+        assert response2["nextToken"] is None
 
         # Verify API calls
         assert mock_gmdp.list_memory_records.call_count == 2
@@ -2506,11 +2506,11 @@ def test_list_memory_records_client_error():
             mock_gmdp.list_memory_records.side_effect = ClientError(error_response, "ListMemoryRecords")
 
             # Test error handling
-            records, token = client.list_memory_records(memory_id="mem-123", namespace="test/namespace")
-
-            # Should return empty list without raising exception
-            assert records == []
-            assert token is None
+            try:
+                client.list_memory_records(memoryId="mem-123", namespace="test/namespace")
+                raise AssertionError("ClientError was not raised")
+            except ClientError as e:
+                assert error["code"] in str(e)
 
 
 def test_get_last_k_turns_client_error():
