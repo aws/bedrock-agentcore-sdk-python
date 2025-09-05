@@ -36,7 +36,7 @@ import boto3
 from datetime import date
 from strands import Agent
 from bedrock_agentcore.memory import MemoryClient
-from bedrock_agentcore.memory.integrations.strands.strands.strands.strands.strands.config import AgentCoreMemoryConfig, RetrievalConfig
+from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
 from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
 ```
 
