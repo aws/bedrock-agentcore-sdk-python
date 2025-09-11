@@ -15,7 +15,7 @@ class TestSDKSimpleAgent(BaseSDKRuntimeTest):
                 from bedrock_agentcore import BedrockAgentCoreApp
                 from strands import Agent
 
-                app = BedrockAgentCoreApp()
+                app = BedrockAgentCoreApp(debug=True)
                 agent = Agent()
 
                 @app.entrypoint
