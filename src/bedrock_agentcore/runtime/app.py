@@ -381,7 +381,7 @@ class BedrockAgentCoreApp(Starlette):
                 return await loop.run_in_executor(None, ctx.run, handler, *args)
         except Exception:
             handler_name = getattr(handler, "__name__", "unknown")
-            self.logger.exception("Handler '%s' execution failed", handler_name)
+            self.logger.debug("Handler '%s' execution failed", handler_name)
             raise
 
     def _handle_task_action(self, payload: dict) -> Optional[JSONResponse]:
