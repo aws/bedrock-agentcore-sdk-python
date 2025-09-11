@@ -37,18 +37,34 @@ class RequestContextFormatter(logging.Formatter):
     """Formatter including request and session IDs."""
 
     def format(self, record):
-        """Format log record with request and session ID context."""
+        """Format log record as AWS Lambda JSON."""
+        import json
+        from datetime import datetime
+
+        log_entry = {
+            "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "logger": record.name,
+        }
+
         request_id = BedrockAgentCoreContext.get_request_id()
-        session_id = BedrockAgentCoreContext.get_session_id()
-
-        parts = []
         if request_id:
-            parts.append(f"[rid:{request_id}]")
-        if session_id:
-            parts.append(f"[sid:{session_id}]")
+            log_entry["requestId"] = request_id
 
-        record.request_id = " ".join(parts) + " " if parts else ""
-        return super().format(record)
+        session_id = BedrockAgentCoreContext.get_session_id()
+        if session_id:
+            log_entry["sessionId"] = session_id
+
+        if record.exc_info:
+            import traceback
+
+            log_entry["errorType"] = record.exc_info[0].__name__
+            log_entry["errorMessage"] = str(record.exc_info[1])
+            log_entry["stackTrace"] = traceback.format_exception(*record.exc_info)
+            log_entry["location"] = f"{record.pathname}:{record.funcName}:{record.lineno}"
+
+        return json.dumps(log_entry, ensure_ascii=False)
 
 
 class BedrockAgentCoreApp(Starlette):
@@ -78,7 +94,7 @@ class BedrockAgentCoreApp(Starlette):
         self.logger = logging.getLogger("bedrock_agentcore.app")
         if not self.logger.handlers:
             handler = logging.StreamHandler()
-            formatter = RequestContextFormatter("%(asctime)s - %(name)s - %(levelname)s - %(request_id)s%(message)s")
+            formatter = RequestContextFormatter()
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
             self.logger.setLevel(logging.DEBUG if self.debug else logging.INFO)
@@ -128,11 +144,9 @@ class BedrockAgentCoreApp(Starlette):
                 duration = time.time() - start_time
                 self.logger.info("Async task completed: %s (%.3fs)", func.__name__, duration)
                 return result
-            except Exception as e:
+            except Exception:
                 duration = time.time() - start_time
-                self.logger.error(
-                    "Async task failed: %s (%.3fs) - %s: %s", func.__name__, duration, type(e).__name__, e
-                )
+                self.logger.exception("Async task failed: %s (%.3fs)", func.__name__, duration)
                 raise
             finally:
                 self.complete_async_task(task_id)
@@ -333,8 +347,8 @@ class BedrockAgentCoreApp(Starlette):
             status = self.get_current_ping_status()
             self.logger.debug("Ping request - status: %s", status.value)
             return JSONResponse({"status": status.value, "time_of_last_update": int(self._last_status_update_time)})
-        except Exception as e:
-            self.logger.error("Ping endpoint failed: %s: %s", type(e).__name__, e)
+        except Exception:
+            self.logger.exception("Ping endpoint failed")
             return JSONResponse({"status": PingStatus.HEALTHY.value, "time_of_last_update": int(time.time())})
 
     def run(self, port: int = 8080, host: Optional[str] = None):
@@ -365,9 +379,9 @@ class BedrockAgentCoreApp(Starlette):
                 loop = asyncio.get_event_loop()
                 ctx = contextvars.copy_context()
                 return await loop.run_in_executor(None, ctx.run, handler, *args)
-        except Exception as e:
+        except Exception:
             handler_name = getattr(handler, "__name__", "unknown")
-            self.logger.error("Handler '%s' execution failed: %s: %s", handler_name, type(e).__name__, e)
+            self.logger.exception("Handler '%s' execution failed", handler_name)
             raise
 
     def _handle_task_action(self, payload: dict) -> Optional[JSONResponse]:
@@ -413,7 +427,7 @@ class BedrockAgentCoreApp(Starlette):
             return JSONResponse({"error": f"Unknown action: {action}"}, status_code=400)
 
         except Exception as e:
-            self.logger.error("Debug action '%s' failed: %s: %s", action, type(e).__name__, e)
+            self.logger.exception("Debug action '%s' failed", action)
             return JSONResponse({"error": "Debug action failed", "details": str(e)}, status_code=500)
 
     async def _stream_with_error_handling(self, generator):
@@ -422,7 +436,7 @@ class BedrockAgentCoreApp(Starlette):
             async for value in generator:
                 yield self._convert_to_sse(value)
         except Exception as e:
-            self.logger.error("Error in async streaming: %s: %s", type(e).__name__, e)
+            self.logger.exception("Error in async streaming")
             error_event = {
                 "error": str(e),
                 "error_type": type(e).__name__,
@@ -477,7 +491,7 @@ class BedrockAgentCoreApp(Starlette):
             for value in generator:
                 yield self._convert_to_sse(value)
         except Exception as e:
-            self.logger.error("Error in sync streaming: %s: %s", type(e).__name__, e)
+            self.logger.exception("Error in sync streaming")
             error_event = {
                 "error": str(e),
                 "error_type": type(e).__name__,

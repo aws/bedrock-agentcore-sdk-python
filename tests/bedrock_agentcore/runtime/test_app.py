@@ -1464,43 +1464,57 @@ class TestRequestContextFormatter:
 
     def test_request_context_formatter_with_both_ids(self):
         """Test formatter with both request and session IDs."""
+        import json
         import logging
 
         from bedrock_agentcore.runtime.app import RequestContextFormatter
         from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
 
-        formatter = RequestContextFormatter("%(request_id)s%(message)s")
+        formatter = RequestContextFormatter()
 
         BedrockAgentCoreContext.set_request_context("req-123", "sess-456")
         record = logging.LogRecord("test", logging.INFO, "", 1, "Test message", (), None)
         formatted = formatter.format(record)
 
-        assert "[rid:req-123] [sid:sess-456] Test message" == formatted
+        log_data = json.loads(formatted)
+        assert log_data["message"] == "Test message"
+        assert log_data["level"] == "INFO"
+        assert log_data["logger"] == "test"
+        assert log_data["requestId"] == "req-123"
+        assert log_data["sessionId"] == "sess-456"
+        assert "timestamp" in log_data
 
     def test_request_context_formatter_with_only_request_id(self):
         """Test formatter with only request ID."""
+        import json
         import logging
 
         from bedrock_agentcore.runtime.app import RequestContextFormatter
         from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
 
-        formatter = RequestContextFormatter("%(request_id)s%(message)s")
+        formatter = RequestContextFormatter()
 
         BedrockAgentCoreContext.set_request_context("req-789", None)
         record = logging.LogRecord("test", logging.INFO, "", 1, "Test message", (), None)
         formatted = formatter.format(record)
 
-        assert "[rid:req-789] Test message" == formatted
-        assert "[sid:" not in formatted
+        log_data = json.loads(formatted)
+        assert log_data["message"] == "Test message"
+        assert log_data["level"] == "INFO"
+        assert log_data["logger"] == "test"
+        assert log_data["requestId"] == "req-789"
+        assert "sessionId" not in log_data
+        assert "timestamp" in log_data
 
     def test_request_context_formatter_with_no_ids(self):
         """Test formatter with no IDs set."""
         import contextvars
+        import json
         import logging
 
         from bedrock_agentcore.runtime.app import RequestContextFormatter
 
-        formatter = RequestContextFormatter("%(request_id)s%(message)s")
+        formatter = RequestContextFormatter()
 
         # Run in fresh context to ensure no IDs are set
         ctx = contextvars.Context()
@@ -1510,4 +1524,10 @@ class TestRequestContextFormatter:
             return formatter.format(record)
 
         formatted = ctx.run(format_in_new_context)
-        assert formatted == "Test message"
+        log_data = json.loads(formatted)
+        assert log_data["message"] == "Test message"
+        assert log_data["level"] == "INFO"
+        assert log_data["logger"] == "test"
+        assert "requestId" not in log_data
+        assert "sessionId" not in log_data
+        assert "timestamp" in log_data
