@@ -266,6 +266,32 @@ class TestBedrockAgentCoreApp:
                 log_level="info",  # Debug mode uses info level
             )
 
+    @patch("uvicorn.run")
+    def test_run_with_kwargs(self, mock_uvicorn):
+        """Test that kwargs are passed through to uvicorn.run."""
+        bedrock_agentcore = BedrockAgentCoreApp()
+
+        # Test with custom log_config and other uvicorn parameters
+        custom_log_config = {
+            "version": 1,
+            "formatters": {
+                "json": {"format": '{"timestamp": "%(asctime)s", "level": "%(levelname)s", "message": "%(message)s"}'}
+            },
+        }
+
+        bedrock_agentcore.run(port=9000, host="test-host", log_config=custom_log_config, workers=4, reload=True)
+
+        mock_uvicorn.assert_called_once_with(
+            bedrock_agentcore,
+            host="test-host",
+            port=9000,
+            access_log=False,
+            log_level="warning",
+            log_config=custom_log_config,
+            workers=4,
+            reload=True,
+        )
+
     def test_invocation_with_request_id_header(self):
         """Test that request ID from header is used."""
         bedrock_agentcore = BedrockAgentCoreApp()

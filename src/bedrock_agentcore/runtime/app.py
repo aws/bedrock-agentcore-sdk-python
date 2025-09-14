@@ -351,12 +351,13 @@ class BedrockAgentCoreApp(Starlette):
             self.logger.exception("Ping endpoint failed")
             return JSONResponse({"status": PingStatus.HEALTHY.value, "time_of_last_update": int(time.time())})
 
-    def run(self, port: int = 8080, host: Optional[str] = None):
+    def run(self, port: int = 8080, host: Optional[str] = None, **kwargs):
         """Start the Bedrock AgentCore server.
 
         Args:
             port: Port to serve on, defaults to 8080
             host: Host to bind to, auto-detected if None
+            **kwargs: Additional arguments passed to uvicorn.run()
         """
         import os
 
@@ -367,7 +368,17 @@ class BedrockAgentCoreApp(Starlette):
                 host = "0.0.0.0"  # nosec B104 - Docker needs this to expose the port
             else:
                 host = "127.0.0.1"
-        uvicorn.run(self, host=host, port=port, access_log=self.debug, log_level="info" if self.debug else "warning")
+
+        # Set default uvicorn parameters, allow kwargs to override
+        uvicorn_params = {
+            "host": host,
+            "port": port,
+            "access_log": self.debug,
+            "log_level": "info" if self.debug else "warning",
+        }
+        uvicorn_params.update(kwargs)
+
+        uvicorn.run(self, **uvicorn_params)
 
     async def _invoke_handler(self, handler, request_context, takes_context, payload):
         try:
