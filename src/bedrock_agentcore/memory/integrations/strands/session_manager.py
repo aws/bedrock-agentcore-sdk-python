@@ -65,7 +65,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                Defaults to None.
             **kwargs (Any): Additional keyword arguments.
         """
-        region_name = os.environ.get("AWS_REGION", region_name)
+        region_name = region_name or os.environ.get("AWS_REGION")
         self.config = agentcore_memory_config
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
