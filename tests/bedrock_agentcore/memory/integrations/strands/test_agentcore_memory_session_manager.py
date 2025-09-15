@@ -99,6 +99,24 @@ class TestAgentCoreMemorySessionManager:
                     assert manager.memory_client == mock_client
                     mock_client_class.assert_called_once_with(region_name=None)
 
+    def test_init_with_aws_region_env_var(self, agentcore_config):
+        """Test initialization with AWS_REGION environment variable."""
+        with patch("bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient") as mock_client_class:
+            mock_client = Mock()
+            mock_client_class.return_value = mock_client
+
+            with patch("boto3.Session") as mock_boto_session:
+                mock_session = Mock()
+                mock_session.client.return_value = Mock()
+                mock_boto_session.return_value = mock_session
+
+                with patch(
+                    "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
+                ):
+                    with patch.dict("os.environ", {"AWS_REGION": "us-east-1"}):
+                        AgentCoreMemorySessionManager(agentcore_config)
+                        mock_client_class.assert_called_once_with(region_name="us-east-1")
+
     def test_events_to_messages(self, session_manager):
         """Test converting Bedrock events to SessionMessages."""
         events = [
