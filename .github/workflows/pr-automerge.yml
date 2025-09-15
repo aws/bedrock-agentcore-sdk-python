@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Check CI status
         id: ci-status
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const { data: checkRuns } = await github.rest.checks.listForRef({
@@ -51,7 +51,7 @@ jobs:
 
       - name: Auto-merge PR
         if: steps.ci-status.outputs.result == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             await github.rest.pulls.merge({
