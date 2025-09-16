@@ -90,6 +90,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 
             return self._last_timestamp
 
+    def _create_event_with_monotonic_timestamp(self, **kwargs):
+        """Create event with guaranteed monotonic timestamp."""
+        kwargs['eventTimestamp'] = self._get_monotonic_timestamp()
+        return self.memory_client.gmdp_client.create_event(**kwargs)
+
         # Override the clients if custom boto session or config is provided
         # Add strands-agents to the request user agent
         if boto_client_config:
@@ -163,14 +168,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if session.session_id != self.config.session_id:
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session.session_id}")
 
-        event = self.memory_client.gmdp_client.create_event(
+        event = self._create_event_with_monotonic_timestamp(
             memoryId=self.config.memory_id,
             actorId=self._get_full_session_id(session.session_id),
             sessionId=self.session_id,
             payload=[
                 {"blob": json.dumps(session.to_dict())},
             ],
-            eventTimestamp=self._get_monotonic_timestamp(),
         )
         logger.info("Created session: %s with event: %s", session.session_id, event.get("event", {}).get("eventId"))
         return session
@@ -234,14 +238,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if session_id != self.config.session_id:
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session_id}")
 
-        event = self.memory_client.gmdp_client.create_event(
+        event = self._create_event_with_monotonic_timestamp(
             memoryId=self.config.memory_id,
             actorId=self._get_full_agent_id(session_agent.agent_id),
             sessionId=self.session_id,
             payload=[
                 {"blob": json.dumps(session_agent.to_dict())},
             ],
-            eventTimestamp=self._get_monotonic_timestamp(),
         )
         logger.info(
             "Created agent: %s in session: %s with event %s",
@@ -349,14 +352,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                     event_timestamp=self._get_monotonic_timestamp(),
                 )
             else:
-                event = self.memory_client.gmdp_client.create_event(
+                event = self._create_event_with_monotonic_timestamp(
                     memoryId=self.config.memory_id,
                     actorId=self.config.actor_id,
                     sessionId=session_id,
                     payload=[
                         {"blob": json.dumps(messages[0])},
                     ],
-                    eventTimestamp=self._get_monotonic_timestamp(),
                 )
             logger.debug("Created event: %s for message: %s", event.get("eventId"), session_message.message_id)
             return event

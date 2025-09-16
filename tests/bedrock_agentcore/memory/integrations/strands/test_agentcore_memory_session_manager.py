@@ -1,5 +1,6 @@
 """Tests for AgentCoreMemorySessionManager."""
 
+import threading
 from unittest.mock import Mock, patch
 
 import pytest
@@ -1047,3 +1048,94 @@ class TestAgentCoreMemorySessionManager:
 
                     # Should not raise exception, just log error
                     manager.retrieve_customer_context(event)
+
+
+class TestMonotonicTimestamp:
+    """Test monotonic timestamp generation."""
+
+    def test_monotonic_timestamps_sequential(self, session_manager):
+        """Test that sequential calls produce increasing timestamps."""
+        timestamps = []
+        for _ in range(10):
+            timestamps.append(session_manager._get_monotonic_timestamp())
+            
+        # Verify all timestamps are strictly increasing
+        for i in range(1, len(timestamps)):
+            assert timestamps[i] > timestamps[i-1]
+
+    def test_monotonic_timestamps_concurrent(self, session_manager):
+        """Test that concurrent calls produce unique increasing timestamps."""
+        timestamps = []
+        lock = threading.Lock()
+        
+        def get_timestamp():
+            ts = session_manager._get_monotonic_timestamp()
+            with lock:
+                timestamps.append(ts)
+        
+        # Create multiple threads
+        threads = []
+        for _ in range(20):
+            thread = threading.Thread(target=get_timestamp)
+            threads.append(thread)
+            
+        # Start all threads
+        for thread in threads:
+            thread.start()
+            
+        # Wait for completion
+        for thread in threads:
+            thread.join()
+            
+        # Sort timestamps and verify uniqueness and ordering
+        timestamps.sort()
+        assert len(timestamps) == 20
+        assert len(set(timestamps)) == 20  # All unique
+        
+        # Verify strictly increasing
+        for i in range(1, len(timestamps)):
+            assert timestamps[i] > timestamps[i-1]
+
+    def test_microsecond_precision(self, session_manager):
+        """Test that rapid calls get microsecond-level differentiation."""
+        # Get many timestamps rapidly
+        timestamps = []
+        for _ in range(100):
+            timestamps.append(session_manager._get_monotonic_timestamp())
+            
+        # Should have microsecond differences
+        for i in range(1, len(timestamps)):
+            diff = timestamps[i] - timestamps[i-1]
+            assert diff.total_seconds() > 0
+            # Should be small differences (microseconds)
+            assert diff.total_seconds() < 0.001
+
+    def test_create_event_wrapper_uses_monotonic_timestamp(self, session_manager):
+        """Test that the create_event wrapper uses monotonic timestamps."""
+        # Mock the underlying create_event method
+        session_manager.memory_client.gmdp_client.create_event = Mock(return_value={"eventId": "test-123"})
+        
+        # Call the wrapper multiple times
+        session_manager._create_event_with_monotonic_timestamp(
+            memoryId="test-memory",
+            actorId="test-actor",
+            sessionId="test-session",
+            payload=[{"blob": "test"}]
+        )
+        
+        session_manager._create_event_with_monotonic_timestamp(
+            memoryId="test-memory",
+            actorId="test-actor", 
+            sessionId="test-session",
+            payload=[{"blob": "test2"}]
+        )
+        
+        # Verify create_event was called twice
+        assert session_manager.memory_client.gmdp_client.create_event.call_count == 2
+        
+        # Get the timestamps from both calls
+        call1_timestamp = session_manager.memory_client.gmdp_client.create_event.call_args_list[0][1]['eventTimestamp']
+        call2_timestamp = session_manager.memory_client.gmdp_client.create_event.call_args_list[1][1]['eventTimestamp']
+        
+        # Verify timestamps are monotonically increasing
+        assert call2_timestamp > call1_timestamp
