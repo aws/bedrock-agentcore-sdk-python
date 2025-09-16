@@ -2,6 +2,7 @@
 
 import json
 import logging
+import threading
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -70,22 +71,24 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self.has_existing_agent = False
         self._last_timestamp = None
         self._sequence_counter = 0
+        self._timestamp_lock = threading.Lock()
 
     def _get_monotonic_timestamp(self) -> datetime:
         """Generate a monotonically increasing timestamp with microsecond precision."""
-        current = datetime.now(timezone.utc)
-        
-        if self._last_timestamp is None or current > self._last_timestamp:
-            self._last_timestamp = current
-            self._sequence_counter = 0
-        else:
-            # Same or earlier time - increment sequence and add microseconds
-            self._sequence_counter += 1
-            self._last_timestamp = self._last_timestamp.replace(
-                microsecond=min(999999, self._last_timestamp.microsecond + self._sequence_counter)
-            )
+        with self._timestamp_lock:
+            current = datetime.now(timezone.utc)
             
-        return self._last_timestamp
+            if self._last_timestamp is None or current > self._last_timestamp:
+                self._last_timestamp = current
+                self._sequence_counter = 0
+            else:
+                # Same or earlier time - increment sequence and add microseconds
+                self._sequence_counter += 1
+                self._last_timestamp = self._last_timestamp.replace(
+                    microsecond=min(999999, self._last_timestamp.microsecond + self._sequence_counter)
+                )
+                
+            return self._last_timestamp
 
         # Override the clients if custom boto session or config is provided
         # Add strands-agents to the request user agent
