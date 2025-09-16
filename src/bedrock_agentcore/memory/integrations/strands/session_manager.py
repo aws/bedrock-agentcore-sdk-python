@@ -73,6 +73,27 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self._sequence_counter = 0
         self._timestamp_lock = threading.Lock()
 
+        # Override the clients if custom boto session or config is provided
+        # Add strands-agents to the request user agent
+        if boto_client_config:
+            existing_user_agent = getattr(boto_client_config, "user_agent_extra", None)
+            if existing_user_agent:
+                new_user_agent = f"{existing_user_agent} strands-agents"
+            else:
+                new_user_agent = "strands-agents"
+            client_config = boto_client_config.merge(BotocoreConfig(user_agent_extra=new_user_agent))
+        else:
+            client_config = BotocoreConfig(user_agent_extra="strands-agents")
+
+        # Override the memory client's boto3 clients
+        self.memory_client.gmcp_client = session.client(
+            "bedrock-agentcore-control", region_name=region_name or session.region_name, config=client_config
+        )
+        self.memory_client.gmdp_client = session.client(
+            "bedrock-agentcore", region_name=region_name or session.region_name, config=client_config
+        )
+        super().__init__(session_id=self.config.session_id, session_repository=self)
+
     def _get_monotonic_timestamp(self) -> datetime:
         """Generate a monotonically increasing timestamp with microsecond precision."""
         with self._timestamp_lock:
@@ -94,27 +115,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         """Create event with guaranteed monotonic timestamp."""
         kwargs['eventTimestamp'] = self._get_monotonic_timestamp()
         return self.memory_client.gmdp_client.create_event(**kwargs)
-
-        # Override the clients if custom boto session or config is provided
-        # Add strands-agents to the request user agent
-        if boto_client_config:
-            existing_user_agent = getattr(boto_client_config, "user_agent_extra", None)
-            if existing_user_agent:
-                new_user_agent = f"{existing_user_agent} strands-agents"
-            else:
-                new_user_agent = "strands-agents"
-            client_config = boto_client_config.merge(BotocoreConfig(user_agent_extra=new_user_agent))
-        else:
-            client_config = BotocoreConfig(user_agent_extra="strands-agents")
-
-        # Override the memory client's boto3 clients
-        self.memory_client.gmcp_client = session.client(
-            "bedrock-agentcore-control", region_name=region_name or session.region_name, config=client_config
-        )
-        self.memory_client.gmdp_client = session.client(
-            "bedrock-agentcore", region_name=region_name or session.region_name, config=client_config
-        )
-        super().__init__(session_id=self.config.session_id, session_repository=self)
 
     def _get_full_session_id(self, session_id: str) -> str:
         """Get the full session ID with the configured prefix.
