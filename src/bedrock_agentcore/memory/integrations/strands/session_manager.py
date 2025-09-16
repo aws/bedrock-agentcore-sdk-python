@@ -68,6 +68,24 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
         self.has_existing_agent = False
+        self._last_timestamp = None
+        self._sequence_counter = 0
+
+    def _get_monotonic_timestamp(self) -> datetime:
+        """Generate a monotonically increasing timestamp with microsecond precision."""
+        current = datetime.now(timezone.utc)
+        
+        if self._last_timestamp is None or current > self._last_timestamp:
+            self._last_timestamp = current
+            self._sequence_counter = 0
+        else:
+            # Same or earlier time - increment sequence and add microseconds
+            self._sequence_counter += 1
+            self._last_timestamp = self._last_timestamp.replace(
+                microsecond=min(999999, self._last_timestamp.microsecond + self._sequence_counter)
+            )
+            
+        return self._last_timestamp
 
         # Override the clients if custom boto session or config is provided
         # Add strands-agents to the request user agent
@@ -149,7 +167,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             payload=[
                 {"blob": json.dumps(session.to_dict())},
             ],
-            eventTimestamp=datetime.now(timezone.utc),
+            eventTimestamp=self._get_monotonic_timestamp(),
         )
         logger.info("Created session: %s with event: %s", session.session_id, event.get("event", {}).get("eventId"))
         return session
@@ -220,7 +238,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             payload=[
                 {"blob": json.dumps(session_agent.to_dict())},
             ],
-            eventTimestamp=datetime.now(timezone.utc),
+            eventTimestamp=self._get_monotonic_timestamp(),
         )
         logger.info(
             "Created agent: %s in session: %s with event %s",
@@ -325,7 +343,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                     actor_id=self.config.actor_id,
                     session_id=session_id,
                     messages=messages,
-                    event_timestamp=datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00")),
+                    event_timestamp=self._get_monotonic_timestamp(),
                 )
             else:
                 event = self.memory_client.gmdp_client.create_event(
@@ -335,7 +353,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                     payload=[
                         {"blob": json.dumps(messages[0])},
                     ],
-                    eventTimestamp=datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00")),
+                    eventTimestamp=self._get_monotonic_timestamp(),
                 )
             logger.debug("Created event: %s for message: %s", event.get("eventId"), session_message.message_id)
             return event
