@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.4] - 2025-09-17
+
+### Added
+- feat: implement AWS Lambda compatible JSON logging (#76) (114a670)
+
+### Fixed
+- fix: dont use milliseconds or microseconds because boto3 doesnt suppo… (#83) (5b97e5a)
+
+### Other Changes
+- ci(deps): bump actions/setup-python from 5 to 6 (#73) (df70612)
+- add optional session parameter to CodeInterpreter for custom credential management (#41) (fa8b028)
+- ci(deps): bump trufflesecurity/trufflehog from 3.90.2 to 3.90.6 (#72) (458c8dc)
+- ci(deps): bump aws-actions/configure-aws-credentials from 4 to 5 (#71) (503bbda)
+- ci(deps): bump actions/checkout from 4 to 5 (#55) (094a182)
+- ci(deps): bump actions/download-artifact from 4 to 5 (#48) (f2831d3)
+- Release v0.1.3 (#70) (b1eab20)
+
 ## [0.1.3] - 2025-09-05
 
 ### Added
