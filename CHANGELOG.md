@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.4] - 2025-09-17
+
+### Other Changes
+- feat(runtime): add kwargs support to run method (#79) (c61edef)
+
 ## [0.1.3] - 2025-09-05
 
 ### Added
