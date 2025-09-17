@@ -97,7 +97,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def _get_monotonic_timestamp(self) -> datetime:
         """Generate a monotonically increasing timestamp with second precision."""
         with self._timestamp_lock:
-            current = datetime.now(timezone.utc)
+            # Currently, boto3 cuts off any granularity beyond seconds in the CreateEvent request. While we wait for a fix to the
+            # boto3 client, the best we can do to allow concurrent events is to increment seconds on the client.
+            # TODO: Once boto3 supports sending milliseconds, we should make this code increment milliseconds instead of seconds.
+            current = datetime.now(timezone.utc).replace(microsecond=0) 
+            print("LOOK AT CURRENT:", current)
             
             if self._last_timestamp is None or current > self._last_timestamp:
                 self._last_timestamp = current
@@ -106,8 +110,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 # Same or earlier time - increment sequence and add seconds
                 self._sequence_counter += 1
                 self._last_timestamp = self._last_timestamp + timedelta(seconds=self._sequence_counter)
+            
+            print("LOOK AT lastTimestamp:", self._last_timestamp)
                 
-            return self._last_timestamp
+            return self._last_timestamp.replace(microsecond=0)
 
     def _create_event_with_monotonic_timestamp(self, **kwargs):
         """Create event with guaranteed monotonic timestamp."""
