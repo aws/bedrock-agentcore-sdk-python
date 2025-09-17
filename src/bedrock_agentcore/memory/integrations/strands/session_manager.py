@@ -68,7 +68,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             if cls._last_timestamp is None:
                 cls._last_timestamp = desired_timestamp
                 return desired_timestamp
-            
+
+            # Why the 1 second check? Because Boto3 does NOT support sub 1 second resolution.
             if desired_timestamp <= cls._last_timestamp + timedelta(seconds=1):
                 # Increment by 1 second to ensure ordering
                 new_timestamp = cls._last_timestamp + timedelta(seconds=1)
