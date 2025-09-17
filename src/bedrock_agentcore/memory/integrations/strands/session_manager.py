@@ -3,7 +3,7 @@
 import json
 import logging
 import threading
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
 import boto3
@@ -54,16 +54,16 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     @classmethod
     def _get_monotonic_timestamp(cls, desired_timestamp: Optional[datetime] = None) -> datetime:
         """Get a monotonically increasing timestamp.
-        
+
         Args:
             desired_timestamp (Optional[datetime]): The desired timestamp. If None, uses current time.
-            
+
         Returns:
             datetime: A timestamp guaranteed to be greater than any previously returned timestamp.
         """
         if desired_timestamp is None:
             desired_timestamp = datetime.now(timezone.utc)
-            
+
         with cls._timestamp_lock:
             if cls._last_timestamp is None:
                 cls._last_timestamp = desired_timestamp
@@ -75,7 +75,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 new_timestamp = cls._last_timestamp + timedelta(seconds=1)
             else:
                 new_timestamp = desired_timestamp
-            
+
             cls._last_timestamp = new_timestamp
             return new_timestamp
 
@@ -352,11 +352,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             messages = AgentCoreMemoryConverter.message_to_payload(session_message)
             if not messages:
                 return
-            
+
             # Parse the original timestamp and use it as desired timestamp
             original_timestamp = datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00"))
             monotonic_timestamp = self._get_monotonic_timestamp(original_timestamp)
-            
+
             if not AgentCoreMemoryConverter.exceeds_conversational_limit(messages[0]):
                 event = self.memory_client.create_event(
                     memory_id=self.config.memory_id,
