@@ -1,6 +1,7 @@
 """Tests for AgentCoreMemorySessionManager."""
 
 import threading
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 import pytest
@@ -1096,19 +1097,35 @@ class TestMonotonicTimestamp:
         for i in range(1, len(timestamps)):
             assert timestamps[i] > timestamps[i-1]
 
-    def test_microsecond_precision(self, session_manager):
-        """Test that rapid calls get microsecond-level differentiation."""
-        # Get many timestamps rapidly
-        timestamps = []
-        for _ in range(100):
-            timestamps.append(session_manager._get_monotonic_timestamp())
+    def test_monotonic_timestamp_past_minute(self, session_manager):
+        """Test that monotonic timestamps can increment past 1 minute."""
+        import unittest.mock
+        
+        # Mock datetime.now to return the same time repeatedly
+        fixed_time = datetime.now(timezone.utc)
+        
+        with unittest.mock.patch('bedrock_agentcore.memory.integrations.strands.session_manager.datetime') as mock_datetime:
+            mock_datetime.now.return_value = fixed_time
+            mock_datetime.timezone = timezone
             
-        # Should have microsecond differences
-        for i in range(1, len(timestamps)):
-            diff = timestamps[i] - timestamps[i-1]
-            assert diff.total_seconds() > 0
-            # Should be small differences (microseconds)
-            assert diff.total_seconds() < 0.001
+            timestamps = []
+            for i in range(70):
+                timestamp = session_manager._get_monotonic_timestamp()
+                timestamps.append(timestamp)
+            
+            # Verify timestamps are monotonically increasing
+            for i in range(1, len(timestamps)):
+                assert timestamps[i] > timestamps[i-1]
+            
+            # Verify we can go past 60 seconds
+            time_diff = timestamps[-1] - timestamps[0]
+            assert time_diff.total_seconds() >= 60
+        
+        # Verify we can go past 60 seconds
+        time_diff = timestamps[-1] - timestamps[0]
+        assert time_diff.total_seconds() >= 60
+
+
 
     def test_create_event_wrapper_uses_monotonic_timestamp(self, session_manager):
         """Test that the create_event wrapper uses monotonic timestamps."""

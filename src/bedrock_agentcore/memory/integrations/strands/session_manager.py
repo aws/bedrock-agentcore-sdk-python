@@ -3,7 +3,7 @@
 import json
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import TYPE_CHECKING, Any, Optional
 
 import boto3
@@ -95,7 +95,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         super().__init__(session_id=self.config.session_id, session_repository=self)
 
     def _get_monotonic_timestamp(self) -> datetime:
-        """Generate a monotonically increasing timestamp with microsecond precision."""
+        """Generate a monotonically increasing timestamp with second precision."""
         with self._timestamp_lock:
             current = datetime.now(timezone.utc)
             
@@ -103,11 +103,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 self._last_timestamp = current
                 self._sequence_counter = 0
             else:
-                # Same or earlier time - increment sequence and add microseconds
+                # Same or earlier time - increment sequence and add seconds
                 self._sequence_counter += 1
-                self._last_timestamp = self._last_timestamp.replace(
-                    microsecond=min(999999, self._last_timestamp.microsecond + self._sequence_counter)
-                )
+                self._last_timestamp = self._last_timestamp + timedelta(seconds=self._sequence_counter)
                 
             return self._last_timestamp
 
