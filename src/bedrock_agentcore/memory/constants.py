@@ -1,7 +1,8 @@
 """Constants for Bedrock AgentCore Memory SDK."""
 
+from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List
+from typing import Any, Dict, List
 
 
 class StrategyType(Enum):
@@ -101,3 +102,34 @@ class ConfigLimits:
     MAX_TRIGGER_EVERY_N_MESSAGES = 16
     MIN_HISTORICAL_CONTEXT_WINDOW = 0
     MAX_HISTORICAL_CONTEXT_WINDOW = 12
+
+
+@dataclass
+class ConversationalMessage:
+    """Represents a conversational message with text and role.
+
+    Args:
+        text: The message content
+        role: The role of the message sender (e.g., 'USER', 'ASSISTANT')
+    """
+
+    text: str
+    role: MessageRole
+
+    def __post_init__(self):
+        """Validate message fields after initialization."""
+        if not isinstance(self.text, str):
+            raise ValueError("ConversationalMessage.text must be a string")
+        if not isinstance(self.role, MessageRole):
+            raise ValueError("ConversationalMessage.role must be a MessageRole")
+
+
+@dataclass
+class BlobMessage:
+    """Represents a blob message containing arbitrary data.
+
+    Args:
+        data: Any arbitrary data to be stored as a blob
+    """
+
+    data: Any
