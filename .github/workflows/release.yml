@@ -142,9 +142,8 @@ jobs:
           ### 🔄 Release Process
           After merging this PR:
           1. Package will be built and tested
-          2. Published to Test PyPI automatically
-          3. **Manual approval required** before production PyPI
-          4. GitHub release and tag created after production
+          2. **Manual approval required** before publishing to PyPI
+          3. GitHub release and tag created after PyPI publication
 
           ### 🚨 Running from: ${{ github.ref }}
           ${{ github.ref != 'refs/heads/main' && '**WARNING**: Not running from main branch!' || '✅ Running from main branch' }}
@@ -208,50 +207,28 @@ jobs:
           name: dist
           path: dist/
 
-  publish-testpypi:
-    name: Publish to TestPyPI
-    needs: test-and-build
-    runs-on: ubuntu-latest
-    environment:
-      name: test-pypi
-
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v5
-        with:
-          name: dist
-          path: dist/
-
-      - name: Publish to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-          skip-existing: true
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-
   release-approval:
     name: Release Approval
-    needs: publish-testpypi
+    needs: test-and-build
     runs-on: ubuntu-latest
-    # IMPORTANT: Always run if test PyPI succeeded
-    if: always() && needs.publish-testpypi.result == 'success'
     environment:
       name: pypi-approval
 
     steps:
       - name: Approval checkpoint
         run: |
-          echo "✅ TestPyPI deployment successful"
-          echo "📦 Package available at: https://test.pypi.org/project/bedrock-agentcore/"
+          echo "✅ Build and tests successful"
+          echo "📦 Package ready for PyPI publication"
           echo ""
           echo "⚠️  MANUAL APPROVAL REQUIRED FOR PRODUCTION"
           echo ""
           echo "Before approving:"
-          echo "1. Test package: pip install -i https://test.pypi.org/simple/ bedrock-agentcore"
-          echo "2. Verify functionality works"
-          echo "3. Check version is correct"
+          echo "1. Verify the PR has been merged to main"
+          echo "2. Check that version number is correct"
+          echo "3. Review the CHANGELOG.md entries"
+          echo "4. Ensure no duplicate version exists on PyPI"
           echo ""
-          echo "🚨 Only approve if everything works correctly!"
+          echo "🚨 Only approve if everything is correct!"
 
   publish-pypi:
     name: Publish to PyPI
@@ -289,12 +266,41 @@ jobs:
           VERSION=$(ls dist/*.whl | sed -n 's/.*-\([0-9.]*\)-.*/\1/p')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Check if version exists on PyPI
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Check if version already exists on PyPI
+          if pip index versions bedrock-agentcore | grep -q "^Available versions.*$VERSION"; then
+            echo "❌ ERROR: Version $VERSION already exists on PyPI!"
+            echo "You cannot re-upload the same version number."
+            echo "Please bump the version and try again."
+            exit 1
+          fi
+
+          echo "✓ Version $VERSION is not on PyPI, safe to publish"
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          # MUST specify password to avoid Trusted Publishing
+          # MUST specify password to avoid Trusted Publishing issues
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: false
+          verbose: true
+
+      - name: Wait for PyPI availability
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          echo "Waiting for package to be available on PyPI..."
+          for i in {1..10}; do
+            if pip index versions bedrock-agentcore | grep -q "$VERSION"; then
+              echo "✓ Package version $VERSION is now available on PyPI"
+              break
+            fi
+            echo "Attempt $i/10: Package not yet available, waiting 30s..."
+            sleep 30
+          done
 
       - name: Create and push tag
         run: |
