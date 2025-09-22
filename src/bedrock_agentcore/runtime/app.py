@@ -21,6 +21,8 @@ from starlette.types import Lifespan
 from .context import BedrockAgentCoreContext, RequestContext
 from .models import (
     ACCESS_TOKEN_HEADER,
+    AUTHORIZATION_HEADER,
+    CUSTOM_HEADER_PREFIX,
     REQUEST_ID_HEADER,
     SESSION_HEADER,
     TASK_ACTION_CLEAR_FORCED_STATUS,
@@ -279,7 +281,27 @@ class BedrockAgentCoreApp(Starlette):
             if agent_identity_token:
                 BedrockAgentCoreContext.set_workload_access_token(agent_identity_token)
 
-            return RequestContext(session_id=session_id)
+            # Collect relevant request headers (Authorization + Custom headers)
+            request_headers = {}
+
+            # Add Authorization header if present
+            authorization_header = headers.get(AUTHORIZATION_HEADER)
+            if authorization_header is not None:
+                request_headers[AUTHORIZATION_HEADER] = authorization_header
+
+            # Add custom headers with the specified prefix
+            for header_name, header_value in headers.items():
+                if header_name.lower().startswith(CUSTOM_HEADER_PREFIX.lower()):
+                    request_headers[header_name] = header_value
+
+            # Set in context if any headers were found
+            if request_headers:
+                BedrockAgentCoreContext.set_request_headers(request_headers)
+
+            # Get the headers from context to pass to RequestContext
+            req_headers = BedrockAgentCoreContext.get_request_headers()
+
+            return RequestContext(session_id=session_id, request_headers=req_headers)
         except Exception as e:
             self.logger.warning("Failed to build request context: %s: %s", type(e).__name__, e)
             request_id = str(uuid.uuid4())

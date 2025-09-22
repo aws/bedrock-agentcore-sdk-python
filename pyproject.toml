@@ -26,8 +26,8 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "boto3>=1.39.7",
-    "botocore>=1.39.7",
+    "boto3>=1.40.35",
+    "botocore>=1.40.35",
     "pydantic>=2.0.0,<3.0.0",
     "urllib3>=1.26.0",
     "starlette>=0.46.2",
