@@ -71,7 +71,7 @@ app.run()  # Ready to run on Bedrock AgentCore
 - 💻 **Code Interpreter** - Secure sandboxed execution: **[Code Interpreter Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/builtin-tools/quickstart-code-interpreter.html)**
 - 🌐 **Browser** - Cloud-based web automation: **[Browser Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/builtin-tools/quickstart-browser.html)**
 - 📊 **Observability** - OpenTelemetry tracing: **[Observability Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/observability/quickstart.html)**
-- 🔐 **Identity** - AWS & third-party auth:
+- 🔐 **Identity** - AWS & third-party auth: **[Identity Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/identity/quickstart.html)**
 
 ## 🏗️ Deployment
 
