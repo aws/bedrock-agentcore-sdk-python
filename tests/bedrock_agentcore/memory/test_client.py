@@ -536,13 +536,16 @@ def test_list_events_with_pagination():
         mock_gmdp = MagicMock()
         client.gmdp_client = mock_gmdp
 
-        # Mock paginated responses
+        # Mock paginated responses - simulate API returning pages in reverse chronological order
+        # Page 1: newest events first (event-149 down to event-50) - 100 items
         first_batch = [
-            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 10, i % 60, i % 60)} for i in range(100)
+            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 11, (i - 50) // 60, (i - 50) % 60)} 
+            for i in range(149, 49, -1)  # 149, 148, ..., 50 (100 items)
         ]
+        # Page 2: older events first (event-49 down to event-0) - 50 items
         second_batch = [
-            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 11, (i - 100) % 60, (i - 100) % 60)}
-            for i in range(100, 150)
+            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 10, i // 60, i % 60)} 
+            for i in range(49, -1, -1)  # 49, 48, ..., 0 (50 items)
         ]
 
         # Setup side effects for multiple calls
