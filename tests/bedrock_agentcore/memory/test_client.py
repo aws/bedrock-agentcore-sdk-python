@@ -472,11 +472,11 @@ def test_list_events_chronological():
     """Test list_events returns the events in chronological order by default."""
     with patch("boto3.client"):
         client = MemoryClient()
-        
+
         # Mock the MemoryClient's internal boto3 client
         mock_gmdp = MagicMock()
         client.gmdp_client = mock_gmdp
-        
+
         # Mock boto3 response in no particular order
         mock_events = [
             {"eventId": "event-2", "eventTimestamp": datetime(2023, 1, 1, 10, 2, 0)},
@@ -499,11 +499,11 @@ def test_list_events_reverse_chronological():
     """Test list_events returns the events in reverse chronological order."""
     with patch("boto3.client"):
         client = MemoryClient()
-        
+
         # Mock the MemoryClient's internal boto3 client
         mock_gmdp = MagicMock()
         client.gmdp_client = mock_gmdp
-        
+
         # Mock boto3 response in no particular order
         mock_events = [
             {"eventId": "event-2", "eventTimestamp": datetime(2023, 1, 1, 10, 2, 0)},
@@ -517,7 +517,7 @@ def test_list_events_reverse_chronological():
             memory_id="mem-123",
             actor_id="user-123",
             session_id="session-456",
-            order=EventOrdering.REVERSE_CHRONOLOGICAL
+            order=EventOrdering.REVERSE_CHRONOLOGICAL,
         )
 
         assert events == [
@@ -539,12 +539,12 @@ def test_list_events_with_pagination():
         # Mock paginated responses - simulate API returning pages in reverse chronological order
         # Page 1: newest events first (event-149 down to event-50) - 100 items
         first_batch = [
-            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 11, (i - 50) // 60, (i - 50) % 60)} 
+            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 11, (i - 50) // 60, (i - 50) % 60)}
             for i in range(149, 49, -1)  # 149, 148, ..., 50 (100 items)
         ]
         # Page 2: older events first (event-49 down to event-0) - 50 items
         second_batch = [
-            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 10, i // 60, i % 60)} 
+            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 10, i // 60, i % 60)}
             for i in range(49, -1, -1)  # 49, 48, ..., 0 (50 items)
         ]
 
@@ -627,7 +627,8 @@ def test_list_events_max_results_limit():
 
         # Mock response with more events than requested
         large_batch = [
-            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 10, 0, i % 60)} for i in range(100)
+            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 11, (i) // 60, (i) % 60)}
+            for i in range(100)
         ]
         mock_gmdp.list_events.return_value = {"events": large_batch, "nextToken": "has-more"}
 
@@ -1040,7 +1041,7 @@ def test_get_last_k_turns():
         # Mock the client
         mock_gmdp = MagicMock()
         client.gmdp_client = mock_gmdp
-        
+
         # We only want the last 2 turns
         k = 2
 
@@ -1061,8 +1062,8 @@ def test_get_last_k_turns():
                 "eventTimestamp": datetime(2023, 1, 1, 10, 2, 0),
                 "payload": [
                     {"conversational": {"role": "USER", "content": {"text": "Message 3"}}},
-                    {"conversational": {"role": "ASSISTANT", "content": {"text": "Message 4"}}}
-                ]
+                    {"conversational": {"role": "ASSISTANT", "content": {"text": "Message 4"}}},
+                ],
             },
             # Third turn, user message in a separate event
             {
@@ -1089,12 +1090,12 @@ def test_get_last_k_turns():
         # Should only return the last 2 turns, in the correct order
         assert turns == [
             [
-                {"role": "USER", "content": {"text": "Message 3"}}, 
-                {"role": "ASSISTANT", "content": {"text": "Message 4"}}
+                {"role": "USER", "content": {"text": "Message 3"}},
+                {"role": "ASSISTANT", "content": {"text": "Message 4"}},
             ],
             [
-                {"role": "USER", "content": {"text": "Message 5"}}, 
-                {"role": "ASSISTANT", "content": {"text": "Message 6"}}
+                {"role": "USER", "content": {"text": "Message 5"}},
+                {"role": "ASSISTANT", "content": {"text": "Message 6"}},
             ],
         ]
 

@@ -35,10 +35,13 @@ from .constants import (
 
 logger = logging.getLogger(__name__)
 
+
 class EventOrdering(Enum):
     """Ordering of events."""
+
     CHRONOLOGICAL = 1
     REVERSE_CHRONOLOGICAL = 2
+
 
 class MemoryClient:
     """High-level Bedrock AgentCore Memory client with essential operations."""
@@ -759,7 +762,7 @@ class MemoryClient:
 
         logger.info("Completed full conversation turn with LLM")
         return retrieved_memories, agent_response, event
-    
+
     def list_events(
         self,
         memory_id: str,
@@ -830,16 +833,13 @@ class MemoryClient:
 
             logger.info("Retrieved total of %d events", len(all_events))
 
-            # Return the first max_results events
-            result = all_events[:max_results]
-
             # Sort events in chronological order
             result = sorted(
-                result, 
-                key=lambda x: x["eventTimestamp"], 
-                reverse=order == EventOrdering.REVERSE_CHRONOLOGICAL
+                all_events, key=lambda x: x["eventTimestamp"], reverse=order == EventOrdering.REVERSE_CHRONOLOGICAL
             )
-            return result
+
+            # Return the latest max_results events
+            return result[:max_results]
 
         except ClientError as e:
             logger.error("Failed to list events: %s", e)
