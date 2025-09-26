@@ -14,6 +14,7 @@ import time
 import uuid
 import warnings
 from datetime import datetime
+from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import boto3
@@ -34,6 +35,9 @@ from .constants import (
 
 logger = logging.getLogger(__name__)
 
+class EventOrdering(Enum):
+    CHRONOLOGICAL = 1
+    REVERSE_CHRONOLOGICAL = 2
 
 class MemoryClient:
     """High-level Bedrock AgentCore Memory client with essential operations."""
@@ -754,7 +758,7 @@ class MemoryClient:
 
         logger.info("Completed full conversation turn with LLM")
         return retrieved_memories, agent_response, event
-
+    
     def list_events(
         self,
         memory_id: str,
@@ -764,6 +768,7 @@ class MemoryClient:
         include_parent_events: bool = False,
         max_results: int = 100,
         include_payload: bool = True,
+        order: Optional[EventOrdering] = EventOrdering.CHRONOLOGICAL,
     ) -> List[Dict[str, Any]]:
         """List all events in a session with pagination support.
 
@@ -778,9 +783,10 @@ class MemoryClient:
             include_parent_events: Whether to include parent branch events (only applies with branch_name)
             max_results: Maximum number of events to return
             include_payload: Whether to include event payloads in response
+            order: Ordering of events (chronological or reverse chronological)
 
         Returns:
-            List of event dictionaries in chronological order
+            List of event dictionaries
 
         Example:
             # Get all events
@@ -822,7 +828,17 @@ class MemoryClient:
                     break
 
             logger.info("Retrieved total of %d events", len(all_events))
-            return all_events[:max_results]
+
+            # Return the first max_results events
+            result = all_events[:max_results]
+
+            # Sort events in chronological order
+            result = sorted(
+                result, 
+                key=lambda x: x["eventTimestamp"], 
+                reverse=order == EventOrdering.REVERSE_CHRONOLOGICAL
+            )
+            return result
 
         except ClientError as e:
             logger.error("Failed to list events: %s", e)

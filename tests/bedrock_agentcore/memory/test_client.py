@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 from botocore.exceptions import ClientError
 
 from bedrock_agentcore.memory import MemoryClient
+from bedrock_agentcore.memory.client import EventOrdering
 from bedrock_agentcore.memory.constants import StrategyType
 
 
@@ -465,6 +466,65 @@ def test_process_turn_with_llm_success_with_retrieval():
         assert event_kwargs["payload"][0]["conversational"]["content"]["text"] == "What did we discuss before?"
         assert event_kwargs["payload"][1]["conversational"]["role"] == "ASSISTANT"
         assert "Previous context | More context" in event_kwargs["payload"][1]["conversational"]["content"]["text"]
+
+
+def test_list_events_chronological():
+    """Test list_events returns the events in chronological order by default."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+        
+        # Mock the MemoryClient's internal boto3 client
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+        
+        # Mock boto3 response in no particular order
+        mock_events = [
+            {"eventId": "event-2", "eventTimestamp": datetime(2023, 1, 1, 10, 2, 0)},
+            {"eventId": "event-3", "eventTimestamp": datetime(2023, 1, 1, 10, 3, 0)},
+            {"eventId": "event-1", "eventTimestamp": datetime(2023, 1, 1, 10, 1, 0)},
+        ]
+        mock_gmdp.list_events.return_value = {"events": mock_events, "nextToken": None}
+
+        # Test list_events
+        events = client.list_events(memory_id="mem-123", actor_id="user-123", session_id="session-456")
+
+        assert events == [
+            {"eventId": "event-1", "eventTimestamp": datetime(2023, 1, 1, 10, 1, 0)},
+            {"eventId": "event-2", "eventTimestamp": datetime(2023, 1, 1, 10, 2, 0)},
+            {"eventId": "event-3", "eventTimestamp": datetime(2023, 1, 1, 10, 3, 0)},
+        ]
+
+
+def test_list_events_reverse_chronological():
+    """Test list_events returns the events in reverse chronological order."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+        
+        # Mock the MemoryClient's internal boto3 client
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+        
+        # Mock boto3 response in no particular order
+        mock_events = [
+            {"eventId": "event-2", "eventTimestamp": datetime(2023, 1, 1, 10, 2, 0)},
+            {"eventId": "event-3", "eventTimestamp": datetime(2023, 1, 1, 10, 3, 0)},
+            {"eventId": "event-1", "eventTimestamp": datetime(2023, 1, 1, 10, 1, 0)},
+        ]
+        mock_gmdp.list_events.return_value = {"events": mock_events, "nextToken": None}
+
+        # Test list_events
+        events = client.list_events(
+            memory_id="mem-123",
+            actor_id="user-123",
+            session_id="session-456",
+            order=EventOrdering.REVERSE_CHRONOLOGICAL
+        )
+
+        assert events == [
+            {"eventId": "event-3", "eventTimestamp": datetime(2023, 1, 1, 10, 3, 0)},
+            {"eventId": "event-2", "eventTimestamp": datetime(2023, 1, 1, 10, 2, 0)},
+            {"eventId": "event-1", "eventTimestamp": datetime(2023, 1, 1, 10, 1, 0)},
+        ]
 
 
 def test_list_events_with_pagination():
