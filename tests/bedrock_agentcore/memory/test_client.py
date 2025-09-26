@@ -1040,35 +1040,63 @@ def test_get_last_k_turns():
         # Mock the client
         mock_gmdp = MagicMock()
         client.gmdp_client = mock_gmdp
+        
+        # We only want the last 2 turns
+        k = 2
 
         # Mock events response with conversation turns
         mock_events = [
+            # First turn, should be ignored because k=2
             {
                 "eventId": "event-1",
-                "eventTimestamp": datetime(2023, 1, 1, 10, 0, 0),
+                "eventTimestamp": datetime(2023, 1, 1, 10, 1, 0),
                 "payload": [
-                    {"conversational": {"role": "USER", "content": {"text": "Hello"}}},
-                    {"conversational": {"role": "ASSISTANT", "content": {"text": "Hi there"}}},
+                    {"conversational": {"role": "USER", "content": {"text": "Message 1"}}},
+                    {"conversational": {"role": "ASSISTANT", "content": {"text": "Message 2"}}},
                 ],
             },
+            # Second turn, all messages in a single event
             {
                 "eventId": "event-2",
-                "eventTimestamp": datetime(2023, 1, 1, 10, 5, 0),
+                "eventTimestamp": datetime(2023, 1, 1, 10, 2, 0),
                 "payload": [
-                    {"conversational": {"role": "USER", "content": {"text": "How are you?"}}},
-                    {"conversational": {"role": "ASSISTANT", "content": {"text": "I'm doing well"}}},
+                    {"conversational": {"role": "USER", "content": {"text": "Message 3"}}},
+                    {"conversational": {"role": "ASSISTANT", "content": {"text": "Message 4"}}}
+                ]
+            },
+            # Third turn, user message in a separate event
+            {
+                "eventId": "event-3",
+                "eventTimestamp": datetime(2023, 1, 1, 10, 3, 0),
+                "payload": [
+                    {"conversational": {"role": "USER", "content": {"text": "Message 5"}}},
+                ],
+            },
+            # Third turn, assistant response in a separate event
+            {
+                "eventId": "event-4",
+                "eventTimestamp": datetime(2023, 1, 1, 10, 4, 0),
+                "payload": [
+                    {"conversational": {"role": "ASSISTANT", "content": {"text": "Message 6"}}},
                 ],
             },
         ]
         mock_gmdp.list_events.return_value = {"events": mock_events, "nextToken": None}
 
         # Test get_last_k_turns
-        turns = client.get_last_k_turns(memory_id="mem-123", actor_id="user-123", session_id="session-456", k=2)
+        turns = client.get_last_k_turns(memory_id="mem-123", actor_id="user-123", session_id="session-456", k=k)
 
-        assert len(turns) == 2
-        assert len(turns[0]) == 2  # First turn has 2 messages
-        assert turns[0][0]["role"] == "USER"
-        assert turns[0][1]["role"] == "ASSISTANT"
+        # Should only return the last 2 turns, in the correct order
+        assert turns == [
+            [
+                {"role": "USER", "content": {"text": "Message 3"}}, 
+                {"role": "ASSISTANT", "content": {"text": "Message 4"}}
+            ],
+            [
+                {"role": "USER", "content": {"text": "Message 5"}}, 
+                {"role": "ASSISTANT", "content": {"text": "Message 6"}}
+            ],
+        ]
 
 
 def test_delete_memory_and_wait():
