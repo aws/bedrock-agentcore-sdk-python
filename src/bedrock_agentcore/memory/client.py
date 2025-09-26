@@ -60,12 +60,14 @@ class MemoryClient:
         "list_memory_strategies",
     }
 
-    def __init__(self, region_name: Optional[str] = None):
+    def __init__(self, region_name: Optional[str] = None, session: Optional[boto3.Session] = None ):
         """Initialize the Memory client."""
-        self.region_name = region_name or boto3.Session().region_name or "us-west-2"
+        if session is None:
+            session = boto3.Session()
+        self.region_name = region_name or session.region_name or "us-west-2"
 
-        self.gmcp_client = boto3.client("bedrock-agentcore-control", region_name=self.region_name)
-        self.gmdp_client = boto3.client("bedrock-agentcore", region_name=self.region_name)
+        self.gmcp_client = session.client("bedrock-agentcore-control", region_name=self.region_name)
+        self.gmdp_client = session.client("bedrock-agentcore", region_name=self.region_name)
 
         logger.info(
             "Initialized MemoryClient for control plane: %s, data plane: %s",
