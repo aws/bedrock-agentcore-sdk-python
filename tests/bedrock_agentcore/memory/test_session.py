@@ -7,6 +7,7 @@ from unittest import mock
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 
 from bedrock_agentcore.memory.constants import BlobMessage, ConversationalMessage, MessageRole, RetrievalConfig
@@ -20,6 +21,331 @@ from bedrock_agentcore.memory.models import (
 )
 from bedrock_agentcore.memory.session import Actor, MemorySession, MemorySessionManager
 
+
+class TestBotocoreConfigSupport:
+    """Test cases for botocore.config support in MemorySessionManager."""
+
+    def test_session_manager_initialization_with_boto_client_config(self):
+        """Test MemorySessionManager initialization with boto_client_config."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Create custom botocore config
+            custom_config = BotocoreConfig(
+                retries={'max_attempts': 5, 'mode': 'adaptive'},
+                max_pool_connections=50,
+                connect_timeout=10,
+                read_timeout=30
+            )
+
+            manager = MemorySessionManager(
+                memory_id="testMemory-1234567890",
+                region_name="us-west-2",
+                boto_client_config=custom_config
+            )
+
+            assert manager._memory_id == "testMemory-1234567890"
+            assert manager.region_name == "us-west-2"
+            assert manager._data_plane_client == mock_client_instance
+
+            # Verify client was called with merged config
+            mock_session.client.assert_called_once()
+            call_args = mock_session.client.call_args
+            assert call_args[0] == ("bedrock-agentcore",)
+            assert call_args[1]["region_name"] == "us-west-2"
+            assert "config" in call_args[1]
+
+            # Verify the config was merged with user agent
+            passed_config = call_args[1]["config"]
+            assert passed_config.user_agent_extra == "bedrock-agentcore-sdk"
+            assert passed_config.retries == {'max_attempts': 5, 'mode': 'adaptive'}
+            assert passed_config.max_pool_connections == 50
+
+    def test_session_manager_initialization_with_existing_user_agent(self):
+        """Test MemorySessionManager initialization preserves existing user agent."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Create custom botocore config with existing user agent
+            custom_config = BotocoreConfig(
+                user_agent_extra="my-custom-app",
+                retries={'max_attempts': 3}
+            )
+
+            MemorySessionManager(
+                memory_id="testMemory-1234567890",
+                region_name="us-west-2",
+                boto_client_config=custom_config
+            )
+
+            # Verify client was called with merged config
+            mock_session.client.assert_called_once()
+            call_args = mock_session.client.call_args
+            passed_config = call_args[1]["config"]
+
+            # Verify existing user agent was preserved and SDK user agent was appended
+            assert passed_config.user_agent_extra == "my-custom-app bedrock-agentcore-sdk"
+            assert passed_config.retries == {'max_attempts': 3}
+
+    def test_session_manager_initialization_without_boto_client_config(self):
+        """Test MemorySessionManager initialization without boto_client_config uses default."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            MemorySessionManager(
+                memory_id="testMemory-1234567890",
+                region_name="us-west-2"
+                # No boto_client_config provided
+            )
+
+            # Verify client was called with default config
+            mock_session.client.assert_called_once()
+            call_args = mock_session.client.call_args
+            passed_config = call_args[1]["config"]
+
+            # Verify default user agent was set
+            assert passed_config.user_agent_extra == "bedrock-agentcore-sdk"
+
+    def test_session_manager_with_custom_retry_config(self):
+        """Test MemorySessionManager with custom retry configuration."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-east-1"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Create config with custom retry settings
+            retry_config = BotocoreConfig(
+                retries={
+                    'max_attempts': 10,
+                    'mode': 'standard'
+                },
+                connect_timeout=60,
+                read_timeout=120
+            )
+
+            MemorySessionManager(
+                memory_id="testMemory-1234567890",
+                region_name="us-east-1",
+                boto_client_config=retry_config
+            )
+
+            # Verify the retry configuration was applied
+            call_args = mock_session.client.call_args
+            passed_config = call_args[1]["config"]
+            assert passed_config.retries['max_attempts'] == 10
+            assert passed_config.retries['mode'] == 'standard'
+            assert passed_config.connect_timeout == 60
+            assert passed_config.read_timeout == 120
+
+    def test_session_manager_with_connection_pool_config(self):
+        """Test MemorySessionManager with custom connection pool configuration."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-east-1"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Create config with connection pool settings
+            pool_config = BotocoreConfig(
+                max_pool_connections=100,
+                retries={'max_attempts': 2}
+            )
+
+            MemorySessionManager(
+                memory_id="testMemory-1234567890",
+                region_name="us-east-1",
+                boto_client_config=pool_config
+            )
+
+            # Verify the connection pool configuration was applied
+            call_args = mock_session.client.call_args
+            passed_config = call_args[1]["config"]
+            assert passed_config.max_pool_connections == 100
+            assert passed_config.retries['max_attempts'] == 2
+
+    def test_session_manager_config_with_boto3_session(self):
+        """Test MemorySessionManager with both boto3_session and boto_client_config."""
+        custom_session = MagicMock()
+        custom_session.region_name = "us-west-2"
+        mock_client_instance = MagicMock()
+        custom_session.client.return_value = mock_client_instance
+
+        # Create custom botocore config
+        custom_config = BotocoreConfig(
+            user_agent_extra="test-app",
+            retries={'max_attempts': 7}
+        )
+
+        MemorySessionManager(
+            memory_id="testMemory-1234567890",
+            region_name="us-west-2",
+            boto3_session=custom_session,
+            boto_client_config=custom_config
+        )
+
+        # Verify the custom session was used with the merged config
+        custom_session.client.assert_called_once()
+        call_args = custom_session.client.call_args
+        passed_config = call_args[1]["config"]
+
+        # Verify user agent was merged correctly
+        assert passed_config.user_agent_extra == "test-app bedrock-agentcore-sdk"
+        assert passed_config.retries['max_attempts'] == 7
+
+    def test_session_manager_config_merge_behavior(self):
+        """Test that botocore config merge behavior works correctly."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-east-1"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Create config with multiple settings
+            original_config = BotocoreConfig(
+                retries={'max_attempts': 5, 'mode': 'adaptive'},
+                max_pool_connections=25,
+                connect_timeout=30,
+                user_agent_extra="original-app"
+            )
+
+            MemorySessionManager(
+                memory_id="testMemory-1234567890",
+                region_name="us-east-1",
+                boto_client_config=original_config
+            )
+
+            # Verify all original settings were preserved and user agent was merged
+            call_args = mock_session.client.call_args
+            passed_config = call_args[1]["config"]
+
+            assert passed_config.retries['max_attempts'] == 5
+            assert passed_config.retries['mode'] == 'adaptive'
+            assert passed_config.max_pool_connections == 25
+            assert passed_config.connect_timeout == 30
+            assert passed_config.user_agent_extra == "original-app bedrock-agentcore-sdk"
+
+    def test_functional_test_with_custom_config(self):
+        """Test that MemorySessionManager functions correctly with custom config."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-east-1"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Create config optimized for high throughput
+            high_throughput_config = BotocoreConfig(
+                retries={'max_attempts': 3, 'mode': 'adaptive'},
+                max_pool_connections=50,
+                connect_timeout=5,
+                read_timeout=60
+            )
+
+            manager = MemorySessionManager(
+                memory_id="testMemory-1234567890",
+                region_name="us-east-1",
+                boto_client_config=high_throughput_config
+            )
+
+            # Mock a successful add_turns operation
+            mock_response = {"event": {"eventId": "test-event-123"}}
+            mock_client_instance.create_event.return_value = mock_response
+
+            # Test that the manager works normally with custom config
+            result = manager.add_turns(
+                actor_id="user-123",
+                session_id="session-456",
+                messages=[ConversationalMessage("Hello", MessageRole.USER)]
+            )
+
+            # Verify the operation succeeded
+            assert isinstance(result, Event)
+            assert result["eventId"] == "test-event-123"
+
+            # Verify the client was created with our custom config
+            call_args = mock_session.client.call_args
+            passed_config = call_args[1]["config"]
+            assert passed_config.max_pool_connections == 50
+            assert passed_config.connect_timeout == 5
+            assert passed_config.read_timeout == 60
+
+    def test_config_parameter_validation(self):
+        """Test that invalid config parameters are handled appropriately."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-east-1"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Test with None config (should work)
+            MemorySessionManager(
+                memory_id="testMemory-1234567890",
+                region_name="us-east-1",
+                boto_client_config=None
+            )
+
+            # Verify default config was applied
+            call_args = mock_session.client.call_args
+            passed_config = call_args[1]["config"]
+            assert passed_config.user_agent_extra == "bedrock-agentcore-sdk"
+
+    def test_config_with_all_parameters(self):
+        """Test MemorySessionManager with all initialization parameters including config."""
+        custom_session = MagicMock()
+        custom_session.region_name = "eu-west-1"
+        mock_client_instance = MagicMock()
+        custom_session.client.return_value = mock_client_instance
+
+        # Create comprehensive config
+        comprehensive_config = BotocoreConfig(
+            retries={'max_attempts': 4, 'mode': 'standard'},
+            max_pool_connections=75,
+            connect_timeout=15,
+            read_timeout=90,
+            user_agent_extra="comprehensive-test"
+        )
+
+        manager = MemorySessionManager(
+            memory_id="testMemory-comprehensive",
+            region_name="eu-west-1",
+            boto3_session=custom_session,
+            boto_client_config=comprehensive_config
+        )
+
+        # Verify all parameters were handled correctly
+        assert manager._memory_id == "testMemory-comprehensive"
+        assert manager.region_name == "eu-west-1"
+
+        # Verify client creation with all parameters
+        custom_session.client.assert_called_once()
+        call_args = custom_session.client.call_args
+
+        assert call_args[0] == ("bedrock-agentcore",)
+        assert call_args[1]["region_name"] == "eu-west-1"
+
+        passed_config = call_args[1]["config"]
+        assert passed_config.retries['max_attempts'] == 4
+        assert passed_config.max_pool_connections == 75
+        assert passed_config.connect_timeout == 15
+        assert passed_config.read_timeout == 90
+        assert passed_config.user_agent_extra == "comprehensive-test bedrock-agentcore-sdk"
 
 class TestSessionManager:
     """Test cases for MemorySessionManager class."""
@@ -38,7 +364,17 @@ class TestSessionManager:
             assert manager._memory_id == "testMemory-1234567890"
             assert manager.region_name == "us-west-2"
             assert manager._data_plane_client == mock_client_instance
-            mock_session.client.assert_called_once_with("bedrock-agentcore", region_name="us-west-2")
+
+            # Verify client was called with config parameter (default user agent)
+            mock_session.client.assert_called_once()
+            call_args = mock_session.client.call_args
+            assert call_args[0] == ("bedrock-agentcore",)
+            assert call_args[1]["region_name"] == "us-west-2"
+            assert "config" in call_args[1]
+
+            # Verify the default config has the correct user agent
+            passed_config = call_args[1]["config"]
+            assert passed_config.user_agent_extra == "bedrock-agentcore-sdk"
 
     def test_getattr_allowed_method(self):
         """Test __getattr__ forwards allowed data plane methods."""

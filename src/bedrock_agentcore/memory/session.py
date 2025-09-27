@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 
 from .constants import BlobMessage, ConversationalMessage, MessageRole, RetrievalConfig
@@ -89,7 +90,11 @@ class MemorySessionManager:
     """
 
     def __init__(
-        self, memory_id: str, region_name: Optional[str] = None, boto3_session: Optional[boto3.Session] = None
+        self,
+        memory_id: str,
+        region_name: Optional[str] = None,
+        boto3_session: Optional[boto3.Session] = None,
+        boto_client_config: Optional[BotocoreConfig] = None,
     ):
         """Initialize a MemorySessionManager instance.
 
@@ -99,6 +104,8 @@ class MemorySessionManager:
                    will use the region from boto3_session or default session.
             boto3_session: Optional boto3 Session to use. If provided and region_name
                           parameter is also specified, validation will ensure they match.
+            boto_client_config: Optional boto3 client configuration. If provided, will be
+                              merged with default configuration including user agent.
 
         Raises:
             ValueError: If region_name parameter conflicts with boto3_session region.
@@ -115,10 +122,23 @@ class MemorySessionManager:
                 f"to use the session's region."
             )
 
+        # Configure boto3 client with merged configuration
+        if boto_client_config:
+            existing_user_agent = getattr(boto_client_config, "user_agent_extra", None)
+            if existing_user_agent:
+                new_user_agent = f"{existing_user_agent} bedrock-agentcore-sdk"
+            else:
+                new_user_agent = "bedrock-agentcore-sdk"
+            client_config = boto_client_config.merge(BotocoreConfig(user_agent_extra=new_user_agent))
+        else:
+            client_config = BotocoreConfig(user_agent_extra="bedrock-agentcore-sdk")
+
         # Use provided region_name or fall back to session region
         self.region_name = region_name or session_region
         self._memory_id = memory_id
-        self._data_plane_client = session.client("bedrock-agentcore", region_name=self.region_name)
+        self._data_plane_client = session.client(
+            "bedrock-agentcore", region_name=self.region_name, config=client_config
+        )
 
         # AgentCore Memory data plane methods
         self._ALLOWED_DATA_PLANE_METHODS = {
