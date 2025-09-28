@@ -36,16 +36,14 @@ class TestBotocoreConfigSupport:
 
             # Create custom botocore config
             custom_config = BotocoreConfig(
-                retries={'max_attempts': 5, 'mode': 'adaptive'},
+                retries={"max_attempts": 5, "mode": "adaptive"},
                 max_pool_connections=50,
                 connect_timeout=10,
-                read_timeout=30
+                read_timeout=30,
             )
 
             manager = MemorySessionManager(
-                memory_id="testMemory-1234567890",
-                region_name="us-west-2",
-                boto_client_config=custom_config
+                memory_id="testMemory-1234567890", region_name="us-west-2", boto_client_config=custom_config
             )
 
             assert manager._memory_id == "testMemory-1234567890"
@@ -62,7 +60,7 @@ class TestBotocoreConfigSupport:
             # Verify the config was merged with user agent
             passed_config = call_args[1]["config"]
             assert passed_config.user_agent_extra == "bedrock-agentcore-sdk"
-            assert passed_config.retries == {'max_attempts': 5, 'mode': 'adaptive'}
+            assert passed_config.retries == {"max_attempts": 5, "mode": "adaptive"}
             assert passed_config.max_pool_connections == 50
 
     def test_session_manager_initialization_with_existing_user_agent(self):
@@ -75,15 +73,10 @@ class TestBotocoreConfigSupport:
             mock_session_class.return_value = mock_session
 
             # Create custom botocore config with existing user agent
-            custom_config = BotocoreConfig(
-                user_agent_extra="my-custom-app",
-                retries={'max_attempts': 3}
-            )
+            custom_config = BotocoreConfig(user_agent_extra="my-custom-app", retries={"max_attempts": 3})
 
             MemorySessionManager(
-                memory_id="testMemory-1234567890",
-                region_name="us-west-2",
-                boto_client_config=custom_config
+                memory_id="testMemory-1234567890", region_name="us-west-2", boto_client_config=custom_config
             )
 
             # Verify client was called with merged config
@@ -93,7 +86,7 @@ class TestBotocoreConfigSupport:
 
             # Verify existing user agent was preserved and SDK user agent was appended
             assert passed_config.user_agent_extra == "my-custom-app bedrock-agentcore-sdk"
-            assert passed_config.retries == {'max_attempts': 3}
+            assert passed_config.retries == {"max_attempts": 3}
 
     def test_session_manager_initialization_without_boto_client_config(self):
         """Test MemorySessionManager initialization without boto_client_config uses default."""
@@ -106,7 +99,7 @@ class TestBotocoreConfigSupport:
 
             MemorySessionManager(
                 memory_id="testMemory-1234567890",
-                region_name="us-west-2"
+                region_name="us-west-2",
                 # No boto_client_config provided
             )
 
@@ -129,25 +122,18 @@ class TestBotocoreConfigSupport:
 
             # Create config with custom retry settings
             retry_config = BotocoreConfig(
-                retries={
-                    'max_attempts': 10,
-                    'mode': 'standard'
-                },
-                connect_timeout=60,
-                read_timeout=120
+                retries={"max_attempts": 10, "mode": "standard"}, connect_timeout=60, read_timeout=120
             )
 
             MemorySessionManager(
-                memory_id="testMemory-1234567890",
-                region_name="us-east-1",
-                boto_client_config=retry_config
+                memory_id="testMemory-1234567890", region_name="us-east-1", boto_client_config=retry_config
             )
 
             # Verify the retry configuration was applied
             call_args = mock_session.client.call_args
             passed_config = call_args[1]["config"]
-            assert passed_config.retries['max_attempts'] == 10
-            assert passed_config.retries['mode'] == 'standard'
+            assert passed_config.retries["max_attempts"] == 10
+            assert passed_config.retries["mode"] == "standard"
             assert passed_config.connect_timeout == 60
             assert passed_config.read_timeout == 120
 
@@ -161,22 +147,17 @@ class TestBotocoreConfigSupport:
             mock_session_class.return_value = mock_session
 
             # Create config with connection pool settings
-            pool_config = BotocoreConfig(
-                max_pool_connections=100,
-                retries={'max_attempts': 2}
-            )
+            pool_config = BotocoreConfig(max_pool_connections=100, retries={"max_attempts": 2})
 
             MemorySessionManager(
-                memory_id="testMemory-1234567890",
-                region_name="us-east-1",
-                boto_client_config=pool_config
+                memory_id="testMemory-1234567890", region_name="us-east-1", boto_client_config=pool_config
             )
 
             # Verify the connection pool configuration was applied
             call_args = mock_session.client.call_args
             passed_config = call_args[1]["config"]
             assert passed_config.max_pool_connections == 100
-            assert passed_config.retries['max_attempts'] == 2
+            assert passed_config.retries["max_attempts"] == 2
 
     def test_session_manager_config_with_boto3_session(self):
         """Test MemorySessionManager with both boto3_session and boto_client_config."""
@@ -186,16 +167,13 @@ class TestBotocoreConfigSupport:
         custom_session.client.return_value = mock_client_instance
 
         # Create custom botocore config
-        custom_config = BotocoreConfig(
-            user_agent_extra="test-app",
-            retries={'max_attempts': 7}
-        )
+        custom_config = BotocoreConfig(user_agent_extra="test-app", retries={"max_attempts": 7})
 
         MemorySessionManager(
             memory_id="testMemory-1234567890",
             region_name="us-west-2",
             boto3_session=custom_session,
-            boto_client_config=custom_config
+            boto_client_config=custom_config,
         )
 
         # Verify the custom session was used with the merged config
@@ -205,7 +183,7 @@ class TestBotocoreConfigSupport:
 
         # Verify user agent was merged correctly
         assert passed_config.user_agent_extra == "test-app bedrock-agentcore-sdk"
-        assert passed_config.retries['max_attempts'] == 7
+        assert passed_config.retries["max_attempts"] == 7
 
     def test_session_manager_config_merge_behavior(self):
         """Test that botocore config merge behavior works correctly."""
@@ -218,24 +196,22 @@ class TestBotocoreConfigSupport:
 
             # Create config with multiple settings
             original_config = BotocoreConfig(
-                retries={'max_attempts': 5, 'mode': 'adaptive'},
+                retries={"max_attempts": 5, "mode": "adaptive"},
                 max_pool_connections=25,
                 connect_timeout=30,
-                user_agent_extra="original-app"
+                user_agent_extra="original-app",
             )
 
             MemorySessionManager(
-                memory_id="testMemory-1234567890",
-                region_name="us-east-1",
-                boto_client_config=original_config
+                memory_id="testMemory-1234567890", region_name="us-east-1", boto_client_config=original_config
             )
 
             # Verify all original settings were preserved and user agent was merged
             call_args = mock_session.client.call_args
             passed_config = call_args[1]["config"]
 
-            assert passed_config.retries['max_attempts'] == 5
-            assert passed_config.retries['mode'] == 'adaptive'
+            assert passed_config.retries["max_attempts"] == 5
+            assert passed_config.retries["mode"] == "adaptive"
             assert passed_config.max_pool_connections == 25
             assert passed_config.connect_timeout == 30
             assert passed_config.user_agent_extra == "original-app bedrock-agentcore-sdk"
@@ -251,16 +227,14 @@ class TestBotocoreConfigSupport:
 
             # Create config optimized for high throughput
             high_throughput_config = BotocoreConfig(
-                retries={'max_attempts': 3, 'mode': 'adaptive'},
+                retries={"max_attempts": 3, "mode": "adaptive"},
                 max_pool_connections=50,
                 connect_timeout=5,
-                read_timeout=60
+                read_timeout=60,
             )
 
             manager = MemorySessionManager(
-                memory_id="testMemory-1234567890",
-                region_name="us-east-1",
-                boto_client_config=high_throughput_config
+                memory_id="testMemory-1234567890", region_name="us-east-1", boto_client_config=high_throughput_config
             )
 
             # Mock a successful add_turns operation
@@ -271,7 +245,7 @@ class TestBotocoreConfigSupport:
             result = manager.add_turns(
                 actor_id="user-123",
                 session_id="session-456",
-                messages=[ConversationalMessage("Hello", MessageRole.USER)]
+                messages=[ConversationalMessage("Hello", MessageRole.USER)],
             )
 
             # Verify the operation succeeded
@@ -295,11 +269,7 @@ class TestBotocoreConfigSupport:
             mock_session_class.return_value = mock_session
 
             # Test with None config (should work)
-            MemorySessionManager(
-                memory_id="testMemory-1234567890",
-                region_name="us-east-1",
-                boto_client_config=None
-            )
+            MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-east-1", boto_client_config=None)
 
             # Verify default config was applied
             call_args = mock_session.client.call_args
@@ -315,18 +285,18 @@ class TestBotocoreConfigSupport:
 
         # Create comprehensive config
         comprehensive_config = BotocoreConfig(
-            retries={'max_attempts': 4, 'mode': 'standard'},
+            retries={"max_attempts": 4, "mode": "standard"},
             max_pool_connections=75,
             connect_timeout=15,
             read_timeout=90,
-            user_agent_extra="comprehensive-test"
+            user_agent_extra="comprehensive-test",
         )
 
         manager = MemorySessionManager(
             memory_id="testMemory-comprehensive",
             region_name="eu-west-1",
             boto3_session=custom_session,
-            boto_client_config=comprehensive_config
+            boto_client_config=comprehensive_config,
         )
 
         # Verify all parameters were handled correctly
@@ -341,11 +311,12 @@ class TestBotocoreConfigSupport:
         assert call_args[1]["region_name"] == "eu-west-1"
 
         passed_config = call_args[1]["config"]
-        assert passed_config.retries['max_attempts'] == 4
+        assert passed_config.retries["max_attempts"] == 4
         assert passed_config.max_pool_connections == 75
         assert passed_config.connect_timeout == 15
         assert passed_config.read_timeout == 90
         assert passed_config.user_agent_extra == "comprehensive-test bedrock-agentcore-sdk"
+
 
 class TestSessionManager:
     """Test cases for MemorySessionManager class."""
@@ -2255,6 +2226,440 @@ class TestAdditionalCoverage:
             # Verify nextToken was passed in second call
             second_call_args = mock_client_instance.list_events.call_args_list[1][1]
             assert second_call_args["nextToken"] == "token-123"
+
+    def test_validate_and_resolve_region_no_session_region(self):
+        """Test _validate_and_resolve_region when session has no region - covers line 158."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = None  # No region in session
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Should use provided region_name when session has no region
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-1")
+            assert manager.region_name == "us-west-1"
+
+    def test_build_client_config_no_existing_user_agent(self):
+        """Test _build_client_config when boto_client_config has no user_agent_extra - covers lines 197-200."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-east-1"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Create config without user_agent_extra
+            custom_config = BotocoreConfig(retries={"max_attempts": 3})
+            # Ensure user_agent_extra is None
+            custom_config.user_agent_extra = None
+
+            MemorySessionManager(memory_id="test-memory", region_name="us-east-1", boto_client_config=custom_config)
+
+            # Verify client was called with merged config
+            call_args = mock_session.client.call_args[1]
+            passed_config = call_args["config"]
+
+            # Should set user agent to just the SDK user agent (no existing agent to merge)
+            assert passed_config.user_agent_extra == "bedrock-agentcore-sdk"
+
+    def test_process_turn_with_llm_with_relevance_score_filtering(self):
+        """Test process_turn_with_llm with relevance score filtering - covers line 316."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+
+            # Mock search_long_term_memories to return records with different relevance scores
+            mock_memories = [
+                {"content": {"text": "High relevance"}, "memoryRecordId": "rec-1", "relevanceScore": 0.8},
+                {"content": {"text": "Low relevance"}, "memoryRecordId": "rec-2", "relevanceScore": 0.2},
+                {"content": {"text": "Medium relevance"}, "memoryRecordId": "rec-3", "relevanceScore": 0.5},
+            ]
+            with patch.object(manager, "search_long_term_memories", return_value=mock_memories):
+                # Mock add_turns
+                mock_event = {"eventId": "event-123"}
+                with patch.object(manager, "add_turns", return_value=Event(mock_event)):
+
+                    def mock_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                        return f"Response with {len(memories)} memories"
+
+                    # Test with relevance_score filtering (should filter out low relevance)
+                    retrieval_config = {"test/namespace": RetrievalConfig(top_k=5, relevance_score=0.4)}
+                    memories, response, event = manager.process_turn_with_llm(
+                        actor_id="user-123",
+                        session_id="session-456",
+                        user_input="Hello",
+                        llm_callback=mock_llm_callback,
+                        retrieval_config=retrieval_config,
+                    )
+
+                    # Should have filtered out the record with relevance_score 0.2
+                    assert len(memories) == 2  # Only records with score >= 0.4
+                    assert "Response with 2 memories" in response
+
+    def test_list_events_empty_events_break(self):
+        """Test list_events when empty events are returned - covers lines 493->526."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+
+            # Mock response with empty events on second call
+            mock_client_instance.list_events.side_effect = [
+                {"events": [{"eventId": "event-1", "eventTimestamp": datetime.now()}], "nextToken": "token-123"},
+                {"events": [], "nextToken": "token-456"},  # Empty events should break the loop
+            ]
+
+            result = manager.list_events(actor_id="user-123", session_id="session-456")
+
+            assert len(result) == 1
+            assert mock_client_instance.list_events.call_count == 2
+
+    def test_list_events_max_iterations_warning(self):
+        """Test list_events max iterations warning - covers lines 517-518."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+
+            # Mock response that would cause infinite loop (always has nextToken)
+            mock_client_instance.list_events.return_value = {
+                "events": [{"eventId": "event-1", "eventTimestamp": datetime.now()}],
+                "nextToken": "always-has-token",
+            }
+
+            with patch("bedrock_agentcore.memory.session.logger") as mock_logger:
+                # Set max_results high enough that we hit max_iterations first
+                result = manager.list_events(actor_id="user-123", session_id="session-456", max_results=10000)
+
+                # Should have hit max iterations and logged warning
+                mock_logger.warning.assert_called_with(
+                    "Reached maximum iteration limit (%d) in list_events pagination", 1000
+                )
+                assert len(result) > 0
+
+    def test_list_events_debug_logging_no_events(self):
+        """Test list_events debug logging when no events returned - covers line 527."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+
+            # Mock response with no events
+            mock_client_instance.list_events.return_value = {"events": []}
+
+            with patch("bedrock_agentcore.memory.session.logger") as mock_logger:
+                result = manager.list_events(actor_id="user-123", session_id="session-456")
+
+                # Should have logged debug message about no events
+                mock_logger.debug.assert_called_with("No more events returned, ending pagination")
+                assert len(result) == 0
+
+    def test_list_branches_empty_events_break(self):
+        """Test list_branches when empty events are returned - covers lines 553->575."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+
+            # Mock response with empty events on second call
+            mock_client_instance.list_events.side_effect = [
+                {"events": [{"eventId": "event-1", "eventTimestamp": datetime.now()}], "nextToken": "token-123"},
+                {"events": [], "nextToken": "token-456"},  # Empty events should break the loop
+            ]
+
+            result = manager.list_branches(actor_id="user-123", session_id="session-456")
+
+            assert len(result) == 1  # Should have main branch
+            assert mock_client_instance.list_events.call_count == 2
+
+    def test_list_branches_max_iterations_warning(self):
+        """Test list_branches max iterations warning - covers lines 566-567."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+
+            # Mock response that would cause infinite loop
+            mock_client_instance.list_events.return_value = {
+                "events": [{"eventId": "event-1", "eventTimestamp": datetime.now()}],
+                "nextToken": "always-has-token",
+            }
+
+            with patch("bedrock_agentcore.memory.session.logger") as mock_logger:
+                result = manager.list_branches(actor_id="user-123", session_id="session-456")
+
+                # Should have hit max iterations and logged warning
+                mock_logger.warning.assert_called_with(
+                    "Reached maximum iteration limit (%d) in list_branches pagination", 1000
+                )
+                assert len(result) > 0
+
+    def test_list_branches_debug_logging_no_events(self):
+        """Test list_branches debug logging when no events returned - covers line 576."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+
+            # Mock response with no events
+            mock_client_instance.list_events.return_value = {"events": []}
+
+            with patch("bedrock_agentcore.memory.session.logger") as mock_logger:
+                result = manager.list_branches(actor_id="user-123", session_id="session-456")
+
+                # Should have logged debug message about no events
+                mock_logger.debug.assert_called_with("No more events returned, ending pagination in list_branches")
+                assert len(result) == 0
+
+    def test_list_branches_multiple_events_same_branch(self):
+        """Test list_branches with multiple events in same branch - covers line 594."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+
+            # Mock events with multiple events in same branch
+            mock_events = [
+                {
+                    "eventId": "event-1",
+                    "eventTimestamp": datetime(2023, 1, 1, 10, 0, 0),
+                    "branch": {"name": "test-branch", "rootEventId": "root-1"},
+                },
+                {
+                    "eventId": "event-2",
+                    "eventTimestamp": datetime(2023, 1, 1, 10, 5, 0),
+                    "branch": {"name": "test-branch", "rootEventId": "root-1"},  # Same branch
+                },
+            ]
+            mock_client_instance.list_events.return_value = {"events": mock_events, "nextToken": None}
+
+            result = manager.list_branches(actor_id="user-123", session_id="session-456")
+
+            assert len(result) == 1  # Only one branch
+            assert result[0]["name"] == "test-branch"
+            assert result[0]["eventCount"] == 2  # Should increment count for second event
+
+    def test_memory_session_add_turns_parameter_order(self):
+        """Test MemorySession.add_turns parameter order - covers line 779."""
+        with patch("boto3.Session"):
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+            session = MemorySession(
+                memory_id="test-memory", actor_id="user-123", session_id="session-456", manager=manager
+            )
+
+            # Mock manager method to verify exact parameter order
+            mock_event = Event({"eventId": "event-123"})
+            with patch.object(manager, "add_turns", return_value=mock_event) as mock_add_turns:
+                messages = [ConversationalMessage("Hello", MessageRole.USER)]
+                custom_timestamp = datetime.now(timezone.utc)
+                branch = {"name": "test-branch"}
+
+                # Call with all parameters to test the exact order
+                session.add_turns(messages=messages, branch=branch, event_timestamp=custom_timestamp)
+
+                # Verify the exact parameter order: actor_id, session_id, messages, event_timestamp, branch
+                mock_add_turns.assert_called_once_with("user-123", "session-456", messages, custom_timestamp, branch)
+
+    def test_process_turn_with_llm_no_relevance_score_config(self):
+        """Test process_turn_with_llm when RetrievalConfig has no relevance_score."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+
+            # Mock search_long_term_memories
+            mock_memories = [{"content": {"text": "Memory"}, "memoryRecordId": "rec-1"}]
+            with patch.object(manager, "search_long_term_memories", return_value=mock_memories):
+                # Mock add_turns
+                mock_event = {"eventId": "event-123"}
+                with patch.object(manager, "add_turns", return_value=Event(mock_event)):
+
+                    def mock_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                        return "Response"
+
+                    # Test with RetrievalConfig that has a very low relevance_score (effectively no filtering)
+                    retrieval_config = {"test/namespace": RetrievalConfig(top_k=3, relevance_score=0.0)}
+                    memories, response, event = manager.process_turn_with_llm(
+                        actor_id="user-123",
+                        session_id="session-456",
+                        user_input="Hello",
+                        llm_callback=mock_llm_callback,
+                        retrieval_config=retrieval_config,
+                    )
+
+                    # Should not filter any memories when relevance_score is very low
+                    assert len(memories) == 1
+                    assert response == "Response"
+
+    def test_validate_and_resolve_region_edge_case(self):
+        """Test _validate_and_resolve_region edge case - covers line 158."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = None  # No region in session
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Test when both region_name and session region are None
+            manager = MemorySessionManager(memory_id="test-memory", region_name=None)
+            assert manager.region_name is None
+
+    def test_memory_session_add_turns_branch_parameter_order(self):
+        """Test MemorySession.add_turns with branch parameter order - covers line 779."""
+        with patch("boto3.Session"):
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+            session = MemorySession(
+                memory_id="test-memory", actor_id="user-123", session_id="session-456", manager=manager
+            )
+
+            # Mock manager method to verify exact parameter order
+            mock_event = Event({"eventId": "event-123"})
+            with patch.object(manager, "add_turns", return_value=mock_event) as mock_add_turns:
+                messages = [ConversationalMessage("Hello", MessageRole.USER)]
+                branch = {"name": "test-branch"}
+
+                # Call with branch parameter only (no timestamp)
+                session.add_turns(messages=messages, branch=branch)
+
+                # Verify the exact parameter order: actor_id, session_id, messages, event_timestamp, branch
+                mock_add_turns.assert_called_once_with("user-123", "session-456", messages, None, branch)
+
+    def test_list_long_term_memory_records_memoryRecordSummaries_fallback(self):
+        """Test list_long_term_memory_records fallback to memoryRecordSummaries."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+
+            # Mock paginator that returns memoryRecordSummaries instead of memoryRecords
+            mock_paginator = MagicMock()
+            mock_client_instance.get_paginator.return_value = mock_paginator
+            mock_paginator.paginate.return_value = [
+                {
+                    "memoryRecords": [],  # Empty memoryRecords
+                    "memoryRecordSummaries": [  # Should fall back to this
+                        {"memoryRecordId": "rec-1"},
+                        {"memoryRecordId": "rec-2"},
+                    ],
+                }
+            ]
+
+            result = manager.list_long_term_memory_records(namespace_prefix="test/namespace")
+
+            assert len(result) == 2
+            assert all(isinstance(record, MemoryRecord) for record in result)
+            assert result[0]["memoryRecordId"] == "rec-1"
+            assert result[1]["memoryRecordId"] == "rec-2"
+
+    def test_region_validation_with_non_string_session_region(self):
+        """Test region validation when session region is not a string."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = 123  # Non-string region (shouldn't cause conflict)
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Should not raise ValueError when session region is not a string
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-1")
+            assert manager.region_name == "us-west-1"
+
+    def test_configure_timestamp_serialization_non_datetime_value(self):
+        """Test timestamp serialization with non-datetime value."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Mock the original serializer method
+            original_serialize = MagicMock()
+            mock_client_instance._serializer._serializer._serialize_type_timestamp = original_serialize
+
+            MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+
+            # Get the overridden serialization function
+            overridden_func = mock_client_instance._serializer._serializer._serialize_type_timestamp
+
+            # Test with non-datetime value (should call original function)
+            serialized = {}
+            shape = MagicMock()
+            overridden_func(serialized, "not-a-datetime", shape, "test_field")
+
+            # Should have called the original function
+            original_serialize.assert_called_once_with(serialized, "not-a-datetime", shape, "test_field")
+
+    def test_configure_timestamp_serialization_datetime_value(self):
+        """Test timestamp serialization with datetime value."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Mock the original serializer method
+            original_serialize = MagicMock()
+            mock_client_instance._serializer._serializer._serialize_type_timestamp = original_serialize
+
+            MemorySessionManager(memory_id="test-memory", region_name="us-west-2")
+
+            # Get the overridden serialization function
+            overridden_func = mock_client_instance._serializer._serializer._serialize_type_timestamp
+
+            # Test with datetime value
+            serialized = {}
+            test_datetime = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+            shape = MagicMock()
+            overridden_func(serialized, test_datetime, shape, "test_field")
+
+            # Should have set the timestamp as float
+            assert serialized["test_field"] == test_datetime.timestamp()
+            # Should NOT have called the original function
+            original_serialize.assert_not_called()
 
 
 class TestAddTurnsWithDataClasses:
