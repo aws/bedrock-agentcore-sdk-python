@@ -819,7 +819,7 @@ class MemorySession(DictWrapper):
         event_timestamp: Optional[datetime] = None,
     ) -> Event:
         """Delegates to manager.add_turns."""
-        return self._manager.add_turns(self._actor_id, self._session_id, messages, event_timestamp, branch)
+        return self._manager.add_turns(self._actor_id, self._session_id, messages, branch, event_timestamp)
 
     def fork_conversation(
         self,

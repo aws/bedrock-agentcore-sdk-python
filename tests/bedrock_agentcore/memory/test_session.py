@@ -1560,8 +1560,8 @@ class TestEdgeCases:
                     "user-123",
                     "session-456",
                     [ConversationalMessage("Hello", MessageRole.USER)],
-                    custom_timestamp,
                     branch,
+                    custom_timestamp,
                 )
 
     def test_comprehensive_error_coverage(self):
@@ -1803,13 +1803,13 @@ class TestEdgeCases:
                     event_timestamp=custom_timestamp,
                 )
 
-                # Verify the exact parameter order: actor_id, session_id, messages, event_timestamp, branch
+                # Verify the exact parameter order: actor_id, session_id, messages, branch, event_timestamp
                 mock_add_turns.assert_called_once_with(
                     "user-123",
                     "session-456",
                     [ConversationalMessage("Hello", MessageRole.USER)],
-                    custom_timestamp,
                     branch,
+                    custom_timestamp,
                 )
 
 
