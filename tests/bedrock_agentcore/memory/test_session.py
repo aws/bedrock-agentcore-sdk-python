@@ -2491,8 +2491,8 @@ class TestAdditionalCoverage:
                 # Call with all parameters to test the exact order
                 session.add_turns(messages=messages, branch=branch, event_timestamp=custom_timestamp)
 
-                # Verify the exact parameter order: actor_id, session_id, messages, event_timestamp, branch
-                mock_add_turns.assert_called_once_with("user-123", "session-456", messages, custom_timestamp, branch)
+                # Verify the exact parameter order: actor_id, session_id, messages, branch, event_timestamp
+                mock_add_turns.assert_called_once_with("user-123", "session-456", messages, branch, custom_timestamp)
 
     def test_process_turn_with_llm_no_relevance_score_config(self):
         """Test process_turn_with_llm when RetrievalConfig has no relevance_score."""
@@ -2559,8 +2559,8 @@ class TestAdditionalCoverage:
                 # Call with branch parameter only (no timestamp)
                 session.add_turns(messages=messages, branch=branch)
 
-                # Verify the exact parameter order: actor_id, session_id, messages, event_timestamp, branch
-                mock_add_turns.assert_called_once_with("user-123", "session-456", messages, None, branch)
+                # Verify the exact parameter order: actor_id, session_id, messages, branch, event_timestamp
+                mock_add_turns.assert_called_once_with("user-123", "session-456", messages, branch, None)
 
     def test_list_long_term_memory_records_memoryRecordSummaries_fallback(self):
         """Test list_long_term_memory_records fallback to memoryRecordSummaries."""
