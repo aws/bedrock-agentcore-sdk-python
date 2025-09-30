@@ -1,179 +1,293 @@
 # Bedrock AgentCore Memory SDK
 
-High-level Python SDK for AWS Bedrock AgentCore Memory service with flexible conversation handling and complete branch management.
+High-level Python SDK for AWS Bedrock AgentCore Memory service with streamlined session management and flexible conversation handling.
+
+## Recommended Classes
+
+### MemorySessionManager (Recommended)
+The primary interface for managing conversational AI sessions with both short-term (conversational events) and long-term (semantic memory) storage. Provides a clean, session-oriented API for memory operations.
+
+### MemorySession (Recommended)
+Session-scoped interface that simplifies operations by automatically handling memory_id, actor_id, and session_id parameters.
+
+### MemoryClient (Legacy)
+The original client interface. While still supported, we recommend migrating to MemorySessionManager for new projects.
 
 ## Key Features
 
+### Streamlined Session Management
+- Session-scoped operations with automatic parameter handling
+- Create MemorySession instances for simplified API calls
+- Built-in actor and session tracking
+
 ### Flexible Conversation API
-- Save any number of messages in a single call
-- Support for USER, ASSISTANT, TOOL, OTHER roles
+- Save any number of messages in a single call with `add_turns()`
+- Support for USER, ASSISTANT, TOOL, OTHER roles via `ConversationalMessage`
+- Support for binary data via `BlobMessage`
 - Natural conversation flow representation
 
 ### Complete Branch Management
 - List all branches in a session
-- Navigate specific branches
-- Get conversation tree structure
+- Fork conversations from specific events
+- Navigate specific branches with simplified API
 - Build context from any branch
-- Continue conversations in existing branches
+
+### Enhanced LLM Integration
+- Built-in `process_turn_with_llm()` method for complete conversation turns
+- Callback pattern for any LLM (Bedrock, OpenAI, etc.)
+- Automatic memory retrieval, LLM processing, and response storage
+- Flexible retrieval configuration with namespace templating
 
 ### Simplified Memory Operations
-- Semantic search with vector store
-- Automatic namespace handling
-- Polling helpers for async operations
-
-### LLM Integration Support
-- Callback pattern for any LLM (Bedrock, OpenAI, etc.)
-- Separated retrieve/generate/save pattern for flexibility
-- Complete conversation turn in one method call
-
+- Semantic search with `search_long_term_memories()`
+- Automatic namespace handling with template variables
+- List and manage memory records
+- Actor and session management
 
 ## Quick Start
 
 ```python
-from bedrock_agentcore.memory import MemoryClient
-from bedrock_agentcore.memory.constants import StrategyType
+from bedrock_agentcore.memory import MemorySessionManager
+from bedrock_agentcore.memory.constants import ConversationalMessage, MessageRole
 
-client = MemoryClient()
-
-# Create memory with strategies
-# MemoryStrategies determine how memory records are extracted from conversations
-memory = client.create_memory_and_wait(
-    name="MyAgentMemory",
-    strategies=[{
-        StrategyType.SEMANTIC.value: {
-            "name": "FactExtractor",
-            "namespaces": ["/food/{actorId}"]
-        }
-    }]
+# Initialize the session manager
+manager = MemorySessionManager(
+    memory_id="your-memory-id",  # Use existing memory id
+    region_name="us-east-1"
 )
 
-# Save conversations, which will be used for memory extraction (if memory strategies are configured when calling create_memory)
-event = client.create_event(
-    memory_id=memory['id'],
+# Create a session for a specific actor
+session = manager.create_memory_session(
     actor_id="user-123",
-    session_id="session-456",
-    messages=[
-        ("I love eating apples and cherries", "USER"),
-        ("Apples are very good.", "ASSISTANT"),
-        ("What is your favorite thing about apples", "USER"),
-        ("I enjoy their flavor -- and their nutritional benefits", "ASSISTANT")
-    ]
+    session_id="session-456"  # Optional - will generate UUID if not provided
 )
 
-# Then after some time has passed and memory records are extracted, you can do
-memory_records = client.retrieve_memories(
-    memory_id=memory['id'],
-    namespace="/food/user-123",
-    query="what food does the user like"
+# Add conversation turns
+session.add_turns([
+    ConversationalMessage("I love eating apples and cherries", MessageRole.USER),
+    ConversationalMessage("Apples are very good for you!", MessageRole.ASSISTANT),
+    ConversationalMessage("What's your favorite thing about apples?", MessageRole.USER),
+    ConversationalMessage("I enjoy their flavor and nutritional benefits", MessageRole.ASSISTANT)
+])
+
+# Search long-term memories (after memory extraction has occurred)
+memories = session.search_long_term_memories(
+    query="what food does the user like",
+    namespace_prefix="/food/user-123",
+    top_k=5
 )
 
-# Or if you have multiple namespaces (say you have multiple users (denoted by actor_id)) and want to search across all of them:
-memory_records = client.retrieve_memories(
-    memory_id=memory['id'],
-    namespace="/", # we can use any prefix of the namespace that we defined in create_memory_and_wait
-    query="Food"
+# Or search across multiple users
+memories = manager.search_long_term_memories(
+    query="Food preferences",
+    namespace_prefix="/food/",  # Search all food-related memories
+    top_k=10
 )
-
 ```
 
 ## Core Usage Examples
 
+### Enhanced LLM Integration with Memory Context
+
+```python
+from bedrock_agentcore.memory.constants import RetrievalConfig
+
+def my_llm(user_input: str, memories: List[Dict]) -> str:
+    # Format context from retrieved memories
+    context = "\n".join([
+        m.get('content', {}).get('text', '') 
+        for m in memories
+    ])
+    
+    # Call your LLM (Bedrock, OpenAI, etc.)
+    # This is just an example - use your actual LLM integration
+    response = f"Based on our previous discussions about {context}, here's my response to: {user_input}"
+    return response
+
+# Configure memory retrieval with multiple namespaces
+retrieval_config = {
+    "support/facts/{sessionId}": RetrievalConfig(top_k=5, relevance_score=0.3),
+    "user/preferences/{actorId}": RetrievalConfig(top_k=3, relevance_score=0.5)
+}
+
+# Process complete conversation turn with automatic memory integration
+memories, response, event = session.process_turn_with_llm(
+    user_input="What did we discuss about my preferences?",
+    llm_callback=my_llm,
+    retrieval_config=retrieval_config
+)
+
+print(f"Retrieved {len(memories)} relevant memories")
+print(f"LLM Response: {response}")
+print(f"Stored event ID: {event.event_id}")
+```
+
 ### Natural Conversation Flow
 
 ```python
-# Multiple user messages, tool usage, flexible patterns
-event = client.create_event(
-    memory_id=memory_id,
-    actor_id=actor_id,
-    session_id=session_id,
-    messages=[
-        ("I need help with my order", "USER"),
-        ("Order #12345", "USER"),
-        ("Let me look that up", "ASSISTANT"),
-        ("lookup_order('12345')", "TOOL"),
-        ("Found it! Your order ships tomorrow.", "ASSISTANT")
-    ]
-)
+from bedrock_agentcore.memory.constants import ConversationalMessage, BlobMessage, MessageRole
+
+# Multiple message types in a single turn
+session.add_turns([
+    ConversationalMessage("I need help with my order", MessageRole.USER),
+    ConversationalMessage("Order #12345", MessageRole.USER),
+    BlobMessage({"image_data": "base64_encoded_receipt"}),  # Binary data
+    ConversationalMessage("Let me look that up", MessageRole.ASSISTANT),
+    ConversationalMessage("lookup_order('12345')", MessageRole.TOOL),
+    ConversationalMessage("Found it! Your order ships tomorrow.", MessageRole.ASSISTANT)
+])
 ```
 
 ### Branch Management
 
 ```python
-# Create branches for different scenarios
-branch = client.fork_conversation(
-    memory_id=memory_id,
-    actor_id=actor_id,
-    session_id=session_id,
-    root_event_id=event_id,
+# Get conversation history
+turns = session.get_last_k_turns(k=3)
+print(f"Last 3 conversation turns: {len(turns)}")
+
+# Fork conversation for alternative scenario
+branch_event = session.fork_conversation(
+    root_event_id="event-123",
     branch_name="premium-option",
-    new_messages=[
-        ("What about expedited shipping?", "USER"),
-        ("I can upgrade you to overnight delivery for $20", "ASSISTANT")
+    messages=[
+        ConversationalMessage("What about expedited shipping?", MessageRole.USER),
+        ConversationalMessage("I can upgrade you to overnight delivery for $20", MessageRole.ASSISTANT)
     ]
 )
 
-# Navigate branches
-branches = client.list_branches(memory_id, actor_id, session_id)
-events = client.list_branch_events(
-    memory_id=memory_id,
-    actor_id=actor_id,
-    session_id=session_id,
-    branch_name="premium-option"
-)
+# List all branches in the session
+branches = session.list_branches()
+for branch in branches:
+    print(f"Branch: {branch.name}, Events: {branch.event_count}")
+
+# Get events from specific branch
+branch_events = session.list_events(branch_name="premium-option")
 ```
 
-### LLM Integration Patterns
-
-#### Pattern 1: Callback-based (Simple cases)
+### Session and Actor Management
 
 ```python
-def my_llm(user_input: str, memories: List[Dict]) -> str:
-    # Your LLM logic here
-    context = "\n".join([m['content']['text'] for m in memories])
-    # Call Bedrock, OpenAI, etc.
-    return "AI response based on context"
+# Manager-level operations
+actors = manager.list_actors()
+print(f"Found {len(actors)} actors in memory")
 
-memories, response, event = client.process_turn_with_llm(
-    memory_id=memory_id,
+# Actor-specific operations
+actor = session.get_actor()
+actor_sessions = actor.list_sessions()
+print(f"Actor has {len(actor_sessions)} sessions")
+
+# Create multiple sessions for the same actor
+session2 = manager.create_memory_session(
     actor_id="user-123",
-    session_id="session-456",
-    user_input="What did we discuss?",
-    llm_callback=my_llm,
-    retrieval_namespace="support/facts/{sessionId}"
+    session_id="session-789"
 )
 ```
 
-#### Pattern 2: Separated calls (More control)
+### Memory Record Management
 
 ```python
-# Step 1: Retrieve
-memories = client.retrieve_memories(
-    memory_id=memory_id,
-    namespace="support/facts/{sessionId}",
-    query="previous discussion"
+# List all memory records in a namespace
+records = session.list_long_term_memory_records(
+    namespace_prefix="/user/preferences/user-123",
+    max_results=20
 )
 
-# Step 2: Your LLM logic
+# Get specific memory record
+record = session.get_memory_record("record-id-123")
+print(f"Record content: {record.content}")
+
+# Delete memory record
+session.delete_memory_record("record-id-123")
+```
+
+### Alternative Pattern: Separated Operations
+
+```python
+# For more control, you can separate the steps:
+
+# Step 1: Retrieve relevant memories
+memories = session.search_long_term_memories(
+    query="previous discussion",
+    namespace_prefix="support/facts/session-456",
+    top_k=5
+)
+
+# Step 2: Process with your LLM
+user_input = "What did we discuss?"
 response = your_llm_logic(user_input, memories)
 
-# Step 3: Save
+# Step 3: Save the conversation
+event = session.add_turns([
+    ConversationalMessage(user_input, MessageRole.USER),
+    ConversationalMessage(response, MessageRole.ASSISTANT)
+])
+```
+
+## Migration from MemoryClient
+
+If you're currently using MemoryClient, here's how to migrate:
+
+### Before (MemoryClient)
+```python
+from bedrock_agentcore.memory import MemoryClient
+
+client = MemoryClient()
 event = client.create_event(
-    memory_id=memory_id,
-    actor_id="user-123",
-    session_id="session-456",
-    messages=[(user_input, "USER"), (response, "ASSISTANT")]
+    memory_id="memory-123",
+    actor_id="user-456", 
+    session_id="session-789",
+    messages=[("Hello", "USER"), ("Hi there", "ASSISTANT")]
 )
 ```
 
-### Environment Variables
+### After (MemorySessionManager)
+```python
+from bedrock_agentcore.memory import MemorySessionManager
+from bedrock_agentcore.memory.constants import ConversationalMessage, MessageRole
+
+manager = MemorySessionManager(memory_id="memory-123")
+session = manager.create_memory_session(
+    actor_id="user-456",
+    session_id="session-789"
+)
+
+event = session.add_turns([
+    ConversationalMessage("Hello", MessageRole.USER),
+    ConversationalMessage("Hi there", MessageRole.ASSISTANT)
+])
+```
+
+### Key Migration Benefits
+- **Cleaner API**: No need to pass memory_id, actor_id, session_id to every method
+- **Type Safety**: Use `ConversationalMessage` and `BlobMessage` instead of tuples
+- **Better Organization**: Session-scoped vs manager-scoped operations
+- **Enhanced Features**: Built-in LLM integration with `process_turn_with_llm()`
+
+## Environment Variables(Legacy)
 
 - AGENTCORE_MEMORY_ROLE_ARN - IAM role for memory execution
-- AGENTCORE_CONTROL_ENDPOINT - Override control plane endpoint
+- AGENTCORE_CONTROL_ENDPOINT - Override control plane endpoint  
 - AGENTCORE_DATA_ENDPOINT - Override data plane endpoint
 
-### Best Practices
+## Best Practices
 
-- Separate retrieval and storage: Use retrieve_memories() and create_event() as separate steps
-- Wait for extraction: Use wait_for_memories() after creating events
-- Handle service errors: Retry on ServiceException errors
-- Use branches: Create branches for different scenarios or A/B testing
+### Session Management
+- Use `MemorySessionManager` for multi-session, multi-actor scenarios
+- Use `MemorySession` for session-specific operations to avoid parameter repetition
+- Create separate sessions for different conversation contexts
+
+### Memory Operations
+- Use `process_turn_with_llm()` for integrated LLM workflows
+- Separate retrieval and storage with `search_long_term_memories()` and `add_turns()` for custom workflows
+- Use namespace prefixes effectively for organized memory retrieval
+- Handle service errors with appropriate retry logic
+
+### Message Handling
+- Use `ConversationalMessage` for text-based interactions
+- Use `BlobMessage` for binary data (images, files, etc.)
+- Group related messages in single `add_turns()` calls for logical conversation units
+
+### Branch Management
+- Create branches for A/B testing different responses
+- Use descriptive branch names for easier navigation
+- Fork from specific events to maintain conversation context
