@@ -68,6 +68,7 @@ ignore_missing_imports = false
 [tool.ruff]
 line-length = 120
 include = ["examples/**/*.py", "src/**/*.py", "tests/**/*.py", "tests-integ/**/*.py"]
+exclude = ["**/*.md"]
 
 [tool.ruff.lint]
 select = [
