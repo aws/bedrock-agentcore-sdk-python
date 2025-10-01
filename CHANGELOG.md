@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.6] - 2025-10-01
+
+### Added
+- feat: Initial commit for Session Manager, Session and Actor constructs (#87) (72e37df)
+
+### Fixed
+- fix: swap event_timestamp with branch in add_turns (#99) (0027298)
+
+### Other Changes
+- chore: Add README for MemorySessionManager (#100) (9b274a0)
+- Feature/boto client config (#98) (107fd53)
+- Update README.md (#95) (0c65811)
+- Release v0.1.5 (#96) (7948d26)
+
 ## [0.1.5] - 2025-09-24
 
 ### Other Changes
