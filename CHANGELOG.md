@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.7] - 2025-10-01
+
+### Fixed
+- fix: fix validation exception which occurs if the default aws region mismatches with the user's region_name (#102) (207e3e0)
+
+### Other Changes
+- chore: bump version to 0.1.6 (#101) (5d5271d)
+
 ## [0.1.6] - 2025-10-01
 
 ### Added
