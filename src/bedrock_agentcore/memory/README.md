@@ -198,10 +198,10 @@ from bedrock_agentcore.memory.constants import RetrievalConfig
 def my_llm(user_input: str, memories: List[Dict]) -> str:
     # Format context from retrieved memories
     context = "\n".join([
-        m.get('content', {}).get('text', '') 
+        m.get('content', {}).get('text', '')
         for m in memories
     ])
-  
+
     # Call your LLM (Bedrock, OpenAI, etc.)
     # This is just an example - use your actual LLM integration
     response = f"Based on our previous discussions about {context}, here's my response to: {user_input}"
@@ -343,25 +343,25 @@ try:
         memory_id="your-memory-id",
         region_name="us-east-1"
     )
-  
+
     session = manager.create_memory_session(
         actor_id="user-123",
         session_id="session-456"
     )
-  
+
     # Add conversation turns
     event = session.add_turns([
         ConversationalMessage("Hello", MessageRole.USER),
         ConversationalMessage("Hi there!", MessageRole.ASSISTANT)
     ])
-  
+
 except NoCredentialsError:
     print("AWS credentials not found. Please configure your credentials.")
-  
+
 except ClientError as e:
     error_code = e.response['Error']['Code']
     error_message = e.response['Error']['Message']
-  
+
     if error_code == 'ResourceNotFoundException':
         print(f"Memory not found: {error_message}")
     elif error_code == 'ValidationException':
@@ -372,7 +372,7 @@ except ClientError as e:
         print(f"Request throttled: {error_message}")
     else:
         print(f"AWS error ({error_code}): {error_message}")
-    
+
 except Exception as e:
     print(f"Unexpected error: {str(e)}")
 ```
@@ -458,7 +458,7 @@ from bedrock_agentcore.memory import MemoryClient
 client = MemoryClient()
 event = client.create_event(
     memory_id="memory-123",
-    actor_id="user-456", 
+    actor_id="user-456",
     session_id="session-789",
     messages=[("Hello", "USER"), ("Hi there", "ASSISTANT")]
 )

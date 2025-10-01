@@ -114,8 +114,8 @@ class MemorySessionManager:
         self._memory_id = memory_id
 
         # Setup session and validate region consistency
+        self.region_name = self._validate_and_resolve_region(region_name, boto3_session)
         session = boto3_session if boto3_session else boto3.Session()
-        self.region_name = self._validate_and_resolve_region(region_name, session)
 
         # Configure and create boto3 client
         client_config = self._build_client_config(boto_client_config)
@@ -138,12 +138,12 @@ class MemorySessionManager:
             "list_events",
         }
 
-    def _validate_and_resolve_region(self, region_name: Optional[str], session: boto3.Session) -> str:
+    def _validate_and_resolve_region(self, region_name: Optional[str], session: Optional[boto3.Session]) -> str:
         """Validate region consistency and resolve the final region to use.
 
         Args:
             region_name: Explicitly provided region name
-            session: Boto3 session instance
+            session: Optional Boto3 session instance
 
         Returns:
             The resolved region name to use
@@ -151,10 +151,10 @@ class MemorySessionManager:
         Raises:
             ValueError: If region_name conflicts with session region
         """
-        session_region = session.region_name
+        session_region = session.region_name if session else None
 
         # Validate region consistency if both are provided
-        if region_name and session_region and isinstance(session_region, str) and region_name != session_region:
+        if region_name and session and session_region and (region_name != session_region):
             raise ValueError(
                 f"Region mismatch: provided region_name '{region_name}' does not match "
                 f"boto3_session region '{session_region}'. Please ensure both "

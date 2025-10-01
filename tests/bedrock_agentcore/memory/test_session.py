@@ -2228,7 +2228,7 @@ class TestAdditionalCoverage:
             assert second_call_args["nextToken"] == "token-123"
 
     def test_validate_and_resolve_region_no_session_region(self):
-        """Test _validate_and_resolve_region when session has no region - covers line 158."""
+        """Test _validate_and_resolve_region when session has no region - covers line 154."""
         with patch("boto3.Session") as mock_session_class:
             mock_session = MagicMock()
             mock_session.region_name = None  # No region in session
@@ -2530,7 +2530,7 @@ class TestAdditionalCoverage:
                     assert response == "Response"
 
     def test_validate_and_resolve_region_edge_case(self):
-        """Test _validate_and_resolve_region edge case - covers line 158."""
+        """Test _validate_and_resolve_region edge case - covers line 154."""
         with patch("boto3.Session") as mock_session_class:
             mock_session = MagicMock()
             mock_session.region_name = None  # No region in session
@@ -2605,6 +2605,76 @@ class TestAdditionalCoverage:
             # Should not raise ValueError when session region is not a string
             manager = MemorySessionManager(memory_id="test-memory", region_name="us-west-1")
             assert manager.region_name == "us-west-1"
+
+    def test_region_validation_order_change(self):
+        """Test that region validation happens before session creation - covers recent commit changes."""
+        # Test case: Conflicting regions should raise ValueError
+        custom_session = MagicMock()
+        custom_session.region_name = "us-east-1"
+        mock_client_instance = MagicMock()
+        custom_session.client.return_value = mock_client_instance
+
+        with pytest.raises(ValueError) as exc_info:
+            MemorySessionManager(
+                memory_id="test-memory",
+                region_name="us-west-1",  # Different from session region
+                boto3_session=custom_session,
+            )
+
+        assert "Region mismatch" in str(exc_info.value)
+        assert "us-west-1" in str(exc_info.value)
+        assert "us-east-1" in str(exc_info.value)
+
+    def test_region_validation_with_none_session(self):
+        """Test region validation when boto3_session is None - covers recent commit changes."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-east-1"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            # Test validation when boto3_session parameter is None
+            manager = MemorySessionManager(
+                memory_id="test-memory",
+                region_name="us-west-1",
+                boto3_session=None,  # Explicitly None
+            )
+
+            # Should use the provided region_name
+            assert manager.region_name == "us-west-1"
+
+    def test_region_validation_simplified_logic(self):
+        """Test the simplified region validation logic - covers recent commit changes."""
+        # Test case 1: Conflicting regions should raise ValueError
+        custom_session = MagicMock()
+        custom_session.region_name = "us-east-1"
+        mock_client_instance = MagicMock()
+        custom_session.client.return_value = mock_client_instance
+
+        with pytest.raises(ValueError) as exc_info:
+            MemorySessionManager(
+                memory_id="test-memory",
+                region_name="us-west-1",  # Different from session region
+                boto3_session=custom_session,
+            )
+
+        assert "Region mismatch" in str(exc_info.value)
+        assert "us-west-1" in str(exc_info.value)
+        assert "us-east-1" in str(exc_info.value)
+
+        # Test case 2: Matching regions should work
+        custom_session2 = MagicMock()
+        custom_session2.region_name = "us-west-1"
+        custom_session2.client.return_value = mock_client_instance
+
+        manager = MemorySessionManager(
+            memory_id="test-memory",
+            region_name="us-west-1",  # Same as session region
+            boto3_session=custom_session2,
+        )
+
+        assert manager.region_name == "us-west-1"
 
     def test_configure_timestamp_serialization_non_datetime_value(self):
         """Test timestamp serialization with non-datetime value."""
