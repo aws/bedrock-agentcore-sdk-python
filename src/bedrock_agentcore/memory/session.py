@@ -622,7 +622,7 @@ class MemorySessionManager:
     def get_last_k_turns(
         self,
         actor_id: str,
-        sesssion_id: str,
+        session_id: str,
         k: int = 5,
         branch_name: Optional[str] = None,
         include_branches: bool = False,
@@ -639,7 +639,7 @@ class MemorySessionManager:
         try:
             events = self.list_events(
                 actor_id=actor_id,
-                session_id=sesssion_id,
+                session_id=session_id,
                 branch_name=branch_name,
                 include_parent_events=include_branches,
                 max_results=max_results,

@@ -942,7 +942,7 @@ class TestSessionManager:
             with patch.object(manager, "list_events", return_value=mock_events):
                 result = manager.get_last_k_turns(
                     actor_id="user-123",
-                    sesssion_id="session-456",  # Note: typo in original method signature
+                    session_id="session-456",
                     k=2,
                 )
 
@@ -963,7 +963,7 @@ class TestSessionManager:
 
             # Mock empty list_events
             with patch.object(manager, "list_events", return_value=[]):
-                result = manager.get_last_k_turns(actor_id="user-123", sesssion_id="session-456", k=5)
+                result = manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
 
                 assert result == []
 
@@ -987,7 +987,7 @@ class TestSessionManager:
                 ),
             ):
                 with pytest.raises(ClientError):
-                    manager.get_last_k_turns(actor_id="user-123", sesssion_id="session-456", k=5)
+                    manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
 
     def test_get_event_success(self):
         """Test get_event successful execution."""
@@ -1836,7 +1836,7 @@ class TestEdgeCases:
                 )
             ]
             with patch.object(manager, "list_events", return_value=mock_events):
-                result = manager.get_last_k_turns(actor_id="user-123", sesssion_id="session-456", k=5)
+                result = manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
 
                 # Should group into 2 turns
                 assert len(result) == 2
@@ -2027,7 +2027,7 @@ class TestEdgeCases:
                 )
             ]
             with patch.object(manager, "list_events", return_value=mock_events):
-                result = manager.get_last_k_turns(actor_id="user-123", sesssion_id="session-456", k=5)
+                result = manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
 
                 assert len(result) == 0  # No turns due to no conversational messages
 
@@ -2053,7 +2053,7 @@ class TestEdgeCases:
                 )
 
             with patch.object(manager, "list_events", return_value=mock_events):
-                result = manager.get_last_k_turns(actor_id="user-123", sesssion_id="session-456", k=3)
+                result = manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=3)
 
                 # Should only return 3 turns even though there are 10 events
                 assert len(result) == 3
@@ -3016,7 +3016,7 @@ class TestAddTurnsWithDataClasses:
             with patch.object(manager, "list_events", return_value=mock_events) as mock_list_events:
                 result = manager.get_last_k_turns(
                     actor_id="user-123",
-                    sesssion_id="session-456",
+                    session_id="session-456",
                     k=2,
                     branch_name="test-branch",
                     include_branches=True,  # This should trigger include_parent_events=True
