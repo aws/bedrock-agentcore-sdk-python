@@ -14,6 +14,7 @@ import time
 import uuid
 import warnings
 from datetime import datetime
+from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import boto3
@@ -33,6 +34,13 @@ from .constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class EventOrdering(Enum):
+    """Ordering of events."""
+
+    CHRONOLOGICAL = 1
+    REVERSE_CHRONOLOGICAL = 2
 
 
 class MemoryClient:
@@ -764,6 +772,7 @@ class MemoryClient:
         include_parent_events: bool = False,
         max_results: int = 100,
         include_payload: bool = True,
+        order: Optional[EventOrdering] = EventOrdering.CHRONOLOGICAL,
     ) -> List[Dict[str, Any]]:
         """List all events in a session with pagination support.
 
@@ -778,9 +787,10 @@ class MemoryClient:
             include_parent_events: Whether to include parent branch events (only applies with branch_name)
             max_results: Maximum number of events to return
             include_payload: Whether to include event payloads in response
+            order: Ordering of events (chronological or reverse chronological)
 
         Returns:
-            List of event dictionaries in chronological order
+            List of event dictionaries
 
         Example:
             # Get all events
@@ -822,7 +832,14 @@ class MemoryClient:
                     break
 
             logger.info("Retrieved total of %d events", len(all_events))
-            return all_events[:max_results]
+
+            # Sort events in chronological order
+            result = sorted(
+                all_events, key=lambda x: x["eventTimestamp"], reverse=order == EventOrdering.REVERSE_CHRONOLOGICAL
+            )
+
+            # Return the latest max_results events
+            return result[:max_results]
 
         except ClientError as e:
             logger.error("Failed to list events: %s", e)
@@ -1093,10 +1110,10 @@ class MemoryClient:
         This method groups messages into logical turns for easier processing.
 
         Returns:
-            List of turns, where each turn is a list of message dictionaries
+            Chronological list of turns, where each turn is a list of message dictionaries
         """
         try:
-            # Use the new list_events method
+            # Get all events in chronological order
             events = self.list_events(
                 memory_id=memory_id,
                 actor_id=actor_id,
@@ -1104,35 +1121,39 @@ class MemoryClient:
                 branch_name=branch_name,
                 include_parent_events=False,
                 max_results=max_results,
+                order=EventOrdering.CHRONOLOGICAL,
             )
 
             if not events:
                 return []
 
-            # Process events to group into turns
             turns = []
             current_turn = []
 
+            # Flatten events into a list of messages
+            messages = []
             for event in events:
-                if len(turns) >= k:
-                    break  # Only need last K turns
                 for payload_item in event.get("payload", []):
                     if "conversational" in payload_item:
-                        role = payload_item["conversational"].get("role")
+                        messages.append(payload_item["conversational"])
 
-                        # Start new turn on USER message
-                        if role == Role.USER.value and current_turn:
-                            turns.append(current_turn)
-                            current_turn = []
+            # Process in reverse order (from newest to oldest)
+            for message in messages[::-1]:
+                # Add message to current turn
+                current_turn.append(message)
 
-                        current_turn.append(payload_item["conversational"])
+                # If it's a user message, we've completed a turn
+                if message.get("role") == Role.USER.value:
+                    # Reorder the messages in the turn and add to the turns list
+                    turns.append(current_turn[::-1])
 
-            # Don't forget the last turn
-            if current_turn:
-                turns.append(current_turn)
+                    # Start a new turn for the next message, unless we have enough turns
+                    current_turn = []
+                    if len(turns) >= k:
+                        break
 
-            # Return the last k turns
-            return turns[:k] if len(turns) > k else turns
+            # Return the last k turns, ordered chronologically
+            return turns[::-1]
 
         except ClientError as e:
             logger.error("Failed to get last K turns: %s", e)
