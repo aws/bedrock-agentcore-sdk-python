@@ -625,7 +625,7 @@ class MemorySessionManager:
         session_id: str,
         k: int = 5,
         branch_name: Optional[str] = None,
-        include_branches: bool = False,
+        include_parent_events: bool = False,
         max_results: int = 100,
     ) -> List[List[EventMessage]]:
         """Get the last K conversation turns.
@@ -641,7 +641,7 @@ class MemorySessionManager:
                 actor_id=actor_id,
                 session_id=session_id,
                 branch_name=branch_name,
-                include_parent_events=include_branches,
+                include_parent_events=include_parent_events,
                 max_results=max_results,
             )
 
@@ -921,10 +921,16 @@ class MemorySession(DictWrapper):
         )
 
     def get_last_k_turns(
-        self, k: int = 5, branch_name: Optional[str] = None, max_results: int = 100
+        self,
+        k: int = 5,
+        branch_name: Optional[str] = None,
+        include_parent_events: Optional[bool] = None,
+        max_results: int = 100,
     ) -> List[List[EventMessage]]:
         """Delegates to manager.get_last_k_turns."""
-        return self._manager.get_last_k_turns(self._actor_id, self._session_id, k, branch_name, max_results=max_results)
+        return self._manager.get_last_k_turns(
+            self._actor_id, self._session_id, k, branch_name, include_parent_events, max_results
+        )
 
     def get_event(self, event_id: str) -> Event:
         """Delegates to manager.get_event."""

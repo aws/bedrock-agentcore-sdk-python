@@ -989,6 +989,85 @@ class TestSessionManager:
                 with pytest.raises(ClientError):
                     manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
 
+    def test_get_last_k_turns_with_include_parent_events_parameter(self):
+        """Test get_last_k_turns with include_parent_events parameter to cover new functionality."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            # Mock list_events
+            mock_events = [
+                Event(
+                    {
+                        "eventId": "event-1",
+                        "eventTimestamp": datetime(2023, 1, 1, 10, 0, 0),
+                        "payload": [
+                            {"conversational": {"role": "USER", "content": {"text": "Hello from branch"}}},
+                            {"conversational": {"role": "ASSISTANT", "content": {"text": "Hi from branch"}}},
+                        ],
+                    }
+                ),
+                Event(
+                    {
+                        "eventId": "event-2",
+                        "eventTimestamp": datetime(2023, 1, 1, 10, 5, 0),
+                        "payload": [
+                            {"conversational": {"role": "USER", "content": {"text": "Another message"}}},
+                            {"conversational": {"role": "ASSISTANT", "content": {"text": "Another response"}}},
+                        ],
+                    }
+                ),
+            ]
+            with patch.object(manager, "list_events", return_value=mock_events) as mock_list_events:
+                # Test with include_parent_events=True
+                result = manager.get_last_k_turns(
+                    actor_id="user-123",
+                    session_id="session-456",
+                    k=3,
+                    branch_name="test-branch",
+                    include_parent_events=True,
+                    max_results=50,
+                )
+
+                assert len(result) == 2
+                assert len(result[0]) == 2  # First turn has 2 messages
+                assert len(result[1]) == 2  # Second turn has 2 messages
+                assert all(isinstance(msg, EventMessage) for msg in result[0])
+                assert all(isinstance(msg, EventMessage) for msg in result[1])
+
+                # Verify list_events was called with include_parent_events=True when include_parent_events=True
+                mock_list_events.assert_called_once_with(
+                    actor_id="user-123",
+                    session_id="session-456",
+                    branch_name="test-branch",
+                    include_parent_events=True,  # This should be True when include_parent_events=True
+                    max_results=50,
+                )
+
+                # Test with include_parent_events=False (default behavior)
+                mock_list_events.reset_mock()
+                manager.get_last_k_turns(
+                    actor_id="user-123",
+                    session_id="session-456",
+                    k=2,
+                    branch_name="test-branch",
+                    include_parent_events=False,
+                )
+
+                # Verify list_events was called with include_parent_events=False when include_parent_events=False
+                mock_list_events.assert_called_once_with(
+                    actor_id="user-123",
+                    session_id="session-456",
+                    branch_name="test-branch",
+                    include_parent_events=False,  # This should be False when include_parent_events=False
+                    max_results=100,  # Default max_results
+                )
+
     def test_get_event_success(self):
         """Test get_event successful execution."""
         with patch("boto3.Session") as mock_session_class:
@@ -1534,7 +1613,8 @@ class TestSession:
                 result = session.get_last_k_turns(k=3)
 
                 assert result == mock_turns
-                mock_get_turns.assert_called_once_with("user-123", "session-456", 3, None, max_results=100)
+                # Updated to match the new method signature with include_parent_events parameter
+                mock_get_turns.assert_called_once_with("user-123", "session-456", 3, None, None, 100)
 
     def test_session_get_event_delegation(self):
         """Test MemorySession.get_event delegates to manager."""
@@ -2995,8 +3075,8 @@ class TestAddTurnsWithDataClasses:
             assert "rec-1" in record_ids
             assert "rec-4" in record_ids
 
-    def test_get_last_k_turns_with_include_branches_true(self):
-        """Test get_last_k_turns with include_branches=True - covers line 539->529."""
+    def test_get_last_k_turns_with_include_parent_events_true(self):
+        """Test get_last_k_turns with include_parent_events=True - covers line 539->529."""
         with patch("boto3.Session") as mock_boto_client:
             mock_client_instance = MagicMock()
             mock_boto_client.return_value = mock_client_instance
@@ -3019,7 +3099,7 @@ class TestAddTurnsWithDataClasses:
                     session_id="session-456",
                     k=2,
                     branch_name="test-branch",
-                    include_branches=True,  # This should trigger include_parent_events=True
+                    include_parent_events=True,  # This should trigger include_parent_events=True
                 )
 
                 assert len(result) == 1
