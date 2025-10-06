@@ -54,6 +54,7 @@ class TestRequiresAccessTokenDecorator:
                         callback_url=None,
                         force_authentication=False,
                         token_poller=None,
+                        custom_state=None,
                     )
 
     def test_sync_function_decoration_no_running_loop(self):
@@ -165,6 +166,7 @@ class TestRequiresAccessTokenDecorator:
                         callback_url=None,
                         force_authentication=False,
                         token_poller=None,
+                        custom_state=None,
                     )
 
     @pytest.mark.asyncio
@@ -205,6 +207,7 @@ class TestRequiresAccessTokenDecorator:
                         callback_url="https://example.com/callback",
                         force_authentication=True,
                         token_poller=mock_poller,
+                        custom_state="myAppState",
                     )
                     async def test_func(token=None):
                         return f"token={token}"
@@ -221,6 +224,7 @@ class TestRequiresAccessTokenDecorator:
                         callback_url="https://example.com/callback",
                         force_authentication=True,
                         token_poller=mock_poller,
+                        custom_state="myAppState",
                     )
 
 

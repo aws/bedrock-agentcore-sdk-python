@@ -28,6 +28,7 @@ def requires_access_token(
     callback_url: Optional[str] = None,
     force_authentication: bool = False,
     token_poller: Optional[TokenPoller] = None,
+    custom_state: Optional[str] = None,
 ) -> Callable:
     """Decorator that fetches an OAuth2 access token before calling the decorated function.
 
@@ -40,6 +41,7 @@ def requires_access_token(
         callback_url: OAuth2 callback URL
         force_authentication: Force re-authentication
         token_poller: Custom token poller implementation
+        custom_state: A state that allows applications to verify the validity of callbacks to callback_url
 
     Returns:
         Decorator function
@@ -59,6 +61,7 @@ def requires_access_token(
                 callback_url=callback_url,
                 force_authentication=force_authentication,
                 token_poller=token_poller,
+                custom_state=custom_state,
             )
 
         @wraps(func)

@@ -120,6 +120,7 @@ class IdentityClient:
         callback_url: Optional[str] = None,
         force_authentication: bool = False,
         token_poller: Optional[TokenPoller] = None,
+        custom_state: Optional[str] = None,
     ) -> str:
         """Get an OAuth2 access token for the specified provider.
 
@@ -132,6 +133,7 @@ class IdentityClient:
             callback_url: OAuth2 callback URL (must be pre-registered)
             force_authentication: Force re-authentication even if token exists in the token vault
             token_poller: Custom token poller implementation
+            custom_state: A state that allows applications to verify the validity of callbacks to callback_url
 
         Returns:
             The access token string
@@ -155,6 +157,8 @@ class IdentityClient:
             req["resourceOauth2ReturnUrl"] = callback_url
         if force_authentication:
             req["forceAuthentication"] = force_authentication
+        if custom_state:
+            req["customState"] = custom_state
 
         response = self.dp_client.get_resource_oauth2_token(**req)
 
@@ -175,6 +179,9 @@ class IdentityClient:
             # only the initial request should have force authentication
             if force_authentication:
                 req["forceAuthentication"] = False
+
+            if "sessionUri" in response:
+                req["sessionUri"] = response["sessionUri"]
 
             # Poll for the token
             active_poller = token_poller or _DefaultApiTokenPoller(
