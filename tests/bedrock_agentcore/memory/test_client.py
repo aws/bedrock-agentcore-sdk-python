@@ -539,7 +539,7 @@ def test_list_events_with_branch_filter():
             actor_id="user-123",
             session_id="session-456",
             branch_name="test-branch",
-            include_parent_events=True,
+            include_parent_branches=True,
         )
 
         assert len(events) == 1

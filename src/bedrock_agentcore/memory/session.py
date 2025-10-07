@@ -453,7 +453,7 @@ class MemorySessionManager:
         actor_id: str,
         session_id: str,
         branch_name: Optional[str] = None,
-        include_parent_events: bool = False,
+        include_parent_branches: bool = False,
         max_results: int = 100,
         include_payload: bool = True,
     ) -> List[Event]:
@@ -466,7 +466,7 @@ class MemorySessionManager:
             actor_id: Actor identifier
             session_id: Session identifier
             branch_name: Optional branch name to filter events (None for all branches)
-            include_parent_events: Whether to include parent branch events (only applies with branch_name)
+            include_parent_branches: Whether to include parent branch events (only applies with branch_name)
             max_results: Maximum number of events to return
             include_payload: Whether to include event payloads in response
 
@@ -505,7 +505,9 @@ class MemorySessionManager:
 
                 # Add branch filter if specified (but not for "main")
                 if branch_name and branch_name != "main":
-                    params["filter"] = {"branch": {"name": branch_name, "includeParentBranches": include_parent_events}}
+                    params["filter"] = {
+                        "branch": {"name": branch_name, "includeParentBranches": include_parent_branches}
+                    }
 
                 response = self._data_plane_client.list_events(**params)
 
@@ -625,7 +627,7 @@ class MemorySessionManager:
         session_id: str,
         k: int = 5,
         branch_name: Optional[str] = None,
-        include_parent_events: bool = False,
+        include_parent_branches: bool = False,
         max_results: int = 100,
     ) -> List[List[EventMessage]]:
         """Get the last K conversation turns.
@@ -641,7 +643,7 @@ class MemorySessionManager:
                 actor_id=actor_id,
                 session_id=session_id,
                 branch_name=branch_name,
-                include_parent_events=include_parent_events,
+                include_parent_branches=include_parent_branches,
                 max_results=max_results,
             )
 
@@ -924,12 +926,12 @@ class MemorySession(DictWrapper):
         self,
         k: int = 5,
         branch_name: Optional[str] = None,
-        include_parent_events: Optional[bool] = None,
+        include_parent_branches: Optional[bool] = None,
         max_results: int = 100,
     ) -> List[List[EventMessage]]:
         """Delegates to manager.get_last_k_turns."""
         return self._manager.get_last_k_turns(
-            self._actor_id, self._session_id, k, branch_name, include_parent_events, max_results
+            self._actor_id, self._session_id, k, branch_name, include_parent_branches, max_results
         )
 
     def get_event(self, event_id: str) -> Event:
@@ -972,7 +974,7 @@ class MemorySession(DictWrapper):
     def list_events(
         self,
         branch_name: Optional[str] = None,
-        include_parent_events: bool = False,
+        include_parent_branches: bool = False,
         max_results: int = 100,
         include_payload: bool = True,
     ) -> List[Event]:
@@ -981,7 +983,7 @@ class MemorySession(DictWrapper):
             actor_id=self._actor_id,
             session_id=self._session_id,
             branch_name=branch_name,
-            include_parent_events=include_parent_events,
+            include_parent_branches=include_parent_branches,
             include_payload=include_payload,
             max_results=max_results,
         )

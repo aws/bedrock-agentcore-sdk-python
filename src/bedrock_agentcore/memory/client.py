@@ -761,7 +761,7 @@ class MemoryClient:
         actor_id: str,
         session_id: str,
         branch_name: Optional[str] = None,
-        include_parent_events: bool = False,
+        include_parent_branches: bool = False,
         max_results: int = 100,
         include_payload: bool = True,
     ) -> List[Dict[str, Any]]:
@@ -775,7 +775,7 @@ class MemoryClient:
             actor_id: Actor identifier
             session_id: Session identifier
             branch_name: Optional branch name to filter events (None for all branches)
-            include_parent_events: Whether to include parent branch events (only applies with branch_name)
+            include_parent_branches: Whether to include parent branch events (only applies with branch_name)
             max_results: Maximum number of events to return
             include_payload: Whether to include event payloads in response
 
@@ -810,7 +810,9 @@ class MemoryClient:
 
                 # Add branch filter if specified (but not for "main")
                 if branch_name and branch_name != "main":
-                    params["filter"] = {"branch": {"name": branch_name, "includeParentBranches": include_parent_events}}
+                    params["filter"] = {
+                        "branch": {"name": branch_name, "includeParentBranches": include_parent_branches}
+                    }
 
                 response = self.gmdp_client.list_events(**params)
 
@@ -907,7 +909,7 @@ class MemoryClient:
         actor_id: str,
         session_id: str,
         branch_name: Optional[str] = None,
-        include_parent_events: bool = False,
+        include_parent_branches: bool = False,
         max_results: int = 100,
     ) -> List[Dict[str, Any]]:
         """List events in a specific branch.
@@ -923,7 +925,7 @@ class MemoryClient:
             actor_id: Actor identifier
             session_id: Session identifier
             branch_name: Branch name (None for main branch)
-            include_parent_events: Whether to include events from parent branches
+            include_parent_branches: Whether to include events from parent branches
             max_results: Maximum events to return
 
         Returns:
@@ -939,7 +941,7 @@ class MemoryClient:
 
             # Only add filter when we have a specific branch name
             if branch_name:
-                params["filter"] = {"branch": {"name": branch_name, "includeParentBranches": include_parent_events}}
+                params["filter"] = {"branch": {"name": branch_name, "includeParentBranches": include_parent_branches}}
 
             response = self.gmdp_client.list_events(**params)
             events = response.get("events", [])
@@ -1051,7 +1053,7 @@ class MemoryClient:
             actor_id=actor_id,
             session_id=session_id,
             branch_name=branch_name,
-            include_parent_events=include_parent,
+            include_parent_branches=include_parent,
             max_results=100,
         )
 
@@ -1102,7 +1104,7 @@ class MemoryClient:
                 actor_id=actor_id,
                 session_id=session_id,
                 branch_name=branch_name,
-                include_parent_events=False,
+                include_parent_branches=False,
                 max_results=max_results,
             )
 

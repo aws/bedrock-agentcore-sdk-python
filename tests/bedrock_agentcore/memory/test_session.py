@@ -772,7 +772,7 @@ class TestSessionManager:
             mock_client_instance.list_events.return_value = {"events": mock_events, "nextToken": None}
 
             result = manager.list_events(
-                actor_id="user-123", session_id="session-456", branch_name="test-branch", include_parent_events=True
+                actor_id="user-123", session_id="session-456", branch_name="test-branch", include_parent_branches=True
             )
 
             assert len(result) == 1
@@ -989,8 +989,8 @@ class TestSessionManager:
                 with pytest.raises(ClientError):
                     manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
 
-    def test_get_last_k_turns_with_include_parent_events_parameter(self):
-        """Test get_last_k_turns with include_parent_events parameter to cover new functionality."""
+    def test_get_last_k_turns_with_include_parent_branches_parameter(self):
+        """Test get_last_k_turns with include_parent_branches parameter to cover new functionality."""
         with patch("boto3.Session") as mock_session_class:
             mock_session = MagicMock()
             mock_session.region_name = "us-west-2"
@@ -1024,13 +1024,13 @@ class TestSessionManager:
                 ),
             ]
             with patch.object(manager, "list_events", return_value=mock_events) as mock_list_events:
-                # Test with include_parent_events=True
+                # Test with include_parent_branches=True
                 result = manager.get_last_k_turns(
                     actor_id="user-123",
                     session_id="session-456",
                     k=3,
                     branch_name="test-branch",
-                    include_parent_events=True,
+                    include_parent_branches=True,
                     max_results=50,
                 )
 
@@ -1040,31 +1040,31 @@ class TestSessionManager:
                 assert all(isinstance(msg, EventMessage) for msg in result[0])
                 assert all(isinstance(msg, EventMessage) for msg in result[1])
 
-                # Verify list_events was called with include_parent_events=True when include_parent_events=True
+                # Verify list_events was called with include_parent_branches=True when include_parent_branches=True
                 mock_list_events.assert_called_once_with(
                     actor_id="user-123",
                     session_id="session-456",
                     branch_name="test-branch",
-                    include_parent_events=True,  # This should be True when include_parent_events=True
+                    include_parent_branches=True,  # This should be True when include_parent_branches=True
                     max_results=50,
                 )
 
-                # Test with include_parent_events=False (default behavior)
+                # Test with include_parent_branches=False (default behavior)
                 mock_list_events.reset_mock()
                 manager.get_last_k_turns(
                     actor_id="user-123",
                     session_id="session-456",
                     k=2,
                     branch_name="test-branch",
-                    include_parent_events=False,
+                    include_parent_branches=False,
                 )
 
-                # Verify list_events was called with include_parent_events=False when include_parent_events=False
+                # Verify list_events was called with include_parent_branches=False when include_parent_branches=False
                 mock_list_events.assert_called_once_with(
                     actor_id="user-123",
                     session_id="session-456",
                     branch_name="test-branch",
-                    include_parent_events=False,  # This should be False when include_parent_events=False
+                    include_parent_branches=False,  # This should be False when include_parent_branches=False
                     max_results=100,  # Default max_results
                 )
 
@@ -1613,7 +1613,7 @@ class TestSession:
                 result = session.get_last_k_turns(k=3)
 
                 assert result == mock_turns
-                # Updated to match the new method signature with include_parent_events parameter
+                # Updated to match the new method signature with include_parent_branches parameter
                 mock_get_turns.assert_called_once_with("user-123", "session-456", 3, None, None, 100)
 
     def test_session_get_event_delegation(self):
@@ -1742,7 +1742,7 @@ class TestSession:
                     actor_id="user-123",
                     session_id="session-456",
                     branch_name="test-branch",
-                    include_parent_events=False,
+                    include_parent_branches=False,
                     include_payload=True,
                     max_results=100,
                 )
@@ -3075,8 +3075,8 @@ class TestAddTurnsWithDataClasses:
             assert "rec-1" in record_ids
             assert "rec-4" in record_ids
 
-    def test_get_last_k_turns_with_include_parent_events_true(self):
-        """Test get_last_k_turns with include_parent_events=True - covers line 539->529."""
+    def test_get_last_k_turns_with_include_parent_branches_true(self):
+        """Test get_last_k_turns with include_parent_branches=True - covers line 539->529."""
         with patch("boto3.Session") as mock_boto_client:
             mock_client_instance = MagicMock()
             mock_boto_client.return_value = mock_client_instance
@@ -3099,17 +3099,17 @@ class TestAddTurnsWithDataClasses:
                     session_id="session-456",
                     k=2,
                     branch_name="test-branch",
-                    include_parent_events=True,  # This should trigger include_parent_events=True
+                    include_parent_branches=True,  # This should trigger include_parent_branches=True
                 )
 
                 assert len(result) == 1
 
-                # Verify list_events was called with include_parent_events=True
+                # Verify list_events was called with include_parent_branches=True
                 mock_list_events.assert_called_once_with(
                     actor_id="user-123",
                     session_id="session-456",
                     branch_name="test-branch",
-                    include_parent_events=True,  # This is the key parameter
+                    include_parent_branches=True,  # This is the key parameter
                     max_results=100,
                 )
 
