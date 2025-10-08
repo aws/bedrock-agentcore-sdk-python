@@ -22,13 +22,16 @@ class TestRequiresAccessTokenDecorator:
     async def test_async_function_decoration(self):
         """Test decorator with async function."""
         # Mock IdentityClient
-        with patch("bedrock_agentcore.identity.auth.IdentityClient") as mock_identity_client_class:
+        with patch(
+            "bedrock_agentcore.identity.auth.IdentityClient"
+        ) as mock_identity_client_class:
             mock_client = Mock()
             mock_identity_client_class.return_value = mock_client
 
             # Mock _get_workload_access_token
             with patch(
-                "bedrock_agentcore.identity.auth._get_workload_access_token", new_callable=AsyncMock
+                "bedrock_agentcore.identity.auth._get_workload_access_token",
+                new_callable=AsyncMock,
             ) as mock_get_agent_token:
                 mock_get_agent_token.return_value = "test-agent-token"
 
@@ -36,9 +39,16 @@ class TestRequiresAccessTokenDecorator:
                 mock_client.get_token = AsyncMock(return_value="test-access-token")
 
                 # Mock _get_region
-                with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+                with patch(
+                    "bedrock_agentcore.identity.auth._get_region",
+                    return_value="us-west-2",
+                ):
 
-                    @requires_access_token(provider_name="test-provider", scopes=["read", "write"], auth_flow="M2M")
+                    @requires_access_token(
+                        provider_name="test-provider",
+                        scopes=["read", "write"],
+                        auth_flow="M2M",
+                    )
                     async def test_async_func(param1, access_token=None):
                         return f"param1={param1}, token={access_token}"
 
@@ -52,6 +62,7 @@ class TestRequiresAccessTokenDecorator:
                         on_auth_url=None,
                         auth_flow="M2M",
                         callback_url=None,
+                        custom_parameters={},
                         force_authentication=False,
                         token_poller=None,
                     )
@@ -59,13 +70,16 @@ class TestRequiresAccessTokenDecorator:
     def test_sync_function_decoration_no_running_loop(self):
         """Test decorator with sync function when no asyncio loop is running."""
         # Mock IdentityClient
-        with patch("bedrock_agentcore.identity.auth.IdentityClient") as mock_identity_client_class:
+        with patch(
+            "bedrock_agentcore.identity.auth.IdentityClient"
+        ) as mock_identity_client_class:
             mock_client = Mock()
             mock_identity_client_class.return_value = mock_client
 
             # Mock _get_workload_access_token
             with patch(
-                "bedrock_agentcore.identity.auth._get_workload_access_token", new_callable=AsyncMock
+                "bedrock_agentcore.identity.auth._get_workload_access_token",
+                new_callable=AsyncMock,
             ) as mock_get_agent_token:
                 mock_get_agent_token.return_value = "test-agent-token"
 
@@ -73,14 +87,24 @@ class TestRequiresAccessTokenDecorator:
                 mock_client.get_token = AsyncMock(return_value="test-access-token")
 
                 # Mock _get_region
-                with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+                with patch(
+                    "bedrock_agentcore.identity.auth._get_region",
+                    return_value="us-west-2",
+                ):
 
-                    @requires_access_token(provider_name="test-provider", scopes=["read"], auth_flow="USER_FEDERATION")
+                    @requires_access_token(
+                        provider_name="test-provider",
+                        scopes=["read"],
+                        auth_flow="USER_FEDERATION",
+                    )
                     def test_sync_func(param1, access_token=None):
                         return f"param1={param1}, token={access_token}"
 
                     # Mock asyncio.get_running_loop to raise RuntimeError (no loop)
-                    with patch("asyncio.get_running_loop", side_effect=RuntimeError("no running loop")):
+                    with patch(
+                        "asyncio.get_running_loop",
+                        side_effect=RuntimeError("no running loop"),
+                    ):
                         with patch("asyncio.run") as mock_asyncio_run:
                             mock_asyncio_run.return_value = "test-access-token"
 
@@ -92,13 +116,16 @@ class TestRequiresAccessTokenDecorator:
     def test_sync_function_decoration_with_running_loop(self):
         """Test decorator with sync function when asyncio loop is running."""
         # Mock IdentityClient
-        with patch("bedrock_agentcore.identity.auth.IdentityClient") as mock_identity_client_class:
+        with patch(
+            "bedrock_agentcore.identity.auth.IdentityClient"
+        ) as mock_identity_client_class:
             mock_client = Mock()
             mock_identity_client_class.return_value = mock_client
 
             # Mock _get_workload_access_token
             with patch(
-                "bedrock_agentcore.identity.auth._get_workload_access_token", new_callable=AsyncMock
+                "bedrock_agentcore.identity.auth._get_workload_access_token",
+                new_callable=AsyncMock,
             ) as mock_get_agent_token:
                 mock_get_agent_token.return_value = "test-agent-token"
 
@@ -106,17 +133,26 @@ class TestRequiresAccessTokenDecorator:
                 mock_client.get_token = AsyncMock(return_value="test-access-token")
 
                 # Mock _get_region
-                with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+                with patch(
+                    "bedrock_agentcore.identity.auth._get_region",
+                    return_value="us-west-2",
+                ):
 
-                    @requires_access_token(provider_name="test-provider", scopes=["read"], auth_flow="M2M")
+                    @requires_access_token(
+                        provider_name="test-provider", scopes=["read"], auth_flow="M2M"
+                    )
                     def test_sync_func(param1, access_token=None):
                         return f"param1={param1}, token={access_token}"
 
                     # Mock asyncio.get_running_loop to succeed (loop is running)
                     with patch("asyncio.get_running_loop"):
-                        with patch("concurrent.futures.ThreadPoolExecutor") as mock_executor_class:
+                        with patch(
+                            "concurrent.futures.ThreadPoolExecutor"
+                        ) as mock_executor_class:
                             mock_executor = Mock()
-                            mock_executor_class.return_value.__enter__.return_value = mock_executor
+                            mock_executor_class.return_value.__enter__.return_value = (
+                                mock_executor
+                            )
 
                             mock_future = Mock()
                             mock_future.result.return_value = "test-access-token"
@@ -131,13 +167,16 @@ class TestRequiresAccessTokenDecorator:
     async def test_custom_parameter_name(self):
         """Test decorator with custom parameter name for token injection."""
         # Mock IdentityClient
-        with patch("bedrock_agentcore.identity.auth.IdentityClient") as mock_identity_client_class:
+        with patch(
+            "bedrock_agentcore.identity.auth.IdentityClient"
+        ) as mock_identity_client_class:
             mock_client = Mock()
             mock_identity_client_class.return_value = mock_client
 
             # Mock _get_workload_access_token
             with patch(
-                "bedrock_agentcore.identity.auth._get_workload_access_token", new_callable=AsyncMock
+                "bedrock_agentcore.identity.auth._get_workload_access_token",
+                new_callable=AsyncMock,
             ) as mock_get_agent_token:
                 mock_get_agent_token.return_value = "test-agent-token"
 
@@ -145,10 +184,16 @@ class TestRequiresAccessTokenDecorator:
                 mock_client.get_token = AsyncMock(return_value="test-access-token")
 
                 # Mock _get_region
-                with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+                with patch(
+                    "bedrock_agentcore.identity.auth._get_region",
+                    return_value="us-west-2",
+                ):
 
                     @requires_access_token(
-                        provider_name="test-provider", into="my_token", scopes=["read"], auth_flow="M2M"
+                        provider_name="test-provider",
+                        into="my_token",
+                        scopes=["read"],
+                        auth_flow="M2M",
                     )
                     async def test_func(param1, my_token=None):
                         return f"param1={param1}, token={my_token}"
@@ -163,6 +208,7 @@ class TestRequiresAccessTokenDecorator:
                         on_auth_url=None,
                         auth_flow="M2M",
                         callback_url=None,
+                        custom_parameters={},
                         force_authentication=False,
                         token_poller=None,
                     )
@@ -171,13 +217,16 @@ class TestRequiresAccessTokenDecorator:
     async def test_with_all_optional_parameters(self):
         """Test decorator with all optional parameters."""
         # Mock IdentityClient
-        with patch("bedrock_agentcore.identity.auth.IdentityClient") as mock_identity_client_class:
+        with patch(
+            "bedrock_agentcore.identity.auth.IdentityClient"
+        ) as mock_identity_client_class:
             mock_client = Mock()
             mock_identity_client_class.return_value = mock_client
 
             # Mock _get_workload_access_token
             with patch(
-                "bedrock_agentcore.identity.auth._get_workload_access_token", new_callable=AsyncMock
+                "bedrock_agentcore.identity.auth._get_workload_access_token",
+                new_callable=AsyncMock,
             ) as mock_get_agent_token:
                 mock_get_agent_token.return_value = "test-agent-token"
 
@@ -185,7 +234,10 @@ class TestRequiresAccessTokenDecorator:
                 mock_client.get_token = AsyncMock(return_value="test-access-token")
 
                 # Mock _get_region
-                with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+                with patch(
+                    "bedrock_agentcore.identity.auth._get_region",
+                    return_value="us-west-2",
+                ):
                     # Mock callback
                     callback_called = False
 
@@ -203,6 +255,7 @@ class TestRequiresAccessTokenDecorator:
                         on_auth_url=on_auth_url,
                         auth_flow="USER_FEDERATION",
                         callback_url="https://example.com/callback",
+                        custom_parameters={"audience": "Audience"},
                         force_authentication=True,
                         token_poller=mock_poller,
                     )
@@ -218,6 +271,7 @@ class TestRequiresAccessTokenDecorator:
                         scopes=["read", "write"],
                         on_auth_url=on_auth_url,
                         auth_flow="USER_FEDERATION",
+                        custom_parameters={"audience": "Audience"},
                         callback_url="https://example.com/callback",
                         force_authentication=True,
                         token_poller=mock_poller,
@@ -231,13 +285,16 @@ class TestRequiresApiKeyDecorator:
     async def test_async_function_decoration(self):
         """Test decorator with async function."""
         # Mock IdentityClient
-        with patch("bedrock_agentcore.identity.auth.IdentityClient") as mock_identity_client_class:
+        with patch(
+            "bedrock_agentcore.identity.auth.IdentityClient"
+        ) as mock_identity_client_class:
             mock_client = Mock()
             mock_identity_client_class.return_value = mock_client
 
             # Mock _get_workload_access_token
             with patch(
-                "bedrock_agentcore.identity.auth._get_workload_access_token", new_callable=AsyncMock
+                "bedrock_agentcore.identity.auth._get_workload_access_token",
+                new_callable=AsyncMock,
             ) as mock_get_agent_token:
                 mock_get_agent_token.return_value = "test-agent-token"
 
@@ -245,7 +302,10 @@ class TestRequiresApiKeyDecorator:
                 mock_client.get_api_key = AsyncMock(return_value="test-api-key")
 
                 # Mock _get_region
-                with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+                with patch(
+                    "bedrock_agentcore.identity.auth._get_region",
+                    return_value="us-west-2",
+                ):
 
                     @requires_api_key(provider_name="test-provider")
                     async def test_async_func(param1, api_key=None):
@@ -255,19 +315,23 @@ class TestRequiresApiKeyDecorator:
 
                     assert result == "param1=value1, key=test-api-key"
                     mock_client.get_api_key.assert_called_once_with(
-                        provider_name="test-provider", agent_identity_token="test-agent-token"
+                        provider_name="test-provider",
+                        agent_identity_token="test-agent-token",
                     )
 
     def test_sync_function_decoration_no_running_loop(self):
         """Test decorator with sync function when no asyncio loop is running."""
         # Mock IdentityClient
-        with patch("bedrock_agentcore.identity.auth.IdentityClient") as mock_identity_client_class:
+        with patch(
+            "bedrock_agentcore.identity.auth.IdentityClient"
+        ) as mock_identity_client_class:
             mock_client = Mock()
             mock_identity_client_class.return_value = mock_client
 
             # Mock _get_workload_access_token
             with patch(
-                "bedrock_agentcore.identity.auth._get_workload_access_token", new_callable=AsyncMock
+                "bedrock_agentcore.identity.auth._get_workload_access_token",
+                new_callable=AsyncMock,
             ) as mock_get_agent_token:
                 mock_get_agent_token.return_value = "test-agent-token"
 
@@ -275,14 +339,20 @@ class TestRequiresApiKeyDecorator:
                 mock_client.get_api_key = AsyncMock(return_value="test-api-key")
 
                 # Mock _get_region
-                with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+                with patch(
+                    "bedrock_agentcore.identity.auth._get_region",
+                    return_value="us-west-2",
+                ):
 
                     @requires_api_key(provider_name="test-provider", into="my_key")
                     def test_sync_func(param1, my_key=None):
                         return f"param1={param1}, key={my_key}"
 
                     # Mock asyncio.get_running_loop to raise RuntimeError (no loop)
-                    with patch("asyncio.get_running_loop", side_effect=RuntimeError("no running loop")):
+                    with patch(
+                        "asyncio.get_running_loop",
+                        side_effect=RuntimeError("no running loop"),
+                    ):
                         with patch("asyncio.run") as mock_asyncio_run:
                             mock_asyncio_run.return_value = "test-api-key"
 
@@ -293,13 +363,16 @@ class TestRequiresApiKeyDecorator:
     def test_sync_function_decoration_with_running_loop(self):
         """Test decorator with sync function when asyncio loop is running."""
         # Mock IdentityClient
-        with patch("bedrock_agentcore.identity.auth.IdentityClient") as mock_identity_client_class:
+        with patch(
+            "bedrock_agentcore.identity.auth.IdentityClient"
+        ) as mock_identity_client_class:
             mock_client = Mock()
             mock_identity_client_class.return_value = mock_client
 
             # Mock _get_workload_access_token
             with patch(
-                "bedrock_agentcore.identity.auth._get_workload_access_token", new_callable=AsyncMock
+                "bedrock_agentcore.identity.auth._get_workload_access_token",
+                new_callable=AsyncMock,
             ) as mock_get_agent_token:
                 mock_get_agent_token.return_value = "test-agent-token"
 
@@ -307,7 +380,10 @@ class TestRequiresApiKeyDecorator:
                 mock_client.get_api_key = AsyncMock(return_value="test-api-key")
 
                 # Mock _get_region
-                with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+                with patch(
+                    "bedrock_agentcore.identity.auth._get_region",
+                    return_value="us-west-2",
+                ):
 
                     @requires_api_key(provider_name="test-provider")
                     def test_sync_func(param1, api_key=None):
@@ -315,9 +391,13 @@ class TestRequiresApiKeyDecorator:
 
                     # Mock asyncio.get_running_loop to succeed (loop is running)
                     with patch("asyncio.get_running_loop"):
-                        with patch("concurrent.futures.ThreadPoolExecutor") as mock_executor_class:
+                        with patch(
+                            "concurrent.futures.ThreadPoolExecutor"
+                        ) as mock_executor_class:
                             mock_executor = Mock()
-                            mock_executor_class.return_value.__enter__.return_value = mock_executor
+                            mock_executor_class.return_value.__enter__.return_value = (
+                                mock_executor
+                            )
 
                             mock_future = Mock()
                             mock_future.result.return_value = "test-api-key"
@@ -335,9 +415,14 @@ class TestSetUpLocalAuth:
     @pytest.mark.asyncio
     async def test_existing_config(self, tmp_path):
         """Test when config file exists with both workload_identity_name and user_id."""
-        config_content = {"workload_identity_name": "existing-workload-123", "user_id": "existing-user-456"}
+        config_content = {
+            "workload_identity_name": "existing-workload-123",
+            "user_id": "existing-user-456",
+        }
         mock_client = Mock()
-        mock_client.get_workload_access_token = Mock(return_value={"workloadAccessToken": "test-access-token-456"})
+        mock_client.get_workload_access_token = Mock(
+            return_value={"workloadAccessToken": "test-access-token-456"}
+        )
 
         # Create the config file in the temp directory
         config_file = tmp_path / ".agentcore.json"
@@ -364,8 +449,12 @@ class TestSetUpLocalAuth:
     async def test_no_config(self, tmp_path):
         """Test when config file doesn't exist."""
         mock_client = Mock()
-        mock_client.create_workload_identity = Mock(return_value={"name": "test-workload-123"})
-        mock_client.get_workload_access_token = Mock(return_value={"workloadAccessToken": "test-access-token-456"})
+        mock_client.create_workload_identity = Mock(
+            return_value={"name": "test-workload-123"}
+        )
+        mock_client.get_workload_access_token = Mock(
+            return_value={"workloadAccessToken": "test-access-token-456"}
+        )
 
         # Change to the temp directory for the test
         import os
@@ -382,7 +471,9 @@ class TestSetUpLocalAuth:
                 # Should create new workload identity and user_id
                 assert result == "test-access-token-456"
                 mock_client.create_workload_identity.assert_called_once()
-                mock_client.get_workload_access_token.assert_called_once_with("test-workload-123", user_id="abcd1234")
+                mock_client.get_workload_access_token.assert_called_once_with(
+                    "test-workload-123", user_id="abcd1234"
+                )
 
                 # Verify that the config file was created
                 config_file = tmp_path / ".agentcore.json"
@@ -448,7 +539,10 @@ class TestGetWorkloadAccessToken:
             with patch("os.getenv") as mock_getenv:
                 mock_getenv.return_value = None  # Not in Docker
 
-                with patch("bedrock_agentcore.identity.auth._set_up_local_auth", new_callable=AsyncMock) as mock_setup:
+                with patch(
+                    "bedrock_agentcore.identity.auth._set_up_local_auth",
+                    new_callable=AsyncMock,
+                ) as mock_setup:
                     mock_setup.return_value = "local-dev-token-456"
 
                     result = await _get_workload_access_token(mock_client)
@@ -470,7 +564,9 @@ class TestGetWorkloadAccessToken:
             with patch("os.getenv") as mock_getenv:
                 mock_getenv.return_value = "1"  # In Docker container
 
-                with pytest.raises(ValueError, match="Workload access token has not been set"):
+                with pytest.raises(
+                    ValueError, match="Workload access token has not been set"
+                ):
                     await _get_workload_access_token(mock_client)
 
                 mock_get_token.assert_called_once()
