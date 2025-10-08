@@ -43,7 +43,9 @@ class TestIdentityClient:
             # Test data
             req = {"name": "test-provider", "clientId": "test-client"}
             expected_response = {"providerId": "test-provider-id"}
-            mock_client.create_oauth2_credential_provider.return_value = expected_response
+            mock_client.create_oauth2_credential_provider.return_value = (
+                expected_response
+            )
 
             result = identity_client.create_oauth2_credential_provider(req)
 
@@ -63,12 +65,16 @@ class TestIdentityClient:
             # Test data
             req = {"name": "test-api-provider", "apiKeyName": "test-key"}
             expected_response = {"providerId": "test-api-provider-id"}
-            mock_client.create_api_key_credential_provider.return_value = expected_response
+            mock_client.create_api_key_credential_provider.return_value = (
+                expected_response
+            )
 
             result = identity_client.create_api_key_credential_provider(req)
 
             assert result == expected_response
-            mock_client.create_api_key_credential_provider.assert_called_once_with(**req)
+            mock_client.create_api_key_credential_provider.assert_called_once_with(
+                **req
+            )
 
     @pytest.mark.asyncio
     async def test_get_token_direct_response(self):
@@ -87,10 +93,15 @@ class TestIdentityClient:
             agent_identity_token = "test-agent-token"
             expected_token = "test-access-token"
 
-            mock_client.get_resource_oauth2_token.return_value = {"accessToken": expected_token}
+            mock_client.get_resource_oauth2_token.return_value = {
+                "accessToken": expected_token
+            }
 
             result = await identity_client.get_token(
-                provider_name=provider_name, scopes=scopes, agent_identity_token=agent_identity_token, auth_flow="M2M"
+                provider_name=provider_name,
+                scopes=scopes,
+                agent_identity_token=agent_identity_token,
+                auth_flow="M2M",
             )
 
             assert result == expected_token
@@ -98,6 +109,7 @@ class TestIdentityClient:
                 resourceCredentialProviderName=provider_name,
                 scopes=scopes,
                 oauth2Flow="M2M",
+                customParameters={},
                 workloadIdentityToken=agent_identity_token,
             )
 
@@ -128,9 +140,14 @@ class TestIdentityClient:
             mock_poller = Mock()
             mock_poller.poll_for_token = AsyncMock(return_value=expected_token)
 
-            with patch("bedrock_agentcore.services.identity._DefaultApiTokenPoller", return_value=mock_poller):
+            with patch(
+                "bedrock_agentcore.services.identity._DefaultApiTokenPoller",
+                return_value=mock_poller,
+            ):
                 result = await identity_client.get_token(
-                    provider_name=provider_name, agent_identity_token=agent_identity_token, auth_flow="USER_FEDERATION"
+                    provider_name=provider_name,
+                    agent_identity_token=agent_identity_token,
+                    auth_flow="USER_FEDERATION",
                 )
 
             assert result == expected_token
@@ -161,13 +178,18 @@ class TestIdentityClient:
                 callback_called = True
                 assert url == auth_url
 
-            mock_client.get_resource_oauth2_token.return_value = {"authorizationUrl": auth_url}
+            mock_client.get_resource_oauth2_token.return_value = {
+                "authorizationUrl": auth_url
+            }
 
             # Mock the token poller
             mock_poller = Mock()
             mock_poller.poll_for_token = AsyncMock(return_value=expected_token)
 
-            with patch("bedrock_agentcore.services.identity._DefaultApiTokenPoller", return_value=mock_poller):
+            with patch(
+                "bedrock_agentcore.services.identity._DefaultApiTokenPoller",
+                return_value=mock_poller,
+            ):
                 result = await identity_client.get_token(
                     provider_name=provider_name,
                     agent_identity_token=agent_identity_token,
@@ -204,13 +226,18 @@ class TestIdentityClient:
                 callback_called = True
                 assert url == auth_url
 
-            mock_client.get_resource_oauth2_token.return_value = {"authorizationUrl": auth_url}
+            mock_client.get_resource_oauth2_token.return_value = {
+                "authorizationUrl": auth_url
+            }
 
             # Mock the token poller
             mock_poller = Mock()
             mock_poller.poll_for_token = AsyncMock(return_value=expected_token)
 
-            with patch("bedrock_agentcore.services.identity._DefaultApiTokenPoller", return_value=mock_poller):
+            with patch(
+                "bedrock_agentcore.services.identity._DefaultApiTokenPoller",
+                return_value=mock_poller,
+            ):
                 result = await identity_client.get_token(
                     provider_name=provider_name,
                     agent_identity_token=agent_identity_token,
@@ -239,9 +266,12 @@ class TestIdentityClient:
             agent_identity_token = "test-agent-token"
             callback_url = "https://example.com/callback"
             force_authentication = True
+            custom_parameters = {"audience": "Audience"}
             expected_token = "test-access-token"
 
-            mock_client.get_resource_oauth2_token.return_value = {"accessToken": expected_token}
+            mock_client.get_resource_oauth2_token.return_value = {
+                "accessToken": expected_token
+            }
 
             result = await identity_client.get_token(
                 provider_name=provider_name,
@@ -249,6 +279,7 @@ class TestIdentityClient:
                 agent_identity_token=agent_identity_token,
                 auth_flow="USER_FEDERATION",
                 callback_url=callback_url,
+                custom_parameters=custom_parameters,
                 force_authentication=force_authentication,
             )
 
@@ -259,6 +290,7 @@ class TestIdentityClient:
                 oauth2Flow="USER_FEDERATION",
                 workloadIdentityToken=agent_identity_token,
                 resourceOauth2ReturnUrl=callback_url,
+                customParameters=custom_parameters,
                 forceAuthentication=force_authentication,
             )
 
@@ -279,7 +311,9 @@ class TestIdentityClient:
             auth_url = "https://example.com/auth"
             expected_token = "test-access-token"
 
-            mock_client.get_resource_oauth2_token.return_value = {"authorizationUrl": auth_url}
+            mock_client.get_resource_oauth2_token.return_value = {
+                "authorizationUrl": auth_url
+            }
 
             # Mock custom token poller
             custom_poller = Mock()
@@ -319,7 +353,8 @@ class TestIdentityClient:
 
             assert result == expected_api_key
             mock_client.get_resource_api_key.assert_called_once_with(
-                resourceCredentialProviderName=provider_name, workloadIdentityToken=agent_identity_token
+                resourceCredentialProviderName=provider_name,
+                workloadIdentityToken=agent_identity_token,
             )
 
     def test_get_workload_access_token_with_user_token(self):
@@ -330,19 +365,29 @@ class TestIdentityClient:
             mock_cp_client = Mock()
             mock_identity_client = Mock()
             mock_dp_client = Mock()
-            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+            mock_boto_client.side_effect = [
+                mock_cp_client,
+                mock_identity_client,
+                mock_dp_client,
+            ]
 
             identity_client = IdentityClient(region)
 
             # Test data
             workload_name = "test-workload"
             user_token = "test-user-jwt-token"
-            user_id = "test-user-id"  # This should be ignored when user_token is provided
+            user_id = (
+                "test-user-id"  # This should be ignored when user_token is provided
+            )
             expected_response = {"workloadAccessToken": "test-workload-token"}
 
-            mock_dp_client.get_workload_access_token_for_jwt.return_value = expected_response
+            mock_dp_client.get_workload_access_token_for_jwt.return_value = (
+                expected_response
+            )
 
-            result = identity_client.get_workload_access_token(workload_name, user_token=user_token, user_id=user_id)
+            result = identity_client.get_workload_access_token(
+                workload_name, user_token=user_token, user_id=user_id
+            )
 
             assert result == expected_response
             mock_dp_client.get_workload_access_token_for_jwt.assert_called_once_with(
@@ -360,7 +405,11 @@ class TestIdentityClient:
             mock_cp_client = Mock()
             mock_identity_client = Mock()
             mock_dp_client = Mock()
-            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+            mock_boto_client.side_effect = [
+                mock_cp_client,
+                mock_identity_client,
+                mock_dp_client,
+            ]
 
             identity_client = IdentityClient(region)
 
@@ -369,9 +418,13 @@ class TestIdentityClient:
             user_id = "test-user-id"
             expected_response = {"workloadAccessToken": "test-workload-token"}
 
-            mock_dp_client.get_workload_access_token_for_user_id.return_value = expected_response
+            mock_dp_client.get_workload_access_token_for_user_id.return_value = (
+                expected_response
+            )
 
-            result = identity_client.get_workload_access_token(workload_name, user_id=user_id)
+            result = identity_client.get_workload_access_token(
+                workload_name, user_id=user_id
+            )
 
             assert result == expected_response
             mock_dp_client.get_workload_access_token_for_user_id.assert_called_once_with(
@@ -389,7 +442,11 @@ class TestIdentityClient:
             mock_cp_client = Mock()
             mock_identity_client = Mock()
             mock_dp_client = Mock()
-            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+            mock_boto_client.side_effect = [
+                mock_cp_client,
+                mock_identity_client,
+                mock_dp_client,
+            ]
 
             identity_client = IdentityClient(region)
 
@@ -402,7 +459,9 @@ class TestIdentityClient:
             result = identity_client.get_workload_access_token(workload_name)
 
             assert result == expected_response
-            mock_dp_client.get_workload_access_token.assert_called_once_with(workloadName=workload_name)
+            mock_dp_client.get_workload_access_token.assert_called_once_with(
+                workloadName=workload_name
+            )
             # Should not call user-specific versions
             mock_dp_client.get_workload_access_token_for_jwt.assert_not_called()
             mock_dp_client.get_workload_access_token_for_user_id.assert_not_called()
@@ -415,24 +474,40 @@ class TestIdentityClient:
             mock_cp_client = Mock()
             mock_identity_client = Mock()
             mock_dp_client = Mock()
-            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+            mock_boto_client.side_effect = [
+                mock_cp_client,
+                mock_identity_client,
+                mock_dp_client,
+            ]
 
             identity_client = IdentityClient(region)
 
             # Test with provided name
             custom_name = "my-custom-workload"
-            expected_response = {"name": custom_name, "workloadIdentityId": "workload-123"}
-            mock_identity_client.create_workload_identity.return_value = expected_response
+            expected_response = {
+                "name": custom_name,
+                "workloadIdentityId": "workload-123",
+            }
+            mock_identity_client.create_workload_identity.return_value = (
+                expected_response
+            )
 
             result = identity_client.create_workload_identity(name=custom_name)
 
             assert result == expected_response
-            mock_identity_client.create_workload_identity.assert_called_with(name=custom_name)
+            mock_identity_client.create_workload_identity.assert_called_with(
+                name=custom_name
+            )
 
             # Test without provided name (auto-generated)
             mock_identity_client.reset_mock()
-            expected_response_auto = {"name": "workload-abcd1234", "workloadIdentityId": "workload-456"}
-            mock_identity_client.create_workload_identity.return_value = expected_response_auto
+            expected_response_auto = {
+                "name": "workload-abcd1234",
+                "workloadIdentityId": "workload-456",
+            }
+            mock_identity_client.create_workload_identity.return_value = (
+                expected_response_auto
+            )
 
             with patch("uuid.uuid4") as mock_uuid:
                 mock_uuid.return_value.hex = "abcd1234efgh5678"
@@ -440,7 +515,9 @@ class TestIdentityClient:
                 result = identity_client.create_workload_identity()
 
                 assert result == expected_response_auto
-                mock_identity_client.create_workload_identity.assert_called_with(name="workload-abcd1234")
+                mock_identity_client.create_workload_identity.assert_called_with(
+                    name="workload-abcd1234"
+                )
 
 
 class TestDefaultApiTokenPoller:
@@ -508,4 +585,6 @@ class TestDefaultApiTokenPoller:
                     await poller.poll_for_token()
 
                 assert "Polling timed out" in str(exc_info.value)
-                assert f"{DEFAULT_POLLING_TIMEOUT_SECONDS} seconds" in str(exc_info.value)
+                assert f"{DEFAULT_POLLING_TIMEOUT_SECONDS} seconds" in str(
+                    exc_info.value
+                )
