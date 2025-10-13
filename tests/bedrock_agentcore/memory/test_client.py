@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 from botocore.exceptions import ClientError
 
 from bedrock_agentcore.memory import MemoryClient
+from bedrock_agentcore.memory.client import EventOrdering
 from bedrock_agentcore.memory.constants import StrategyType
 
 
@@ -467,6 +468,65 @@ def test_process_turn_with_llm_success_with_retrieval():
         assert "Previous context | More context" in event_kwargs["payload"][1]["conversational"]["content"]["text"]
 
 
+def test_list_events_chronological():
+    """Test list_events returns the events in chronological order by default."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        # Mock the MemoryClient's internal boto3 client
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        # Mock boto3 response in no particular order
+        mock_events = [
+            {"eventId": "event-2", "eventTimestamp": datetime(2023, 1, 1, 10, 2, 0)},
+            {"eventId": "event-3", "eventTimestamp": datetime(2023, 1, 1, 10, 3, 0)},
+            {"eventId": "event-1", "eventTimestamp": datetime(2023, 1, 1, 10, 1, 0)},
+        ]
+        mock_gmdp.list_events.return_value = {"events": mock_events, "nextToken": None}
+
+        # Test list_events
+        events = client.list_events(memory_id="mem-123", actor_id="user-123", session_id="session-456")
+
+        assert events == [
+            {"eventId": "event-1", "eventTimestamp": datetime(2023, 1, 1, 10, 1, 0)},
+            {"eventId": "event-2", "eventTimestamp": datetime(2023, 1, 1, 10, 2, 0)},
+            {"eventId": "event-3", "eventTimestamp": datetime(2023, 1, 1, 10, 3, 0)},
+        ]
+
+
+def test_list_events_reverse_chronological():
+    """Test list_events returns the events in reverse chronological order."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        # Mock the MemoryClient's internal boto3 client
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        # Mock boto3 response in no particular order
+        mock_events = [
+            {"eventId": "event-2", "eventTimestamp": datetime(2023, 1, 1, 10, 2, 0)},
+            {"eventId": "event-3", "eventTimestamp": datetime(2023, 1, 1, 10, 3, 0)},
+            {"eventId": "event-1", "eventTimestamp": datetime(2023, 1, 1, 10, 1, 0)},
+        ]
+        mock_gmdp.list_events.return_value = {"events": mock_events, "nextToken": None}
+
+        # Test list_events
+        events = client.list_events(
+            memory_id="mem-123",
+            actor_id="user-123",
+            session_id="session-456",
+            order=EventOrdering.REVERSE_CHRONOLOGICAL,
+        )
+
+        assert events == [
+            {"eventId": "event-3", "eventTimestamp": datetime(2023, 1, 1, 10, 3, 0)},
+            {"eventId": "event-2", "eventTimestamp": datetime(2023, 1, 1, 10, 2, 0)},
+            {"eventId": "event-1", "eventTimestamp": datetime(2023, 1, 1, 10, 1, 0)},
+        ]
+
+
 def test_list_events_with_pagination():
     """Test list_events with pagination support."""
     with patch("boto3.client"):
@@ -476,13 +536,16 @@ def test_list_events_with_pagination():
         mock_gmdp = MagicMock()
         client.gmdp_client = mock_gmdp
 
-        # Mock paginated responses
+        # Mock paginated responses - simulate API returning pages in reverse chronological order
+        # Page 1: newest events first (event-149 down to event-50) - 100 items
         first_batch = [
-            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 10, i % 60, i % 60)} for i in range(100)
+            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 11, (i - 50) // 60, (i - 50) % 60)}
+            for i in range(149, 49, -1)  # 149, 148, ..., 50 (100 items)
         ]
+        # Page 2: older events first (event-49 down to event-0) - 50 items
         second_batch = [
-            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 11, (i - 100) % 60, (i - 100) % 60)}
-            for i in range(100, 150)
+            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 10, i // 60, i % 60)}
+            for i in range(49, -1, -1)  # 49, 48, ..., 0 (50 items)
         ]
 
         # Setup side effects for multiple calls
@@ -564,7 +627,8 @@ def test_list_events_max_results_limit():
 
         # Mock response with more events than requested
         large_batch = [
-            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 10, 0, i % 60)} for i in range(100)
+            {"eventId": f"event-{i}", "eventTimestamp": datetime(2023, 1, 1, 11, (i) // 60, (i) % 60)}
+            for i in range(100)
         ]
         mock_gmdp.list_events.return_value = {"events": large_batch, "nextToken": "has-more"}
 
@@ -943,34 +1007,62 @@ def test_get_last_k_turns():
         mock_gmdp = MagicMock()
         client.gmdp_client = mock_gmdp
 
+        # We only want the last 2 turns
+        k = 2
+
         # Mock events response with conversation turns
         mock_events = [
+            # First turn, should be ignored because k=2
             {
                 "eventId": "event-1",
-                "eventTimestamp": datetime(2023, 1, 1, 10, 0, 0),
+                "eventTimestamp": datetime(2023, 1, 1, 10, 1, 0),
                 "payload": [
-                    {"conversational": {"role": "USER", "content": {"text": "Hello"}}},
-                    {"conversational": {"role": "ASSISTANT", "content": {"text": "Hi there"}}},
+                    {"conversational": {"role": "USER", "content": {"text": "Message 1"}}},
+                    {"conversational": {"role": "ASSISTANT", "content": {"text": "Message 2"}}},
                 ],
             },
+            # Second turn, all messages in a single event
             {
                 "eventId": "event-2",
-                "eventTimestamp": datetime(2023, 1, 1, 10, 5, 0),
+                "eventTimestamp": datetime(2023, 1, 1, 10, 2, 0),
                 "payload": [
-                    {"conversational": {"role": "USER", "content": {"text": "How are you?"}}},
-                    {"conversational": {"role": "ASSISTANT", "content": {"text": "I'm doing well"}}},
+                    {"conversational": {"role": "USER", "content": {"text": "Message 3"}}},
+                    {"conversational": {"role": "ASSISTANT", "content": {"text": "Message 4"}}},
+                ],
+            },
+            # Third turn, user message in a separate event
+            {
+                "eventId": "event-3",
+                "eventTimestamp": datetime(2023, 1, 1, 10, 3, 0),
+                "payload": [
+                    {"conversational": {"role": "USER", "content": {"text": "Message 5"}}},
+                ],
+            },
+            # Third turn, assistant response in a separate event
+            {
+                "eventId": "event-4",
+                "eventTimestamp": datetime(2023, 1, 1, 10, 4, 0),
+                "payload": [
+                    {"conversational": {"role": "ASSISTANT", "content": {"text": "Message 6"}}},
                 ],
             },
         ]
         mock_gmdp.list_events.return_value = {"events": mock_events, "nextToken": None}
 
         # Test get_last_k_turns
-        turns = client.get_last_k_turns(memory_id="mem-123", actor_id="user-123", session_id="session-456", k=2)
+        turns = client.get_last_k_turns(memory_id="mem-123", actor_id="user-123", session_id="session-456", k=k)
 
-        assert len(turns) == 2
-        assert len(turns[0]) == 2  # First turn has 2 messages
-        assert turns[0][0]["role"] == "USER"
-        assert turns[0][1]["role"] == "ASSISTANT"
+        # Should only return the last 2 turns, in the correct order
+        assert turns == [
+            [
+                {"role": "USER", "content": {"text": "Message 3"}},
+                {"role": "ASSISTANT", "content": {"text": "Message 4"}},
+            ],
+            [
+                {"role": "USER", "content": {"text": "Message 5"}},
+                {"role": "ASSISTANT", "content": {"text": "Message 6"}},
+            ],
+        ]
 
 
 def test_delete_memory_and_wait():
