@@ -1523,9 +1523,9 @@ class TestSession:
                 result = session.add_turns(messages=[ConversationalMessage("Hello", MessageRole.USER)])
 
                 assert result == mock_event
-                mock_add_turns.assert_called_once_with(
-                    "user-123", "session-456", [ConversationalMessage("Hello", MessageRole.USER)], None, None
-                )
+            mock_add_turns.assert_called_once_with(
+                "user-123", "session-456", [ConversationalMessage("Hello", MessageRole.USER)], None, None, None
+            )
 
     def test_session_fork_conversation_delegation(self):
         """Test MemorySession.fork_conversation delegates to manager."""
@@ -1552,6 +1552,7 @@ class TestSession:
                     "test-branch",
                     [ConversationalMessage("Fork message", MessageRole.USER)],
                     None,
+                    None,
                 )
 
     def test_session_create_blob_event_delegation(self):
@@ -1569,7 +1570,7 @@ class TestSession:
                 result = session.add_turns(messages=[BlobMessage(blob_data)])
 
                 assert result == mock_event
-                mock_add_turns.assert_called_once_with("user-123", "session-456", [BlobMessage(blob_data)], None, None)
+                mock_add_turns.assert_called_once_with("user-123", "session-456", [BlobMessage(blob_data)], None, None, None)
 
     def test_session_process_turn_with_llm_delegation(self):
         """Test MemorySession.process_turn_with_llm delegates to manager."""
@@ -1597,7 +1598,7 @@ class TestSession:
                 assert memories == mock_memories
                 assert response == mock_response
                 assert event == mock_event
-                mock_process.assert_called_once_with("user-123", "session-456", "Hello", mock_llm, None, None)
+                mock_process.assert_called_once_with("user-123", "session-456", "Hello", mock_llm, None, None, None)
 
     def test_session_get_last_k_turns_delegation(self):
         """Test MemorySession.get_last_k_turns delegates to manager."""
@@ -1743,6 +1744,7 @@ class TestSession:
                     session_id="session-456",
                     branch_name="test-branch",
                     include_parent_branches=False,
+                    eventMetadata=None,
                     include_payload=True,
                     max_results=100,
                 )
@@ -1948,6 +1950,7 @@ class TestEdgeCases:
                     "session-456",
                     [ConversationalMessage("Hello", MessageRole.USER)],
                     branch,
+                    None,
                     custom_timestamp,
                 )
 
@@ -2196,7 +2199,356 @@ class TestEdgeCases:
                     "session-456",
                     [ConversationalMessage("Hello", MessageRole.USER)],
                     branch,
+                    None,
                     custom_timestamp,
+                )
+
+class TestEventMetadataFlow:
+    """Test cases for metadata support for STM in MemorySessionManager."""
+
+    def test_fork_conversation_with_metadata_parameter(self):
+        """Test fork_conversation with new metadata parameter."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            # Mock add_turns
+            mock_event = {"eventId": "fork-event-123", "memoryId": "testMemory-1234567890"}
+            with patch.object(manager, "add_turns", return_value=Event(mock_event)) as mock_add_turns:
+                metadata = {"location": {"stringValue": "NYC"}}
+                
+                result = manager.fork_conversation(
+                    actor_id="user-123",
+                    session_id="session-456",
+                    root_event_id="event-root-123",
+                    branch_name="test-branch",
+                    messages=[ConversationalMessage("Fork message", MessageRole.USER)],
+                    metadata=metadata,
+                )
+
+                assert result["eventId"] == "fork-event-123"
+
+                # Verify add_turns was called with metadata
+                mock_add_turns.assert_called_once()
+                call_args = mock_add_turns.call_args[1]
+                assert call_args["metadata"] == metadata
+                assert call_args["branch"]["rootEventId"] == "event-root-123"
+                assert call_args["branch"]["name"] == "test-branch"
+
+    def test_list_events_with_event_metadata_filter(self):
+        """Test list_events with eventMetadata filter parameter."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            # Mock response
+            mock_events = [{"eventId": "filtered-event-1", "eventTimestamp": datetime.now()}]
+            mock_client_instance.list_events.return_value = {"events": mock_events, "nextToken": None}
+
+            # Test with eventMetadata filter
+            event_metadata_filter = [
+                {
+                    'left': {
+                        'metadataKey': 'location'
+                    },
+                    'operator': 'EQUALS_TO',
+                    'right': {
+                        'metadataValue': {
+                            'stringValue': 'NYC'
+                        }
+                    }
+                }
+            ]
+
+            result = manager.list_events(
+                actor_id="user-123", 
+                session_id="session-456", 
+                eventMetadata=event_metadata_filter
+            )
+
+            assert len(result) == 1
+            assert result[0]["eventId"] == "filtered-event-1"
+
+            # Verify filter was applied
+            call_args = mock_client_instance.list_events.call_args[1]
+            assert "filter" in call_args
+            assert call_args["filter"]["eventMetadata"] == event_metadata_filter
+
+    def test_list_events_with_both_branch_and_metadata_filters(self):
+        """Test list_events with both branch and eventMetadata filters."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            # Mock response
+            mock_events = [{"eventId": "filtered-event-1", "eventTimestamp": datetime.now()}]
+            mock_client_instance.list_events.return_value = {"events": mock_events, "nextToken": None}
+
+            # Test with both branch and eventMetadata filters
+            event_metadata_filter = [
+                {
+                    'left': {
+                        'metadataKey': 'location'
+                    },
+                    'operator': 'EQUALS_TO',
+                    'right': {
+                        'metadataValue': {
+                            'stringValue': 'NYC'
+                        }
+                    }
+                }
+            ]
+
+            result = manager.list_events(
+                actor_id="user-123", 
+                session_id="session-456", 
+                branch_name="test-branch",
+                include_parent_branches=True,
+                eventMetadata=event_metadata_filter
+            )
+
+            assert len(result) == 1
+
+            # Verify both filters were applied - eventMetadata should override branch filter
+            call_args = mock_client_instance.list_events.call_args[1]
+            assert "filter" in call_args
+            assert call_args["filter"]["eventMetadata"] == event_metadata_filter
+            # Branch filter should not be present when eventMetadata is specified
+            assert "branch" not in call_args["filter"]
+
+    def test_memory_session_list_events_with_event_metadata(self):
+        """Test MemorySession.list_events with eventMetadata parameter."""
+        with patch("boto3.Session"):
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+            session = MemorySession(
+                memory_id="testMemory-1234567890", actor_id="user-123", session_id="session-456", manager=manager
+            )
+
+            # Mock manager method
+            mock_events = [Event({"eventId": "event-1"})]
+            event_metadata_filter = [
+                {
+                    'left': {
+                        'metadataKey': 'location'
+                    },
+                    'operator': 'EQUALS_TO',
+                    'right': {
+                        'metadataValue': {
+                            'stringValue': 'NYC'
+                        }
+                    }
+                }
+            ]
+
+            with patch.object(manager, "list_events", return_value=mock_events) as mock_list_events:
+                result = session.list_events(
+                    branch_name="test-branch",
+                    eventMetadata=event_metadata_filter
+                )
+
+                assert result == mock_events
+                mock_list_events.assert_called_once_with(
+                    actor_id="user-123",
+                    session_id="session-456",
+                    branch_name="test-branch",
+                    include_parent_branches=False,
+                    eventMetadata=event_metadata_filter,
+                    include_payload=True,
+                    max_results=100,
+                )
+
+    def test_memory_session_fork_conversation_with_metadata(self):
+        """Test MemorySession.fork_conversation with metadata parameter."""
+        with patch("boto3.Session"):
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+            session = MemorySession(
+                memory_id="testMemory-1234567890", actor_id="user-123", session_id="session-456", manager=manager
+            )
+
+            # Mock manager method
+            mock_event = Event({"eventId": "fork-event-123"})
+            metadata = {"location": {"stringValue": "NYC"}}
+            
+            with patch.object(manager, "fork_conversation", return_value=mock_event) as mock_fork:
+                result = session.fork_conversation(
+                    messages=[ConversationalMessage("Fork message", MessageRole.USER)],
+                    root_event_id="event-root-123",
+                    branch_name="test-branch",
+                    metadata=metadata,
+                )
+
+                assert result == mock_event
+                mock_fork.assert_called_once_with(
+                    "user-123",
+                    "session-456",
+                    "event-root-123",
+                    "test-branch",
+                    [ConversationalMessage("Fork message", MessageRole.USER)],
+                    metadata,
+                    None,
+                )
+
+    def test_memory_session_process_turn_with_llm_with_metadata(self):
+        """Test MemorySession.process_turn_with_llm with metadata parameter."""
+        with patch("boto3.Session"):
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+            session = MemorySession(
+                memory_id="testMemory-1234567890", actor_id="user-123", session_id="session-456", manager=manager
+            )
+
+            # Mock manager method
+            mock_memories = [{"content": {"text": "Memory"}}]
+            mock_response = "LLM response"
+            mock_event = {"eventId": "event-123"}
+            metadata = {"location": {"stringValue": "NYC"}}
+            
+            with patch.object(
+                manager, "process_turn_with_llm", return_value=(mock_memories, mock_response, mock_event)
+            ) as mock_process:
+
+                def mock_llm(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                    return "Response"
+
+                memories, response, event = session.process_turn_with_llm(
+                    user_input="Hello", 
+                    llm_callback=mock_llm, 
+                    retrieval_config=None,
+                    metadata=metadata
+                )
+
+                assert memories == mock_memories
+                assert response == mock_response
+                assert event == mock_event
+                mock_process.assert_called_once_with(
+                    "user-123", 
+                    "session-456", 
+                    "Hello", 
+                    mock_llm, 
+                    None, 
+                    metadata,
+                    None
+                )
+
+    def test_process_turn_with_llm_with_metadata_parameter(self):
+        """Test process_turn_with_llm with metadata parameter."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            # Mock search_long_term_memories
+            mock_memories = [{"content": {"text": "Previous context"}, "memoryRecordId": "rec-123"}]
+            with patch.object(manager, "search_long_term_memories", return_value=mock_memories):
+                # Mock add_turns
+                mock_event = {"eventId": "event-123", "memoryId": "testMemory-1234567890"}
+                with patch.object(manager, "add_turns", return_value=Event(mock_event)) as mock_add_turns:
+                    # Define LLM callback
+                    def mock_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                        return f"Response to: {user_input} with {len(memories)} memories"
+
+                    # Test process_turn_with_llm with metadata
+                    retrieval_config = {"test/namespace": RetrievalConfig(top_k=5)}
+                    metadata = {"location": {"stringValue": "NYC"}}
+                    
+                    memories, response, event = manager.process_turn_with_llm(
+                        actor_id="user-123",
+                        session_id="session-456",
+                        user_input="Hello",
+                        llm_callback=mock_llm_callback,
+                        retrieval_config=retrieval_config,
+                        metadata=metadata,
+                    )
+
+                    assert len(memories) == 1
+                    assert "Response to: Hello with 1 memories" in response
+                    assert event["eventId"] == "event-123"
+
+                    # Verify add_turns was called with metadata
+                    mock_add_turns.assert_called_once()
+                    call_args = mock_add_turns.call_args[1]
+                    assert call_args["metadata"] == metadata
+
+    def test_add_turns_with_metadata_parameter(self):
+        """Test add_turns with metadata parameter."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            # Mock create_event response
+            mock_response = {"event": {"eventId": "turn-event-123", "memoryId": "testMemory-1234567890"}}
+            mock_client_instance.create_event.return_value = mock_response
+
+            messages = [
+                ConversationalMessage("Hello", MessageRole.USER),
+                ConversationalMessage("Hi there", MessageRole.ASSISTANT),
+            ]
+            metadata = {"location": {"stringValue": "NYC"}}
+            
+            result = manager.add_turns(
+                actor_id="user-123", 
+                session_id="session-456", 
+                messages=messages,
+                metadata=metadata
+            )
+
+            assert isinstance(result, Event)
+            assert result["eventId"] == "turn-event-123"
+
+            # Verify metadata was passed to create_event
+            call_args = mock_client_instance.create_event.call_args[1]
+            assert call_args["metadata"] == metadata
+            assert len(call_args["payload"]) == 2
+
+    def test_memory_session_add_turns_with_metadata(self):
+        """Test MemorySession.add_turns with metadata parameter."""
+        with patch("boto3.Session"):
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+            session = MemorySession(
+                memory_id="testMemory-1234567890", actor_id="user-123", session_id="session-456", manager=manager
+            )
+
+            # Mock manager method
+            mock_event = Event({"eventId": "event-123"})
+            metadata = {"location": {"stringValue": "NYC"}}
+            
+            with patch.object(manager, "add_turns", return_value=mock_event) as mock_add_turns:
+                result = session.add_turns(
+                    messages=[ConversationalMessage("Hello", MessageRole.USER)],
+                    metadata=metadata
+                )
+
+                assert result == mock_event
+                mock_add_turns.assert_called_once_with(
+                    "user-123", 
+                    "session-456", 
+                    [ConversationalMessage("Hello", MessageRole.USER)], 
+                    None, 
+                    metadata,
+                    None
                 )
 
 
@@ -2572,7 +2924,7 @@ class TestAdditionalCoverage:
                 session.add_turns(messages=messages, branch=branch, event_timestamp=custom_timestamp)
 
                 # Verify the exact parameter order: actor_id, session_id, messages, branch, event_timestamp
-                mock_add_turns.assert_called_once_with("user-123", "session-456", messages, branch, custom_timestamp)
+                mock_add_turns.assert_called_once_with("user-123", "session-456", messages, branch, None, custom_timestamp)
 
     def test_process_turn_with_llm_no_relevance_score_config(self):
         """Test process_turn_with_llm when RetrievalConfig has no relevance_score."""
@@ -2640,7 +2992,7 @@ class TestAdditionalCoverage:
                 session.add_turns(messages=messages, branch=branch)
 
                 # Verify the exact parameter order: actor_id, session_id, messages, branch, event_timestamp
-                mock_add_turns.assert_called_once_with("user-123", "session-456", messages, branch, None)
+                mock_add_turns.assert_called_once_with("user-123", "session-456", messages, branch, None, None)
 
     def test_list_long_term_memory_records_memoryRecordSummaries_fallback(self):
         """Test list_long_term_memory_records fallback to memoryRecordSummaries."""
