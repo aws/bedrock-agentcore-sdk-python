@@ -79,9 +79,6 @@ app.run()  # Ready to run on Bedrock AgentCore
 
 **Production:** [AWS CDK](https://aws.amazon.com/cdk/) - coming soon.
 
-## ⚠️ Preview Status
-
-Bedrock AgentCore SDK is currently in public preview. APIs may change as we refine the SDK.
 
 ## 📝 License & Contributing
 

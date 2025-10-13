@@ -1,4 +1,4 @@
-Bedrock AgentCore CLI Starter Toolkit
+Bedrock AgentCore SDK Python
 Copyright 2025 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 This product includes software developed by Amazon.com, Inc. (https://www.amazon.com/).
