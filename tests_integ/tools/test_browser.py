@@ -10,3 +10,8 @@ with browser_session("us-west-2") as client:
 
     client.take_control()
     client.release_control()
+
+with browser_session("us-west-2", viewport={"width": 1280, "height": 720}) as client:
+    assert client.session_id is not None
+    url, headers = client.generate_ws_headers()
+    assert url.startswith("wss")

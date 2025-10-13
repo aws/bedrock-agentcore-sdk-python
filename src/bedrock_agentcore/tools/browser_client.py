@@ -99,6 +99,7 @@ class BrowserClient:
         identifier: Optional[str] = DEFAULT_IDENTIFIER,
         name: Optional[str] = None,
         session_timeout_seconds: Optional[int] = DEFAULT_SESSION_TIMEOUT,
+        viewport: Optional[Dict[str, int]] = None,
     ) -> str:
         """Start a browser sandbox session.
 
@@ -111,19 +112,31 @@ class BrowserClient:
                 will be generated using a UUID.
             session_timeout_seconds (Optional[int]): The timeout for the session in seconds.
                 Defaults to DEFAULT_TIMEOUT.
-            description (Optional[str]): A description for this session.
-                Defaults to an empty string.
+            viewport (Optional[Dict[str, int]]): The viewport dimensions for the browser.
+                Should be a dict with 'width' and 'height' keys (e.g., {'width': 1920, 'height': 1080}).
+                If not provided, the service default viewport will be used.
 
         Returns:
             str: The session ID of the newly created session.
+
+        Example:
+            >>> client = BrowserClient('us-west-2')
+            >>> session_id = client.start(viewport={'width': 1920, 'height': 1080})
         """
         self.logger.info("Starting browser session...")
 
-        response = self.client.start_browser_session(
-            browserIdentifier=identifier,
-            name=name or f"browser-session-{uuid.uuid4().hex[:8]}",
-            sessionTimeoutSeconds=session_timeout_seconds,
-        )
+        # Build the request parameters
+        request_params = {
+            "browserIdentifier": identifier,
+            "name": name or f"browser-session-{uuid.uuid4().hex[:8]}",
+            "sessionTimeoutSeconds": session_timeout_seconds,
+        }
+
+        # Add viewport if provided
+        if viewport is not None:
+            request_params["viewPort"] = viewport
+
+        response = self.client.start_browser_session(**request_params)
 
         self.identifier = response["browserIdentifier"]
         self.session_id = response["sessionId"]
@@ -306,26 +319,18 @@ class BrowserClient:
 
 
 @contextmanager
-def browser_session(region: str) -> Generator[BrowserClient, None, None]:
+def browser_session(region: str, viewport: Optional[Dict[str, int]] = None) -> Generator[BrowserClient, None, None]:
     """Context manager for creating and managing a browser sandbox session.
-
-    This context manager handles creating a client, starting a session, and
-    ensuring the session is properly cleaned up when the context exits.
 
     Args:
         region (str): The AWS region to use for the Browser service.
+        viewport (Optional[Dict[str, int]]): The viewport dimensions for the browser.
 
     Yields:
         BrowserClient: An initialized and started browser client.
-
-    Example:
-        >>> with browser_session('us-west-2') as client:
-        ...     browser = client.get_browser_obj()
-        ...     page = browser.new_page()
-        ...     page.goto('https://example.com')
     """
     client = BrowserClient(region)
-    client.start()
+    client.start(viewport=viewport)
 
     try:
         yield client

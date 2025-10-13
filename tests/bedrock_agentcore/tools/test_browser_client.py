@@ -71,10 +71,12 @@ class TestBrowserClient:
         assert client.session_id == "session-123"
 
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_start_with_custom_params(self, mock_boto3):
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_custom_params(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_client = MagicMock()
         mock_boto3.client.return_value = mock_client
+        mock_uuid4.return_value.hex = "12345678abcdef"
 
         client = BrowserClient("us-west-2")
         mock_response = {"browserIdentifier": "custom.browser", "sessionId": "custom-session-123"}
@@ -361,3 +363,46 @@ class TestBrowserClient:
             sessionId="test-session-id",
             streamUpdate={"automationStreamUpdate": {"streamStatus": "ENABLED"}},
         )
+
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_viewport(self, mock_uuid4, mock_boto3):
+        # Arrange
+        mock_client = MagicMock()
+        mock_boto3.client.return_value = mock_client
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        mock_client.start_browser_session.return_value = mock_response
+        viewport = {"width": 1920, "height": 1080}
+
+        # Act
+        session_id = client.start(viewport=viewport)
+
+        # Assert
+        mock_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+            viewPort=viewport,
+        )
+        assert session_id == "session-123"
+        assert client.identifier == "aws.browser.v1"
+        assert client.session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.BrowserClient")
+    def test_browser_session_context_manager_with_viewport(self, mock_client_class):
+        # Arrange
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        viewport = {"width": 1280, "height": 720}
+
+        # Act
+        with browser_session("us-west-2", viewport=viewport):
+            pass
+
+        # Assert
+        mock_client_class.assert_called_once_with("us-west-2")
+        mock_client.start.assert_called_once_with(viewport=viewport)
+        mock_client.stop.assert_called_once()
