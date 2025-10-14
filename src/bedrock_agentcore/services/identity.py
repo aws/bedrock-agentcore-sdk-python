@@ -4,8 +4,9 @@ import asyncio
 import logging
 import time
 import uuid
+from pydantic import BaseModel
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 import boto3
 
@@ -55,6 +56,11 @@ class _DefaultApiTokenPoller(TokenPoller):
             + "User may not have completed authorization."
         )
 
+class UserTokenIdentifier(BaseModel):
+    user_token: str
+
+class UserIdIdentifier(BaseModel):
+    user_id: str
 
 class IdentityClient:
     """A high-level client for Bedrock AgentCore Identity."""
@@ -102,13 +108,33 @@ class IdentityClient:
         self.logger.info("Successfully retrieved workload access token")
         return resp
 
-    def create_workload_identity(self, name: Optional[str] = None) -> Dict:
+    def create_workload_identity(self, name: Optional[str] = None, allowed_resource_oauth_2_return_urls: Optional[list[str]] = None) -> Dict:
         """Create workload identity with optional name."""
         self.logger.info("Creating workload identity...")
         if not name:
             name = f"workload-{uuid.uuid4().hex[:8]}"
-        return self.identity_client.create_workload_identity(name=name)
-
+        return self.identity_client.create_workload_identity(name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls or list())
+    
+    def update_workload_identity(self, name: str, allowed_resource_oauth_2_return_urls: list[str]) -> Dict:
+        self.logger.info(f"Updating workload identity [{name}]")
+        return self.identity_client.update_workload_identity(name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls)
+    
+    def complete_resource_token_auth(self, session_uri: str, user_identifier: Union[UserTokenIdentifier, UserIdIdentifier]):
+        self.logger.info(f"Completing 3LO OAuth2 flow...")
+        
+        user_identifier_value = {}
+        if isinstance(user_identifier, UserIdIdentifier):
+            user_identifier_value['userId'] = user_identifier.user_id
+        elif isinstance(user_identifier, UserTokenIdentifier):
+            user_identifier_value['userToken'] = user_identifier.user_token
+        else:
+            raise Exception(f'Unexpected UserIdentifier: {user_identifier}')
+        
+        return self.dp_client.complete_resource_token_auth(
+                userIdentifier=user_identifier_value,
+                sessionUri=session_uri
+            )
+    
     async def get_token(
         self,
         *,
@@ -155,8 +181,11 @@ class IdentityClient:
             req["resourceOauth2ReturnUrl"] = callback_url
         if force_authentication:
             req["forceAuthentication"] = force_authentication
+        
+        self.logger.info(f"Getting OAuth2 token.......... force_authentication={force_authentication}")
 
         response = self.dp_client.get_resource_oauth2_token(**req)
+        self.logger.info(f"Getting OAuth2 token response={response}")
 
         # If we got a token directly, return it
         if "accessToken" in response:

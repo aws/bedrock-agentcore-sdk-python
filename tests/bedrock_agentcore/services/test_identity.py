@@ -427,7 +427,7 @@ class TestIdentityClient:
             result = identity_client.create_workload_identity(name=custom_name)
 
             assert result == expected_response
-            mock_identity_client.create_workload_identity.assert_called_with(name=custom_name)
+            mock_identity_client.create_workload_identity.assert_called_with(name=custom_name, allowedResourceOauth2ReturnUrls=list())
 
             # Test without provided name (auto-generated)
             mock_identity_client.reset_mock()
@@ -440,7 +440,7 @@ class TestIdentityClient:
                 result = identity_client.create_workload_identity()
 
                 assert result == expected_response_auto
-                mock_identity_client.create_workload_identity.assert_called_with(name="workload-abcd1234")
+                mock_identity_client.create_workload_identity.assert_called_with(name="workload-abcd1234", allowedResourceOauth2ReturnUrls=list())
 
 
 class TestDefaultApiTokenPoller:

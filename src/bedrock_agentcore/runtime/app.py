@@ -22,6 +22,7 @@ from .context import BedrockAgentCoreContext, RequestContext
 from .models import (
     ACCESS_TOKEN_HEADER,
     AUTHORIZATION_HEADER,
+    CALLBACK_URL_HEADER,
     CUSTOM_HEADER_PREFIX,
     REQUEST_ID_HEADER,
     SESSION_HEADER,
@@ -280,6 +281,10 @@ class BedrockAgentCoreApp(Starlette):
             agent_identity_token = headers.get(ACCESS_TOKEN_HEADER)
             if agent_identity_token:
                 BedrockAgentCoreContext.set_workload_access_token(agent_identity_token)
+                
+            agent_workload_callback_url = headers.get(CALLBACK_URL_HEADER)
+            if agent_workload_callback_url:
+                BedrockAgentCoreContext.set_workload_callback_url(agent_workload_callback_url)
 
             # Collect relevant request headers (Authorization + Custom headers)
             request_headers = {}

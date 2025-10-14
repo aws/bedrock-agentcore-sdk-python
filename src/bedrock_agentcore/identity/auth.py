@@ -56,7 +56,7 @@ def requires_access_token(
                 scopes=scopes,
                 on_auth_url=on_auth_url,
                 auth_flow=auth_flow,
-                callback_url=callback_url,
+                callback_url=_get_workload_callback_url(callback_url),
                 force_authentication=force_authentication,
                 token_poller=token_poller,
             )
@@ -143,6 +143,11 @@ def requires_api_key(*, provider_name: str, into: str = "api_key") -> Callable:
 
     return decorator
 
+def _get_workload_callback_url(user_provider_callback_url: Optional[str]):
+    if user_provider_callback_url:
+        return user_provider_callback_url
+    
+    return BedrockAgentCoreContext.get_workload_callback_url()
 
 async def _get_workload_access_token(client: IdentityClient) -> str:
     token = BedrockAgentCoreContext.get_workload_access_token()
