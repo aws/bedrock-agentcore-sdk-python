@@ -81,7 +81,7 @@ dev = [
 requires-dist = [
     { name = "boto3", specifier = ">=1.40.35" },
     { name = "botocore", specifier = ">=1.40.35" },
-    { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
+    { name = "pydantic", specifier = ">=2.0.0,<2.41.3" },
     { name = "starlette", specifier = ">=0.46.2" },
     { name = "strands-agents", marker = "extra == 'strands-agents'", specifier = ">=1.1.0" },
     { name = "typing-extensions", specifier = ">=4.13.2,<5.0.0" },
