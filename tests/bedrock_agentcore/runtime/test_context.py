@@ -42,8 +42,7 @@ class TestBedrockAgentCoreContext:
         ctx = contextvars.Context()
 
         def test_in_new_context():
-            result = BedrockAgentCoreContext.get_workload_callback_url()
-            return result
+            return BedrockAgentCoreContext.get_workload_callback_url()
 
         result = ctx.run(test_in_new_context)
         assert result is None
