@@ -113,11 +113,15 @@ class IdentityClient:
         self.logger.info("Creating workload identity...")
         if not name:
             name = f"workload-{uuid.uuid4().hex[:8]}"
-        return self.identity_client.create_workload_identity(name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls or list())
+        return self.identity_client.create_workload_identity(name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls or [])
     
     def update_workload_identity(self, name: str, allowed_resource_oauth_2_return_urls: list[str]) -> Dict:
-        self.logger.info(f"Updating workload identity [{name}]")
+        self.logger.info(f"Updating workload identity '{name}' with callback urls: {allowed_resource_oauth_2_return_urls}")
         return self.identity_client.update_workload_identity(name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls)
+    
+    def get_workload_identity(self, name: str) -> Dict:
+        self.logger.info(f"Fetching workload identity '{name}'")
+        return self.cp_client.get_workload_identity(name=name)
     
     def complete_resource_token_auth(self, session_uri: str, user_identifier: Union[UserTokenIdentifier, UserIdIdentifier]):
         self.logger.info(f"Completing 3LO OAuth2 flow...")
@@ -128,7 +132,7 @@ class IdentityClient:
         elif isinstance(user_identifier, UserTokenIdentifier):
             user_identifier_value['userToken'] = user_identifier.user_token
         else:
-            raise Exception(f'Unexpected UserIdentifier: {user_identifier}')
+            raise ValueError(f'Unexpected UserIdentifier: {user_identifier}')
         
         return self.dp_client.complete_resource_token_auth(
                 userIdentifier=user_identifier_value,
