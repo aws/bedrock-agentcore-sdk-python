@@ -127,7 +127,7 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
         run: |
           BRANCH_NAME="release/v$NEW_VERSION"
-          
+
           WARNING_TEXT=""
           if [ "$GITHUB_REF" != "refs/heads/main" ]; then
             WARNING_TEXT="**WARNING**: Not running from main branch!"
