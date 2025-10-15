@@ -4,11 +4,11 @@ import asyncio
 import logging
 import time
 import uuid
-from pydantic import BaseModel
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 import boto3
+from pydantic import BaseModel
 
 from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
 
@@ -58,10 +58,14 @@ class _DefaultApiTokenPoller(TokenPoller):
 
 
 class UserTokenIdentifier(BaseModel):
+    """The OAuth2.0 token issued by the user's identity provider."""
+
     user_token: str
 
 
 class UserIdIdentifier(BaseModel):
+    """The ID of the user for whom you have retrieved a workload access token for."""
+
     user_id: str
 
 
@@ -123,21 +127,24 @@ class IdentityClient:
         )
 
     def update_workload_identity(self, name: str, allowed_resource_oauth_2_return_urls: list[str]) -> Dict:
+        """Update an existing workload identity with allowed resource OAuth2 callback urls."""
         self.logger.info(
-            f"Updating workload identity '{name}' with callback urls: {allowed_resource_oauth_2_return_urls}"
+            "Updating workload identity '%s' with callback urls: %s", name, allowed_resource_oauth_2_return_urls
         )
         return self.identity_client.update_workload_identity(
             name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls
         )
 
     def get_workload_identity(self, name: str) -> Dict:
-        self.logger.info(f"Fetching workload identity '{name}'")
+        """Retrieves information about a workload identity."""
+        self.logger.info("Fetching workload identity '%s'", name)
         return self.cp_client.get_workload_identity(name=name)
 
     def complete_resource_token_auth(
         self, session_uri: str, user_identifier: Union[UserTokenIdentifier, UserIdIdentifier]
     ):
-        self.logger.info(f"Completing 3LO OAuth2 flow...")
+        """Confirms the user authentication session for obtaining OAuth2.0 tokens for a resource."""
+        self.logger.info("Completing 3LO OAuth2 flow...")
 
         user_identifier_value = {}
         if isinstance(user_identifier, UserIdIdentifier):
