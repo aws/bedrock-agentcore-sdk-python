@@ -143,11 +143,13 @@ def requires_api_key(*, provider_name: str, into: str = "api_key") -> Callable:
 
     return decorator
 
-def _get_workload_callback_url(user_provider_callback_url: Optional[str]):
-    if user_provider_callback_url:
-        return user_provider_callback_url
-    
+
+def _get_workload_callback_url(user_provided_callback_url: Optional[str]):
+    if user_provided_callback_url:
+        return user_provided_callback_url
+
     return BedrockAgentCoreContext.get_workload_callback_url()
+
 
 async def _get_workload_access_token(client: IdentityClient) -> str:
     token = BedrockAgentCoreContext.get_workload_access_token()

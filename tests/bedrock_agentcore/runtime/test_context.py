@@ -28,7 +28,7 @@ class TestBedrockAgentCoreContext:
 
         result = ctx.run(test_in_new_context)
         assert result is None
-        
+
     def test_set_and_get_workload_callback_url(self):
         callback_url = "http://unit-test"
 

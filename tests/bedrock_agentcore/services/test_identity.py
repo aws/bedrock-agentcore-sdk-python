@@ -429,7 +429,9 @@ class TestIdentityClient:
             result = identity_client.create_workload_identity(name=custom_name)
 
             assert result == expected_response
-            mock_identity_client.create_workload_identity.assert_called_with(name=custom_name, allowedResourceOauth2ReturnUrls=[])
+            mock_identity_client.create_workload_identity.assert_called_with(
+                name=custom_name, allowedResourceOauth2ReturnUrls=[]
+            )
 
             # Test without provided name (auto-generated)
             mock_identity_client.reset_mock()
@@ -442,7 +444,9 @@ class TestIdentityClient:
                 result = identity_client.create_workload_identity()
 
                 assert result == expected_response_auto
-                mock_identity_client.create_workload_identity.assert_called_with(name="workload-abcd1234", allowedResourceOauth2ReturnUrls=[])
+                mock_identity_client.create_workload_identity.assert_called_with(
+                    name="workload-abcd1234", allowedResourceOauth2ReturnUrls=[]
+                )
 
     def test_update_workload_identity(self):
         region = "us-west-2"
@@ -467,7 +471,7 @@ class TestIdentityClient:
             mock_identity_client.update_workload_identity.assert_called_once_with(
                 name=workload_name, allowedResourceOauth2ReturnUrls=allowed_urls
             )
-            
+
     def test_get_workload_identity(self):
         region = "us-west-2"
 
@@ -555,7 +559,7 @@ class TestIdentityClient:
             invalid_identifier = "invalid-string"  # Not a UserIdIdentifier or UserTokenIdentifier
 
             with pytest.raises(ValueError, match="Unexpected UserIdentifier"):
-                identity_client.complete_resource_token_auth(session_uri, invalid_identifier) # type: ignore - unit test
+                identity_client.complete_resource_token_auth(session_uri, invalid_identifier)  # type: ignore - unit test
 
 
 class TestDefaultApiTokenPoller:

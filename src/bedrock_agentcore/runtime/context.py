@@ -37,7 +37,7 @@ class BedrockAgentCoreContext:
             return cls._workload_access_token.get()
         except LookupError:
             return None
-        
+
     @classmethod
     def set_workload_callback_url(cls, workload_callback_url: str):
         """Set the workload callback url in the context."""

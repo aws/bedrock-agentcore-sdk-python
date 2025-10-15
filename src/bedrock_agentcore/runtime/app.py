@@ -281,7 +281,7 @@ class BedrockAgentCoreApp(Starlette):
             agent_identity_token = headers.get(ACCESS_TOKEN_HEADER)
             if agent_identity_token:
                 BedrockAgentCoreContext.set_workload_access_token(agent_identity_token)
-                
+
             agent_workload_callback_url = headers.get(CALLBACK_URL_HEADER)
             if agent_workload_callback_url:
                 BedrockAgentCoreContext.set_workload_callback_url(agent_workload_callback_url)
