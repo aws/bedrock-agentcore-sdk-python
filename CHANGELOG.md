@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.0] - 2025-10-15
+
+### Fixed
+- fix: rename list_events parameter include_parent_events to include_parent_branches to match the boto3 parameter (#108) (ee35ade)
+- fix: add the include_parent_events parameter to the get_last_k_turns method (#107) (eee67da)
+- fix: fix session name typo in get_last_k_turns (#104) (1ba3e1c)
+
+### Documentation
+- docs: remove preview verbiage following Bedrock AgentCore GA release (#113) (9d496aa)
+
+### Other Changes
+- fix(deps): restrict pydantic to versions below 2.41.3 (#115) (b4a49b9)
+- feat(browser): Add viewport configuration support to BrowserClient (#112) (014a6b8)
+- chore: bump version to 0.1.7 (#103) (d572d68)
+
 ## [0.1.7] - 2025-10-01
 
 ### Fixed

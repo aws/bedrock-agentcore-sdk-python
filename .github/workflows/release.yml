@@ -65,20 +65,23 @@ jobs:
 
       - name: Bump version
         id: bump
+        env:
+          CHANGELOG_INPUT: ${{ github.event.inputs.changelog }}
+          BUMP_TYPE: ${{ github.event.inputs.bump_type }}
         run: |
           chmod +x scripts/bump_version.py
 
           # If no custom changelog, provide guidance
-          if [ -z "${{ github.event.inputs.changelog }}" ]; then
+          if [ -z "$CHANGELOG_INPUT" ]; then
             echo "ℹ️  No custom changelog provided. Will auto-generate from commits."
             echo "💡 Tip: Provide a meaningful changelog message for better release notes"
           fi
 
-          if [ -n "${{ github.event.inputs.changelog }}" ]; then
-            python scripts/bump_version.py ${{ github.event.inputs.bump_type }} \
-              --changelog "${{ github.event.inputs.changelog }}"
+          if [ -n "$CHANGELOG_INPUT" ]; then
+            python scripts/bump_version.py "$BUMP_TYPE" \
+              --changelog "$CHANGELOG_INPUT"
           else
-            python scripts/bump_version.py ${{ github.event.inputs.bump_type }}
+            python scripts/bump_version.py "$BUMP_TYPE"
           fi
 
           uv lock --no-progress
@@ -88,8 +91,10 @@ jobs:
           echo "New version: $NEW_VERSION"
 
       - name: Create release branch and PR
+        env:
+          NEW_VERSION: ${{ steps.bump.outputs.version }}
         run: |
-          BRANCH_NAME="release/v${{ steps.bump.outputs.version }}"
+          BRANCH_NAME="release/v$NEW_VERSION"
 
           if git ls-remote --exit-code --heads origin $BRANCH_NAME; then
             echo "⚠️  Branch $BRANCH_NAME already exists. Deleting it first..."
@@ -102,14 +107,14 @@ jobs:
 
           git checkout -b $BRANCH_NAME
           git add -A
-          git commit -m "chore: bump version to ${{ steps.bump.outputs.version }}
+          git commit -m "chore: bump version to $NEW_VERSION
 
           Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
 
           git push origin $BRANCH_NAME
 
           COMMITTED_VERSION=$(git show HEAD:pyproject.toml | grep -m1 -oP '^version = "\K[^"]+')
-          if [ "$COMMITTED_VERSION" != "${{ steps.bump.outputs.version }}" ]; then
+          if [ "$COMMITTED_VERSION" != "$NEW_VERSION" ]; then
             echo "❌ ERROR: Version not committed correctly!"
             exit 1
           fi
@@ -117,14 +122,24 @@ jobs:
       - name: Create Pull Request
         env:
           GH_TOKEN: ${{ github.token }}
+          NEW_VERSION: ${{ steps.bump.outputs.version }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_ACTOR: ${{ github.actor }}
         run: |
-          BRANCH_NAME="release/v${{ steps.bump.outputs.version }}"
+          BRANCH_NAME="release/v$NEW_VERSION"
+
+          WARNING_TEXT=""
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            WARNING_TEXT="**WARNING**: Not running from main branch!"
+          else
+            WARNING_TEXT="✅ Running from main branch"
+          fi
 
           gh pr create \
             --base main \
-            --head $BRANCH_NAME \
-            --title "Release v${{ steps.bump.outputs.version }}" \
-            --body "## 🚀 Release v${{ steps.bump.outputs.version }}
+            --head "$BRANCH_NAME" \
+            --title "Release v$NEW_VERSION" \
+            --body "## 🚀 Release v$NEW_VERSION
 
           This PR was automatically created by the release workflow.
 
@@ -145,11 +160,11 @@ jobs:
           2. **Manual approval required** before publishing to PyPI
           3. GitHub release and tag created after PyPI publication
 
-          ### 🚨 Running from: ${{ github.ref }}
-          ${{ github.ref != 'refs/heads/main' && '**WARNING**: Not running from main branch!' || '✅ Running from main branch' }}
+          ### 🚨 Running from: $GITHUB_REF
+          $WARNING_TEXT
 
           ---
-          *Triggered by @${{ github.actor }}*"
+          *Triggered by @$GITHUB_ACTOR*"
 
   test-and-build:
     name: Test and Build
@@ -162,8 +177,9 @@ jobs:
           ref: release/v${{ needs.prepare-release.outputs.version }}
 
       - name: Verify version before build
+        env:
+          EXPECTED_VERSION: ${{ needs.prepare-release.outputs.version }}
         run: |
-          EXPECTED_VERSION="${{ needs.prepare-release.outputs.version }}"
           ACTUAL_VERSION=$(grep -m1 -oP '^version = "\K[^"]+' pyproject.toml)
 
           echo "Expected version: $EXPECTED_VERSION"
@@ -252,8 +268,10 @@ jobs:
           path: dist/
 
       - name: Verify PyPI token exists
+        env:
+          PYPI_TOKEN_SET: ${{ secrets.PYPI_API_TOKEN != '' }}
         run: |
-          if [ -z "${{ secrets.PYPI_API_TOKEN }}" ]; then
+          if [ "$PYPI_TOKEN_SET" != "true" ]; then
             echo "❌ ERROR: PYPI_API_TOKEN not configured!"
             echo "Please add your PyPI API token to GitHub Secrets"
             exit 1
@@ -267,9 +285,9 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if version exists on PyPI
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
           # Check if version already exists on PyPI
           if pip index versions bedrock-agentcore | grep -q "^Available versions.*$VERSION"; then
             echo "❌ ERROR: Version $VERSION already exists on PyPI!"
@@ -283,15 +301,14 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          # MUST specify password to avoid Trusted Publishing issues
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: false
           verbose: true
 
       - name: Wait for PyPI availability
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
           echo "Waiting for package to be available on PyPI..."
           for i in {1..10}; do
             if pip index versions bedrock-agentcore | grep -q "$VERSION"; then
@@ -303,14 +320,19 @@ jobs:
           done
 
       - name: Create and push tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a v${{ steps.version.outputs.version }} -m "Release v${{ steps.version.outputs.version }}"
-          git push origin v${{ steps.version.outputs.version }}
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: Bedrock AgentCore SDK v${{ steps.version.outputs.version }}

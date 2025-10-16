@@ -5,9 +5,10 @@ import logging
 import time
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 import boto3
+from pydantic import BaseModel
 
 from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
 
@@ -56,6 +57,18 @@ class _DefaultApiTokenPoller(TokenPoller):
         )
 
 
+class UserTokenIdentifier(BaseModel):
+    """The OAuth2.0 token issued by the user's identity provider."""
+
+    user_token: str
+
+
+class UserIdIdentifier(BaseModel):
+    """The ID of the user for whom you have retrieved a workload access token for."""
+
+    user_id: str
+
+
 class IdentityClient:
     """A high-level client for Bedrock AgentCore Identity."""
 
@@ -102,12 +115,46 @@ class IdentityClient:
         self.logger.info("Successfully retrieved workload access token")
         return resp
 
-    def create_workload_identity(self, name: Optional[str] = None) -> Dict:
+    def create_workload_identity(
+        self, name: Optional[str] = None, allowed_resource_oauth_2_return_urls: Optional[list[str]] = None
+    ) -> Dict:
         """Create workload identity with optional name."""
         self.logger.info("Creating workload identity...")
         if not name:
             name = f"workload-{uuid.uuid4().hex[:8]}"
-        return self.identity_client.create_workload_identity(name=name)
+        return self.identity_client.create_workload_identity(
+            name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls or []
+        )
+
+    def update_workload_identity(self, name: str, allowed_resource_oauth_2_return_urls: list[str]) -> Dict:
+        """Update an existing workload identity with allowed resource OAuth2 callback urls."""
+        self.logger.info(
+            "Updating workload identity '%s' with callback urls: %s", name, allowed_resource_oauth_2_return_urls
+        )
+        return self.identity_client.update_workload_identity(
+            name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls
+        )
+
+    def get_workload_identity(self, name: str) -> Dict:
+        """Retrieves information about a workload identity."""
+        self.logger.info("Fetching workload identity '%s'", name)
+        return self.cp_client.get_workload_identity(name=name)
+
+    def complete_resource_token_auth(
+        self, session_uri: str, user_identifier: Union[UserTokenIdentifier, UserIdIdentifier]
+    ):
+        """Confirms the user authentication session for obtaining OAuth2.0 tokens for a resource."""
+        self.logger.info("Completing 3LO OAuth2 flow...")
+
+        user_identifier_value = {}
+        if isinstance(user_identifier, UserIdIdentifier):
+            user_identifier_value["userId"] = user_identifier.user_id
+        elif isinstance(user_identifier, UserTokenIdentifier):
+            user_identifier_value["userToken"] = user_identifier.user_token
+        else:
+            raise ValueError(f"Unexpected UserIdentifier: {user_identifier}")
+
+        return self.dp_client.complete_resource_token_auth(userIdentifier=user_identifier_value, sessionUri=session_uri)
 
     async def get_token(
         self,
@@ -120,6 +167,7 @@ class IdentityClient:
         callback_url: Optional[str] = None,
         force_authentication: bool = False,
         token_poller: Optional[TokenPoller] = None,
+        custom_state: Optional[str] = None,
     ) -> str:
         """Get an OAuth2 access token for the specified provider.
 
@@ -132,6 +180,7 @@ class IdentityClient:
             callback_url: OAuth2 callback URL (must be pre-registered)
             force_authentication: Force re-authentication even if token exists in the token vault
             token_poller: Custom token poller implementation
+            custom_state: A state that allows applications to verify the validity of callbacks to callback_url
 
         Returns:
             The access token string
@@ -155,6 +204,8 @@ class IdentityClient:
             req["resourceOauth2ReturnUrl"] = callback_url
         if force_authentication:
             req["forceAuthentication"] = force_authentication
+        if custom_state:
+            req["customState"] = custom_state
 
         response = self.dp_client.get_resource_oauth2_token(**req)
 
@@ -175,6 +226,9 @@ class IdentityClient:
             # only the initial request should have force authentication
             if force_authentication:
                 req["forceAuthentication"] = False
+
+            if "sessionUri" in response:
+                req["sessionUri"] = response["sessionUri"]
 
             # Poll for the token
             active_poller = token_poller or _DefaultApiTokenPoller(

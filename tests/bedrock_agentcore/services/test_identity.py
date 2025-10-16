@@ -9,6 +9,8 @@ from bedrock_agentcore.services.identity import (
     DEFAULT_POLLING_INTERVAL_SECONDS,
     DEFAULT_POLLING_TIMEOUT_SECONDS,
     IdentityClient,
+    UserIdIdentifier,
+    UserTokenIdentifier,
     _DefaultApiTokenPoller,
 )
 
@@ -117,11 +119,13 @@ class TestIdentityClient:
             agent_identity_token = "test-agent-token"
             auth_url = "https://example.com/auth"
             expected_token = "test-access-token"
+            session_uri = "https://example-federation-authorization-request/12345"
 
             # First call returns auth URL, subsequent calls return token
             mock_client.get_resource_oauth2_token.side_effect = [
                 {"authorizationUrl": auth_url},
                 {"accessToken": expected_token},
+                {"sessionUri": session_uri},
             ]
 
             # Mock the token poller
@@ -239,6 +243,7 @@ class TestIdentityClient:
             agent_identity_token = "test-agent-token"
             callback_url = "https://example.com/callback"
             force_authentication = True
+            custom_state = "myAppCustomState"
             expected_token = "test-access-token"
 
             mock_client.get_resource_oauth2_token.return_value = {"accessToken": expected_token}
@@ -250,6 +255,7 @@ class TestIdentityClient:
                 auth_flow="USER_FEDERATION",
                 callback_url=callback_url,
                 force_authentication=force_authentication,
+                custom_state=custom_state,
             )
 
             assert result == expected_token
@@ -260,6 +266,7 @@ class TestIdentityClient:
                 workloadIdentityToken=agent_identity_token,
                 resourceOauth2ReturnUrl=callback_url,
                 forceAuthentication=force_authentication,
+                customState=custom_state,
             )
 
     @pytest.mark.asyncio
@@ -278,8 +285,13 @@ class TestIdentityClient:
             agent_identity_token = "test-agent-token"
             auth_url = "https://example.com/auth"
             expected_token = "test-access-token"
+            force_authentication = True
+            session_uri = "https://example-federation-authorization-request/12345"
 
-            mock_client.get_resource_oauth2_token.return_value = {"authorizationUrl": auth_url}
+            mock_client.get_resource_oauth2_token.return_value = {
+                "authorizationUrl": auth_url,
+                "sessionUri": session_uri,
+            }
 
             # Mock custom token poller
             custom_poller = Mock()
@@ -290,6 +302,7 @@ class TestIdentityClient:
                 agent_identity_token=agent_identity_token,
                 auth_flow="USER_FEDERATION",
                 token_poller=custom_poller,
+                force_authentication=force_authentication,
             )
 
             assert result == expected_token
@@ -427,7 +440,9 @@ class TestIdentityClient:
             result = identity_client.create_workload_identity(name=custom_name)
 
             assert result == expected_response
-            mock_identity_client.create_workload_identity.assert_called_with(name=custom_name)
+            mock_identity_client.create_workload_identity.assert_called_with(
+                name=custom_name, allowedResourceOauth2ReturnUrls=[]
+            )
 
             # Test without provided name (auto-generated)
             mock_identity_client.reset_mock()
@@ -440,7 +455,122 @@ class TestIdentityClient:
                 result = identity_client.create_workload_identity()
 
                 assert result == expected_response_auto
-                mock_identity_client.create_workload_identity.assert_called_with(name="workload-abcd1234")
+                mock_identity_client.create_workload_identity.assert_called_with(
+                    name="workload-abcd1234", allowedResourceOauth2ReturnUrls=[]
+                )
+
+    def test_update_workload_identity(self):
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_identity_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            workload_name = "test-workload"
+            allowed_urls = ["https://unit-test.com/callback", "https://test.com/oauth"]
+            expected_response = {"name": workload_name, "allowedResourceOauth2ReturnUrls": allowed_urls}
+
+            mock_identity_client.update_workload_identity.return_value = expected_response
+
+            result = identity_client.update_workload_identity(workload_name, allowed_urls)
+
+            assert result == expected_response
+            mock_identity_client.update_workload_identity.assert_called_once_with(
+                name=workload_name, allowedResourceOauth2ReturnUrls=allowed_urls
+            )
+
+    def test_get_workload_identity(self):
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_identity_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            workload_name = "test-workload"
+            allowed_urls = ["https://unit-test.com/callback", "https://test.com/oauth"]
+            expected_response = {"name": workload_name, "allowedResourceOauth2ReturnUrls": allowed_urls}
+
+            mock_cp_client.get_workload_identity.return_value = expected_response
+
+            result = identity_client.get_workload_identity(workload_name)
+
+            assert result == expected_response
+            mock_cp_client.get_workload_identity.assert_called_once_with(name=workload_name)
+
+    def test_complete_resource_token_auth_with_user_id(self):
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_identity_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            session_uri = "https://unit-test.com/session/123"
+            user_id = "test-user-123"
+            user_identifier = UserIdIdentifier(user_id=user_id)
+            expected_response = {}
+
+            mock_dp_client.complete_resource_token_auth.return_value = expected_response
+
+            result = identity_client.complete_resource_token_auth(session_uri, user_identifier)
+
+            assert result == expected_response
+            mock_dp_client.complete_resource_token_auth.assert_called_once_with(
+                userIdentifier={"userId": user_id}, sessionUri=session_uri
+            )
+
+    def test_complete_resource_token_auth_with_user_token(self):
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_identity_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            session_uri = "https://example.com/session/456"
+            user_token = "user-unit-test-token"
+            user_identifier = UserTokenIdentifier(user_token=user_token)
+            expected_response = {}
+
+            mock_dp_client.complete_resource_token_auth.return_value = expected_response
+
+            result = identity_client.complete_resource_token_auth(session_uri, user_identifier)
+
+            assert result == expected_response
+            mock_dp_client.complete_resource_token_auth.assert_called_once_with(
+                userIdentifier={"userToken": user_token}, sessionUri=session_uri
+            )
+
+    def test_complete_resource_token_auth_with_invalid_identifier(self):
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_identity_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            session_uri = "https://unit-test.com/session/789"
+            invalid_identifier = "invalid-string"  # Not a UserIdIdentifier or UserTokenIdentifier
+
+            with pytest.raises(ValueError, match="Unexpected UserIdentifier"):
+                identity_client.complete_resource_token_auth(session_uri, invalid_identifier)  # type: ignore - unit test
 
 
 class TestDefaultApiTokenPoller:
