@@ -29,20 +29,20 @@ class TestBedrockAgentCoreContext:
         result = ctx.run(test_in_new_context)
         assert result is None
 
-    def test_set_and_get_workload_callback_url(self):
-        callback_url = "http://unit-test"
+    def test_set_and_get_oauth2_callback_url(self):
+        oauth2_callback_url = "http://unit-test"
 
-        BedrockAgentCoreContext.set_workload_callback_url(callback_url)
-        result = BedrockAgentCoreContext.get_workload_callback_url()
+        BedrockAgentCoreContext.set_oauth2_callback_url(oauth2_callback_url)
+        result = BedrockAgentCoreContext.get_oauth2_callback_url()
 
-        assert result == callback_url
+        assert result == oauth2_callback_url
 
-    def test_get_workload_callback_url_when_none_set(self):
+    def test_get_oauth2_callback_url_when_none_set(self):
         # Run this test in a completely fresh context to avoid interference from other tests
         ctx = contextvars.Context()
 
         def test_in_new_context():
-            return BedrockAgentCoreContext.get_workload_callback_url()
+            return BedrockAgentCoreContext.get_oauth2_callback_url()
 
         result = ctx.run(test_in_new_context)
         assert result is None
