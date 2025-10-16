@@ -9,7 +9,10 @@ from typing import Any, Callable, Dict, List, Literal, Optional
 
 import boto3
 
-from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
+from bedrock_agentcore._utils.endpoints import (
+    get_control_plane_endpoint,
+    get_data_plane_endpoint,
+)
 
 
 class TokenPoller(ABC):
@@ -44,7 +47,9 @@ class _DefaultApiTokenPoller(TokenPoller):
         while time.time() - start_time < DEFAULT_POLLING_TIMEOUT_SECONDS:
             await asyncio.sleep(DEFAULT_POLLING_INTERVAL_SECONDS)
 
-            self.logger.info("Polling for token for authorization url: %s", self.auth_url)
+            self.logger.info(
+                "Polling for token for authorization url: %s", self.auth_url
+            )
             resp = self.polling_func()
             if resp is not None:
                 self.logger.info("Token is ready")
@@ -63,13 +68,19 @@ class IdentityClient:
         """Initialize the identity client with the specified region."""
         self.region = region
         self.cp_client = boto3.client(
-            "bedrock-agentcore-control", region_name=region, endpoint_url=get_control_plane_endpoint(region)
+            "bedrock-agentcore-control",
+            region_name=region,
+            endpoint_url=get_control_plane_endpoint(region),
         )
         self.identity_client = boto3.client(
-            "bedrock-agentcore-control", region_name=region, endpoint_url=get_data_plane_endpoint(region)
+            "bedrock-agentcore-control",
+            region_name=region,
+            endpoint_url=get_data_plane_endpoint(region),
         )
         self.dp_client = boto3.client(
-            "bedrock-agentcore", region_name=region, endpoint_url=get_data_plane_endpoint(region)
+            "bedrock-agentcore",
+            region_name=region,
+            endpoint_url=get_data_plane_endpoint(region),
         )
         self.logger = logging.getLogger("bedrock_agentcore.identity_client")
 
@@ -84,17 +95,26 @@ class IdentityClient:
         return self.cp_client.create_api_key_credential_provider(**req)
 
     def get_workload_access_token(
-        self, workload_name: str, user_token: Optional[str] = None, user_id: Optional[str] = None
+        self,
+        workload_name: str,
+        user_token: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> Dict:
         """Get a workload access token using workload name and optionally user token."""
         if user_token:
             if user_id is not None:
-                self.logger.warning("Both user token and user id are supplied, using user token")
+                self.logger.warning(
+                    "Both user token and user id are supplied, using user token"
+                )
             self.logger.info("Getting workload access token for JWT...")
-            resp = self.dp_client.get_workload_access_token_for_jwt(workloadName=workload_name, userToken=user_token)
+            resp = self.dp_client.get_workload_access_token_for_jwt(
+                workloadName=workload_name, userToken=user_token
+            )
         elif user_id:
             self.logger.info("Getting workload access token for user id...")
-            resp = self.dp_client.get_workload_access_token_for_user_id(workloadName=workload_name, userId=user_id)
+            resp = self.dp_client.get_workload_access_token_for_user_id(
+                workloadName=workload_name, userId=user_id
+            )
         else:
             self.logger.info("Getting workload access token...")
             resp = self.dp_client.get_workload_access_token(workloadName=workload_name)
@@ -118,6 +138,7 @@ class IdentityClient:
         on_auth_url: Optional[Callable[[str], Any]] = None,
         auth_flow: Literal["M2M", "USER_FEDERATION"],
         callback_url: Optional[str] = None,
+        custom_parameters: Optional[dict] = {},
         force_authentication: bool = False,
         token_poller: Optional[TokenPoller] = None,
     ) -> str:
@@ -130,6 +151,7 @@ class IdentityClient:
             on_auth_url: Callback for handling authorization URLs
             auth_flow: Authentication flow type ("M2M" or "USER_FEDERATION")
             callback_url: OAuth2 callback URL (must be pre-registered)
+            custom_parameters: optional parameters to be sent to the authorizer endpoint of the provider
             force_authentication: Force re-authentication even if token exists in the token vault
             token_poller: Custom token poller implementation
 
@@ -148,6 +170,7 @@ class IdentityClient:
             "scopes": scopes,
             "oauth2Flow": auth_flow,
             "workloadIdentityToken": agent_identity_token,
+            "customParameters": custom_parameters,
         }
 
         # Add optional parameters
@@ -178,15 +201,25 @@ class IdentityClient:
 
             # Poll for the token
             active_poller = token_poller or _DefaultApiTokenPoller(
-                auth_url, lambda: self.dp_client.get_resource_oauth2_token(**req).get("accessToken", None)
+                auth_url,
+                lambda: self.dp_client.get_resource_oauth2_token(**req).get(
+                    "accessToken", None
+                ),
             )
             return await active_poller.poll_for_token()
 
-        raise RuntimeError("Identity service did not return a token or an authorization URL.")
+        raise RuntimeError(
+            "Identity service did not return a token or an authorization URL."
+        )
 
-    async def get_api_key(self, *, provider_name: str, agent_identity_token: str) -> str:
+    async def get_api_key(
+        self, *, provider_name: str, agent_identity_token: str
+    ) -> str:
         """Programmatically retrieves an API key from the Identity service."""
         self.logger.info("Getting API key...")
-        req = {"resourceCredentialProviderName": provider_name, "workloadIdentityToken": agent_identity_token}
+        req = {
+            "resourceCredentialProviderName": provider_name,
+            "workloadIdentityToken": agent_identity_token,
+        }
 
         return self.dp_client.get_resource_api_key(**req)["apiKey"]

@@ -26,6 +26,7 @@ def requires_access_token(
     on_auth_url: Optional[Callable[[str], Any]] = None,
     auth_flow: Literal["M2M", "USER_FEDERATION"],
     callback_url: Optional[str] = None,
+    custom_parameters: Optional[dict] = {},
     force_authentication: bool = False,
     token_poller: Optional[TokenPoller] = None,
 ) -> Callable:
@@ -38,6 +39,7 @@ def requires_access_token(
         on_auth_url: Callback for handling authorization URLs
         auth_flow: Authentication flow type ("M2M" or "USER_FEDERATION")
         callback_url: OAuth2 callback URL
+        custom_parameters: optional parameters to be sent to the authorizer endpoint of the provider
         force_authentication: Force re-authentication
         token_poller: Custom token poller implementation
 
@@ -57,6 +59,7 @@ def requires_access_token(
                 on_auth_url=on_auth_url,
                 auth_flow=auth_flow,
                 callback_url=callback_url,
+                custom_parameters=custom_parameters,
                 force_authentication=force_authentication,
                 token_poller=token_poller,
             )
@@ -173,7 +176,9 @@ async def _set_up_local_auth(client: IdentityClient) -> str:
 
     workload_identity_name = config.get("workload_identity_name")
     if workload_identity_name:
-        print(f"Found existing workload identity from {config_path.absolute()}: {workload_identity_name}")
+        print(
+            f"Found existing workload identity from {config_path.absolute()}: {workload_identity_name}"
+        )
     else:
         workload_identity_name = client.create_workload_identity()["name"]
         print("Created a workload identity")
@@ -192,7 +197,9 @@ async def _set_up_local_auth(client: IdentityClient) -> str:
     except Exception:
         print("Warning: could not write the created workload identity to file")
 
-    return client.get_workload_access_token(workload_identity_name, user_id=user_id)["workloadAccessToken"]
+    return client.get_workload_access_token(workload_identity_name, user_id=user_id)[
+        "workloadAccessToken"
+    ]
 
 
 def _get_region() -> str:
