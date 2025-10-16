@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional, TypedDict, Union, NotRequired
+from typing import Optional, TypedDict, Union
 
 class StringValue(TypedDict):
     """Value associated with the `eventMetadata` key."""
@@ -75,7 +75,7 @@ class EventMetadataFilter(TypedDict):
     """
     left: LeftExpression
     operator: OperatorType
-    right: NotRequired[RightExpression]
+    right: Optional[RightExpression]
     
     def build_expression(left_operand: LeftExpression, operator: OperatorType, right_operand: Optional[RightExpression] = None) -> 'EventMetadataFilter':
         """
