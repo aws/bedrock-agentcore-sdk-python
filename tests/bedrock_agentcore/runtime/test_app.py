@@ -389,6 +389,36 @@ class TestBedrockAgentCoreApp:
             response = client.get("/ping")
             assert response.status_code == 200
 
+    def test_custom_middleware_on_init(self):
+        """Test that user-supplied middleware passed at init is applied."""
+        from starlette.middleware import Middleware
+        from starlette.middleware.base import BaseHTTPMiddleware
+
+        class AddHeaderMiddleware(BaseHTTPMiddleware):
+            def __init__(self, app, header_name: str = "x-test", header_value: str = "1"):
+                super().__init__(app)
+                self.header_name = header_name
+                self.header_value = header_value
+
+            async def dispatch(self, request, call_next):
+                response = await call_next(request)
+                response.headers[self.header_name] = self.header_value
+                return response
+
+        app = BedrockAgentCoreApp(
+            middleware=[Middleware(AddHeaderMiddleware, header_name="x-custom-mw", header_value="mw")]
+        )
+
+        @app.entrypoint
+        def handler(payload):
+            return {"ok": True}
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={"input": "test"})
+
+        assert response.status_code == 200
+        assert response.headers.get("x-custom-mw") == "mw"
+
 
 class TestConcurrentInvocations:
     """Test concurrent invocation handling simplified without limits."""
