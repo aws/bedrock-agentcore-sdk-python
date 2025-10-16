@@ -151,7 +151,11 @@ async def _get_workload_access_token(client: IdentityClient) -> str:
     else:
         # workload access token context var was not set, so we should be running in a local dev environment
         if os.getenv("DOCKER_CONTAINER") == "1":
-            raise ValueError("Workload access token has not been set.")
+            raise ValueError(
+                "Workload access token has not been set. If invoking agent runtime via SIGV4 inbound auth, "
+                "please specify the X-Amzn-Bedrock-AgentCore-Runtime-User-Id header and retry. "
+                "For details, see - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-oauth.html"
+            )
 
         return await _set_up_local_auth(client)
 
