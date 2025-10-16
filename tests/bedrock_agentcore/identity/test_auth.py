@@ -470,7 +470,9 @@ class TestGetWorkloadAccessToken:
             with patch("os.getenv") as mock_getenv:
                 mock_getenv.return_value = "1"  # In Docker container
 
-                with pytest.raises(ValueError, match="Workload access token has not been set.*X-Amzn-Bedrock-AgentCore-Runtime-User-Id"):
+                with pytest.raises(
+                    ValueError, match="Workload access token has not been set.*X-Amzn-Bedrock-AgentCore-Runtime-User-Id"
+                ):
                     await _get_workload_access_token(mock_client)
 
                 mock_get_token.assert_called_once()
