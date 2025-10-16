@@ -1570,7 +1570,9 @@ class TestSession:
                 result = session.add_turns(messages=[BlobMessage(blob_data)])
 
                 assert result == mock_event
-                mock_add_turns.assert_called_once_with("user-123", "session-456", [BlobMessage(blob_data)], None, None, None)
+                mock_add_turns.assert_called_once_with(
+                    "user-123", "session-456", [BlobMessage(blob_data)], None, None, None
+                )
 
     def test_session_process_turn_with_llm_delegation(self):
         """Test MemorySession.process_turn_with_llm delegates to manager."""
@@ -2203,6 +2205,7 @@ class TestEdgeCases:
                     custom_timestamp,
                 )
 
+
 class TestEventMetadataFlow:
     """Test cases for metadata support for STM in MemorySessionManager."""
 
@@ -2221,7 +2224,7 @@ class TestEventMetadataFlow:
             mock_event = {"eventId": "fork-event-123", "memoryId": "testMemory-1234567890"}
             with patch.object(manager, "add_turns", return_value=Event(mock_event)) as mock_add_turns:
                 metadata = {"location": {"stringValue": "NYC"}}
-                
+
                 result = manager.fork_conversation(
                     actor_id="user-123",
                     session_id="session-456",
@@ -2258,22 +2261,14 @@ class TestEventMetadataFlow:
             # Test with eventMetadata filter
             event_metadata_filter = [
                 {
-                    'left': {
-                        'metadataKey': 'location'
-                    },
-                    'operator': 'EQUALS_TO',
-                    'right': {
-                        'metadataValue': {
-                            'stringValue': 'NYC'
-                        }
-                    }
+                    "left": {"metadataKey": "location"},
+                    "operator": "EQUALS_TO",
+                    "right": {"metadataValue": {"stringValue": "NYC"}},
                 }
             ]
 
             result = manager.list_events(
-                actor_id="user-123", 
-                session_id="session-456", 
-                eventMetadata=event_metadata_filter
+                actor_id="user-123", session_id="session-456", eventMetadata=event_metadata_filter
             )
 
             assert len(result) == 1
@@ -2302,24 +2297,18 @@ class TestEventMetadataFlow:
             # Test with both branch and eventMetadata filters
             event_metadata_filter = [
                 {
-                    'left': {
-                        'metadataKey': 'location'
-                    },
-                    'operator': 'EQUALS_TO',
-                    'right': {
-                        'metadataValue': {
-                            'stringValue': 'NYC'
-                        }
-                    }
+                    "left": {"metadataKey": "location"},
+                    "operator": "EQUALS_TO",
+                    "right": {"metadataValue": {"stringValue": "NYC"}},
                 }
             ]
 
             result = manager.list_events(
-                actor_id="user-123", 
-                session_id="session-456", 
+                actor_id="user-123",
+                session_id="session-456",
                 branch_name="test-branch",
                 include_parent_branches=True,
-                eventMetadata=event_metadata_filter
+                eventMetadata=event_metadata_filter,
             )
 
             assert len(result) == 1
@@ -2343,23 +2332,14 @@ class TestEventMetadataFlow:
             mock_events = [Event({"eventId": "event-1"})]
             event_metadata_filter = [
                 {
-                    'left': {
-                        'metadataKey': 'location'
-                    },
-                    'operator': 'EQUALS_TO',
-                    'right': {
-                        'metadataValue': {
-                            'stringValue': 'NYC'
-                        }
-                    }
+                    "left": {"metadataKey": "location"},
+                    "operator": "EQUALS_TO",
+                    "right": {"metadataValue": {"stringValue": "NYC"}},
                 }
             ]
 
             with patch.object(manager, "list_events", return_value=mock_events) as mock_list_events:
-                result = session.list_events(
-                    branch_name="test-branch",
-                    eventMetadata=event_metadata_filter
-                )
+                result = session.list_events(branch_name="test-branch", eventMetadata=event_metadata_filter)
 
                 assert result == mock_events
                 mock_list_events.assert_called_once_with(
@@ -2383,7 +2363,7 @@ class TestEventMetadataFlow:
             # Mock manager method
             mock_event = Event({"eventId": "fork-event-123"})
             metadata = {"location": {"stringValue": "NYC"}}
-            
+
             with patch.object(manager, "fork_conversation", return_value=mock_event) as mock_fork:
                 result = session.fork_conversation(
                     messages=[ConversationalMessage("Fork message", MessageRole.USER)],
@@ -2416,7 +2396,7 @@ class TestEventMetadataFlow:
             mock_response = "LLM response"
             mock_event = {"eventId": "event-123"}
             metadata = {"location": {"stringValue": "NYC"}}
-            
+
             with patch.object(
                 manager, "process_turn_with_llm", return_value=(mock_memories, mock_response, mock_event)
             ) as mock_process:
@@ -2425,24 +2405,13 @@ class TestEventMetadataFlow:
                     return "Response"
 
                 memories, response, event = session.process_turn_with_llm(
-                    user_input="Hello", 
-                    llm_callback=mock_llm, 
-                    retrieval_config=None,
-                    metadata=metadata
+                    user_input="Hello", llm_callback=mock_llm, retrieval_config=None, metadata=metadata
                 )
 
                 assert memories == mock_memories
                 assert response == mock_response
                 assert event == mock_event
-                mock_process.assert_called_once_with(
-                    "user-123", 
-                    "session-456", 
-                    "Hello", 
-                    mock_llm, 
-                    None, 
-                    metadata,
-                    None
-                )
+                mock_process.assert_called_once_with("user-123", "session-456", "Hello", mock_llm, None, metadata, None)
 
     def test_process_turn_with_llm_with_metadata_parameter(self):
         """Test process_turn_with_llm with metadata parameter."""
@@ -2468,7 +2437,7 @@ class TestEventMetadataFlow:
                     # Test process_turn_with_llm with metadata
                     retrieval_config = {"test/namespace": RetrievalConfig(top_k=5)}
                     metadata = {"location": {"stringValue": "NYC"}}
-                    
+
                     memories, response, event = manager.process_turn_with_llm(
                         actor_id="user-123",
                         session_id="session-456",
@@ -2507,12 +2476,9 @@ class TestEventMetadataFlow:
                 ConversationalMessage("Hi there", MessageRole.ASSISTANT),
             ]
             metadata = {"location": {"stringValue": "NYC"}}
-            
+
             result = manager.add_turns(
-                actor_id="user-123", 
-                session_id="session-456", 
-                messages=messages,
-                metadata=metadata
+                actor_id="user-123", session_id="session-456", messages=messages, metadata=metadata
             )
 
             assert isinstance(result, Event)
@@ -2534,21 +2500,15 @@ class TestEventMetadataFlow:
             # Mock manager method
             mock_event = Event({"eventId": "event-123"})
             metadata = {"location": {"stringValue": "NYC"}}
-            
+
             with patch.object(manager, "add_turns", return_value=mock_event) as mock_add_turns:
                 result = session.add_turns(
-                    messages=[ConversationalMessage("Hello", MessageRole.USER)],
-                    metadata=metadata
+                    messages=[ConversationalMessage("Hello", MessageRole.USER)], metadata=metadata
                 )
 
                 assert result == mock_event
                 mock_add_turns.assert_called_once_with(
-                    "user-123", 
-                    "session-456", 
-                    [ConversationalMessage("Hello", MessageRole.USER)], 
-                    None, 
-                    metadata,
-                    None
+                    "user-123", "session-456", [ConversationalMessage("Hello", MessageRole.USER)], None, metadata, None
                 )
 
 
@@ -2924,7 +2884,9 @@ class TestAdditionalCoverage:
                 session.add_turns(messages=messages, branch=branch, event_timestamp=custom_timestamp)
 
                 # Verify the exact parameter order: actor_id, session_id, messages, branch, event_timestamp
-                mock_add_turns.assert_called_once_with("user-123", "session-456", messages, branch, None, custom_timestamp)
+                mock_add_turns.assert_called_once_with(
+                    "user-123", "session-456", messages, branch, None, custom_timestamp
+                )
 
     def test_process_turn_with_llm_no_relevance_score_config(self):
         """Test process_turn_with_llm when RetrievalConfig has no relevance_score."""

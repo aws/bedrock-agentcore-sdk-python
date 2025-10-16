@@ -16,10 +16,10 @@ from .models import (
     DictWrapper,
     Event,
     EventMessage,
+    EventMetadataFilter,
     MemoryRecord,
-    SessionSummary,
     MetadataValue,
-    EventMetadataFilter
+    SessionSummary,
 )
 
 logger = logging.getLogger(__name__)
@@ -428,7 +428,7 @@ class MemorySessionManager:
 
         if branch:
             params["branch"] = branch
-        
+
         if metadata:
             params["metadata"] = metadata
 
@@ -490,6 +490,7 @@ class MemorySessionManager:
             session_id: Session identifier
             branch_name: Optional branch name to filter events (None for all branches)
             include_parent_branches: Whether to include parent branch events (only applies with branch_name)
+            eventMetadata: Optional list of event metadata filters to apply
             max_results: Maximum number of events to return
             include_payload: Whether to include event payloads in response
 
@@ -505,12 +506,12 @@ class MemorySessionManager:
 
             # Get events from a specific branch
             branch_events = client.list_events(actor_id, session_id, branch_name="test-branch")
-            
+
             #### Get events with event metadata filter
             ```
             filtered_events_with_metadata = client.list_events(
                 actor_id=actor_id,
-                session_id=session_id, 
+                session_id=session_id,
                 eventMetadata=[
                     {
                         'left': {
@@ -522,7 +523,7 @@ class MemorySessionManager:
                                 'stringValue': 'NYC'
                             }
                         }
-                    }       
+                    }
                 ]
             )
             ```
@@ -544,7 +545,7 @@ class MemorySessionManager:
                                 'stringValue': 'NYC'
                             }
                         }
-                    }       
+                    }
                 ]
             )
             ```
@@ -577,9 +578,7 @@ class MemorySessionManager:
 
                 # Add eventMetadata filter if specified
                 if eventMetadata:
-                    params["filter"] = {
-                        "eventMetadata": eventMetadata
-                    }
+                    params["filter"] = {"eventMetadata": eventMetadata}
 
                 response = self._data_plane_client.list_events(**params)
 

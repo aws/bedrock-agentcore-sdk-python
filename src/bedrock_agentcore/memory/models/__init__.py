@@ -4,14 +4,15 @@ from typing import Any, Dict
 
 from .DictWrapper import DictWrapper
 from .filters import (
-    StringValue,
-    MetadataValue,
-    MetadataKey,
+    EventMetadataFilter,
     LeftExpression,
+    MetadataKey,
+    MetadataValue,
     OperatorType,
     RightExpression,
-    EventMetadataFilter,
+    StringValue,
 )
+
 
 class ActorSummary(DictWrapper):
     """A class representing an actor summary."""
@@ -83,6 +84,7 @@ class SessionSummary(DictWrapper):
             session_summary: Dictionary containing session summary data.
         """
         super().__init__(session_summary)
+
 
 __all__ = [
     "DictWrapper",
