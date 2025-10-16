@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.2] - 2025-10-16
+
+### Added
+- feat: integrate metadata support for short-term-memory (STM) (#114) (a87bc30)
+
+### Other Changes
+- chore: improve GitHub Actions workflow input handling (#117) (1bdddf6)
+- Add support for Identity OAuth 2.0 federation enhancements (#106) (6334a24)
+- Add OAuth2 3LO Identity APIs and enable setting 3LO callback URL via HTTP headers (#116) (9fda6b4)
+- chore: bump version to 1.0.0 (#118) (e620ced)
+
 ## [1.0.0] - 2025-10-15
 
 ### Fixed
