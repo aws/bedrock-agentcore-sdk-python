@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.2] - 2025-10-16
+
+### Fixed
+- fix: remove NotRequried as it is supported only in python 3.11 (#125) (806ee26)
+
 ## [1.0.0] - 2025-10-15
 
 ### Fixed
