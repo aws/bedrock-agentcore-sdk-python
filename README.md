@@ -77,7 +77,7 @@ app.run()  # Ready to run on Bedrock AgentCore
 
 **Quick Start:** Use the [Bedrock AgentCore Starter Toolkit](https://github.com/aws/bedrock-agentcore-starter-toolkit) for rapid prototyping.
 
-**Production:** [AWS CDK](https://aws.amazon.com/cdk/) - coming soon.
+**Production:** [AWS CDK](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_bedrockagentcore-readme.html).
 
 
 ## 📝 License & Contributing
