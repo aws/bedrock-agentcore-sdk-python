@@ -39,27 +39,25 @@ Amazon Bedrock AgentCore enables you to deploy and operate highly effective agen
 ## 🚀 From Local Development to Bedrock AgentCore
 
 ```python
-# Your existing agent (any framework)
-from strands import Agent
-# or LangGraph, CrewAI, Autogen, custom logic - doesn't matter
-
-def my_local_agent(query):
-    # Your carefully crafted agent logic
-    return agent.process(query)
-
-# Deploy to Bedrock AgentCore
 from bedrock_agentcore import BedrockAgentCoreApp
 app = BedrockAgentCoreApp()
 
-@app.entrypoint
-def production_agent(request):
-    return my_local_agent(request.get("prompt"))  # Same logic, enterprise platform
+from strands import Agent # or bring your agent.
 
-app.run()  # Ready to run on Bedrock AgentCore
+@app.entrypoint
+async def handler(request):
+    prompt = request.get("prompt")
+
+    agent = Agent()
+
+    async for event in agent.stream_async(prompt):
+        yield (event)
+
+app.run()
 ```
 
 **What you get with Bedrock AgentCore:**
-- ✅ **Keep your agent logic** - Works with Strands, LangGraph, CrewAI, Autogen, custom frameworks
+- ✅ **Keep your agent logic** - Works with Strands, LangGraph, CrewAI, Autogen, or custom frameworks
 - ✅ **Zero infrastructure management** - No servers, containers, or scaling concerns
 - ✅ **Enterprise-grade platform** - Built-in auth, memory, observability, security
 - ✅ **Production-ready deployment** - Reliable, scalable, compliant hosting
