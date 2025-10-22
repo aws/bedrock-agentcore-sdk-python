@@ -143,7 +143,7 @@ class MemorySessionManager:
             "list_events",
             "batch_create_memory_records",
             "batch_delete_memory_records",
-            "batch_update_memory_records"
+            "batch_update_memory_records",
         }
 
     def _validate_and_resolve_region(self, region_name: Optional[str], session: Optional[boto3.Session]) -> str:
