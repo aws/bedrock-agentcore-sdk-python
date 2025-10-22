@@ -1,6 +1,5 @@
 """Module containing session management classes for AgentCore Memory interactions."""
 
-import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -316,7 +315,9 @@ class MemorySessionManager:
             raise
 
         # Step 3: Save the conversation turn
-        event = self._save_conversation_turn(actor_id, session_id, user_input, agent_response, metadata, event_timestamp)
+        event = self._save_conversation_turn(
+            actor_id, session_id, user_input, agent_response, metadata, event_timestamp
+        )
         return retrieved_memories, agent_response, event
 
     async def process_turn_with_llm_async(
@@ -364,7 +365,9 @@ class MemorySessionManager:
             raise
 
         # Step 3: Save the conversation turn
-        event = self._save_conversation_turn(actor_id, session_id, user_input, agent_response, metadata, event_timestamp)
+        event = self._save_conversation_turn(
+            actor_id, session_id, user_input, agent_response, metadata, event_timestamp
+        )
         return retrieved_memories, agent_response, event
 
     def _retrieve_memories_for_llm(
@@ -395,7 +398,7 @@ class MemorySessionManager:
                         if record.get("relevanceScore", config.relevance_score) >= config.relevance_score
                     ]
                 retrieved_memories.extend(memory_records)
-        
+
         logger.info("Retrieved %d memories for LLM context", len(retrieved_memories))
         return retrieved_memories
 
