@@ -89,6 +89,9 @@ class MemorySessionManager:
         - bedrock-agentcore:DeleteMemoryRecord
         - bedrock-agentcore:ListActors
         - bedrock-agentcore:ListSessions
+        - bedrock-agentcore:BatchCreateMemoryRecords
+        - bedrock-agentcore:BatchDeleteMemoryRecords
+        - bedrock-agentcore:BatchUpdateMemoryRecords
     """
 
     def __init__(
@@ -138,6 +141,9 @@ class MemorySessionManager:
             "get_event",
             "delete_event",
             "list_events",
+            "batch_create_memory_records",
+            "batch_delete_memory_records",
+            "batch_update_memory_records"
         }
 
     def _validate_and_resolve_region(self, region_name: Optional[str], session: Optional[boto3.Session]) -> str:
