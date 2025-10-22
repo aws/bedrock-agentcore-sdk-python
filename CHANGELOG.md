@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.4] - 2025-10-22
+
+### Added
+- feat: support for async llm callback (#131) (1e3fd0c)
+
+### Other Changes
+- chore(memory): fix linter issues (#132) (36ea477)
+- Add middleware (#121) (f30e281)
+- Update Outbound Oauth error message (#119) (a9ad13a)
+- Update README.md (#128) (c744ba3)
+- chore: bump version to 1.0.3 (#127) (d14d80e)
+
 ## [1.0.3] - 2025-10-16
 
 ### Fixed
