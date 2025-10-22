@@ -1,5 +1,6 @@
 """Unit tests for Session Manager and MemorySession classes - no external connections."""
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List
@@ -447,6 +448,40 @@ class TestSessionManager:
 
                 assert len(memories) == 0
                 assert response == "Response to: Hello"
+                assert event["eventId"] == "event-123"
+
+    def test_process_turn_with_llm_async_method(self):
+        """Test process_turn_with_llm_async method."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            # Mock add_turns
+            mock_event = {"eventId": "event-123", "memoryId": "testMemory-1234567890"}
+            with patch.object(manager, "add_turns", return_value=Event(mock_event)):
+                # Define async LLM callback
+                async def mock_async_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                    return f"Async method response to: {user_input}"
+
+                # Test process_turn_with_llm_async
+                async def run_test():
+                    memories, response, event = await manager.process_turn_with_llm_async(
+                        actor_id="user-123",
+                        session_id="session-456",
+                        user_input="Hello async method",
+                        llm_callback=mock_async_llm_callback,
+                        retrieval_config=None,
+                    )
+                    return memories, response, event
+
+                memories, response, event = asyncio.run(run_test())
+                assert len(memories) == 0
+                assert response == "Async method response to: Hello async method"
                 assert event["eventId"] == "event-123"
 
     def test_process_turn_with_llm_callback_error(self):
