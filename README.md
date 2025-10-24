@@ -65,13 +65,13 @@ app.run()  # Ready to run on Bedrock AgentCore
 - ✅ **Production-ready deployment** - Reliable, scalable, compliant hosting
 
 ## Amazon Bedrock AgentCore services
-- 🚀 **Runtime** - Secure and session isolated compute: **[Runtime Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/runtime/quickstart.html)**
-- 🧠 **Memory** - Persistent knowledge across sessions: **[Memory Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/memory/quickstart.html)**
-- 🔗 **Gateway** - Transform APIs into MCP tools: **[Gateway Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/gateway/quickstart.html)**
-- 💻 **Code Interpreter** - Secure sandboxed execution: **[Code Interpreter Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/builtin-tools/quickstart-code-interpreter.html)**
-- 🌐 **Browser** - Cloud-based web automation: **[Browser Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/builtin-tools/quickstart-browser.html)**
-- 📊 **Observability** - OpenTelemetry tracing: **[Observability Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/observability/quickstart.html)**
-- 🔐 **Identity** - AWS & third-party auth: **[Identity Quick Start](https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/identity/quickstart.html)**
+- 🚀 **Runtime** - Secure and session isolated compute: **[Runtime Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-get-started-toolkit.html)**
+- 🧠 **Memory** - Persistent knowledge across sessions: **[Memory Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-get-started.html)**
+- 🔗 **Gateway** - Transform APIs into MCP tools: **[Gateway Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-quick-start.html)**
+- 💻 **Code Interpreter** - Secure sandboxed execution: **[Code Interpreter Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/code-interpreter-getting-started.html)**
+- 🌐 **Browser** - Cloud-based web automation: **[Browser Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/browser-onboarding.html)**
+- 📊 **Observability** - OpenTelemetry tracing: **[Observability Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability-get-started.html)**
+- 🔐 **Identity** - AWS & third-party auth: **[Identity Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/identity-getting-started-cognito.html)**
 
 ## 🏗️ Deployment
 
