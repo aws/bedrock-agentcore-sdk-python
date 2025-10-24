@@ -1,77 +1,131 @@
+# .pre-commit-config.yaml
+# Balanced approach: Fast checks on commit, heavy checks on push
+
 repos:
-  # uv hooks
+  # ========================================
+  # PRE-COMMIT STAGE (Fast, Auto-fixing)
+  # Runs on every commit - MUST BE FAST
+  # ========================================
+
+  # uv lock file management
   - repo: https://github.com/astral-sh/uv-pre-commit
-    # uv version
     rev: 0.7.13
     hooks:
-      # Keep uv.lock in sync with pyproject.toml
       - id: uv-lock
+        stages: [pre-commit]
 
-  # Code formatting and linting
+  # Code formatting and basic linting (FAST + AUTO-FIX)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version
     rev: v0.12.0
     hooks:
-      # Run the linter
+      # Linter with auto-fixes
       - id: ruff
-        args: [--fix]
-      # Run the formatter
+        args: [--fix, --exit-non-zero-on-fix]
+        stages: [pre-commit]
+      # Formatter (auto-fixes)
       - id: ruff-format
+        stages: [pre-commit]
 
-  # Basic file hygiene
+  # Basic file hygiene (FAST + AUTO-FIX)
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
+        stages: [pre-commit]
       - id: end-of-file-fixer
+        stages: [pre-commit]
       - id: check-toml
+        stages: [pre-commit]
       - id: check-json
+        stages: [pre-commit]
+      - id: check-yaml
+        stages: [pre-commit]
       - id: check-merge-conflict
+        stages: [pre-commit]
       - id: check-added-large-files
+        args: ['--maxkb=1000']
+        stages: [pre-commit]
       - id: debug-statements
+        stages: [pre-commit]
+      - id: check-case-conflict
+        stages: [pre-commit]
 
-  # Security checks
+  # ========================================
+  # PRE-PUSH STAGE (Heavier checks)
+  # Runs before push - can be slower
+  # ========================================
+
+  # Security scanning
   - repo: https://github.com/PyCQA/bandit
     rev: '1.7.9'
     hooks:
       - id: bandit
-        args: ['-r', 'src/']
+        args: ['-r', 'src/', '-ll']  # Only medium/high severity
         pass_filenames: false
         types: [python]
+        stages: [pre-push]
 
-  # Unit tests with coverage
+  # Type checking (can be slow)
   - repo: local
     hooks:
-      - id: pytest-cov
-        name: pytest with coverage
+      - id: mypy
+        name: Type checking with mypy
+        entry: uv run mypy
+        language: system
+        types: [python]
+        args: ['src/']
+        pass_filenames: false
+        stages: [pre-push]
+
+  # Fast unit tests only (not full suite)
+  - repo: local
+    hooks:
+      - id: pytest-fast
+        name: Fast unit tests
         entry: uv run pytest
         language: system
         types: [python]
         pass_filenames: false
-        always_run: true
+        stages: [pre-push]
         args: [
-          --cov=src,
-          --cov-report=term-missing,
-          --cov-report=html,
-          --cov-branch,
-          --cov-precision=2,
-          tests/
+          'tests/',
+          '-m', 'not slow',  # Skip slow tests
+          '--maxfail=5',     # Stop after 5 failures
+          '-x',              # Stop on first failure
+          '--tb=short',      # Short traceback
+          '-q',              # Quiet output
         ]
+
+  # ========================================
+  # COMMIT-MSG STAGE (Commit message format)
+  # Runs when writing commit message
+  # ========================================
+
+  - repo: local
+    hooks:
+      - id: commitizen-check
+        name: Check commit message format
+        entry: uv run cz check
+        language: system
+        stages: [commit-msg]
+        args: ['--commit-msg-file']
+
+# ========================================
+# Configuration
+# ========================================
 
 default_language_version:
   python: python3.10
 
+# Pre-commit.ci settings (if using)
 ci:
   autofix_commit_msg: |
     [pre-commit.ci] auto fixes from pre-commit.com hooks
-
-    for more information, see https://pre-commit.ci
   autofix_prs: true
-  autoupdate_branch: ''
-  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
   autoupdate_schedule: weekly
   skip: []
   submodules: false
 
-default_install_hook_types: [pre-commit, pre-push]
-default_stages: [pre-commit, pre-push]
+# Default hook types and stages
+default_install_hook_types: [pre-commit, pre-push, commit-msg]
+default_stages: [pre-commit]
