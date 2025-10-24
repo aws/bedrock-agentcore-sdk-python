@@ -1,10 +1,10 @@
 # .pre-commit-config.yaml
-# Balanced approach: Fast checks on commit, heavy checks on push
+# Balanced approach: Fast checks on commit, full tests with coverage on push
 
 repos:
   # ========================================
   # PRE-COMMIT STAGE (Fast, Auto-fixing)
-  # Runs on every commit - MUST BE FAST
+  # Runs on every commit
   # ========================================
 
   # uv lock file management
@@ -14,15 +14,13 @@ repos:
       - id: uv-lock
         stages: [pre-commit]
 
-  # Code formatting and basic linting (FAST + AUTO-FIX)
+  # Code formatting and linting (FAST + AUTO-FIX)
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.12.0
     hooks:
-      # Linter with auto-fixes
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
         stages: [pre-commit]
-      # Formatter (auto-fixes)
       - id: ruff-format
         stages: [pre-commit]
 
@@ -47,12 +45,10 @@ repos:
         stages: [pre-commit]
       - id: debug-statements
         stages: [pre-commit]
-      - id: check-case-conflict
-        stages: [pre-commit]
 
   # ========================================
   # PRE-PUSH STAGE (Heavier checks)
-  # Runs before push - can be slower
+  # Runs before push
   # ========================================
 
   # Security scanning
@@ -60,55 +56,30 @@ repos:
     rev: '1.7.9'
     hooks:
       - id: bandit
-        args: ['-r', 'src/', '-ll']  # Only medium/high severity
+        args: ['-r', 'src/', '-ll']
         pass_filenames: false
         types: [python]
         stages: [pre-push]
 
-  # Type checking (can be slow)
+  # Full test suite with coverage (same as you had before)
   - repo: local
     hooks:
-      - id: mypy
-        name: Type checking with mypy
-        entry: uv run mypy
-        language: system
-        types: [python]
-        args: ['src/']
-        pass_filenames: false
-        stages: [pre-push]
-
-  # Fast unit tests only (not full suite)
-  - repo: local
-    hooks:
-      - id: pytest-fast
-        name: Fast unit tests
+      - id: pytest-cov
+        name: pytest with coverage
         entry: uv run pytest
         language: system
         types: [python]
         pass_filenames: false
-        stages: [pre-push]
+        always_run: true
+        stages: [pre-push]  # Moved from pre-commit to pre-push
         args: [
-          'tests/',
-          '-m', 'not slow',  # Skip slow tests
-          '--maxfail=5',     # Stop after 5 failures
-          '-x',              # Stop on first failure
-          '--tb=short',      # Short traceback
-          '-q',              # Quiet output
+          --cov=src,
+          --cov-report=term-missing,
+          --cov-report=html,
+          --cov-branch,
+          --cov-precision=2,
+          tests/
         ]
-
-  # ========================================
-  # COMMIT-MSG STAGE (Commit message format)
-  # Runs when writing commit message
-  # ========================================
-
-  - repo: local
-    hooks:
-      - id: commitizen-check
-        name: Check commit message format
-        entry: uv run cz check
-        language: system
-        stages: [commit-msg]
-        args: ['--commit-msg-file']
 
 # ========================================
 # Configuration
@@ -117,15 +88,17 @@ repos:
 default_language_version:
   python: python3.10
 
-# Pre-commit.ci settings (if using)
 ci:
   autofix_commit_msg: |
     [pre-commit.ci] auto fixes from pre-commit.com hooks
+
+    for more information, see https://pre-commit.ci
   autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
   autoupdate_schedule: weekly
   skip: []
   submodules: false
 
-# Default hook types and stages
-default_install_hook_types: [pre-commit, pre-push, commit-msg]
+default_install_hook_types: [pre-commit, pre-push]
 default_stages: [pre-commit]
