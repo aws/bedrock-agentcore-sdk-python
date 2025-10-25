@@ -1,45 +1,67 @@
+# .pre-commit-config.yaml
+# Balanced approach: Fast checks on commit, full tests with coverage on push
+
 repos:
-  # uv hooks
+  # ========================================
+  # PRE-COMMIT STAGE (Fast, Auto-fixing)
+  # Runs on every commit
+  # ========================================
+
+  # uv lock file management
   - repo: https://github.com/astral-sh/uv-pre-commit
-    # uv version
     rev: 0.7.13
     hooks:
-      # Keep uv.lock in sync with pyproject.toml
       - id: uv-lock
+        stages: [pre-commit]
 
-  # Code formatting and linting
+  # Code formatting and linting (FAST + AUTO-FIX)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version
     rev: v0.12.0
     hooks:
-      # Run the linter
       - id: ruff
-        args: [--fix]
-      # Run the formatter
+        args: [--fix, --exit-non-zero-on-fix]
+        stages: [pre-commit]
       - id: ruff-format
+        stages: [pre-commit]
 
-  # Basic file hygiene
+  # Basic file hygiene (FAST + AUTO-FIX)
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
+        stages: [pre-commit]
       - id: end-of-file-fixer
+        stages: [pre-commit]
       - id: check-toml
+        stages: [pre-commit]
       - id: check-json
+        stages: [pre-commit]
+      - id: check-yaml
+        stages: [pre-commit]
       - id: check-merge-conflict
+        stages: [pre-commit]
       - id: check-added-large-files
+        args: ['--maxkb=1000']
+        stages: [pre-commit]
       - id: debug-statements
+        stages: [pre-commit]
 
-  # Security checks
+  # ========================================
+  # PRE-PUSH STAGE (Heavier checks)
+  # Runs before push
+  # ========================================
+
+  # Security scanning
   - repo: https://github.com/PyCQA/bandit
     rev: '1.7.9'
     hooks:
       - id: bandit
-        args: ['-r', 'src/']
+        args: ['-r', 'src/', '-ll']
         pass_filenames: false
         types: [python]
+        stages: [pre-push]
 
-  # Unit tests with coverage
+  # Full test suite with coverage (same as you had before)
   - repo: local
     hooks:
       - id: pytest-cov
@@ -49,6 +71,7 @@ repos:
         types: [python]
         pass_filenames: false
         always_run: true
+        stages: [pre-push]  # Moved from pre-commit to pre-push
         args: [
           --cov=src,
           --cov-report=term-missing,
@@ -57,6 +80,10 @@ repos:
           --cov-precision=2,
           tests/
         ]
+
+# ========================================
+# Configuration
+# ========================================
 
 default_language_version:
   python: python3.10
@@ -74,4 +101,4 @@ ci:
   submodules: false
 
 default_install_hook_types: [pre-commit, pre-push]
-default_stages: [pre-commit, pre-push]
+default_stages: [pre-commit]

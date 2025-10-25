@@ -12,9 +12,84 @@ While we appreciate your interest in contributing code, we maintain this policy 
 - Align with our product roadmap and architecture decisions
 - Comply with AWS security and compliance requirements
 
+## Development Setup (For AWS Team Members)
+
+### Initial Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/aws/bedrock-agentcore-sdk-python.git
+cd bedrock-agentcore-sdk-python
+
+# Create virtual environment and install dependencies
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv sync
+
+# Install pre-commit hooks (one-time)
+pre-commit install
+```
+
+That's it! You're ready to develop.
+
+### Daily Development Workflow
+
+Pre-commit hooks will now run automatically:
+
+```bash
+# Make your changes
+vim src/bedrock_agentcore/myfile.py
+
+# Commit (hooks run automatically)
+git commit -m "feat: add new feature"
+# ↑ Formatting and linting run here
+
+# Push (tests run automatically)
+git push origin my-branch
+# ↑ Security scanning and tests run here
+```
+
+### What the Hooks Check
+
+**On every commit** (~10-20 seconds):
+- ✅ Code formatting (auto-fixes with ruff)
+- ✅ Import sorting (auto-fixes)
+- ✅ Linting (with ruff)
+- ✅ File hygiene (trailing whitespace, etc.)
+
+**Before every push** (~2-5 minutes):
+- ✅ Security scanning (bandit)
+- ✅ Full test suite with coverage
+
+### Skipping Hooks (WIP Commits)
+
+For work-in-progress commits, you can skip checks:
+
+```bash
+git commit --no-verify -m "wip: incomplete work"
+```
+
+**Please run all checks before opening a PR!**
+
+### Running Checks Manually
+
+```bash
+# Run all pre-commit checks
+pre-commit run --all-files
+
+# Run only pre-commit stage (fast)
+pre-commit run --hook-stage pre-commit --all-files
+
+# Run only pre-push stage (includes tests)
+pre-commit run --hook-stage pre-push --all-files
+
+# Run tests manually
+uv run pytest tests/ --cov=src
+```
+
 ## How You Can Help
 
-Although we don't accept code contributions, your feedback is invaluable! Here's how you can help improve the CLI Starter Toolkit:
+Although we don't accept code contributions, your feedback is invaluable! Here's how you can help improve the SDK:
 
 ### Report Bugs
 Found something that doesn't work as expected? Please [open an issue](https://github.com/aws/bedrock-agentcore-sdk-python/issues/new?template=bug_report.md) with:
@@ -63,7 +138,7 @@ See our [Security Policy](SECURITY.md) for more details.
 
 ## Questions and Discussions
 
-- For questions about using the CLI Starter Toolkit, please use [GitHub Discussions](https://github.com/aws/bedrock-agentcore-sdk-python/discussions)
+- For questions about using the SDK, please use [GitHub Discussions](https://github.com/aws/bedrock-agentcore-sdk-python/discussions)
 - For AWS Bedrock service questions, visit [AWS re:Post](https://repost.aws/)
 - For urgent AWS support, use your [AWS Support](https://aws.amazon.com/support/) plan
 
@@ -81,7 +156,7 @@ By engaging with this project, you agree that your contributions (issues, discus
 
 ## 🙏 Thank You
 
-Even though we can't accept code contributions at this time, your feedback, bug reports, and feature requests help us make the Bedrock AgentCore CLI Starter Toolkit better for everyone. We truly appreciate your involvement and support!
+Even though we can't accept code contributions at this time, your feedback, bug reports, and feature requests help us make the Bedrock AgentCore SDK better for everyone. We truly appreciate your involvement and support!
 
 ---
 
