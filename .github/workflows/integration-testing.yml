@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       approval-env: ${{ steps.collab-check.outputs.result }}
-      should-run: ${{ steps.safety-check.outputs.safe }}
+      should-run: ${{ steps.safety-check.outputs.result }}
     steps:
       - name: Checkout base branch for safety check
         uses: actions/checkout@v5
