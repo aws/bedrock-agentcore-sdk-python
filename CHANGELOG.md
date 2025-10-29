@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.5] - 2025-10-29
+
+### Documentation
+- docs: update quickstart links to AWS documentation (#138) (b3d49f8)
+
+### Other Changes
+- fix(memory): resolve AWS_REGION env var (#143) (7a9a855)
+- Chore/workflow improvements (#137) (091dab1)
+- chore: enabling batch api pass through to boto3 client methods (#135) (245f3c1)
+- chore: bump version to 1.0.4 (#134) (ecba82d)
+
 ## [1.0.4] - 2025-10-22
 
 ### Added
