@@ -2980,8 +2980,9 @@ class TestAdditionalCoverage:
         5. us-west-2 fallback
         """
         # Test 1: region_name parameter takes highest priority
-        with patch("boto3.Session") as mock_session_class, patch.dict(
-            "os.environ", {"AWS_REGION": "eu-west-1"}, clear=True
+        with (
+            patch("boto3.Session") as mock_session_class,
+            patch.dict("os.environ", {"AWS_REGION": "eu-west-1"}, clear=True),
         ):
             mock_session = MagicMock()
             mock_session.region_name = None
@@ -3001,8 +3002,9 @@ class TestAdditionalCoverage:
             assert manager.region_name == "ap-south-1"
 
         # Test 3: AWS_REGION env var takes priority over boto3.Session().region_name
-        with patch("boto3.Session") as mock_session_class, patch.dict(
-            "os.environ", {"AWS_REGION": "eu-central-1"}, clear=True
+        with (
+            patch("boto3.Session") as mock_session_class,
+            patch.dict("os.environ", {"AWS_REGION": "eu-central-1"}, clear=True),
         ):
             mock_session = MagicMock()
             mock_session.region_name = "ca-central-1"  # This would be from AWS config
