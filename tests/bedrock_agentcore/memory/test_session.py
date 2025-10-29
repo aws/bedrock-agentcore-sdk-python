@@ -2960,16 +2960,16 @@ class TestAdditionalCoverage:
 
     def test_validate_and_resolve_region_edge_case(self):
         """Test _validate_and_resolve_region edge case - covers line 154."""
-        with patch("boto3.Session") as mock_session_class:
+        with patch("boto3.Session") as mock_session_class, patch.dict("os.environ", {}, clear=True):
             mock_session = MagicMock()
             mock_session.region_name = None  # No region in session
             mock_client_instance = MagicMock()
             mock_session.client.return_value = mock_client_instance
             mock_session_class.return_value = mock_session
 
-            # Test when both region_name and session region are None
+            # Test when both region_name and session region are None, should fallback to us-west-2
             manager = MemorySessionManager(memory_id="test-memory", region_name=None)
-            assert manager.region_name is None
+            assert manager.region_name == "us-west-2"
 
     def test_memory_session_add_turns_branch_parameter_order(self):
         """Test MemorySession.add_turns with branch parameter order - covers line 779."""
