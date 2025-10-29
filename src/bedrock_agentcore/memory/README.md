@@ -94,7 +94,16 @@ The following environment variables can be used to configure the SDK:
 - `AGENTCORE_MEMORY_ROLE_ARN` - IAM role for memory execution (legacy)
 - `AGENTCORE_CONTROL_ENDPOINT` - Override control plane endpoint
 - `AGENTCORE_DATA_ENDPOINT` - Override data plane endpoint
-- `AWS_DEFAULT_REGION` - Default AWS region (e.g., us-east-1)
+- `AWS_REGION` - AWS region (e.g., us-east-1)
+- `AWS_DEFAULT_REGION` - Alternative AWS region variable (e.g., us-east-1)
+
+**Region Resolution Order:**
+The SDK resolves the AWS region in the following priority order:
+1. `region_name` parameter passed to `MemorySessionManager`
+2. Region from `boto3_session` if provided
+3. `AWS_REGION` environment variable
+4. `DEFAULT_AWS_REGION` environment variable
+5. Default fallback: `us-west-2`
 
 ## Recommended Classes
 

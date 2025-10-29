@@ -1,6 +1,7 @@
 """Module containing session management classes for AgentCore Memory interactions."""
 
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
@@ -170,7 +171,9 @@ class MemorySessionManager:
                 f"to use the session's region."
             )
 
-        return region_name or session_region
+        return (
+            region_name or session_region or os.environ.get("AWS_REGION") or boto3.Session().region_name or "us-west-2"
+        )
 
     def _build_client_config(self, boto_client_config: Optional[BotocoreConfig]) -> BotocoreConfig:
         """Build the final boto3 client configuration with SDK user agent.

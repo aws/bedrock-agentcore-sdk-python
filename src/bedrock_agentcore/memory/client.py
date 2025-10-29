@@ -10,6 +10,7 @@ backward compatibility.
 
 import copy
 import logging
+import os
 import time
 import uuid
 import warnings
@@ -62,7 +63,7 @@ class MemoryClient:
 
     def __init__(self, region_name: Optional[str] = None):
         """Initialize the Memory client."""
-        self.region_name = region_name or boto3.Session().region_name or "us-west-2"
+        self.region_name = region_name or os.environ.get("AWS_REGION") or boto3.Session().region_name or "us-west-2"
 
         self.gmcp_client = boto3.client("bedrock-agentcore-control", region_name=self.region_name)
         self.gmdp_client = boto3.client("bedrock-agentcore", region_name=self.region_name)
