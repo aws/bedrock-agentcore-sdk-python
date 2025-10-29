@@ -2971,6 +2971,67 @@ class TestAdditionalCoverage:
             manager = MemorySessionManager(memory_id="test-memory", region_name=None)
             assert manager.region_name == "us-west-2"
 
+    def test_region_resolution_priority_order(self):
+        """Test region resolution follows documented priority order:
+        1. region_name parameter
+        2. boto3_session region
+        3. AWS_REGION env var
+        4. boto3.Session().region_name (checks AWS_DEFAULT_REGION and AWS config)
+        5. us-west-2 fallback
+        """
+        # Test 1: region_name parameter takes highest priority
+        with patch("boto3.Session") as mock_session_class, patch.dict(
+            "os.environ", {"AWS_REGION": "eu-west-1"}, clear=True
+        ):
+            mock_session = MagicMock()
+            mock_session.region_name = None
+            mock_session.client.return_value = MagicMock()
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory", region_name="us-east-1")
+            assert manager.region_name == "us-east-1"
+
+        # Test 2: boto3_session region takes priority over AWS_REGION
+        with patch.dict("os.environ", {"AWS_REGION": "eu-west-1"}, clear=True):
+            mock_session = MagicMock()
+            mock_session.region_name = "ap-south-1"
+            mock_session.client.return_value = MagicMock()
+
+            manager = MemorySessionManager(memory_id="test-memory", boto3_session=mock_session)
+            assert manager.region_name == "ap-south-1"
+
+        # Test 3: AWS_REGION env var takes priority over boto3.Session().region_name
+        with patch("boto3.Session") as mock_session_class, patch.dict(
+            "os.environ", {"AWS_REGION": "eu-central-1"}, clear=True
+        ):
+            mock_session = MagicMock()
+            mock_session.region_name = "ca-central-1"  # This would be from AWS config
+            mock_session.client.return_value = MagicMock()
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory")
+            assert manager.region_name == "eu-central-1"
+
+        # Test 4: boto3.Session().region_name used when AWS_REGION not set
+        with patch("boto3.Session") as mock_session_class, patch.dict("os.environ", {}, clear=True):
+            mock_session = MagicMock()
+            mock_session.region_name = "sa-east-1"  # From AWS_DEFAULT_REGION or AWS config
+            mock_session.client.return_value = MagicMock()
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory")
+            assert manager.region_name == "sa-east-1"
+
+        # Test 5: us-west-2 fallback when nothing is set
+        with patch("boto3.Session") as mock_session_class, patch.dict("os.environ", {}, clear=True):
+            mock_session = MagicMock()
+            mock_session.region_name = None
+            mock_session.client.return_value = MagicMock()
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="test-memory")
+            assert manager.region_name == "us-west-2"
+
     def test_memory_session_add_turns_branch_parameter_order(self):
         """Test MemorySession.add_turns with branch parameter order - covers line 779."""
         with patch("boto3.Session"):

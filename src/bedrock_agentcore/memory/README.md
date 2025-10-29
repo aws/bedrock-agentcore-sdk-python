@@ -102,7 +102,7 @@ The SDK resolves the AWS region in the following priority order:
 1. `region_name` parameter passed to `MemorySessionManager`
 2. Region from `boto3_session` if provided
 3. `AWS_REGION` environment variable
-4. `DEFAULT_AWS_REGION` environment variable
+4. `boto3.Session().region_name` (which checks `AWS_DEFAULT_REGION` and AWS config)
 5. Default fallback: `us-west-2`
 
 ## Recommended Classes
