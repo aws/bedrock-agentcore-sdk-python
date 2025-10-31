@@ -20,14 +20,8 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 from starlette.types import Lifespan
 
-from .context import BedrockAgentCoreContext, RequestContext
+from .context import AgentContext, BedrockAgentCoreContext, ProcessingContext, RequestContext
 from .models import (
-    ACCESS_TOKEN_HEADER,
-    AUTHORIZATION_HEADER,
-    CUSTOM_HEADER_PREFIX,
-    OAUTH2_CALLBACK_URL_HEADER,
-    REQUEST_ID_HEADER,
-    SESSION_HEADER,
     TASK_ACTION_CLEAR_FORCED_STATUS,
     TASK_ACTION_FORCE_BUSY,
     TASK_ACTION_FORCE_HEALTHY,
@@ -275,51 +269,79 @@ class BedrockAgentCoreApp(Starlette):
                 self.logger.warning("Attempted to complete unknown task ID: %s", task_id)
                 return False
 
-    def _build_request_context(self, request) -> RequestContext:
-        """Build request context and setup all context variables."""
+    def _build_request_context(self, request) -> AgentContext:
+        """Build request context from incoming request.
+
+        Args:
+            request: Starlette Request object
+
+        Returns:
+            AgentContext with both request and processing data
+        """
         try:
-            headers = request.headers
-            request_id = headers.get(REQUEST_ID_HEADER)
-            if not request_id:
-                request_id = str(uuid.uuid4())
+            # Generate request ID
+            request_id = str(uuid.uuid4())
 
-            session_id = headers.get(SESSION_HEADER)
-            BedrockAgentCoreContext.set_request_context(request_id, session_id)
+            # Extract session ID from headers (case-insensitive)
+            session_id = request.headers.get("x-amzn-bedrock-agentcore-runtime-session-id")
 
-            agent_identity_token = headers.get(ACCESS_TOKEN_HEADER)
-            if agent_identity_token:
-                BedrockAgentCoreContext.set_workload_access_token(agent_identity_token)
-
-            oauth2_callback_url = headers.get(OAUTH2_CALLBACK_URL_HEADER)
-            if oauth2_callback_url:
-                BedrockAgentCoreContext.set_oauth2_callback_url(oauth2_callback_url)
-
-            # Collect relevant request headers (Authorization + Custom headers)
+            # Extract relevant headers (Authorization + Custom headers)
             request_headers = {}
 
-            # Add Authorization header if present
-            authorization_header = headers.get(AUTHORIZATION_HEADER)
-            if authorization_header is not None:
-                request_headers[AUTHORIZATION_HEADER] = authorization_header
+            # Create a case-insensitive lookup
+            headers_lower = {}
+            for key, value in request.headers.items():
+                headers_lower[key.lower()] = (key, value)  # Store original key + value
 
-            # Add custom headers with the specified prefix
-            for header_name, header_value in headers.items():
-                if header_name.lower().startswith(CUSTOM_HEADER_PREFIX.lower()):
-                    request_headers[header_name] = header_value
+            # Check for Authorization header (case-insensitive)
+            if "authorization" in headers_lower:
+                original_key, value = headers_lower["authorization"]
+                request_headers["Authorization"] = value  # Normalize to "Authorization"
 
-            # Set in context if any headers were found
+            # Extract custom headers with the specific prefix (case-insensitive)
+            custom_prefix = "x-amzn-bedrock-agentcore-runtime-custom-"
+            for lower_key, (original_key, value) in headers_lower.items():
+                if lower_key.startswith(custom_prefix):
+                    request_headers[original_key] = value  # Keep original case
+
+            # Convert empty dict to None
+            request_headers = request_headers if request_headers else None
+
+            # Set in BedrockAgentCoreContext for global access
+            BedrockAgentCoreContext.set_request_context(request_id, session_id)
             if request_headers:
                 BedrockAgentCoreContext.set_request_headers(request_headers)
 
-            # Get the headers from context to pass to RequestContext
-            req_headers = BedrockAgentCoreContext.get_request_headers()
+            # Check if middleware injected processing data
+            processing_context = ProcessingContext()
+            if hasattr(request, "state") and hasattr(request.state, "processing_data"):
+                # Middleware has injected data
+                processing_data = request.state.processing_data
 
-            return RequestContext(session_id=session_id, request_headers=req_headers)
+                # Handle both flat and namespaced data structures
+                if processing_data:
+                    # Check if it's already namespaced (dict of dicts)
+                    if all(isinstance(v, dict) for v in processing_data.values()):
+                        # Already namespaced
+                        processing_context.middleware_data = processing_data
+                    else:
+                        # Flat structure - put in 'default' namespace
+                        processing_context.middleware_data["default"] = processing_data
+
+            BedrockAgentCoreContext.set_processing_context(processing_context)
+
+            # Create and return AgentContext
+            return AgentContext(
+                request=RequestContext(session_id=session_id, request_headers=request_headers),
+                processing=processing_context,
+            )
+
         except Exception as e:
             self.logger.warning("Failed to build request context: %s: %s", type(e).__name__, e)
-            request_id = str(uuid.uuid4())
-            BedrockAgentCoreContext.set_request_context(request_id, None)
-            return RequestContext(session_id=None)
+            # Return minimal context on error
+            return AgentContext(
+                request=RequestContext(session_id=None, request_headers=None), processing=ProcessingContext()
+            )
 
     def _takes_context(self, handler: Callable) -> bool:
         try:
