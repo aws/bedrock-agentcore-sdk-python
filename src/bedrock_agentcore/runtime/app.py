@@ -22,8 +22,11 @@ from starlette.types import Lifespan
 
 from .context import AgentContext, BedrockAgentCoreContext, ProcessingContext, RequestContext
 from .models import (
+    ACCESS_TOKEN_HEADER,
     AUTHORIZATION_HEADER,
     CUSTOM_HEADER_PREFIX,
+    OAUTH2_CALLBACK_URL_HEADER,
+    REQUEST_ID_HEADER,
     SESSION_HEADER,
     TASK_ACTION_CLEAR_FORCED_STATUS,
     TASK_ACTION_FORCE_BUSY,
@@ -273,47 +276,55 @@ class BedrockAgentCoreApp(Starlette):
                 return False
 
     def _build_request_context(self, request) -> AgentContext:
-        """Build request context from incoming request.
+        """Build request context and setup all context variables.
 
         Args:
             request: Starlette Request object
 
         Returns:
-            AgentContext with both request and processing data
+            AgentContext containing both request and processing data
         """
         try:
-            # Generate request ID
-            request_id = str(uuid.uuid4())
+            headers = request.headers
 
-            # Extract session ID from headers (case-insensitive)
-            session_id = request.headers.get(SESSION_HEADER)
+            # Extract or generate request ID
+            request_id = headers.get(REQUEST_ID_HEADER)
+            if not request_id:
+                request_id = str(uuid.uuid4())
 
-            # Extract relevant headers (Authorization + Custom headers)
+            # Extract session ID
+            session_id = headers.get(SESSION_HEADER)
+            BedrockAgentCoreContext.set_request_context(request_id, session_id)
+
+            # Extract and set workload access token
+            agent_identity_token = headers.get(ACCESS_TOKEN_HEADER)
+            if agent_identity_token:
+                BedrockAgentCoreContext.set_workload_access_token(agent_identity_token)
+
+            # Extract and set OAuth2 callback URL
+            oauth2_callback_url = headers.get(OAUTH2_CALLBACK_URL_HEADER)
+            if oauth2_callback_url:
+                BedrockAgentCoreContext.set_oauth2_callback_url(oauth2_callback_url)
+
+            # Collect relevant request headers (Authorization + Custom headers)
             request_headers = {}
 
-            # Handle case-insensitive header lookup for both Starlette Headers and plain dicts
-            headers_lower = {}
-            for key, value in request.headers.items():
-                headers_lower[key.lower()] = (key, value)  # Store original key + value
+            # Add Authorization header if present
+            authorization_header = headers.get(AUTHORIZATION_HEADER)
+            if authorization_header is not None:
+                request_headers[AUTHORIZATION_HEADER] = authorization_header
 
-            # Check for Authorization header (case-insensitive)
-            if AUTHORIZATION_HEADER.lower() in headers_lower:
-                original_key, value = headers_lower[AUTHORIZATION_HEADER.lower()]
-                request_headers["Authorization"] = value  # Normalize to "Authorization"
+            # Add custom headers with the specified prefix
+            for header_name, header_value in headers.items():
+                if header_name.lower().startswith(CUSTOM_HEADER_PREFIX.lower()):
+                    request_headers[header_name] = header_value
 
-            # Extract custom headers with the specific prefix (case-insensitive)
-            custom_prefix_lower = CUSTOM_HEADER_PREFIX.lower()
-            for lower_key, (original_key, value) in headers_lower.items():
-                if lower_key.startswith(custom_prefix_lower):
-                    request_headers[original_key] = value  # Keep original case
-
-            # Convert empty dict to None
-            request_headers = request_headers if request_headers else None
-
-            # Set in BedrockAgentCoreContext for global access
-            BedrockAgentCoreContext.set_request_context(request_id, session_id)
+            # Set in BedrockAgentCoreContext if any headers were found
             if request_headers:
                 BedrockAgentCoreContext.set_request_headers(request_headers)
+
+            # Get the headers from context to pass to RequestContext
+            req_headers = BedrockAgentCoreContext.get_request_headers()
 
             # Check if middleware injected processing data
             processing_context = ProcessingContext()
@@ -333,15 +344,18 @@ class BedrockAgentCoreApp(Starlette):
 
             BedrockAgentCoreContext.set_processing_context(processing_context)
 
-            # Create and return AgentContext
+            # Return AgentContext (combines request + processing)
             return AgentContext(
-                request=RequestContext(session_id=session_id, request_headers=request_headers),
+                request=RequestContext(session_id=session_id, request_headers=req_headers),
                 processing=processing_context,
             )
 
         except Exception as e:
             self.logger.warning("Failed to build request context: %s: %s", type(e).__name__, e)
-            # Return minimal context on error
+            request_id = str(uuid.uuid4())
+            BedrockAgentCoreContext.set_request_context(request_id, None)
+
+            # Return minimal AgentContext on error
             return AgentContext(
                 request=RequestContext(session_id=None, request_headers=None), processing=ProcessingContext()
             )
