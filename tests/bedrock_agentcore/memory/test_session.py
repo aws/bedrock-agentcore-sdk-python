@@ -1452,6 +1452,86 @@ class TestSessionManager:
             with pytest.raises(ClientError):
                 manager.delete_memory_record(record_id="invalid-record")
 
+    def test_delete_all_long_term_memories_in_namespace_success(self):
+        """Test delete_all_long_term_memories_in_namespace successful execution."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            # Mock list_long_term_memory_records
+            mock_records = [
+                {"memoryRecordId": "rec-1", "content": {"text": "Memory 1"}},
+                {"memoryRecordId": "rec-2", "content": {"text": "Memory 2"}},
+            ]
+            with patch.object(manager, "list_long_term_memory_records", return_value=mock_records):
+                # Mock batch_delete_memory_records response
+                mock_response = {
+                    "successfulRecords": [
+                        {"memoryRecordId": "rec-1", "status": "SUCCEEDED"},
+                        {"memoryRecordId": "rec-2", "status": "SUCCEEDED"},
+                    ],
+                    "failedRecords": [],
+                }
+                mock_client_instance.batch_delete_memory_records.return_value = mock_response
+
+                result = manager.delete_all_long_term_memories_in_namespace("test/namespace")
+
+                assert len(result["successfulRecords"]) == 2
+                assert len(result["failedRecords"]) == 0
+
+                # Verify API call
+                mock_client_instance.batch_delete_memory_records.assert_called_once_with(
+                    memoryId="testMemory-1234567890",
+                    records=[{"memoryRecordId": "rec-1"}, {"memoryRecordId": "rec-2"}],
+                )
+
+    def test_delete_all_long_term_memories_in_namespace_empty(self):
+        """Test delete_all_long_term_memories_in_namespace with no records."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            # Mock empty list_long_term_memory_records
+            with patch.object(manager, "list_long_term_memory_records", return_value=[]):
+                result = manager.delete_all_long_term_memories_in_namespace("empty/namespace")
+
+                assert result == {"successfulRecords": [], "failedRecords": []}
+                # Should not call batch_delete_memory_records
+                mock_client_instance.batch_delete_memory_records.assert_not_called()
+
+    def test_delete_all_long_term_memories_in_namespace_client_error(self):
+        """Test delete_all_long_term_memories_in_namespace with ClientError."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            # Mock list_long_term_memory_records
+            mock_records = [{"memoryRecordId": "rec-1", "content": {"text": "Memory 1"}}]
+            with patch.object(manager, "list_long_term_memory_records", return_value=mock_records):
+                # Mock ClientError
+                error_response = {"Error": {"Code": "ValidationException", "Message": "Invalid request"}}
+                mock_client_instance.batch_delete_memory_records.side_effect = ClientError(
+                    error_response, "BatchDeleteMemoryRecords"
+                )
+
+                with pytest.raises(ClientError):
+                    manager.delete_all_long_term_memories_in_namespace("test/namespace")
+
     def test_list_actor_sessions_success(self):
         """Test list_actor_sessions successful execution."""
         with patch("boto3.Session") as mock_session_class:
