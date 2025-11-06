@@ -1,13 +1,14 @@
 import pytest
+
 from bedrock_agentcore.tools.config import (
-    VpcConfig,
-    NetworkConfiguration,
-    S3Location,
-    RecordingConfiguration,
-    BrowserSigningConfiguration,
-    ViewportConfiguration,
     BrowserConfiguration,
+    BrowserSigningConfiguration,
     CodeInterpreterConfiguration,
+    NetworkConfiguration,
+    RecordingConfiguration,
+    S3Location,
+    ViewportConfiguration,
+    VpcConfig,
     create_browser_config,
 )
 

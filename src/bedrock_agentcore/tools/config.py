@@ -280,7 +280,6 @@ class CodeInterpreterConfiguration:
         return config
 
 
-
 def create_browser_config(
     name: str,
     execution_role_arn: str,
