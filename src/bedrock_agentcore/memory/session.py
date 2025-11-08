@@ -653,15 +653,19 @@ class MemorySessionManager:
                 if next_token:
                     params["nextToken"] = next_token
 
+                # Initialize the filterMap
+                filterMap = {}
+
                 # Add branch filter if specified (but not for "main")
                 if branch_name and branch_name != "main":
-                    params["filter"] = {
-                        "branch": {"name": branch_name, "includeParentBranches": include_parent_branches}
-                    }
+                    filterMap["branch"] = {"name": branch_name, "includeParentBranches": include_parent_branches}
 
                 # Add eventMetadata filter if specified
                 if eventMetadata:
-                    params["filter"] = {"eventMetadata": eventMetadata}
+                    filterMap["eventMetadata"] = eventMetadata
+
+                if filterMap:
+                    params["filter"] = filterMap
 
                 response = self._data_plane_client.list_events(**params)
 

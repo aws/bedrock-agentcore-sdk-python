@@ -2505,8 +2505,8 @@ class TestEventMetadataFlow:
             call_args = mock_client_instance.list_events.call_args[1]
             assert "filter" in call_args
             assert call_args["filter"]["eventMetadata"] == event_metadata_filter
-            # Branch filter should not be present when eventMetadata is specified
-            assert "branch" not in call_args["filter"]
+            # Branch filter should be present when eventMetadata is specified
+            assert "branch" in call_args["filter"]
 
     def test_memory_session_list_events_with_event_metadata(self):
         """Test MemorySession.list_events with eventMetadata parameter."""
