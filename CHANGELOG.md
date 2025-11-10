@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.6] - 2025-11-10
+
+### Added
+- feat: Add control plane CRUD operations and config helpers for browser and code interpreter (#152) (81faca1)
+- feat: adding function to delete all memory records in namespace (#148) (72a16be)
+
+### Fixed
+- fix: list_events having branch & eventMetadata filter (#153) (70e138d)
+- fix: correct workflow output reference for external PR tests (#141) (90f04bf)
+
+### Other Changes
+- chore: bump version to 1.0.5 (#144) (1456d03)
+
 ## [1.0.5] - 2025-10-29
 
 ### Documentation
