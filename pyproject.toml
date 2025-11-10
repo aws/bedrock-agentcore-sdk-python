@@ -83,6 +83,7 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "!src/**/*.py" = ["D"]
+"src/bedrock_agentcore/memory/metadata-workflow.ipynb" = ["E501"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

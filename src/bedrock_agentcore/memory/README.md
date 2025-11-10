@@ -19,6 +19,7 @@ conversation handling.
   - [Branch Management](#branch-management)
   - [Session and Actor Management](#session-and-actor-management)
   - [Memory Record Management](#memory-record-management)
+  - [Event Management with Metadata](#event-management-with-metadata)
   - [Alternative Pattern: Separated Operations](#alternative-pattern-separated-operations)
 - [Error Handling](#error-handling)
   - [Common Exceptions](#common-exceptions)
@@ -311,6 +312,12 @@ print(f"Record content: {record.content}")
 # Delete memory record
 session.delete_memory_record("record-id-123")
 ```
+
+### Event Management with Metadata
+
+Events can now be managed by defining custom metadata.
+
+Learn more here!: [Working example](src/bedrock_agentcore/memory/metadata-workflow.ipynb)
 
 ### Alternative Pattern: Separated Operations
 
