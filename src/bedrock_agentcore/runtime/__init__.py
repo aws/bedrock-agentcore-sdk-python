@@ -4,10 +4,20 @@ This package contains the core runtime components for Bedrock AgentCore applicat
 - BedrockAgentCoreApp: Main application class
 - RequestContext: HTTP request context
 - BedrockAgentCoreContext: Agent identity context
+- ProcessingContext
+- StandardNamespaces
 """
 
 from .app import BedrockAgentCoreApp
-from .context import BedrockAgentCoreContext, RequestContext
+from .context import AgentContext, BedrockAgentCoreContext, ProcessingContext, RequestContext, StandardNamespaces
 from .models import PingStatus
 
-__all__ = ["BedrockAgentCoreApp", "RequestContext", "BedrockAgentCoreContext", "PingStatus"]
+__all__ = [
+    "BedrockAgentCoreApp",
+    "RequestContext",
+    "ProcessingContext",
+    "AgentContext",
+    "BedrockAgentCoreContext",
+    "PingStatus",
+    "StandardNamespaces",
+]

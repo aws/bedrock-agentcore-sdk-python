@@ -20,7 +20,7 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 from starlette.types import Lifespan
 
-from .context import BedrockAgentCoreContext, RequestContext
+from .context import AgentContext, BedrockAgentCoreContext, ProcessingContext, RequestContext
 from .models import (
     ACCESS_TOKEN_HEADER,
     AUTHORIZATION_HEADER,
@@ -275,21 +275,33 @@ class BedrockAgentCoreApp(Starlette):
                 self.logger.warning("Attempted to complete unknown task ID: %s", task_id)
                 return False
 
-    def _build_request_context(self, request) -> RequestContext:
-        """Build request context and setup all context variables."""
+    def _build_request_context(self, request) -> AgentContext:
+        """Build request context and setup all context variables.
+
+        Args:
+            request: Starlette Request object
+
+        Returns:
+            AgentContext containing both request and processing data
+        """
         try:
             headers = request.headers
+
+            # Extract or generate request ID
             request_id = headers.get(REQUEST_ID_HEADER)
             if not request_id:
                 request_id = str(uuid.uuid4())
 
+            # Extract session ID
             session_id = headers.get(SESSION_HEADER)
             BedrockAgentCoreContext.set_request_context(request_id, session_id)
 
+            # Extract and set workload access token
             agent_identity_token = headers.get(ACCESS_TOKEN_HEADER)
             if agent_identity_token:
                 BedrockAgentCoreContext.set_workload_access_token(agent_identity_token)
 
+            # Extract and set OAuth2 callback URL
             oauth2_callback_url = headers.get(OAUTH2_CALLBACK_URL_HEADER)
             if oauth2_callback_url:
                 BedrockAgentCoreContext.set_oauth2_callback_url(oauth2_callback_url)
@@ -307,19 +319,46 @@ class BedrockAgentCoreApp(Starlette):
                 if header_name.lower().startswith(CUSTOM_HEADER_PREFIX.lower()):
                     request_headers[header_name] = header_value
 
-            # Set in context if any headers were found
+            # Set in BedrockAgentCoreContext if any headers were found
             if request_headers:
                 BedrockAgentCoreContext.set_request_headers(request_headers)
 
             # Get the headers from context to pass to RequestContext
             req_headers = BedrockAgentCoreContext.get_request_headers()
 
-            return RequestContext(session_id=session_id, request_headers=req_headers)
+            # Check if middleware injected processing data
+            processing_context = ProcessingContext()
+            if hasattr(request, "state") and hasattr(request.state, "processing_data"):
+                # Middleware has injected data
+                processing_data = request.state.processing_data
+
+                # Handle both flat and namespaced data structures
+                if processing_data:
+                    # Check if it's already namespaced (dict of dicts)
+                    if all(isinstance(v, dict) for v in processing_data.values()):
+                        # Already namespaced
+                        processing_context.middleware_data = processing_data
+                    else:
+                        # Flat structure - put in 'default' namespace
+                        processing_context.middleware_data["default"] = processing_data
+
+            BedrockAgentCoreContext.set_processing_context(processing_context)
+
+            # Return AgentContext (combines request + processing)
+            return AgentContext(
+                request=RequestContext(session_id=session_id, request_headers=req_headers),
+                processing=processing_context,
+            )
+
         except Exception as e:
             self.logger.warning("Failed to build request context: %s: %s", type(e).__name__, e)
             request_id = str(uuid.uuid4())
             BedrockAgentCoreContext.set_request_context(request_id, None)
-            return RequestContext(session_id=None)
+
+            # Return minimal AgentContext on error
+            return AgentContext(
+                request=RequestContext(session_id=None, request_headers=None), processing=ProcessingContext()
+            )
 
     def _takes_context(self, handler: Callable) -> bool:
         try:

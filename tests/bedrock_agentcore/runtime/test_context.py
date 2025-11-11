@@ -2,6 +2,8 @@
 
 import contextvars
 
+from pydantic import ValidationError
+
 from bedrock_agentcore.runtime.context import BedrockAgentCoreContext, RequestContext
 
 
@@ -183,3 +185,125 @@ class TestRequestContext:
 
         assert context.session_id == "test-session-789"
         assert context.request_headers == {}
+
+
+class TestProcessingContext:
+    """Test ProcessingContext with namespace isolation."""
+
+    def test_processing_context_set_and_get(self):
+        """Test setting and getting namespaced data."""
+        from bedrock_agentcore.runtime.context import ProcessingContext, StandardNamespaces
+
+        context = ProcessingContext()
+        context.set(StandardNamespaces.AUTH, "user_id", "alice")
+
+        result = context.get(StandardNamespaces.AUTH, "user_id")
+        assert result == "alice"
+
+    def test_processing_context_namespace_isolation(self):
+        """Test that namespaces are isolated."""
+        from bedrock_agentcore.runtime.context import ProcessingContext
+
+        context = ProcessingContext()
+        context.set("auth", "user_id", "alice")
+        context.set("timing", "user_id", "bob")  # Different namespace, same key
+
+        assert context.get("auth", "user_id") == "alice"
+        assert context.get("timing", "user_id") == "bob"
+
+    def test_processing_context_get_namespace(self):
+        """Test getting entire namespace."""
+        from bedrock_agentcore.runtime.context import ProcessingContext
+
+        context = ProcessingContext()
+        context.set("auth", "user_id", "alice")
+        context.set("auth", "role", "admin")
+
+        auth_data = context.get_namespace("auth")
+        assert auth_data == {"user_id": "alice", "role": "admin"}
+
+    def test_processing_context_has_namespace(self):
+        """Test checking namespace existence."""
+        from bedrock_agentcore.runtime.context import ProcessingContext
+
+        context = ProcessingContext()
+        assert not context.has_namespace("auth")
+
+        context.set("auth", "user_id", "alice")
+        assert context.has_namespace("auth")
+
+    def test_processing_context_validation(self):
+        """Test optional validation."""
+        import pytest
+
+        from bedrock_agentcore.runtime.context import ProcessingContext
+
+        context = ProcessingContext()
+
+        # Should work without validation
+        context.set("custom", "data", "x" * 200, validate=False)
+
+        # Should fail with validation (exceeds max_size)
+        with pytest.raises(ValueError, match="Value too large"):
+            context.set("custom", "large", "x" * 200, validate=True, max_size=100)
+
+        # Should fail with malicious pattern
+        with pytest.raises(ValueError, match="Potentially unsafe pattern"):
+            context.set("custom", "bad", "test\x00null", validate=True)
+
+
+class TestAgentContext:
+    """Test AgentContext integration."""
+
+    def test_agent_context_backward_compatibility(self):
+        """Test backward compatibility properties."""
+        from bedrock_agentcore.runtime.context import AgentContext, ProcessingContext, RequestContext
+
+        request = RequestContext(session_id="test-123", request_headers={"Authorization": "Bearer token"})
+        processing = ProcessingContext()
+
+        context = AgentContext(request=request, processing=processing)
+
+        # Backward compatibility
+        assert context.session_id == "test-123"
+        assert context.request_headers is not None
+        assert "Authorization" in context.request_headers
+
+    def test_agent_context_immutability(self):
+        """Test that request context is immutable."""
+        from types import MappingProxyType
+
+        import pytest
+
+        from bedrock_agentcore.runtime.context import AgentContext, ProcessingContext, RequestContext
+
+        request = RequestContext(session_id="test-123", request_headers={"Authorization": "Bearer token"})
+        processing = ProcessingContext()
+        context = AgentContext(request=request, processing=processing)
+
+        # Cannot modify frozen request
+        with pytest.raises((ValidationError, AttributeError, TypeError)):
+            context.request.session_id = "hacked"
+
+        # Cannot modify headers (MappingProxyType)
+        assert isinstance(context.request_headers, MappingProxyType)
+        with pytest.raises(TypeError):
+            context.request_headers["new"] = "value"
+
+        # CAN modify processing context
+        context.processing.set("custom", "key", "value")
+        assert context.processing.get("custom", "key") == "value"
+
+
+class TestStandardNamespaces:
+    """Test StandardNamespaces constants."""
+
+    def test_standard_namespaces_values(self):
+        """Test that standard namespace constants have expected values."""
+        from bedrock_agentcore.runtime.context import StandardNamespaces
+
+        assert StandardNamespaces.AUTH == "auth"
+        assert StandardNamespaces.TIMING == "timing"
+        assert StandardNamespaces.AUDIT == "audit"
+        assert StandardNamespaces.METRICS == "metrics"
+        assert StandardNamespaces.CUSTOM == "custom"
