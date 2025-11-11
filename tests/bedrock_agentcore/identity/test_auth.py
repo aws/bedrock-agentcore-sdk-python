@@ -227,6 +227,45 @@ class TestRequiresAccessTokenDecorator:
                         custom_state="myAppState",
                     )
 
+    @pytest.mark.asyncio
+    async def test_custom_parameters_passed_to_client(self):
+        with patch("bedrock_agentcore.identity.auth.IdentityClient") as mock_identity_client_class:
+            mock_client = Mock()
+            mock_identity_client_class.return_value = mock_client
+
+            with patch(
+                "bedrock_agentcore.identity.auth._get_workload_access_token", new_callable=AsyncMock
+            ) as mock_get_agent_token:
+                mock_get_agent_token.return_value = "test-agent-token"
+                mock_client.get_token = AsyncMock(return_value="test-access-token")
+
+                with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+                    custom_params = {"param1": "value1", "param2": "value2"}
+
+                    @requires_access_token(
+                        provider_name="test-provider",
+                        scopes=["read"],
+                        auth_flow="USER_FEDERATION",
+                        custom_parameters=custom_params,
+                    )
+                    async def test_func(access_token=None):
+                        return access_token
+
+                    result = await test_func()
+
+                    assert result == "test-access-token"
+                    mock_client.get_token.assert_called_once_with(
+                        provider_name="test-provider",
+                        agent_identity_token="test-agent-token",
+                        scopes=["read"],
+                        auth_flow="USER_FEDERATION",
+                        callback_url=None,
+                        force_authentication=False,
+                        token_poller=None,
+                        custom_state=None,
+                        custom_parameters=custom_params,
+                    )
+
 
 class TestRequiresApiKeyDecorator:
     """Test the requires_api_key decorator."""

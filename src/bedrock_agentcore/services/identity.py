@@ -168,6 +168,7 @@ class IdentityClient:
         force_authentication: bool = False,
         token_poller: Optional[TokenPoller] = None,
         custom_state: Optional[str] = None,
+        custom_parameters: Optional[Dict[str, str]] = None,
     ) -> str:
         """Get an OAuth2 access token for the specified provider.
 
@@ -181,6 +182,8 @@ class IdentityClient:
             force_authentication: Force re-authentication even if token exists in the token vault
             token_poller: Custom token poller implementation
             custom_state: A state that allows applications to verify the validity of callbacks to callback_url
+            custom_parameters: A map of custom parameters to include in authorization request to the credential provider
+                               Note: these parameters are in addition to standard OAuth 2.0 flow parameters
 
         Returns:
             The access token string
@@ -206,6 +209,8 @@ class IdentityClient:
             req["forceAuthentication"] = force_authentication
         if custom_state:
             req["customState"] = custom_state
+        if custom_parameters:
+            req["customParameters"] = custom_parameters
 
         response = self.dp_client.get_resource_oauth2_token(**req)
 
