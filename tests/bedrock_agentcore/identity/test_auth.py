@@ -55,6 +55,7 @@ class TestRequiresAccessTokenDecorator:
                         force_authentication=False,
                         token_poller=None,
                         custom_state=None,
+                        custom_parameters=None,
                     )
 
     def test_sync_function_decoration_no_running_loop(self):
@@ -167,6 +168,7 @@ class TestRequiresAccessTokenDecorator:
                         force_authentication=False,
                         token_poller=None,
                         custom_state=None,
+                        custom_parameters=None,
                     )
 
     @pytest.mark.asyncio
@@ -208,6 +210,7 @@ class TestRequiresAccessTokenDecorator:
                         force_authentication=True,
                         token_poller=mock_poller,
                         custom_state="myAppState",
+                        custom_parameters=None,
                     )
                     async def test_func(token=None):
                         return f"token={token}"
@@ -225,6 +228,7 @@ class TestRequiresAccessTokenDecorator:
                         force_authentication=True,
                         token_poller=mock_poller,
                         custom_state="myAppState",
+                        custom_parameters=None,
                     )
 
     @pytest.mark.asyncio
@@ -263,6 +267,7 @@ class TestRequiresAccessTokenDecorator:
                         force_authentication=False,
                         token_poller=None,
                         custom_state=None,
+                        on_auth_url=None,
                         custom_parameters=custom_params,
                     )
 
