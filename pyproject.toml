@@ -144,7 +144,7 @@ dev = [
     "pytest-cov>=6.0.0",
     "ruff>=0.12.0",
     "wheel>=0.45.1",
-    "strands-agents>=1.1.0",
+    "strands-agents>=1.18.0",
 ]
 
 [project.optional-dependencies]

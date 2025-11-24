@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10"
 
 [[package]]
@@ -100,7 +100,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "pytest-cov", specifier = ">=6.0.0" },
     { name = "ruff", specifier = ">=0.12.0" },
-    { name = "strands-agents", specifier = ">=1.1.0" },
+    { name = "strands-agents", specifier = ">=1.18.0" },
     { name = "wheel", specifier = ">=0.45.1" },
 ]
 
@@ -1381,12 +1381,13 @@ wheels = [
 
 [[package]]
 name = "strands-agents"
-version = "1.1.0"
+version = "1.18.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "boto3" },
     { name = "botocore" },
     { name = "docstring-parser" },
+    { name = "jsonschema" },
     { name = "mcp" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-instrumentation-threading" },
@@ -1395,9 +1396,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "watchdog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fe/93/2b3603c08a94feebbe836b78b4a925b4fcdf7a4060c2ccd53b987239b532/strands_agents-1.1.0.tar.gz", hash = "sha256:bba7ad79a1b9e39986135e0907dad97b90e318ab3f3fb4f33742e12714ec6aa8", size = 230143, upload-time = "2025-07-24T21:13:57.305Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c6/58/08665fc8d5330fc32727793c39ad019f6cc3f75272ede3629dd67b4fe6a5/strands_agents-1.18.0.tar.gz", hash = "sha256:85bd251d50de5d441cc2578068b4656ca86bdbaa1764e292d56b0edf0cf54c52", size = 521216, upload-time = "2025-11-21T21:30:26.394Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c6/46/02ab678f266bd07d0f4ebd0f43499eabc02a832ea5d35c4f7a2b2bf770c8/strands_agents-1.1.0-py3-none-any.whl", hash = "sha256:183d0b6f7533d4bb3655cda1d7a8ab6189bffeb20184dd88b45881daf83dc5f5", size = 163806, upload-time = "2025-07-24T21:13:53.733Z" },
+    { url = "https://files.pythonhosted.org/packages/56/37/79c63bf7ac194754748fc42b5c9fb8f964dc742d92c19052e6cc74fede39/strands_agents-1.18.0-py3-none-any.whl", hash = "sha256:c9cf9662b24344413d204a7ee60d3e3ab88791568e9f572020901eb3df9b6b5e", size = 255594, upload-time = "2025-11-21T21:30:24.662Z" },
 ]
 
 [[package]]
