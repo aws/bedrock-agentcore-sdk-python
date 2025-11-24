@@ -22,7 +22,7 @@ jobs:
       should-run: ${{ steps.safety-check.outputs.result }}
     steps:
       - name: Checkout base branch for safety check
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.base.sha }}
 
@@ -116,7 +116,7 @@ jobs:
          mask-aws-account-id: true
 
       - name: Checkout PR head commit
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
