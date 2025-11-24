@@ -5,7 +5,7 @@ import contextvars
 import logging
 import os
 from functools import wraps
-from typing import Any, Callable, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 import boto3
 
@@ -29,6 +29,7 @@ def requires_access_token(
     force_authentication: bool = False,
     token_poller: Optional[TokenPoller] = None,
     custom_state: Optional[str] = None,
+    custom_parameters: Optional[Dict[str, str]] = None,
 ) -> Callable:
     """Decorator that fetches an OAuth2 access token before calling the decorated function.
 
@@ -42,6 +43,8 @@ def requires_access_token(
         force_authentication: Force re-authentication
         token_poller: Custom token poller implementation
         custom_state: A state that allows applications to verify the validity of callbacks to callback_url
+        custom_parameters: A map of custom parameters to include in authorization request to the credential provider
+                           Note: these parameters are in addition to standard OAuth 2.0 flow parameters
 
     Returns:
         Decorator function
@@ -62,6 +65,7 @@ def requires_access_token(
                 force_authentication=force_authentication,
                 token_poller=token_poller,
                 custom_state=custom_state,
+                custom_parameters=custom_parameters,
             )
 
         @wraps(func)

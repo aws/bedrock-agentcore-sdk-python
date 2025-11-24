@@ -309,6 +309,41 @@ class TestIdentityClient:
             custom_poller.poll_for_token.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_get_token_with_custom_parameters(self):
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_client = Mock()
+            mock_boto_client.return_value = mock_client
+
+            identity_client = IdentityClient(region)
+
+            provider_name = "test-provider"
+            scopes = ["read", "write"]
+            agent_identity_token = "test-agent-token"
+            custom_parameters = {"param1": "value1", "param2": "value2"}
+            expected_token = "test-access-token"
+
+            mock_client.get_resource_oauth2_token.return_value = {"accessToken": expected_token}
+
+            result = await identity_client.get_token(
+                provider_name=provider_name,
+                scopes=scopes,
+                agent_identity_token=agent_identity_token,
+                auth_flow="USER_FEDERATION",
+                custom_parameters=custom_parameters,
+            )
+
+            assert result == expected_token
+            mock_client.get_resource_oauth2_token.assert_called_once_with(
+                resourceCredentialProviderName=provider_name,
+                scopes=scopes,
+                oauth2Flow="USER_FEDERATION",
+                workloadIdentityToken=agent_identity_token,
+                customParameters=custom_parameters,
+            )
+
+    @pytest.mark.asyncio
     async def test_get_api_key_success(self):
         """Test successful API key retrieval."""
         region = "us-west-2"
