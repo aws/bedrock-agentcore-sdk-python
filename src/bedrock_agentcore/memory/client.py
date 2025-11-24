@@ -13,8 +13,9 @@ import logging
 import time
 import uuid
 import warnings
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
@@ -60,7 +61,7 @@ class MemoryClient:
         "list_memory_strategies",
     }
 
-    def __init__(self, region_name: Optional[str] = None):
+    def __init__(self, region_name: str | None = None):
         """Initialize the Memory client."""
         self.region_name = region_name or boto3.Session().region_name or "us-west-2"
 
@@ -119,11 +120,11 @@ class MemoryClient:
     def create_memory(
         self,
         name: str,
-        strategies: Optional[List[Dict[str, Any]]] = None,
-        description: Optional[str] = None,
+        strategies: list[dict[str, Any]] | None = None,
+        description: str | None = None,
         event_expiry_days: int = 90,
-        memory_execution_role_arn: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        memory_execution_role_arn: str | None = None,
+    ) -> dict[str, Any]:
         """Create a memory with simplified configuration."""
         if strategies is None:
             strategies = []
@@ -160,11 +161,11 @@ class MemoryClient:
     def create_or_get_memory(
         self,
         name: str,
-        strategies: Optional[List[Dict[str, Any]]] = None,
-        description: Optional[str] = None,
+        strategies: list[dict[str, Any]] | None = None,
+        description: str | None = None,
         event_expiry_days: int = 90,
-        memory_execution_role_arn: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        memory_execution_role_arn: str | None = None,
+    ) -> dict[str, Any]:
         """Create a memory resource or fetch the existing memory details if it already exists.
 
         Returns:
@@ -194,13 +195,13 @@ class MemoryClient:
     def create_memory_and_wait(
         self,
         name: str,
-        strategies: List[Dict[str, Any]],
-        description: Optional[str] = None,
+        strategies: list[dict[str, Any]],
+        description: str | None = None,
         event_expiry_days: int = 90,
-        memory_execution_role_arn: Optional[str] = None,
+        memory_execution_role_arn: str | None = None,
         max_wait: int = 300,
         poll_interval: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a memory and wait for it to become ACTIVE.
 
         This method creates a memory and polls until it reaches ACTIVE status,
@@ -253,7 +254,7 @@ class MemoryClient:
                     # Get failure reason if available
                     response = self.gmcp_client.get_memory(memoryId=memory_id)  # Input uses old field name
                     failure_reason = response["memory"].get("failureReason", "Unknown")
-                    raise RuntimeError("Memory creation failed: %s" % failure_reason)
+                    raise RuntimeError(f"Memory creation failed: {failure_reason}")
                 else:
                     logger.debug("Memory status: %s (%d seconds elapsed)", status, elapsed)
 
@@ -263,11 +264,11 @@ class MemoryClient:
 
             time.sleep(poll_interval)
 
-        raise TimeoutError("Memory %s did not become ACTIVE within %d seconds" % (memory_id, max_wait))
+        raise TimeoutError(f"Memory {memory_id} did not become ACTIVE within {max_wait} seconds")
 
     def retrieve_memories(
-        self, memory_id: str, namespace: str, query: str, actor_id: Optional[str] = None, top_k: int = 3
-    ) -> List[Dict[str, Any]]:
+        self, memory_id: str, namespace: str, query: str, actor_id: str | None = None, top_k: int = 3
+    ) -> list[dict[str, Any]]:
         """Retrieve relevant memories from a namespace.
 
         Note: Wildcards (*) are NOT supported in namespaces. You must provide the
@@ -332,10 +333,10 @@ class MemoryClient:
         memory_id: str,
         actor_id: str,
         session_id: str,
-        messages: List[Tuple[str, str]],
-        event_timestamp: Optional[datetime] = None,
-        branch: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, Any]:
+        messages: list[tuple[str, str]],
+        event_timestamp: datetime | None = None,
+        branch: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """Save an event of an agent interaction or conversation with a user.
 
         This is the basis of short-term memory. If you configured your Memory resource
@@ -410,7 +411,7 @@ class MemoryClient:
                     role_enum = MessageRole(role.upper())
                 except ValueError as err:
                     raise ValueError(
-                        "Invalid role '%s'. Must be one of: %s" % (role, ", ".join([r.value for r in MessageRole]))
+                        "Invalid role '{}'. Must be one of: {}".format(role, ", ".join([r.value for r in MessageRole]))
                     ) from err
 
                 payload.append({"conversational": {"content": {"text": text}, "role": role_enum.value}})
@@ -447,9 +448,9 @@ class MemoryClient:
         actor_id: str,
         session_id: str,
         blob_data: Any,
-        event_timestamp: Optional[datetime] = None,
-        branch: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, Any]:
+        event_timestamp: datetime | None = None,
+        branch: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """Save a blob event to AgentCore Memory.
 
         Args:
@@ -505,10 +506,10 @@ class MemoryClient:
         memory_id: str,
         actor_id: str,
         session_id: str,
-        messages: List[Tuple[str, str]],
-        event_timestamp: Optional[datetime] = None,
-        branch: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, Any]:
+        messages: list[tuple[str, str]],
+        event_timestamp: datetime | None = None,
+        branch: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """DEPRECATED: Use create_event() instead.
 
         Args:
@@ -564,7 +565,7 @@ class MemoryClient:
                     role_enum = MessageRole(role.upper())
                 except ValueError as err:
                     raise ValueError(
-                        "Invalid role '%s'. Must be one of: %s" % (role, ", ".join([r.value for r in MessageRole]))
+                        "Invalid role '{}'. Must be one of: {}".format(role, ", ".join([r.value for r in MessageRole]))
                     ) from err
 
                 payload.append({"conversational": {"content": {"text": text}, "role": role_enum.value}})
@@ -603,8 +604,8 @@ class MemoryClient:
         session_id: str,
         user_input: str,
         agent_response: str,
-        event_timestamp: Optional[datetime] = None,
-    ) -> Dict[str, Any]:
+        event_timestamp: datetime | None = None,
+    ) -> dict[str, Any]:
         """DEPRECATED: Use save_conversation() for more flexibility.
 
         This method will be removed in v1.0.0.
@@ -633,11 +634,11 @@ class MemoryClient:
         session_id: str,
         user_input: str,
         agent_response: str,
-        event_timestamp: Optional[datetime] = None,
-        retrieval_namespace: Optional[str] = None,
-        retrieval_query: Optional[str] = None,
+        event_timestamp: datetime | None = None,
+        retrieval_namespace: str | None = None,
+        retrieval_query: str | None = None,
         top_k: int = 3,
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """DEPRECATED: Use retrieve_memories() and save_conversation() separately.
 
         This method will be removed in v1.0.0.
@@ -674,12 +675,12 @@ class MemoryClient:
         actor_id: str,
         session_id: str,
         user_input: str,
-        llm_callback: Callable[[str, List[Dict[str, Any]]], str],
-        retrieval_namespace: Optional[str] = None,
-        retrieval_query: Optional[str] = None,
+        llm_callback: Callable[[str, list[dict[str, Any]]], str],
+        retrieval_namespace: str | None = None,
+        retrieval_query: str | None = None,
         top_k: int = 3,
-        event_timestamp: Optional[datetime] = None,
-    ) -> Tuple[List[Dict[str, Any]], str, Dict[str, Any]]:
+        event_timestamp: datetime | None = None,
+    ) -> tuple[list[dict[str, Any]], str, dict[str, Any]]:
         r"""Complete conversation turn with LLM callback integration.
 
         This method combines memory retrieval, LLM invocation, and response storage
@@ -760,11 +761,11 @@ class MemoryClient:
         memory_id: str,
         actor_id: str,
         session_id: str,
-        branch_name: Optional[str] = None,
+        branch_name: str | None = None,
         include_parent_branches: bool = False,
         max_results: int = 100,
         include_payload: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List all events in a session with pagination support.
 
         This method provides direct access to the raw events API, allowing developers
@@ -830,7 +831,7 @@ class MemoryClient:
             logger.error("Failed to list events: %s", e)
             raise
 
-    def list_branches(self, memory_id: str, actor_id: str, session_id: str) -> List[Dict[str, Any]]:
+    def list_branches(self, memory_id: str, actor_id: str, session_id: str) -> list[dict[str, Any]]:
         """List all branches in a session.
 
         This method handles pagination automatically and provides a structured view
@@ -908,10 +909,10 @@ class MemoryClient:
         memory_id: str,
         actor_id: str,
         session_id: str,
-        branch_name: Optional[str] = None,
+        branch_name: str | None = None,
         include_parent_branches: bool = False,
         max_results: int = 100,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List events in a specific branch.
 
         This method provides complex filtering and pagination that would require
@@ -966,7 +967,7 @@ class MemoryClient:
             logger.error("Failed to list branch events: %s", e)
             raise
 
-    def get_conversation_tree(self, memory_id: str, actor_id: str, session_id: str) -> Dict[str, Any]:
+    def get_conversation_tree(self, memory_id: str, actor_id: str, session_id: str) -> dict[str, Any]:
         """Get a tree structure of the conversation with all branches.
 
         This method transforms a flat list of events into a hierarchical tree structure,
@@ -1035,7 +1036,7 @@ class MemoryClient:
 
     def merge_branch_context(
         self, memory_id: str, actor_id: str, session_id: str, branch_name: str, include_parent: bool = True
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get all messages from a branch for context building.
 
         Args:
@@ -1085,10 +1086,10 @@ class MemoryClient:
         actor_id: str,
         session_id: str,
         k: int = 5,
-        branch_name: Optional[str] = None,
+        branch_name: str | None = None,
         include_branches: bool = False,
         max_results: int = 100,
-    ) -> List[List[Dict[str, Any]]]:
+    ) -> list[list[dict[str, Any]]]:
         """Get the last K conversation turns.
 
         A "turn" typically consists of a user message followed by assistant response(s).
@@ -1147,9 +1148,9 @@ class MemoryClient:
         session_id: str,
         root_event_id: str,
         branch_name: str,
-        new_messages: List[Tuple[str, str]],
-        event_timestamp: Optional[datetime] = None,
-    ) -> Dict[str, Any]:
+        new_messages: list[tuple[str, str]],
+        event_timestamp: datetime | None = None,
+    ) -> dict[str, Any]:
         """Fork a conversation from a specific event to create a new branch."""
         try:
             branch = {"rootEventId": root_event_id, "name": branch_name}
@@ -1170,7 +1171,7 @@ class MemoryClient:
             logger.error("Failed to fork conversation: %s", e)
             raise
 
-    def get_memory_strategies(self, memory_id: str) -> List[Dict[str, Any]]:
+    def get_memory_strategies(self, memory_id: str) -> list[dict[str, Any]]:
         """Get all strategies for a memory."""
         try:
             response = self.gmcp_client.get_memory(memoryId=memory_id)  # Input uses old field name
@@ -1212,7 +1213,7 @@ class MemoryClient:
             logger.error("Failed to get memory status: %s", e)
             raise
 
-    def list_memories(self, max_results: int = 100) -> List[Dict[str, Any]]:
+    def list_memories(self, max_results: int = 100) -> list[dict[str, Any]]:
         """List all memories for the account."""
         try:
             # Ensure max_results doesn't exceed API limit per request
@@ -1247,7 +1248,7 @@ class MemoryClient:
             logger.error("Failed to list memories: %s", e)
             raise
 
-    def delete_memory(self, memory_id: str) -> Dict[str, Any]:
+    def delete_memory(self, memory_id: str) -> dict[str, Any]:
         """Delete a memory resource."""
         try:
             response = self.gmcp_client.delete_memory(
@@ -1259,7 +1260,7 @@ class MemoryClient:
             logger.error("Failed to delete memory: %s", e)
             raise
 
-    def delete_memory_and_wait(self, memory_id: str, max_wait: int = 300, poll_interval: int = 10) -> Dict[str, Any]:
+    def delete_memory_and_wait(self, memory_id: str, max_wait: int = 300, poll_interval: int = 10) -> dict[str, Any]:
         """Delete a memory and wait for deletion to complete.
 
         This method deletes a memory and polls until it's fully deleted,
@@ -1299,20 +1300,20 @@ class MemoryClient:
 
             time.sleep(poll_interval)
 
-        raise TimeoutError("Memory %s was not deleted within %d seconds" % (memory_id, max_wait))
+        raise TimeoutError(f"Memory {memory_id} was not deleted within {max_wait} seconds")
 
     def add_semantic_strategy(
         self,
         memory_id: str,
         name: str,
-        description: Optional[str] = None,
-        namespaces: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        description: str | None = None,
+        namespaces: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Add a semantic memory strategy.
 
         Note: Configuration is no longer provided for built-in strategies as per API changes.
         """
-        strategy: Dict = {
+        strategy: dict = {
             StrategyType.SEMANTIC.value: {
                 "name": name,
             }
@@ -1329,11 +1330,11 @@ class MemoryClient:
         self,
         memory_id: str,
         name: str,
-        description: Optional[str] = None,
-        namespaces: Optional[List[str]] = None,
+        description: str | None = None,
+        namespaces: list[str] | None = None,
         max_wait: int = 300,
         poll_interval: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Add a semantic strategy and wait for memory to return to ACTIVE state.
 
         This addresses the issue where adding a strategy puts the memory into
@@ -1349,14 +1350,14 @@ class MemoryClient:
         self,
         memory_id: str,
         name: str,
-        description: Optional[str] = None,
-        namespaces: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        description: str | None = None,
+        namespaces: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Add a summary memory strategy.
 
         Note: Configuration is no longer provided for built-in strategies as per API changes.
         """
-        strategy: Dict = {
+        strategy: dict = {
             StrategyType.SUMMARY.value: {
                 "name": name,
             }
@@ -1373,11 +1374,11 @@ class MemoryClient:
         self,
         memory_id: str,
         name: str,
-        description: Optional[str] = None,
-        namespaces: Optional[List[str]] = None,
+        description: str | None = None,
+        namespaces: list[str] | None = None,
         max_wait: int = 300,
         poll_interval: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Add a summary strategy and wait for memory to return to ACTIVE state."""
         self.add_summary_strategy(memory_id, name, description, namespaces)
         return self._wait_for_memory_active(memory_id, max_wait, poll_interval)
@@ -1386,14 +1387,14 @@ class MemoryClient:
         self,
         memory_id: str,
         name: str,
-        description: Optional[str] = None,
-        namespaces: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        description: str | None = None,
+        namespaces: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Add a user preference memory strategy.
 
         Note: Configuration is no longer provided for built-in strategies as per API changes.
         """
-        strategy: Dict = {
+        strategy: dict = {
             StrategyType.USER_PREFERENCE.value: {
                 "name": name,
             }
@@ -1410,11 +1411,11 @@ class MemoryClient:
         self,
         memory_id: str,
         name: str,
-        description: Optional[str] = None,
-        namespaces: Optional[List[str]] = None,
+        description: str | None = None,
+        namespaces: list[str] | None = None,
         max_wait: int = 300,
         poll_interval: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Add a user preference strategy and wait for memory to return to ACTIVE state."""
         self.add_user_preference_strategy(memory_id, name, description, namespaces)
         return self._wait_for_memory_active(memory_id, max_wait, poll_interval)
@@ -1423,11 +1424,11 @@ class MemoryClient:
         self,
         memory_id: str,
         name: str,
-        extraction_config: Dict[str, Any],
-        consolidation_config: Dict[str, Any],
-        description: Optional[str] = None,
-        namespaces: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        extraction_config: dict[str, Any],
+        consolidation_config: dict[str, Any],
+        description: str | None = None,
+        namespaces: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Add a custom semantic strategy with prompts.
 
         Args:
@@ -1469,13 +1470,13 @@ class MemoryClient:
         self,
         memory_id: str,
         name: str,
-        extraction_config: Dict[str, Any],
-        consolidation_config: Dict[str, Any],
-        description: Optional[str] = None,
-        namespaces: Optional[List[str]] = None,
+        extraction_config: dict[str, Any],
+        consolidation_config: dict[str, Any],
+        description: str | None = None,
+        namespaces: list[str] | None = None,
         max_wait: int = 300,
         poll_interval: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Add a custom semantic strategy and wait for memory to return to ACTIVE state."""
         self.add_custom_semantic_strategy(
             memory_id, name, extraction_config, consolidation_config, description, namespaces
@@ -1486,12 +1487,12 @@ class MemoryClient:
         self,
         memory_id: str,
         strategy_id: str,
-        description: Optional[str] = None,
-        namespaces: Optional[List[str]] = None,
-        configuration: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        description: str | None = None,
+        namespaces: list[str] | None = None,
+        configuration: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Modify a strategy with full control over configuration."""
-        modify_config: Dict = {"memoryStrategyId": strategy_id}  # Using old field name for input
+        modify_config: dict = {"memoryStrategyId": strategy_id}  # Using old field name for input
 
         if description is not None:
             modify_config["description"] = description
@@ -1502,17 +1503,17 @@ class MemoryClient:
 
         return self.update_memory_strategies(memory_id=memory_id, modify_strategies=[modify_config])
 
-    def delete_strategy(self, memory_id: str, strategy_id: str) -> Dict[str, Any]:
+    def delete_strategy(self, memory_id: str, strategy_id: str) -> dict[str, Any]:
         """Delete a strategy from a memory."""
         return self.update_memory_strategies(memory_id=memory_id, delete_strategy_ids=[strategy_id])
 
     def update_memory_strategies(
         self,
         memory_id: str,
-        add_strategies: Optional[List[Dict[str, Any]]] = None,
-        modify_strategies: Optional[List[Dict[str, Any]]] = None,
-        delete_strategy_ids: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        add_strategies: list[dict[str, Any]] | None = None,
+        modify_strategies: list[dict[str, Any]] | None = None,
+        delete_strategy_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Update memory strategies - add, modify, or delete."""
         try:
             memory_strategies = {}
@@ -1534,7 +1535,7 @@ class MemoryClient:
                     strategy_info = strategy_map.get(strategy_id)
 
                     if not strategy_info:
-                        raise ValueError("Strategy %s not found in memory %s" % (strategy_id, memory_id))
+                        raise ValueError(f"Strategy {strategy_id} not found in memory {memory_id}")
 
                     strategy_type = strategy_info["memoryStrategyType"]  # Using normalized field
                     override_type = strategy_info.get("configuration", {}).get("type")
@@ -1575,12 +1576,12 @@ class MemoryClient:
     def update_memory_strategies_and_wait(
         self,
         memory_id: str,
-        add_strategies: Optional[List[Dict[str, Any]]] = None,
-        modify_strategies: Optional[List[Dict[str, Any]]] = None,
-        delete_strategy_ids: Optional[List[str]] = None,
+        add_strategies: list[dict[str, Any]] | None = None,
+        modify_strategies: list[dict[str, Any]] | None = None,
+        delete_strategy_ids: list[str] | None = None,
         max_wait: int = 300,
         poll_interval: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Update memory strategies and wait for memory to return to ACTIVE state.
 
         This method handles the temporary CREATING state that occurs when
@@ -1663,7 +1664,7 @@ class MemoryClient:
             logger.info("Note: Encountered %d service errors during polling", service_errors)
         return False
 
-    def add_strategy(self, memory_id: str, strategy: Dict[str, Any]) -> Dict[str, Any]:
+    def add_strategy(self, memory_id: str, strategy: dict[str, Any]) -> dict[str, Any]:
         """Add a strategy to a memory (without waiting).
 
         WARNING: After adding a strategy, the memory enters CREATING state temporarily.
@@ -1686,7 +1687,7 @@ class MemoryClient:
 
     # Private methods
 
-    def _normalize_memory_response(self, memory: Dict[str, Any]) -> Dict[str, Any]:
+    def _normalize_memory_response(self, memory: dict[str, Any]) -> dict[str, Any]:
         """Normalize memory response to include both old and new field names.
 
         The API returns new field names but SDK users might expect old ones.
@@ -1728,11 +1729,11 @@ class MemoryClient:
 
         return memory
 
-    def _add_strategy(self, memory_id: str, strategy: Dict[str, Any]) -> Dict[str, Any]:
+    def _add_strategy(self, memory_id: str, strategy: dict[str, Any]) -> dict[str, Any]:
         """Internal method to add a single strategy."""
         return self.update_memory_strategies(memory_id=memory_id, add_strategies=[strategy])
 
-    def _wait_for_memory_active(self, memory_id: str, max_wait: int, poll_interval: int) -> Dict[str, Any]:
+    def _wait_for_memory_active(self, memory_id: str, max_wait: int, poll_interval: int) -> dict[str, Any]:
         """Wait for memory to return to ACTIVE state after strategy update."""
         logger.info("Waiting for memory %s to return to ACTIVE state...", memory_id)
 
@@ -1751,7 +1752,7 @@ class MemoryClient:
                 elif status == MemoryStatus.FAILED.value:
                     response = self.gmcp_client.get_memory(memoryId=memory_id)  # Input uses old field name
                     failure_reason = response["memory"].get("failureReason", "Unknown")
-                    raise RuntimeError("Memory update failed: %s" % failure_reason)
+                    raise RuntimeError(f"Memory update failed: {failure_reason}")
                 else:
                     logger.debug("Memory status: %s (%d seconds elapsed)", status, elapsed)
 
@@ -1761,9 +1762,9 @@ class MemoryClient:
 
             time.sleep(poll_interval)
 
-        raise TimeoutError("Memory %s did not return to ACTIVE state within %d seconds" % (memory_id, max_wait))
+        raise TimeoutError(f"Memory {memory_id} did not return to ACTIVE state within {max_wait} seconds")
 
-    def _add_default_namespaces(self, strategies: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _add_default_namespaces(self, strategies: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Add default namespaces to strategies that don't have them."""
         processed = []
 
@@ -1794,7 +1795,7 @@ class MemoryClient:
 
         return True
 
-    def _validate_strategy_config(self, strategy: Dict[str, Any], strategy_type: str) -> None:
+    def _validate_strategy_config(self, strategy: dict[str, Any], strategy_type: str) -> None:
         """Validate strategy configuration parameters."""
         strategy_config = strategy[strategy_type]
 
@@ -1803,8 +1804,8 @@ class MemoryClient:
             self._validate_namespace(namespace)
 
     def _wrap_configuration(
-        self, config: Dict[str, Any], strategy_type: str, override_type: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, config: dict[str, Any], strategy_type: str, override_type: str | None = None
+    ) -> dict[str, Any]:
         """Wrap configuration based on strategy type."""
         wrapped_config = {}
 

@@ -5,7 +5,7 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import boto3
 from botocore.config import Config as BotocoreConfig
@@ -50,10 +50,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
     # Class-level timestamp tracking for monotonic ordering
     _timestamp_lock = threading.Lock()
-    _last_timestamp: Optional[datetime] = None
+    _last_timestamp: datetime | None = None
 
     @classmethod
-    def _get_monotonic_timestamp(cls, desired_timestamp: Optional[datetime] = None) -> datetime:
+    def _get_monotonic_timestamp(cls, desired_timestamp: datetime | None = None) -> datetime:
         """Get a monotonically increasing timestamp.
 
         Args:
@@ -83,9 +83,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def __init__(
         self,
         agentcore_memory_config: AgentCoreMemoryConfig,
-        region_name: Optional[str] = None,
-        boto_session: Optional[boto3.Session] = None,
-        boto_client_config: Optional[BotocoreConfig] = None,
+        region_name: str | None = None,
+        boto_session: boto3.Session | None = None,
+        boto_client_config: BotocoreConfig | None = None,
         **kwargs: Any,
     ):
         """Initialize AgentCoreMemorySessionManager with Bedrock AgentCore Memory.
@@ -188,7 +188,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         logger.info("Created session: %s with event: %s", session.session_id, event.get("event", {}).get("eventId"))
         return session
 
-    def read_session(self, session_id: str, **kwargs: Any) -> Optional[Session]:
+    def read_session(self, session_id: str, **kwargs: Any) -> Session | None:
         """Read session data.
 
         AgentCore Memory does not have a `get_session` method.
@@ -263,7 +263,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             event.get("event", {}).get("eventId"),
         )
 
-    def read_agent(self, session_id: str, agent_id: str, **kwargs: Any) -> Optional[SessionAgent]:
+    def read_agent(self, session_id: str, agent_id: str, **kwargs: Any) -> SessionAgent | None:
         """Read agent data from AgentCore Memory events.
 
         We reconstruct the agent state from the conversation history.
@@ -317,7 +317,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
     def create_message(
         self, session_id: str, agent_id: str, session_message: SessionMessage, **kwargs: Any
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Create a new message in AgentCore Memory.
 
         Args:
@@ -382,7 +382,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             logger.error("Failed to create message in AgentCore Memory: %s", e)
             raise SessionException(f"Failed to create message: {e}") from e
 
-    def read_message(self, session_id: str, agent_id: str, message_id: int, **kwargs: Any) -> Optional[SessionMessage]:
+    def read_message(self, session_id: str, agent_id: str, message_id: int, **kwargs: Any) -> SessionMessage | None:
         """Read a specific message by ID from AgentCore Memory.
 
         Args:
@@ -427,7 +427,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         )
 
     def list_messages(
-        self, session_id: str, agent_id: str, limit: Optional[int] = None, offset: int = 0, **kwargs: Any
+        self, session_id: str, agent_id: str, limit: int | None = None, offset: int = 0, **kwargs: Any
     ) -> list[SessionMessage]:
         """List messages for an agent from AgentCore Memory with pagination.
 

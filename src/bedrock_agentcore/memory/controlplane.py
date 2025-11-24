@@ -8,7 +8,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
@@ -48,13 +48,13 @@ class MemoryControlPlaneClient:
         self,
         name: str,
         event_expiry_days: int = 90,
-        description: Optional[str] = None,
-        memory_execution_role_arn: Optional[str] = None,
-        strategies: Optional[List[Dict[str, Any]]] = None,
+        description: str | None = None,
+        memory_execution_role_arn: str | None = None,
+        strategies: list[dict[str, Any]] | None = None,
         wait_for_active: bool = False,
         max_wait: int = 300,
         poll_interval: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a memory resource with optional strategies.
 
         Args:
@@ -101,7 +101,7 @@ class MemoryControlPlaneClient:
             logger.error("Failed to create memory: %s", e)
             raise
 
-    def get_memory(self, memory_id: str, include_strategies: bool = True) -> Dict[str, Any]:
+    def get_memory(self, memory_id: str, include_strategies: bool = True) -> dict[str, Any]:
         """Get a memory resource by ID.
 
         Args:
@@ -129,7 +129,7 @@ class MemoryControlPlaneClient:
             logger.error("Failed to get memory: %s", e)
             raise
 
-    def list_memories(self, max_results: int = 100) -> List[Dict[str, Any]]:
+    def list_memories(self, max_results: int = 100) -> list[dict[str, Any]]:
         """List all memories for the account with pagination support.
 
         Args:
@@ -168,16 +168,16 @@ class MemoryControlPlaneClient:
     def update_memory(
         self,
         memory_id: str,
-        description: Optional[str] = None,
-        event_expiry_days: Optional[int] = None,
-        memory_execution_role_arn: Optional[str] = None,
-        add_strategies: Optional[List[Dict[str, Any]]] = None,
-        modify_strategies: Optional[List[Dict[str, Any]]] = None,
-        delete_strategy_ids: Optional[List[str]] = None,
+        description: str | None = None,
+        event_expiry_days: int | None = None,
+        memory_execution_role_arn: str | None = None,
+        add_strategies: list[dict[str, Any]] | None = None,
+        modify_strategies: list[dict[str, Any]] | None = None,
+        delete_strategy_ids: list[str] | None = None,
         wait_for_active: bool = False,
         max_wait: int = 300,
         poll_interval: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Update a memory resource properties and/or strategies.
 
         Args:
@@ -195,7 +195,7 @@ class MemoryControlPlaneClient:
         Returns:
             Updated memory object
         """
-        params: Dict = {
+        params: dict = {
             "memoryId": memory_id,
             "clientToken": str(uuid.uuid4()),
         }
@@ -248,7 +248,7 @@ class MemoryControlPlaneClient:
         wait_for_strategies: bool = False,  # Changed default to False
         max_wait: int = 300,
         poll_interval: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Delete a memory resource.
 
         Args:
@@ -320,11 +320,11 @@ class MemoryControlPlaneClient:
     def add_strategy(
         self,
         memory_id: str,
-        strategy: Dict[str, Any],
+        strategy: dict[str, Any],
         wait_for_active: bool = False,
         max_wait: int = 300,
         poll_interval: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Add a strategy to a memory resource.
 
         Args:
@@ -373,7 +373,7 @@ class MemoryControlPlaneClient:
 
         return memory
 
-    def get_strategy(self, memory_id: str, strategy_id: str) -> Dict[str, Any]:
+    def get_strategy(self, memory_id: str, strategy_id: str) -> dict[str, Any]:
         """Get a specific strategy from a memory resource.
 
         Args:
@@ -401,13 +401,13 @@ class MemoryControlPlaneClient:
         self,
         memory_id: str,
         strategy_id: str,
-        description: Optional[str] = None,
-        namespaces: Optional[List[str]] = None,
-        configuration: Optional[Dict[str, Any]] = None,
+        description: str | None = None,
+        namespaces: list[str] | None = None,
+        configuration: dict[str, Any] | None = None,
         wait_for_active: bool = False,
         max_wait: int = 300,
         poll_interval: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Update a strategy in a memory resource.
 
         Args:
@@ -424,7 +424,7 @@ class MemoryControlPlaneClient:
             Updated memory object
         """
         # Note: API expects memoryStrategyId for input but returns strategyId in response
-        modify_config: Dict = {"memoryStrategyId": strategy_id}
+        modify_config: dict = {"memoryStrategyId": strategy_id}
 
         if description is not None:
             modify_config["description"] = description
@@ -455,7 +455,7 @@ class MemoryControlPlaneClient:
         wait_for_active: bool = False,
         max_wait: int = 300,
         poll_interval: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Remove a strategy from a memory resource.
 
         Args:
@@ -480,7 +480,7 @@ class MemoryControlPlaneClient:
 
     # ==================== HELPER METHODS ====================
 
-    def _wait_for_memory_active(self, memory_id: str, max_wait: int, poll_interval: int) -> Dict[str, Any]:
+    def _wait_for_memory_active(self, memory_id: str, max_wait: int, poll_interval: int) -> dict[str, Any]:
         """Wait for memory to return to ACTIVE state."""
         logger.info("Waiting for memory %s to become ACTIVE...", memory_id)
         return self._wait_for_status(
@@ -489,7 +489,7 @@ class MemoryControlPlaneClient:
 
     def _wait_for_strategy_active(
         self, memory_id: str, strategy_id: str, max_wait: int, poll_interval: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Wait for specific memory strategy to become ACTIVE."""
         logger.info("Waiting for strategy %s to become ACTIVE (max wait: %d seconds)...", strategy_id, max_wait)
 
@@ -536,7 +536,7 @@ class MemoryControlPlaneClient:
 
     def _wait_for_status(
         self, memory_id: str, target_status: str, max_wait: int, poll_interval: int, check_strategies: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generic method to wait for a memory to reach a specific status.
 
         Args:

@@ -1,6 +1,6 @@
 """Module containing all the model classes."""
 
-from typing import Any, Dict
+from typing import Any
 
 from .DictWrapper import DictWrapper
 from .filters import (
@@ -17,7 +17,7 @@ from .filters import (
 class ActorSummary(DictWrapper):
     """A class representing an actor summary."""
 
-    def __init__(self, actor_summary: Dict[str, Any]):
+    def __init__(self, actor_summary: dict[str, Any]):
         """Initialize an ActorSummary instance.
 
         Args:
@@ -29,7 +29,7 @@ class ActorSummary(DictWrapper):
 class Branch(DictWrapper):
     """A class representing a branch."""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]):
         """Initialize a Branch instance.
 
         Args:
@@ -41,7 +41,7 @@ class Branch(DictWrapper):
 class Event(DictWrapper):
     """A class representing an event."""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]):
         """Initialize an Event instance.
 
         Args:
@@ -53,7 +53,7 @@ class Event(DictWrapper):
 class EventMessage(DictWrapper):
     """A class representing an event message."""
 
-    def __init__(self, event_message: Dict[str, Any]):
+    def __init__(self, event_message: dict[str, Any]):
         """Initialize an EventMessage instance.
 
         Args:
@@ -65,7 +65,7 @@ class EventMessage(DictWrapper):
 class MemoryRecord(DictWrapper):
     """A class representing a memory record."""
 
-    def __init__(self, memory_record: Dict[str, Any]):
+    def __init__(self, memory_record: dict[str, Any]):
         """Initialize a MemoryRecord instance.
 
         Args:
@@ -77,7 +77,7 @@ class MemoryRecord(DictWrapper):
 class SessionSummary(DictWrapper):
     """A class representing a session summary."""
 
-    def __init__(self, session_summary: Dict[str, Any]):
+    def __init__(self, session_summary: dict[str, Any]):
         """Initialize a SessionSummary instance.
 
         Args:

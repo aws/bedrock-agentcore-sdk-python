@@ -43,8 +43,8 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
     logger.info("COMPLETE AGENT WORKFLOW TEST")
     logger.info("=" * 80)
 
-    actor_id = "customer-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
-    session_id = "support-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
+    actor_id = "customer-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
+    session_id = "support-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
 
     logger.info("\n1. Memory strategies already configured during creation")
 
@@ -356,7 +356,7 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
     logger.info("Waiting 30 seconds for extraction to trigger...")
     time.sleep(30)
 
-    namespace = "support/facts/%s" % session_id
+    namespace = f"support/facts/{session_id}"
     if client.wait_for_memories(memory_id, namespace, max_wait=180):
         logger.info("✓ Memories extracted and indexed successfully")
 
@@ -411,8 +411,8 @@ def test_bedrock_integration(client: MemoryClient, memory_id: str):
         logger.info("Skipping Bedrock test - ensure AWS credentials are configured")
         return
 
-    actor_id = "bedrock-test-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
-    session_id = "bedrock-session-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
+    actor_id = "bedrock-test-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
+    session_id = "bedrock-session-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
 
     # Create initial context
     logger.info("\n1. Creating initial conversation context...")
@@ -439,7 +439,7 @@ def test_bedrock_integration(client: MemoryClient, memory_id: str):
 
     # Retrieve relevant memories
     logger.info("\n4. Retrieving relevant context...")
-    namespace = "support/facts/%s" % session_id
+    namespace = f"support/facts/{session_id}"
     memories = client.retrieve_memories(memory_id=memory_id, namespace=namespace, query=user_query, top_k=5)
 
     context = ""
@@ -453,7 +453,7 @@ def test_bedrock_integration(client: MemoryClient, memory_id: str):
     messages = []
     if context:
         messages.append(
-            {"role": "assistant", "content": "Here's what I know from our previous conversation:\n%s" % context}
+            {"role": "assistant", "content": f"Here's what I know from our previous conversation:\n{context}"}
         )
 
     messages.append({"role": "user", "content": user_query})
@@ -694,7 +694,7 @@ def main():
 
     logger.info("\nCreating test memory with strategies...")
     memory = client.create_memory(
-        name="DXTest_%s" % datetime.now().strftime("%Y%m%d%H%M%S"),
+        name="DXTest_{}".format(datetime.now().strftime("%Y%m%d%H%M%S")),
         description="Developer experience evaluation",
         strategies=[
             {
