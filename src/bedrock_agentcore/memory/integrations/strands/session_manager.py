@@ -4,7 +4,7 @@ import json
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
 import boto3
@@ -47,38 +47,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     - Support for custom retrieval configurations per namespace
     - Consistent with existing Strands Session managers (such as: FileSessionManager, S3SessionManager)
     """
-
-    # Class-level timestamp tracking for monotonic ordering
-    _timestamp_lock = threading.Lock()
-    _last_timestamp: Optional[datetime] = None
-
-    @classmethod
-    def _get_monotonic_timestamp(cls, desired_timestamp: Optional[datetime] = None) -> datetime:
-        """Get a monotonically increasing timestamp.
-
-        Args:
-            desired_timestamp (Optional[datetime]): The desired timestamp. If None, uses current time.
-
-        Returns:
-            datetime: A timestamp guaranteed to be greater than any previously returned timestamp.
-        """
-        if desired_timestamp is None:
-            desired_timestamp = datetime.now(timezone.utc)
-
-        with cls._timestamp_lock:
-            if cls._last_timestamp is None:
-                cls._last_timestamp = desired_timestamp
-                return desired_timestamp
-
-            # Why the 1 second check? Because Boto3 does NOT support sub 1 second resolution.
-            if desired_timestamp <= cls._last_timestamp + timedelta(seconds=1):
-                # Increment by 1 second to ensure ordering
-                new_timestamp = cls._last_timestamp + timedelta(seconds=1)
-            else:
-                new_timestamp = desired_timestamp
-
-            cls._last_timestamp = new_timestamp
-            return new_timestamp
 
     def __init__(
         self,
@@ -183,7 +151,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             payload=[
                 {"blob": json.dumps(session.to_dict())},
             ],
-            eventTimestamp=self._get_monotonic_timestamp(),
+            eventTimestamp=datetime.now(timezone.utc),
         )
         logger.info("Created session: %s with event: %s", session.session_id, event.get("event", {}).get("eventId"))
         return session
@@ -254,7 +222,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             payload=[
                 {"blob": json.dumps(session_agent.to_dict())},
             ],
-            eventTimestamp=self._get_monotonic_timestamp(),
+            eventTimestamp=datetime.now(timezone.utc),
         )
         logger.info(
             "Created agent: %s in session: %s with event %s",
@@ -355,16 +323,14 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 return
 
             # Parse the original timestamp and use it as desired timestamp
-            original_timestamp = datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00"))
-            monotonic_timestamp = self._get_monotonic_timestamp(original_timestamp)
-
+            event_time = datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00"))
             if not AgentCoreMemoryConverter.exceeds_conversational_limit(messages[0]):
                 event = self.memory_client.create_event(
                     memory_id=self.config.memory_id,
                     actor_id=self.config.actor_id,
                     session_id=session_id,
                     messages=messages,
-                    event_timestamp=monotonic_timestamp,
+                    event_timestamp=event_time,
                 )
             else:
                 event = self.memory_client.gmdp_client.create_event(
@@ -374,7 +340,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                     payload=[
                         {"blob": json.dumps(messages[0])},
                     ],
-                    eventTimestamp=monotonic_timestamp,
+                    eventTimestamp=event_time,
                 )
             logger.debug("Created event: %s for message: %s", event.get("eventId"), session_message.message_id)
             return event
