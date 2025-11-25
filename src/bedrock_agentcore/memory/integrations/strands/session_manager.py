@@ -5,7 +5,7 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Set
 
 import boto3
 from botocore.config import Config as BotocoreConfig
@@ -101,7 +101,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self.config = agentcore_memory_config
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
-        self.has_existing_agent = False
 
         # Override the clients if custom boto session or config is provided
         # Add strands-agents to the request user agent
@@ -122,6 +121,18 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self.memory_client.gmdp_client = session.client(
             "bedrock-agentcore", region_name=region_name or session.region_name, config=client_config
         )
+
+        # Create root event for multi-agent branch support
+        initial_event = self.memory_client.gmdp_client.create_event(
+            memoryId=self.config.memory_id,
+            actorId=self.config.actor_id,
+            sessionId=self.config.session_id,
+            payload=[{"blob": json.dumps({"type": "session_start"})}],
+            eventTimestamp=self._get_monotonic_timestamp(),
+        )
+        self._root_event_id: str = initial_event.get("event", {}).get("eventId")
+        self._created_branches: Set[str] = set()
+
         super().__init__(session_id=self.config.session_id, session_repository=self)
 
     def _get_full_session_id(self, session_id: str) -> str:
@@ -155,6 +166,17 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 f"Cannot create agent [ {full_agent_id} ] with the same ID as the actor ID: {self.config.actor_id}"
             )
         return full_agent_id
+
+    def _get_branch_for_agent(self, agent_id: str) -> dict[str, str]:
+        """Get branch dict for create_event.
+
+        First event on a branch includes rootEventId to create it.
+        Subsequent events only need the branch name.
+        """
+        branch_name = f"agent_{agent_id}"
+        if branch_name in self._created_branches:
+            return {"name": branch_name}
+        return {"name": branch_name, "rootEventId": self._root_event_id}
 
     # region SessionRepository interface implementation
     def create_session(self, session: Session, **kwargs: Any) -> Session:
@@ -358,24 +380,35 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             original_timestamp = datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00"))
             monotonic_timestamp = self._get_monotonic_timestamp(original_timestamp)
 
+            # Get branch for this agent
+            branch = self._get_branch_for_agent(agent_id)
+
+            # messages[0] is a tuple (text, role)
+            text, role = messages[0]
+
             if not AgentCoreMemoryConverter.exceeds_conversational_limit(messages[0]):
-                event = self.memory_client.create_event(
-                    memory_id=self.config.memory_id,
-                    actor_id=self.config.actor_id,
-                    session_id=session_id,
-                    messages=messages,
-                    event_timestamp=monotonic_timestamp,
+                event = self.memory_client.gmdp_client.create_event(
+                    memoryId=self.config.memory_id,
+                    actorId=self.config.actor_id,
+                    sessionId=session_id,
+                    payload=[{"conversational": {"content": {"text": text}, "role": role.upper()}}],
+                    eventTimestamp=monotonic_timestamp,
+                    branch=branch,
                 )
             else:
                 event = self.memory_client.gmdp_client.create_event(
                     memoryId=self.config.memory_id,
                     actorId=self.config.actor_id,
                     sessionId=session_id,
-                    payload=[
-                        {"blob": json.dumps(messages[0])},
-                    ],
+                    payload=[{"blob": text}],
                     eventTimestamp=monotonic_timestamp,
+                    branch=branch,
                 )
+
+            # Mark branch as created after successful event
+            branch_name = f"agent_{agent_id}"
+            self._created_branches.add(branch_name)
+
             logger.debug("Created event: %s for message: %s", event.get("eventId"), session_message.message_id)
             return event
         except Exception as e:
@@ -449,12 +482,20 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         try:
             max_results = (limit + offset) if limit else 100
-            events = self.memory_client.list_events(
-                memory_id=self.config.memory_id,
-                actor_id=self.config.actor_id,
-                session_id=session_id,
-                max_results=max_results,
-            )
+            branch_name = f"agent_{agent_id}"
+
+            # Build filter for branch
+            params = {
+                "memoryId": self.config.memory_id,
+                "actorId": self.config.actor_id,
+                "sessionId": session_id,
+                "maxResults": max_results,
+                "filter": {"branch": {"name": branch_name}},
+            }
+
+            response = self.memory_client.gmdp_client.list_events(**params)
+            events = response.get("events", [])
+
             messages = AgentCoreMemoryConverter.events_to_messages(events)
             if limit is not None:
                 return messages[offset : offset + limit]
@@ -564,12 +605,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
     @override
     def initialize(self, agent: "Agent", **kwargs: Any) -> None:
-        if self.has_existing_agent:
-            logger.warning(
-                "An Agent already exists in session %s. We currently support one agent per session.", self.session_id
-            )
-        else:
-            self.has_existing_agent = True
         RepositorySessionManager.initialize(self, agent, **kwargs)
 
     # endregion RepositorySessionManager overrides
