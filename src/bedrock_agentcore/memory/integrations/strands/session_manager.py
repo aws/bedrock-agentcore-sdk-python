@@ -122,7 +122,42 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             "bedrock-agentcore", region_name=region_name or session.region_name, config=client_config
         )
 
-        # Create root event for multi-agent branch support
+        # Query existing branches and find root event
+        self._created_branches: Set[str] = set()
+        self._root_event_id: str = self._init_branches()
+
+        super().__init__(session_id=self.config.session_id, session_repository=self)
+
+    def _init_branches(self) -> str:
+        """Initialize branch tracking. Returns root event ID."""
+        try:
+            # List existing events to find branches
+            response = self.memory_client.gmdp_client.list_events(
+                memoryId=self.config.memory_id,
+                actorId=self.config.actor_id,
+                sessionId=self.config.session_id,
+                maxResults=100,
+            )
+            events = response.get("events", [])
+
+            # Find existing branches and root event
+            root_event_id = None
+            for event in events:
+                branch = event.get("branch", {})
+                if branch.get("name"):
+                    self._created_branches.add(branch["name"])
+                # First event without a branch name is the root
+                if not branch.get("name") and root_event_id is None:
+                    root_event_id = event.get("eventId")
+
+            # If we found a root event, use it; otherwise create one
+            if root_event_id:
+                return root_event_id
+
+        except Exception as e:
+            logger.debug("No existing events found: %s", e)
+
+        # Create root event for new session
         initial_event = self.memory_client.gmdp_client.create_event(
             memoryId=self.config.memory_id,
             actorId=self.config.actor_id,
@@ -130,10 +165,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             payload=[{"blob": json.dumps({"type": "session_start"})}],
             eventTimestamp=self._get_monotonic_timestamp(),
         )
-        self._root_event_id: str = initial_event.get("event", {}).get("eventId")
-        self._created_branches: Set[str] = set()
-
-        super().__init__(session_id=self.config.session_id, session_repository=self)
+        return initial_event.get("event", {}).get("eventId")
 
     def _get_full_session_id(self, session_id: str) -> str:
         """Get the full session ID with the configured prefix.
@@ -502,6 +534,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             else:
                 return messages[offset:]
 
+        except self.memory_client.gmdp_client.exceptions.ValidationException as e:
+            # Branch doesn't exist yet - return empty list
+            if "Branch not found" in str(e):
+                return []
+            logger.error("Failed to list messages from AgentCore Memory: %s", e)
+            return []
         except Exception as e:
             logger.error("Failed to list messages from AgentCore Memory: %s", e)
             return []
