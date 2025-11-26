@@ -204,14 +204,14 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 # Create event in main first
                 metadata = {
                     "agent_id": StringValue.build(session_agent.agent_id),
-                    "event_type": StringValue.build("session_state"),
+                    "event_type": StringValue.build("session_agent"),
                 }
                 if self.config.metadata:
                     metadata.update(self.config.metadata)
 
                 event_params = self._prepare_event_params(
                     payload=[
-                        {"blob": json.dumps({"session_state": session_agent.to_dict()})}
+                        {"blob": json.dumps({"session_agent": session_agent.to_dict()})}
                     ],
                     metadata=metadata,
                     branch=False,
@@ -239,10 +239,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             # Get or create branch root
             root_event_id = self._get_or_create_branch_root(branch_name, session_agent)
 
-            # Create new session_state event
+            # Create new session_agent event
             metadata = {
                 "agent_id": StringValue.build(session_agent.agent_id),
-                "event_type": StringValue.build("session_state"),
+                "event_type": StringValue.build("session_agent"),
             }
             if self.config.metadata:
                 metadata.update(self.config.metadata)
@@ -250,7 +250,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             if branch_name == "main":
                 event_params = self._prepare_event_params(
                     payload=[
-                        {"blob": json.dumps({"session_state": session_agent.to_dict()})}
+                        {"blob": json.dumps({"session_agent": session_agent.to_dict()})}
                     ],
                     metadata=metadata,
                 )
@@ -262,7 +262,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                     root_event_id=root_event_id,
                     branch_name=branch_name,
                     messages=[
-                        {"blob": json.dumps({"session_state": session_agent.to_dict()})}
+                        {"blob": json.dumps({"session_agent": session_agent.to_dict()})}
                     ],
                     metadata=metadata,
                     event_timestamp=self._get_monotonic_timestamp(),
@@ -323,7 +323,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             if self.config.default_branch.name == "main":
                 metadata = {
                     "agent_id": StringValue.build(session_agent.agent_id),
-                    "event_type": StringValue.build("session_state"),
+                    "event_type": StringValue.build("session_agent"),
                 }
                 if self.config.metadata:
                     metadata.update(self.config.metadata)
@@ -331,7 +331,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 # Prepare event parameters
                 event_params = self._prepare_event_params(
                     payload=[
-                        {"blob": json.dumps({"session": session_agent.to_dict()})}
+                        {"blob": json.dumps({"session_agent": session_agent.to_dict()})}
                     ],
                     metadata=metadata,
                 )
@@ -389,29 +389,14 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 EventMetadataFilter.build_expression(
                     left_operand=LeftExpression.build(key="event_type"),
                     operator=OperatorType.EQUALS_TO,
-                    right_operand=RightExpression.build("session_state"),
-                )
+                    right_operand=RightExpression.build("session_agent"),
+                ),
+                EventMetadataFilter.build_expression(
+                    left_operand=LeftExpression.build(key="agent_id"),
+                    operator=OperatorType.EQUALS_TO,
+                    right_operand=RightExpression.build(agent_id),
+                ),
             ]
-            if (
-                agent_id
-                and hasattr(self.config, "short_term_retrieval_config")
-                and hasattr(self.config.short_term_retrieval_config, "metadata")
-                and self.config.short_term_retrieval_config.metadata
-                and "agent_id"
-                in self.config.short_term_retrieval_config.metadata.keys()
-            ):
-                logger.debug(
-                    f"Using metadata filter: {self.config.short_term_retrieval_config.metadata['agent_id']}"
-                )
-                filters.append(
-                    EventMetadataFilter.build_expression(
-                        left_operand=LeftExpression.build(key="agent_id"),
-                        operator=OperatorType.EQUALS_TO,
-                        right_operand=RightExpression.build(
-                            self.config.short_term_retrieval_config.metadata["agent_id"]
-                        ),
-                    )
-                )
             list_params = self._prepare_list_params(
                 eventMetadata=filters, max_results=1
             )
@@ -427,9 +412,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             if payload and "blob" in payload[0]:
                 blob_data = json.loads(payload[0]["blob"])
                 # Extract SessionAgent from blob.
-                session_data = blob_data.get("session_state") or blob_data.get(
-                    "session"
-                )
+                session_data = blob_data.get("session_agent")
                 agent_data = SessionAgent.from_dict(session_data)
                 logger.debug(f"Successfully read agent {agent_id}")
                 self._session_cache = agent_data
@@ -541,22 +524,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 operator=OperatorType.NOT_EXISTS,
             )
 
-            filters = [message_filter]
-
-            # Create metadata filter for agent_id if configured
-            if (
-                hasattr(self.config, "retrieval_config")
-                and hasattr(self.config.short_term_retrieval_config, "metadata")
-                and self.config.short_term_retrieval_config.metadata
-                and "agent_id"
-                in self.config.short_term_retrieval_config.metadata.keys()
-            ):
-                agent_filter = EventMetadataFilter.build_expression(
-                    left_operand=LeftExpression.build(key="agent_id"),
-                    operator=OperatorType.EQUALS_TO,
-                    right_operand=RightExpression.build(agent_id),
-                )
-                filters.append(agent_filter)
+            # Always filter by agent_id to prevent cross-pollution
+            agent_filter = EventMetadataFilter.build_expression(
+                left_operand=LeftExpression.build(key="agent_id"),
+                operator=OperatorType.EQUALS_TO,
+                right_operand=RightExpression.build(agent_id),
+            )
+            filters = [message_filter, agent_filter]
 
             list_params = self._prepare_list_params(
                 max_results=max_results,
@@ -565,8 +539,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
             events = self.memory_session_manager.list_events(**list_params)
             logger.debug(f"Found {len(events)} events")
-            messages = AgentCoreMemoryConverter.events_to_messages(events)
-            return messages
+            return AgentCoreMemoryConverter.events_to_messages(events) if events else []
 
         except Exception as e:
             logger.error("Failed to list messages from AgentCore Memory: %s", e)
@@ -654,6 +627,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         try:
             all_context = []
+            # Check if retrieval_config exists and is not empty
+            if not self.config.retrieval_config:
+                return
+
             # Retrieve from long-term memory in parallel
             with ThreadPoolExecutor() as executor:
                 future_to_namespace = {
