@@ -6,7 +6,7 @@ This script tests all the endpoints and features of the async status example.
 """
 
 import time
-from typing import Any, Dict
+from typing import Any
 
 import requests
 
@@ -45,7 +45,7 @@ class AsyncStatusExampleTester:
             print(f"   ❌ Error testing ping endpoint: {e}")
             return None
 
-    def test_rpc_action(self, action: str, expected_fields: list = None) -> Dict[Any, Any]:
+    def test_rpc_action(self, action: str, expected_fields: list = None) -> dict[Any, Any]:
         """Test a debug action via POST /invocations."""
         print(f"🔍 Testing debug action: {action}")
         try:
@@ -70,7 +70,7 @@ class AsyncStatusExampleTester:
             print(f"   ❌ Error testing debug action '{action}': {e}")
             return {}
 
-    def test_business_action(self, action: str, payload: dict = None) -> Dict[Any, Any]:
+    def test_business_action(self, action: str, payload: dict = None) -> dict[Any, Any]:
         """Test a regular business logic action."""
         print(f"🔍 Testing business action: {action}")
         try:

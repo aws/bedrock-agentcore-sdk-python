@@ -1,7 +1,7 @@
 """Event metadata filter models for querying events based on metadata."""
 
 from enum import Enum
-from typing import Optional, TypedDict, Union
+from typing import TypedDict
 
 
 class StringValue(TypedDict):
@@ -15,7 +15,7 @@ class StringValue(TypedDict):
         return {"stringValue": value}
 
 
-MetadataValue = Union[StringValue]
+MetadataValue = StringValue
 """
 Union type representing metadata values.
 
@@ -23,7 +23,7 @@ Variants:
 - StringValue: {"stringValue": str} - String metadata value
 """
 
-MetadataKey = Union[str]
+MetadataKey = str
 """
 Union type representing metadata key.
 """
@@ -80,12 +80,12 @@ class EventMetadataFilter(TypedDict):
 
     left: LeftExpression
     operator: OperatorType
-    right: Optional[RightExpression]
+    right: RightExpression | None
 
     def build_expression(
         left_operand: LeftExpression,
         operator: OperatorType,
-        right_operand: Optional[RightExpression] = None,
+        right_operand: RightExpression | None = None,
     ) -> "EventMetadataFilter":
         """Build the required event metadata filter expression.
 

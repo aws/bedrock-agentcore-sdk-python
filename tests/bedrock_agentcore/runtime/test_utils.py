@@ -1,7 +1,6 @@
 """Tests for Bedrock AgentCore runtime utilities."""
 
 from dataclasses import dataclass
-from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -64,7 +63,7 @@ class TestConvertComplexObjects:
         class TestDataClass:
             name: str
             value: int
-            items: List[str]
+            items: list[str]
 
         data = TestDataClass(name="test", value=100, items=["a", "b", "c"])
         result = convert_complex_objects(data)
@@ -123,7 +122,7 @@ class TestConvertComplexObjects:
         @dataclass
         class ConfigData:
             version: str
-            features: List[str]
+            features: list[str]
 
         test_dict = {
             "config": ConfigModel(setting="test", enabled=True),
@@ -202,7 +201,7 @@ class TestConvertComplexObjects:
         @dataclass
         class UserProfile:
             bio: str
-            avatar_url: Optional[str]
+            avatar_url: str | None
 
         class PostModel(BaseModel):
             title: str

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -69,7 +69,7 @@ class MessageRole(Enum):
 
 
 # Default namespaces for each strategy type
-DEFAULT_NAMESPACES: Dict[StrategyType, List[str]] = {
+DEFAULT_NAMESPACES: dict[StrategyType, list[str]] = {
     StrategyType.SEMANTIC: ["/actor/{actorId}/strategy/{strategyId}/{sessionId}"],
     StrategyType.SUMMARY: ["/actor/{actorId}/strategy/{strategyId}/{sessionId}"],
     StrategyType.USER_PREFERENCE: ["/actor/{actorId}/strategy/{strategyId}"],
@@ -78,17 +78,17 @@ DEFAULT_NAMESPACES: Dict[StrategyType, List[str]] = {
 
 # Configuration wrapper keys for update operations
 # These are still needed for wrapping configurations during updates
-EXTRACTION_WRAPPER_KEYS: Dict[MemoryStrategyTypeEnum, str] = {
+EXTRACTION_WRAPPER_KEYS: dict[MemoryStrategyTypeEnum, str] = {
     MemoryStrategyTypeEnum.SEMANTIC: "semanticExtractionConfiguration",
     MemoryStrategyTypeEnum.USER_PREFERENCE: "userPreferenceExtractionConfiguration",
 }
 
-CUSTOM_EXTRACTION_WRAPPER_KEYS: Dict[OverrideType, str] = {
+CUSTOM_EXTRACTION_WRAPPER_KEYS: dict[OverrideType, str] = {
     OverrideType.SEMANTIC_OVERRIDE: "semanticExtractionOverride",
     OverrideType.USER_PREFERENCE_OVERRIDE: "userPreferenceExtractionOverride",
 }
 
-CUSTOM_CONSOLIDATION_WRAPPER_KEYS: Dict[OverrideType, str] = {
+CUSTOM_CONSOLIDATION_WRAPPER_KEYS: dict[OverrideType, str] = {
     OverrideType.SEMANTIC_OVERRIDE: "semanticConsolidationOverride",
     OverrideType.SUMMARY_OVERRIDE: "summaryConsolidationOverride",
     OverrideType.USER_PREFERENCE_OVERRIDE: "userPreferenceConsolidationOverride",
@@ -149,5 +149,5 @@ class RetrievalConfig(BaseModel):
 
     top_k: int = Field(default=10, gt=1, le=100)
     relevance_score: float = Field(default=0.0, ge=0.0, le=1.0)
-    strategy_id: Optional[str] = None
-    retrieval_query: Optional[str] = None
+    strategy_id: str | None = None
+    retrieval_query: str | None = None

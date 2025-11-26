@@ -18,8 +18,8 @@ def test_list_events_api(client: MemoryClient, memory_id: str):
     logger.info("TESTING LIST_EVENTS PUBLIC API (Issue #1)")
     logger.info("=" * 80)
 
-    actor_id = "test-list-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
-    session_id = "session-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
+    actor_id = "test-list-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
+    session_id = "session-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
 
     # Create some events
     logger.info("\n1. Creating test events...")
@@ -79,7 +79,7 @@ def test_strategy_polling_fix(client: MemoryClient):
     # Create memory without strategies
     logger.info("\n1. Creating memory without strategies...")
     memory = client.create_memory_and_wait(
-        name="PollingTest_%s" % datetime.now().strftime("%Y%m%d%H%M%S"),
+        name="PollingTest_{}".format(datetime.now().strftime("%Y%m%d%H%M%S")),
         strategies=[],  # No strategies initially
         event_expiry_days=7,
     )
@@ -135,8 +135,8 @@ def test_get_last_k_turns_fix(client: MemoryClient, memory_id: str):
     logger.info("TESTING GET_LAST_K_TURNS FIX (Issue #3)")
     logger.info("=" * 80)
 
-    actor_id = "restaurant-user-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
-    session_id = "restaurant-session-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
+    actor_id = "restaurant-user-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
+    session_id = "restaurant-session-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
 
     # Create the exact conversation from the issue
     logger.info("\n1. Creating restaurant conversation...")
@@ -357,7 +357,7 @@ def main():
     logger.info("\n\nCreating memory for remaining tests...")
     # Explicitly define strategy with clear namespace pattern for testing
     memory = client.create_memory_and_wait(
-        name="RetrievalTest_%s" % datetime.now().strftime("%Y%m%d%H%M%S"),
+        name="RetrievalTest_{}".format(datetime.now().strftime("%Y%m%d%H%M%S")),
         strategies=[
             {
                 "semanticMemoryStrategy": {

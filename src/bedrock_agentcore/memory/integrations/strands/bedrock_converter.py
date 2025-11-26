@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Any, Tuple
+from typing import Any
 
 from strands.types.session import SessionMessage
 
@@ -15,7 +15,7 @@ class AgentCoreMemoryConverter:
     """Handles conversion between Strands and Bedrock AgentCore Memory formats."""
 
     @staticmethod
-    def message_to_payload(session_message: SessionMessage) -> list[Tuple[str, str]]:
+    def message_to_payload(session_message: SessionMessage) -> list[tuple[str, str]]:
         """Convert a SessionMessage to Bedrock AgentCore Memory message format.
 
         Args:
@@ -65,7 +65,7 @@ class AgentCoreMemoryConverter:
                 elif "blob" in payload_item:
                     try:
                         blob_data = json.loads(payload_item["blob"])
-                        if isinstance(blob_data, (tuple, list)) and len(blob_data) == 2:
+                        if isinstance(blob_data, tuple | list) and len(blob_data) == 2:
                             try:
                                 messages.append(SessionMessage.from_dict(json.loads(blob_data[0])))
                             except (json.JSONDecodeError, ValueError):
