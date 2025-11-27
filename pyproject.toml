@@ -33,6 +33,7 @@ dependencies = [
     "starlette>=0.46.2",
     "typing-extensions>=4.13.2,<5.0.0",
     "uvicorn>=0.34.2",
+    "pre-commit>=4.2.0",
 ]
 
 [project.scripts]
@@ -150,4 +151,7 @@ dev = [
 [project.optional-dependencies]
 strands-agents = [
     "strands-agents>=1.1.0"
+]
+test = [
+    "websockets>=13.0"
 ]
