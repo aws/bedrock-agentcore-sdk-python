@@ -280,6 +280,24 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def create_session(self, session: Session, **kwargs: Any) -> Session:
         """Create a new session."""
         self._validate_session_id(session.session_id)
+
+        try:
+            metadata = {
+                "event_type": StringValue.build("session"),
+            }
+            if self.config.metadata:
+                metadata.update(self.config.metadata)
+
+            event_params = self._prepare_event_params(
+                payload=[{"blob": json.dumps({"session": session.to_dict()})}],
+                metadata=metadata,
+            )
+
+            self.memory_session_manager.create_event(**event_params)
+            logger.info(f"Created session: {session.session_id}")
+        except Exception as e:
+            logger.error(f"Failed to create session: {e}")
+            raise SessionException(f"Failed to create session: {e}") from e
         return session
 
     def update_agent(
