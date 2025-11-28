@@ -317,7 +317,7 @@ session.delete_memory_record("record-id-123")
 
 Events can now be managed by defining custom metadata.
 
-Learn more here!: [Working example](src/bedrock_agentcore/memory/metadata-workflow.ipynb)
+Learn more here!: [Working example](metadata-workflow.ipynb)
 
 ### Alternative Pattern: Separated Operations
 

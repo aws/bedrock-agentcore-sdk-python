@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.7] - 2025-11-25
+
+### Added
+- feat: parallelize retrieve memories API calls for multiple namespaces to improve latency (#163) (df5a2c9)
+- feat: add documentation for metadata support in STM (#156) (67563f1)
+
+### Fixed
+- fix: metadata-workflow readme link (#171) (a8536df)
+
+### Other Changes
+- chore: bump strands-agents version (#172) (cb98125)
+- Allow passing custom parameters to the GetResourceOauth2Token API via SDK decorator (#157) (988ca8f)
+- chore: bump version to 1.0.6 (#155) (d1953e8)
+
 ## [1.0.6] - 2025-11-10
 
 ### Added
