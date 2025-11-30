@@ -4,16 +4,24 @@ Contains metadata extracted from HTTP requests that handlers can optionally acce
 """
 
 from contextvars import ContextVar
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
 
 class RequestContext(BaseModel):
-    """Request context containing metadata from HTTP requests."""
+    """Request context containing metadata from HTTP requests.
+
+    Attributes:
+        session_id: Session identifier from request headers
+        request_headers: Authorization and custom headers from the request
+        processing_data: Data injected by middleware (available if middleware sets
+                        request.state.processing_data)
+    """
 
     session_id: Optional[str] = Field(None)
     request_headers: Optional[Dict[str, str]] = Field(None)
+    processing_data: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
 class BedrockAgentCoreContext:

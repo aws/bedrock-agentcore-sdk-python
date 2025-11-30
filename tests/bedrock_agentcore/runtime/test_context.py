@@ -183,3 +183,70 @@ class TestRequestContext:
 
         assert context.session_id == "test-session-789"
         assert context.request_headers == {}
+
+    def test_request_context_initialization_with_processing_data(self):
+        """Test RequestContext initialization with processing_data."""
+        processing_data = {"user_id": "123", "tenant": "acme", "features": ["auth", "logging"]}
+
+        context = RequestContext(session_id="test-session-123", processing_data=processing_data)
+
+        assert context.session_id == "test-session-123"
+        assert context.processing_data == processing_data
+        assert context.processing_data["user_id"] == "123"
+        assert context.processing_data["tenant"] == "acme"
+        assert context.processing_data["features"] == ["auth", "logging"]
+
+    def test_request_context_processing_data_default_empty_dict(self):
+        """Test RequestContext processing_data defaults to empty dict."""
+        context = RequestContext(session_id="test-session-456")
+
+        assert context.session_id == "test-session-456"
+        assert context.processing_data == {}
+        assert isinstance(context.processing_data, dict)
+
+    def test_request_context_initialization_minimal_has_empty_processing_data(self):
+        """Test RequestContext with minimal initialization has empty processing_data."""
+        context = RequestContext()
+
+        assert context.session_id is None
+        assert context.request_headers is None
+        assert context.processing_data == {}
+
+    def test_request_context_with_all_fields(self):
+        """Test RequestContext with all fields populated."""
+        headers = {"Authorization": "Bearer test-token", "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Key": "custom-value"}
+        processing_data = {
+            "middleware_processed": True,
+            "auth_result": {"user": "test-user", "roles": ["admin"]},
+            "timestamp": 1234567890,
+        }
+
+        context = RequestContext(
+            session_id="full-session-123", request_headers=headers, processing_data=processing_data
+        )
+
+        assert context.session_id == "full-session-123"
+        assert context.request_headers == headers
+        assert context.processing_data == processing_data
+        assert context.processing_data["middleware_processed"] is True
+        assert context.processing_data["auth_result"]["user"] == "test-user"
+
+    def test_request_context_processing_data_with_nested_structures(self):
+        """Test RequestContext with complex nested processing_data."""
+        processing_data = {
+            "level1": {"level2": {"level3": {"deep_value": "found"}}},
+            "list_data": [1, 2, {"nested_in_list": True}],
+            "mixed": [{"a": 1}, {"b": 2}],
+        }
+
+        context = RequestContext(processing_data=processing_data)
+
+        assert context.processing_data["level1"]["level2"]["level3"]["deep_value"] == "found"
+        assert context.processing_data["list_data"][2]["nested_in_list"] is True
+
+    def test_request_context_processing_data_empty_dict_explicit(self):
+        """Test RequestContext with explicitly set empty processing_data."""
+        context = RequestContext(session_id="test-session", processing_data={})
+
+        assert context.processing_data == {}
+        assert len(context.processing_data) == 0

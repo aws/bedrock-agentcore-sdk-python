@@ -173,6 +173,7 @@ class TestBedrockAgentCoreApp:
 
         context = bedrock_agentcore._build_request_context(mock_request)
         assert context.session_id is None
+        assert context.processing_data == {}
 
     def test_takes_context_exception_handling(self):
         """Test _takes_context handles exceptions gracefully."""
@@ -1599,6 +1600,7 @@ class TestRequestHeadersExtraction:
         class MockRequest:
             def __init__(self):
                 self.headers = {"Authorization": "Bearer test-auth-token", "Content-Type": "application/json"}
+                self.state = type("State", (), {})()
 
         mock_request = MockRequest()
         context = app._build_request_context(mock_request)
@@ -1619,6 +1621,7 @@ class TestRequestHeadersExtraction:
                     "X-Other-Header": "should-not-include",
                     "Content-Type": "application/json",
                 }
+                self.state = type("State", (), {})()
 
         mock_request = MockRequest()
         context = app._build_request_context(mock_request)
@@ -1642,6 +1645,7 @@ class TestRequestHeadersExtraction:
                     "Content-Type": "application/json",
                     "X-Other-Header": "ignored",
                 }
+                self.state = type("State", (), {})()
 
         mock_request = MockRequest()
         context = app._build_request_context(mock_request)
@@ -1672,6 +1676,7 @@ class TestRequestHeadersExtraction:
                         "Accept": "application/json",
                         "X-Other-Header": "not-relevant",
                     }
+                    self.state = type("State", (), {})()
 
             mock_request = MockRequest()
             context = app._build_request_context(mock_request)
@@ -1693,6 +1698,7 @@ class TestRequestHeadersExtraction:
             class MockRequest:
                 def __init__(self):
                     self.headers = {}
+                    self.state = type("State", (), {})()
 
             mock_request = MockRequest()
             context = app._build_request_context(mock_request)
@@ -1712,6 +1718,7 @@ class TestRequestHeadersExtraction:
                     "X-AMZN-BEDROCK-AGENTCORE-RUNTIME-CUSTOM-UPPERCASE": "upper-value",
                     "X-Amzn-Bedrock-AgentCore-Runtime-Custom-MixedCase": "mixed-value",
                 }
+                self.state = type("State", (), {})()
 
         mock_request = MockRequest()
         context = app._build_request_context(mock_request)
@@ -1736,6 +1743,7 @@ class TestRequestHeadersExtraction:
                     "X-Amzn-Bedrock-AgentCore-Runtime-Request-Id": "test-request-123",
                     "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": "test-session-456",
                 }
+                self.state = type("State", (), {})()
 
         mock_request = MockRequest()
         context = app._build_request_context(mock_request)
@@ -1839,6 +1847,7 @@ class TestRequestHeadersExtraction:
                     "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Spaces": "value with spaces",
                     "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Quotes": 'value-with-"quotes"',
                 }
+                self.state = type("State", (), {})()
 
         mock_request = MockRequest()
         context = app._build_request_context(mock_request)
@@ -1866,6 +1875,7 @@ class TestRequestHeadersExtraction:
                     # Prefix as substring - should NOT be included
                     "PrefixX-Amzn-Bedrock-AgentCore-Runtime-Custom-": "has-prefix",
                 }
+                self.state = type("State", (), {})()
 
         mock_request = MockRequest()
         context = app._build_request_context(mock_request)
@@ -1894,6 +1904,7 @@ class TestRequestHeadersExtraction:
                     "Proxy-Authorization": "Bearer proxy-token",  # Should NOT be included
                     "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Auth": "Bearer custom-token",  # Should be included
                 }
+                self.state = type("State", (), {})()
 
         mock_request = MockRequest()
         context = app._build_request_context(mock_request)
@@ -1924,6 +1935,7 @@ class TestRequestHeadersExtraction:
                         "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Empty": "",  # Empty custom header
                         "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Valid": "valid-value",
                     }
+                    self.state = type("State", (), {})()
 
             mock_request = MockRequest()
             context = app._build_request_context(mock_request)
