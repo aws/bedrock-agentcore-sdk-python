@@ -17,7 +17,7 @@ class RequestContext(BaseModel):
     request: Optional[Any] = Field(None, description="The underlying Starlette request object")
 
     class Config:
-        """Allow Arbitrary types."""
+        """Allow non-serializable types like Starlette Request."""
 
         arbitrary_types_allowed = True
 
