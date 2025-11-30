@@ -317,7 +317,7 @@ class BedrockAgentCoreApp(Starlette):
             return RequestContext(
                 session_id=session_id,
                 request_headers=req_headers,
-                request=request,  # NEW: Pass through the Starlette request object
+                request=request,  # Pass through the Starlette request object
             )
         except Exception as e:
             self.logger.warning("Failed to build request context: %s: %s", type(e).__name__, e)
