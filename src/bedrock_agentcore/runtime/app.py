@@ -314,21 +314,16 @@ class BedrockAgentCoreApp(Starlette):
             # Get the headers from context to pass to RequestContext
             req_headers = BedrockAgentCoreContext.get_request_headers()
 
-            # Extract middleware processing data from request.state
-            processing_data = {}
-            if hasattr(request.state, "processing_data"):
-                processing_data = getattr(request.state, "processing_data", {}) or {}
-
             return RequestContext(
                 session_id=session_id,
                 request_headers=req_headers,
-                processing_data=processing_data,  # Pass middleware data
+                request=request,  # NEW: Pass through the Starlette request object
             )
         except Exception as e:
             self.logger.warning("Failed to build request context: %s: %s", type(e).__name__, e)
             request_id = str(uuid.uuid4())
             BedrockAgentCoreContext.set_request_context(request_id, None)
-            return RequestContext(session_id=None, processing_data={})
+            return RequestContext(session_id=None, request=None)
 
     def _takes_context(self, handler: Callable) -> bool:
         try:

@@ -1,6 +1,7 @@
 """Tests for Bedrock AgentCore context functionality."""
 
 import contextvars
+from unittest.mock import MagicMock
 
 from bedrock_agentcore.runtime.context import BedrockAgentCoreContext, RequestContext
 
@@ -176,6 +177,7 @@ class TestRequestContext:
 
         assert context.session_id is None
         assert context.request_headers is None
+        assert context.request is None
 
     def test_request_context_with_empty_headers(self):
         """Test RequestContext with empty headers dictionary."""
@@ -184,69 +186,66 @@ class TestRequestContext:
         assert context.session_id == "test-session-789"
         assert context.request_headers == {}
 
-    def test_request_context_initialization_with_processing_data(self):
-        """Test RequestContext initialization with processing_data."""
-        processing_data = {"user_id": "123", "tenant": "acme", "features": ["auth", "logging"]}
+    def test_request_context_initialization_with_request_object(self):
+        """Test RequestContext initialization with request object."""
+        mock_request = MagicMock()
+        mock_request.state.user_id = "123"
+        mock_request.state.tenant = "acme"
 
-        context = RequestContext(session_id="test-session-123", processing_data=processing_data)
+        context = RequestContext(session_id="test-session-123", request=mock_request)
 
         assert context.session_id == "test-session-123"
-        assert context.processing_data == processing_data
-        assert context.processing_data["user_id"] == "123"
-        assert context.processing_data["tenant"] == "acme"
-        assert context.processing_data["features"] == ["auth", "logging"]
+        assert context.request is mock_request
+        assert context.request.state.user_id == "123"
+        assert context.request.state.tenant == "acme"
 
-    def test_request_context_processing_data_default_empty_dict(self):
-        """Test RequestContext processing_data defaults to empty dict."""
+    def test_request_context_request_default_none(self):
+        """Test RequestContext request defaults to None."""
         context = RequestContext(session_id="test-session-456")
 
         assert context.session_id == "test-session-456"
-        assert context.processing_data == {}
-        assert isinstance(context.processing_data, dict)
+        assert context.request is None
 
-    def test_request_context_initialization_minimal_has_empty_processing_data(self):
-        """Test RequestContext with minimal initialization has empty processing_data."""
+    def test_request_context_initialization_minimal_has_none_request(self):
+        """Test RequestContext with minimal initialization has None request."""
         context = RequestContext()
 
         assert context.session_id is None
         assert context.request_headers is None
-        assert context.processing_data == {}
+        assert context.request is None
 
     def test_request_context_with_all_fields(self):
         """Test RequestContext with all fields populated."""
         headers = {"Authorization": "Bearer test-token", "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Key": "custom-value"}
-        processing_data = {
-            "middleware_processed": True,
-            "auth_result": {"user": "test-user", "roles": ["admin"]},
-            "timestamp": 1234567890,
-        }
+        mock_request = MagicMock()
+        mock_request.state.middleware_processed = True
+        mock_request.state.auth_result = {"user": "test-user", "roles": ["admin"]}
 
-        context = RequestContext(
-            session_id="full-session-123", request_headers=headers, processing_data=processing_data
-        )
+        context = RequestContext(session_id="full-session-123", request_headers=headers, request=mock_request)
 
         assert context.session_id == "full-session-123"
         assert context.request_headers == headers
-        assert context.processing_data == processing_data
-        assert context.processing_data["middleware_processed"] is True
-        assert context.processing_data["auth_result"]["user"] == "test-user"
+        assert context.request is mock_request
+        assert context.request.state.middleware_processed is True
+        assert context.request.state.auth_result["user"] == "test-user"
 
-    def test_request_context_processing_data_with_nested_structures(self):
-        """Test RequestContext with complex nested processing_data."""
-        processing_data = {
-            "level1": {"level2": {"level3": {"deep_value": "found"}}},
-            "list_data": [1, 2, {"nested_in_list": True}],
-            "mixed": [{"a": 1}, {"b": 2}],
-        }
+    def test_request_context_request_state_with_nested_structures(self):
+        """Test RequestContext with complex nested request.state data."""
+        mock_request = MagicMock()
+        mock_request.state.level1 = {"level2": {"level3": {"deep_value": "found"}}}
+        mock_request.state.list_data = [1, 2, {"nested_in_list": True}]
 
-        context = RequestContext(processing_data=processing_data)
+        context = RequestContext(request=mock_request)
 
-        assert context.processing_data["level1"]["level2"]["level3"]["deep_value"] == "found"
-        assert context.processing_data["list_data"][2]["nested_in_list"] is True
+        assert context.request.state.level1["level2"]["level3"]["deep_value"] == "found"
+        assert context.request.state.list_data[2]["nested_in_list"] is True
 
-    def test_request_context_processing_data_empty_dict_explicit(self):
-        """Test RequestContext with explicitly set empty processing_data."""
-        context = RequestContext(session_id="test-session", processing_data={})
+    def test_request_context_allows_arbitrary_types(self):
+        """Test RequestContext allows arbitrary types via Config."""
+        # This tests that arbitrary_types_allowed = True works
+        mock_request = MagicMock()
 
-        assert context.processing_data == {}
-        assert len(context.processing_data) == 0
+        # Should not raise ValidationError
+        context = RequestContext(request=mock_request)
+
+        assert context.request is mock_request

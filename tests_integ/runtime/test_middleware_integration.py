@@ -1,9 +1,9 @@
 """Integration tests for middleware → handler data flow.
 
 These tests verify the complete flow:
-1. Middleware sets request.state.processing_data
-2. SDK extracts it in _build_request_context
-3. Handler receives it in context.processing_data
+1. Middleware sets request.state attributes
+2. SDK passes the request object through in _build_request_context
+3. Handler accesses it via context.request.state
 """
 
 import time
@@ -22,12 +22,8 @@ class TimingMiddleware(BaseHTTPMiddleware):
     """Middleware that adds timing data."""
 
     async def dispatch(self, request, call_next):
-        # Initialize processing_data if not exists
-        if not hasattr(request.state, "processing_data"):
-            request.state.processing_data = {}
-
         start_time = time.time()
-        request.state.processing_data["start_time"] = start_time
+        request.state.start_time = start_time
 
         response = await call_next(request)
 
@@ -38,17 +34,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """Middleware that adds auth data."""
 
     async def dispatch(self, request, call_next):
-        # Initialize processing_data if not exists
-        if not hasattr(request.state, "processing_data"):
-            request.state.processing_data = {}
-
         # Check for auth header
         auth = request.headers.get("Authorization", "")
         if auth.startswith("Bearer "):
-            request.state.processing_data["user_id"] = "test_user_123"
-            request.state.processing_data["authenticated"] = True
+            request.state.user_id = "test_user_123"
+            request.state.authenticated = True
         else:
-            request.state.processing_data["authenticated"] = False
+            request.state.authenticated = False
 
         return await call_next(request)
 
@@ -57,11 +49,8 @@ class MetadataMiddleware(BaseHTTPMiddleware):
     """Middleware that adds various metadata."""
 
     async def dispatch(self, request, call_next):
-        if not hasattr(request.state, "processing_data"):
-            request.state.processing_data = {}
-
-        request.state.processing_data["client_ip"] = request.client.host if request.client else "unknown"
-        request.state.processing_data["path"] = request.url.path
+        request.state.client_ip = request.client.host if request.client else "unknown"
+        request.state.path = request.url.path
 
         return await call_next(request)
 
@@ -82,7 +71,7 @@ class TestMiddlewareIntegration:
 
         @app.entrypoint
         def handler(payload, context):
-            start_time = context.processing_data.get("start_time")
+            start_time = getattr(context.request.state, "start_time", None)
             return {"has_start_time": start_time is not None, "start_time_type": type(start_time).__name__}
 
         client = TestClient(app)
@@ -102,8 +91,8 @@ class TestMiddlewareIntegration:
         @app.entrypoint
         def handler(payload, context):
             return {
-                "authenticated": context.processing_data.get("authenticated"),
-                "user_id": context.processing_data.get("user_id"),
+                "authenticated": getattr(context.request.state, "authenticated", None),
+                "user_id": getattr(context.request.state, "user_id", None),
             }
 
         client = TestClient(app)
@@ -125,8 +114,8 @@ class TestMiddlewareIntegration:
         @app.entrypoint
         def handler(payload, context):
             return {
-                "authenticated": context.processing_data.get("authenticated"),
-                "user_id": context.processing_data.get("user_id"),
+                "authenticated": getattr(context.request.state, "authenticated", None),
+                "user_id": getattr(context.request.state, "user_id", None),
             }
 
         client = TestClient(app)
@@ -153,12 +142,15 @@ class TestMiddlewareIntegration:
 
         @app.entrypoint
         def handler(payload, context):
+            state = context.request.state
+            # Access the internal _state dict to get keys
+            state_keys = list(state._state.keys()) if hasattr(state, "_state") else []
             return {
-                "has_start_time": "start_time" in context.processing_data,
-                "has_authenticated": "authenticated" in context.processing_data,
-                "has_path": "path" in context.processing_data,
-                "path": context.processing_data.get("path"),
-                "keys": list(context.processing_data.keys()),
+                "has_start_time": hasattr(state, "start_time"),
+                "has_authenticated": hasattr(state, "authenticated"),
+                "has_path": hasattr(state, "path"),
+                "path": getattr(state, "path", None),
+                "keys": state_keys,
             }
 
         client = TestClient(app)
@@ -180,14 +172,16 @@ class TestMiddlewareIntegration:
         assert "client_ip" in keys
 
     def test_no_middleware_empty_processing_data(self):
-        """Without middleware, processing_data is empty dict."""
+        """Without middleware, request.state has no custom attributes."""
         from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
         app = BedrockAgentCoreApp()  # No middleware
 
         @app.entrypoint
         def handler(payload, context):
-            return {"processing_data": context.processing_data, "is_empty": len(context.processing_data) == 0}
+            # Access the internal _state dict to get custom attributes
+            state_attrs = list(context.request.state._state.keys()) if hasattr(context.request.state, "_state") else []
+            return {"state_attrs": state_attrs, "is_empty": len(state_attrs) == 0}
 
         client = TestClient(app)
         response = client.post("/invocations", json={})
@@ -195,10 +189,10 @@ class TestMiddlewareIntegration:
         assert response.status_code == 200
         data = response.json()
         assert data["is_empty"] is True
-        assert data["processing_data"] == {}
+        assert data["state_attrs"] == []
 
     def test_handler_can_modify_processing_data(self):
-        """Handler can add to processing_data (though it won't persist)."""
+        """Handler can add to request.state (though it won't persist)."""
         from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
         app = BedrockAgentCoreApp(middleware=[Middleware(TimingMiddleware)])
@@ -206,13 +200,13 @@ class TestMiddlewareIntegration:
         @app.entrypoint
         def handler(payload, context):
             # Add data in handler
-            context.processing_data["handler_added"] = "yes"
-            context.processing_data["processed_at"] = time.time()
+            context.request.state.handler_added = "yes"
+            context.request.state.processed_at = time.time()
 
             return {
-                "has_middleware_data": "start_time" in context.processing_data,
-                "has_handler_data": "handler_added" in context.processing_data,
-                "handler_added": context.processing_data.get("handler_added"),
+                "has_middleware_data": hasattr(context.request.state, "start_time"),
+                "has_handler_data": hasattr(context.request.state, "handler_added"),
+                "handler_added": getattr(context.request.state, "handler_added", None),
             }
 
         client = TestClient(app)
@@ -225,7 +219,7 @@ class TestMiddlewareIntegration:
         assert data["handler_added"] == "yes"
 
     def test_processing_data_with_session_and_headers(self):
-        """processing_data works alongside session_id and request_headers."""
+        """request.state works alongside session_id and request_headers."""
         from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
         app = BedrockAgentCoreApp(middleware=[Middleware(AuthMiddleware)])
@@ -235,8 +229,8 @@ class TestMiddlewareIntegration:
             return {
                 "session_id": context.session_id,
                 "has_auth_header": context.request_headers is not None and "Authorization" in context.request_headers,
-                "authenticated": context.processing_data.get("authenticated"),
-                "user_id": context.processing_data.get("user_id"),
+                "authenticated": getattr(context.request.state, "authenticated", None),
+                "user_id": getattr(context.request.state, "user_id", None),
             }
 
         client = TestClient(app)
@@ -263,19 +257,20 @@ class TestEdgeCases:
     """Edge case tests."""
 
     def test_middleware_sets_empty_dict(self):
-        """Middleware that sets empty processing_data."""
+        """Middleware that sets an empty dict on request.state."""
         from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
         class EmptyMiddleware(BaseHTTPMiddleware):
             async def dispatch(self, request, call_next):
-                request.state.processing_data = {}
+                request.state.empty_dict = {}
                 return await call_next(request)
 
         app = BedrockAgentCoreApp(middleware=[Middleware(EmptyMiddleware)])
 
         @app.entrypoint
         def handler(payload, context):
-            return {"is_dict": isinstance(context.processing_data, dict)}
+            empty_dict = getattr(context.request.state, "empty_dict", None)
+            return {"is_dict": isinstance(empty_dict, dict)}
 
         client = TestClient(app)
         response = client.post("/invocations", json={})
@@ -289,21 +284,20 @@ class TestEdgeCases:
 
         class NestedMiddleware(BaseHTTPMiddleware):
             async def dispatch(self, request, call_next):
-                request.state.processing_data = {
-                    "auth": {"user_id": "alice", "roles": ["admin", "user"]},
-                    "metrics": {"request_count": 42},
-                }
+                request.state.auth = {"user_id": "alice", "roles": ["admin", "user"]}
+                request.state.metrics = {"request_count": 42}
                 return await call_next(request)
 
         app = BedrockAgentCoreApp(middleware=[Middleware(NestedMiddleware)])
 
         @app.entrypoint
         def handler(payload, context):
-            auth = context.processing_data.get("auth", {})
+            auth = getattr(context.request.state, "auth", {})
+            metrics = getattr(context.request.state, "metrics", {})
             return {
                 "user_id": auth.get("user_id"),
                 "roles": auth.get("roles"),
-                "request_count": context.processing_data.get("metrics", {}).get("request_count"),
+                "request_count": metrics.get("request_count"),
             }
 
         client = TestClient(app)
@@ -316,19 +310,20 @@ class TestEdgeCases:
         assert data["request_count"] == 42
 
     def test_large_processing_data(self):
-        """Handler can receive large processing_data."""
+        """Handler can receive large data via request.state."""
         from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
         class LargeDataMiddleware(BaseHTTPMiddleware):
             async def dispatch(self, request, call_next):
-                request.state.processing_data = {f"key_{i}": f"value_{i}" for i in range(100)}
+                request.state.large_data = {f"key_{i}": f"value_{i}" for i in range(100)}
                 return await call_next(request)
 
         app = BedrockAgentCoreApp(middleware=[Middleware(LargeDataMiddleware)])
 
         @app.entrypoint
         def handler(payload, context):
-            return {"count": len(context.processing_data), "has_key_50": "key_50" in context.processing_data}
+            large_data = getattr(context.request.state, "large_data", {})
+            return {"count": len(large_data), "has_key_50": "key_50" in large_data}
 
         client = TestClient(app)
         response = client.post("/invocations", json={})
@@ -353,32 +348,26 @@ class TestRealWorldScenario:
 
         class ProductionAuthMiddleware(BaseHTTPMiddleware):
             async def dispatch(self, request, call_next):
-                if not hasattr(request.state, "processing_data"):
-                    request.state.processing_data = {}
-
                 auth = request.headers.get("Authorization", "")
                 if auth.startswith("Bearer "):
                     # Simulate JWT validation
-                    request.state.processing_data["user_id"] = "user_12345"
-                    request.state.processing_data["user_email"] = "user@example.com"
-                    request.state.processing_data["user_role"] = "developer"
-                    request.state.processing_data["authenticated"] = True
+                    request.state.user_id = "user_12345"
+                    request.state.user_email = "user@example.com"
+                    request.state.user_role = "developer"
+                    request.state.authenticated = True
                 else:
-                    request.state.processing_data["authenticated"] = False
+                    request.state.authenticated = False
 
                 return await call_next(request)
 
         class ProductionTimingMiddleware(BaseHTTPMiddleware):
             async def dispatch(self, request, call_next):
-                if not hasattr(request.state, "processing_data"):
-                    request.state.processing_data = {}
-
                 start = time.time()
-                request.state.processing_data["request_start"] = start
+                request.state.request_start = start
 
                 response = await call_next(request)
 
-                # Note: This won't update processing_data for the handler
+                # Note: This won't update request.state for the handler
                 # but shows the pattern
                 return response
 
@@ -391,14 +380,16 @@ class TestRealWorldScenario:
 
         @app.entrypoint
         def ai_agent(payload, context):
+            state = context.request.state
+
             # Check auth
-            if not context.processing_data.get("authenticated"):
+            if not getattr(state, "authenticated", False):
                 return {"error": "Unauthorized"}, 401
 
             # Get user info
-            user_id = context.processing_data.get("user_id")
-            user_email = context.processing_data.get("user_email")
-            user_role = context.processing_data.get("user_role")
+            user_id = getattr(state, "user_id", None)
+            user_email = getattr(state, "user_email", None)
+            user_role = getattr(state, "user_role", None)
 
             # Process request
             user_message = payload.get("message", "")

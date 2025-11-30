@@ -173,7 +173,7 @@ class TestBedrockAgentCoreApp:
 
         context = bedrock_agentcore._build_request_context(mock_request)
         assert context.session_id is None
-        assert context.processing_data == {}
+        assert context.request is None
 
     def test_takes_context_exception_handling(self):
         """Test _takes_context handles exceptions gracefully."""

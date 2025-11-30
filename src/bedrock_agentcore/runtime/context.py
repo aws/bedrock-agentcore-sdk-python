@@ -10,18 +10,16 @@ from pydantic import BaseModel, Field
 
 
 class RequestContext(BaseModel):
-    """Request context containing metadata from HTTP requests.
-
-    Attributes:
-        session_id: Session identifier from request headers
-        request_headers: Authorization and custom headers from the request
-        processing_data: Data injected by middleware (available if middleware sets
-                        request.state.processing_data)
-    """
+    """Request context containing metadata from HTTP requests."""
 
     session_id: Optional[str] = Field(None)
     request_headers: Optional[Dict[str, str]] = Field(None)
-    processing_data: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    request: Optional[Any] = Field(None, description="The underlying Starlette request object")
+
+    class Config:
+        """Allow Arbitrary types."""
+
+        arbitrary_types_allowed = True
 
 
 class BedrockAgentCoreContext:
