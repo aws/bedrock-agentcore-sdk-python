@@ -20,41 +20,94 @@ if not logger.handlers:
 
 def requires_access_token(
     *,
-    provider_name: str,
-    into: str = "access_token",
-    scopes: List[str],
+    # OAuth parameters (required for M2M and USER_FEDERATION)
+    provider_name: Optional[str] = None,
+    scopes: Optional[List[str]] = None,
     on_auth_url: Optional[Callable[[str], Any]] = None,
-    auth_flow: Literal["M2M", "USER_FEDERATION"],
     callback_url: Optional[str] = None,
     force_authentication: bool = False,
     token_poller: Optional[TokenPoller] = None,
     custom_state: Optional[str] = None,
     custom_parameters: Optional[Dict[str, str]] = None,
+    # AWS JWT parameters (required for AWS_JWT)
+    audience: Optional[List[str]] = None,
+    signing_algorithm: str = "ES384",
+    duration_seconds: int = 300,
+    tags: Optional[List[Dict[str, str]]] = None,
+    # Common parameters
+    into: str = "access_token",
+    auth_flow: Literal["M2M", "USER_FEDERATION", "AWS_JWT"] = "USER_FEDERATION",
 ) -> Callable:
-    """Decorator that fetches an OAuth2 access token before calling the decorated function.
+    """Decorator that fetches an access token before calling the decorated function.
 
-    Args:
-        provider_name: The credential provider name
-        into: Parameter name to inject the token into
-        scopes: OAuth2 scopes to request
-        on_auth_url: Callback for handling authorization URLs
-        auth_flow: Authentication flow type ("M2M" or "USER_FEDERATION")
+    Supports three authentication flows:
+
+    1. USER_FEDERATION (OAuth 3LO): User consent required, uses credential provider
+    2. M2M (OAuth client credentials): Machine-to-machine, uses credential provider
+    3. AWS_JWT: Direct AWS STS JWT, no secrets required
+
+    OAuth Parameters (for M2M and USER_FEDERATION):
+        provider_name: The credential provider name (required for OAuth flows)
+        scopes: OAuth2 scopes to request (required for OAuth flows)
+        on_auth_url: Callback for handling authorization URLs (USER_FEDERATION only)
         callback_url: OAuth2 callback URL
         force_authentication: Force re-authentication
         token_poller: Custom token poller implementation
-        custom_state: A state that allows applications to verify the validity of callbacks to callback_url
-        custom_parameters: A map of custom parameters to include in authorization request to the credential provider
-                           Note: these parameters are in addition to standard OAuth 2.0 flow parameters
+        custom_state: State for callback verification
+        custom_parameters: Additional OAuth parameters
+
+    AWS JWT Parameters (for AWS_JWT):
+        audience: List of intended token recipients (required for AWS_JWT)
+        signing_algorithm: 'ES384' (default) or 'RS256'
+        duration_seconds: Token lifetime 60-3600 (default 300)
+        tags: Custom claims as [{'Key': str, 'Value': str}, ...]
+
+    Common Parameters:
+        into: Parameter name to inject the token into (default: 'access_token')
+        auth_flow: Authentication flow type
 
     Returns:
         Decorator function
+
+    Examples:
+        # OAuth USER_FEDERATION flow
+        @requires_access_token(
+            provider_name="CognitoProvider",
+            scopes=["openid"],
+            auth_flow="USER_FEDERATION",
+            on_auth_url=lambda url: print(f"Please authorize: {url}")
+        )
+        async def call_oauth_api(*, access_token: str):
+            ...
+
+        # AWS JWT flow (no secrets!)
+        @requires_access_token(
+            auth_flow="AWS_JWT",
+            audience=["https://api.example.com"],
+            signing_algorithm="ES384",
+        )
+        async def call_external_api(*, access_token: str):
+            ...
     """
+    # Validate parameters based on flow
+    if auth_flow in ["M2M", "USER_FEDERATION"]:
+        if not provider_name:
+            raise ValueError(f"provider_name is required for auth_flow='{auth_flow}'")
+        if not scopes:
+            raise ValueError(f"scopes is required for auth_flow='{auth_flow}'")
+    elif auth_flow == "AWS_JWT":
+        if not audience:
+            raise ValueError("audience is required for auth_flow='AWS_JWT'")
+        if signing_algorithm not in ["ES384", "RS256"]:
+            raise ValueError("signing_algorithm must be 'ES384' or 'RS256'")
+        if not (60 <= duration_seconds <= 3600):
+            raise ValueError("duration_seconds must be between 60 and 3600")
 
     def decorator(func: Callable) -> Callable:
         client = IdentityClient(_get_region())
 
-        async def _get_token() -> str:
-            """Common token fetching logic."""
+        async def _get_oauth_token() -> str:
+            """Get token via OAuth flow (existing logic)."""
             return await client.get_token(
                 provider_name=provider_name,
                 agent_identity_token=await _get_workload_access_token(client),
@@ -67,6 +120,23 @@ def requires_access_token(
                 custom_state=custom_state,
                 custom_parameters=custom_parameters,
             )
+
+        async def _get_aws_jwt_token() -> str:
+            """Get token via AWS STS (new logic)."""
+            result = client.get_aws_jwt_token_sync(
+                audience=audience,
+                signing_algorithm=signing_algorithm,
+                duration_seconds=duration_seconds,
+                tags=tags,
+            )
+            return result["token"]
+
+        async def _get_token() -> str:
+            """Route to appropriate token retrieval method."""
+            if auth_flow == "AWS_JWT":
+                return await _get_aws_jwt_token()
+            else:
+                return await _get_oauth_token()
 
         @wraps(func)
         async def async_wrapper(*args: Any, **kwargs_func: Any) -> Any:
