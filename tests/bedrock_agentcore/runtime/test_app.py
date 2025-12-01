@@ -1949,3 +1949,202 @@ class TestRequestHeadersExtraction:
         assert result["X-Amzn-Bedrock-AgentCore-Runtime-Custom-Empty"] == ""
         assert result["X-Amzn-Bedrock-AgentCore-Runtime-Custom-Valid"] == "valid-value"
         assert len(result) == 3
+
+
+class TestWebSocketSupport:
+    """Test WebSocket decorator and handler functionality."""
+
+    def test_websocket_initialization(self):
+        """Test that WebSocket route is registered during initialization."""
+        app = BedrockAgentCoreApp()
+        routes = app.routes
+        route_paths = [route.path for route in routes]  # type: ignore
+
+        assert "/ws" in route_paths
+
+    def test_websocket_decorator(self):
+        """Test @app.websocket decorator registers handler."""
+        app = BedrockAgentCoreApp()
+
+        @app.websocket
+        async def test_handler(websocket, context):
+            await websocket.accept()
+
+        assert app._websocket_handler is not None
+        assert app._websocket_handler == test_handler
+
+    def test_websocket_no_handler_defined(self):
+        """Test WebSocket endpoint when no handler is defined."""
+        from starlette.websockets import WebSocketDisconnect
+
+        app = BedrockAgentCoreApp()
+        client = TestClient(app)
+
+        with pytest.raises((WebSocketDisconnect, RuntimeError)):
+            with client.websocket_connect("/ws"):
+                pass
+
+    def test_websocket_basic_communication(self):
+        """Test basic WebSocket send/receive."""
+        app = BedrockAgentCoreApp()
+
+        @app.websocket
+        async def handler(websocket, context):
+            await websocket.accept()
+            data = await websocket.receive_json()
+            await websocket.send_json({"echo": data})
+            await websocket.close()
+
+        client = TestClient(app)
+
+        with client.websocket_connect("/ws") as websocket:
+            websocket.send_json({"message": "Hello"})
+            response = websocket.receive_json()
+            assert response == {"echo": {"message": "Hello"}}
+
+    def test_websocket_with_context(self):
+        """Test WebSocket handler receives context with session ID."""
+        app = BedrockAgentCoreApp()
+
+        received_context = None
+
+        @app.websocket
+        async def handler(websocket, context):
+            nonlocal received_context
+            received_context = context
+            await websocket.accept()
+            await websocket.send_json({"session_id": context.session_id})
+            await websocket.close()
+
+        client = TestClient(app)
+
+        with client.websocket_connect(
+            "/ws", headers={"X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": "ws-session-123"}
+        ) as websocket:
+            response = websocket.receive_json()
+            assert response["session_id"] == "ws-session-123"
+            assert received_context is not None
+            assert received_context.session_id == "ws-session-123"
+
+    def test_websocket_handler_exception(self):
+        """Test WebSocket handler exceptions are caught and logged."""
+        from starlette.websockets import WebSocketDisconnect
+
+        app = BedrockAgentCoreApp()
+
+        @app.websocket
+        async def handler(websocket, context):
+            await websocket.accept()
+            raise ValueError("Test WebSocket error")
+
+        client = TestClient(app)
+
+        with pytest.raises((WebSocketDisconnect, ValueError, RuntimeError)):
+            with client.websocket_connect("/ws") as websocket:
+                websocket.receive_json()
+
+    def test_websocket_multiple_messages(self):
+        """Test WebSocket can handle multiple messages."""
+        app = BedrockAgentCoreApp()
+
+        @app.websocket
+        async def handler(websocket, context):
+            await websocket.accept()
+            for _ in range(3):
+                data = await websocket.receive_json()
+                await websocket.send_json({"received": data})
+            await websocket.close()
+
+        client = TestClient(app)
+
+        with client.websocket_connect("/ws") as websocket:
+            for i in range(3):
+                websocket.send_json({"count": i})
+                response = websocket.receive_json()
+                assert response == {"received": {"count": i}}
+
+    def test_websocket_disconnect_handling(self):
+        """Test WebSocket gracefully handles client disconnect."""
+        from starlette.websockets import WebSocketDisconnect
+
+        app = BedrockAgentCoreApp()
+
+        disconnect_handled = False
+
+        @app.websocket
+        async def handler(websocket, context):
+            nonlocal disconnect_handled
+            await websocket.accept()
+            try:
+                while True:
+                    await websocket.receive_json()
+            except WebSocketDisconnect:
+                disconnect_handled = True
+                raise
+
+        client = TestClient(app)
+
+        with client.websocket_connect("/ws") as websocket:
+            websocket.send_json({"message": "test"})
+
+        # Disconnect should be handled gracefully
+        assert disconnect_handled
+
+    def test_websocket_with_request_headers(self):
+        """Test WebSocket handler receives custom request headers via context."""
+        app = BedrockAgentCoreApp()
+
+        received_headers = None
+
+        @app.websocket
+        async def handler(websocket, context):
+            nonlocal received_headers
+            received_headers = context.request_headers
+            await websocket.accept()
+            await websocket.send_json({"has_headers": context.request_headers is not None})
+            await websocket.close()
+
+        client = TestClient(app)
+
+        headers = {
+            "Authorization": "Bearer ws-token",
+            "X-Amzn-Bedrock-AgentCore-Runtime-Custom-ClientId": "ws-client-123",
+        }
+
+        with client.websocket_connect("/ws", headers=headers) as websocket:
+            response = websocket.receive_json()
+            assert response["has_headers"] is True
+
+        assert received_headers is not None
+        # Find authorization header (case-insensitive)
+        auth_key = next((k for k in received_headers.keys() if k.lower() == "authorization"), None)
+        assert auth_key is not None
+        assert received_headers[auth_key] == "Bearer ws-token"
+
+    def test_websocket_streaming_data(self):
+        """Test WebSocket can stream multiple data chunks."""
+        app = BedrockAgentCoreApp()
+
+        @app.websocket
+        async def handler(websocket, context):
+            await websocket.accept()
+            # Stream data
+            for i in range(5):
+                await websocket.send_json({"chunk": i, "data": f"chunk_{i}"})
+            await websocket.send_json({"done": True})
+            await websocket.close()
+
+        client = TestClient(app)
+
+        with client.websocket_connect("/ws") as websocket:
+            chunks = []
+            for _ in range(5):
+                chunk = websocket.receive_json()
+                chunks.append(chunk)
+
+            final = websocket.receive_json()
+
+            assert len(chunks) == 5
+            assert chunks[0] == {"chunk": 0, "data": "chunk_0"}
+            assert chunks[4] == {"chunk": 4, "data": "chunk_4"}
+            assert final == {"done": True}
