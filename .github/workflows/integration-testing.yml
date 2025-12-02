@@ -130,7 +130,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e .
-          pip install --no-cache-dir pytest requests strands-agents uvicorn httpx starlette websockets
+          pip install --no-cache-dir pytest requests strands-agents uvicorn httpx starlette
 
       - name: Run integration tests
         env:
