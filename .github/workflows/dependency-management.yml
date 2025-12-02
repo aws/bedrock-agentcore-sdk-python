@@ -42,7 +42,7 @@ jobs:
           uv run pip-licenses --fail-on="GPL;LGPL;AGPL;SSPL" || true
 
       - name: Upload license report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: license-report
           path: licenses.json

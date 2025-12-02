@@ -57,7 +57,7 @@ jobs:
 
       - name: Upload Bandit results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: bandit-results
           path: bandit-report.json
@@ -91,7 +91,7 @@ jobs:
 
       - name: Upload Safety results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: safety-results
           path: safety-report.json
