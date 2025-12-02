@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.0] - 2025-12-02
+
+### Added
+- feat: add websockets as main dependency for @app.websocket decorator (#181) (9146d3e)
+
+### Other Changes
+- Feature/bidirectional streaming (#180) (535faa5)
+- feat(runtime): Add middleware data support to request context (#178) (95bbfa4)
+- chore: bump version to 1.0.7 (#173) (18a78b9)
+
 ## [1.0.7] - 2025-11-25
 
 ### Added
