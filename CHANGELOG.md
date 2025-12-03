@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1] - 2025-12-03
+
+### Other Changes
+- feat(identity):  Add @requires_iam_access_token decorator for AWS STS JWT tokens (#179) (4ab6072)
+- Add Strands AgentCore Evaluation integration (#183) (f242836)
+- chore: bump version to 1.1.0 (#182) (042d4bf)
+
 ## [1.1.0] - 2025-12-02
 
 ### Added
