@@ -94,6 +94,7 @@ convention = "google"
 testpaths = [
     "tests"
 ]
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 branch = true
@@ -148,9 +149,13 @@ dev = [
     "websockets>=14.1",
     "wheel>=0.45.1",
     "strands-agents>=1.18.0",
+    "strands-agents-evals>=0.1.0",
 ]
 
 [project.optional-dependencies]
 strands-agents = [
     "strands-agents>=1.1.0"
+]
+strands-agents-evals = [
+    "strands-agents-evals>=0.1.0"
 ]
