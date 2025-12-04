@@ -159,7 +159,7 @@ class AgentCoreRuntimeClient:
             ValueError: If runtime_arn format is invalid.
 
         Example:
-            >>> client = AgentRuntimeClient('us-west-2')
+            >>> client = AgentCoreRuntimeClient('us-west-2')
             >>> ws_url, headers = client.generate_ws_connection(
             ...     runtime_arn='arn:aws:bedrock-agentcore:us-west-2:123:runtime/my-runtime',
             ...     endpoint_name='DEFAULT'
@@ -257,7 +257,7 @@ class AgentCoreRuntimeClient:
             RuntimeError: If URL generation fails or no credentials found.
 
         Example:
-            >>> client = AgentRuntimeClient('us-west-2')
+            >>> client = AgentCoreRuntimeClient('us-west-2')
             >>> presigned_url = client.generate_presigned_url(
             ...     runtime_arn='arn:aws:bedrock-agentcore:us-west-2:123:runtime/my-runtime',
             ...     endpoint_name='DEFAULT',
@@ -350,7 +350,7 @@ class AgentCoreRuntimeClient:
             ValueError: If runtime_arn format is invalid or bearer_token is empty.
 
         Example:
-            >>> client = AgentRuntimeClient('us-west-2')
+            >>> client = AgentCoreRuntimeClient('us-west-2')
             >>> ws_url, headers = client.generate_ws_connection_oauth(
             ...     runtime_arn='arn:aws:bedrock-agentcore:us-west-2:123:runtime/my-runtime',
             ...     bearer_token='eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...',
