@@ -56,6 +56,21 @@ class TestAgentCoreRuntimeClientIntegration:
         assert "Authorization" in headers
         assert "X-Amz-Date" in headers
         assert "Host" in headers
+        assert "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id" in headers
+        assert "User-Agent" in headers
+        assert headers["User-Agent"] == "AgentCoreRuntimeClient/1.0"
+
+    def test_generate_ws_connection_with_session_id(self, mock_boto_session):
+        """Test that generate_ws_connection includes provided session ID in headers."""
+        client = AgentCoreRuntimeClient(region="us-west-2")
+        runtime_arn = "arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/test-runtime"
+        test_session_id = "integration-test-session-789"
+
+        ws_url, headers = client.generate_ws_connection(runtime_arn, session_id=test_session_id)
+
+        # Verify session ID is in headers
+        assert "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id" in headers
+        assert headers["X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"] == test_session_id
 
     def test_generate_presigned_url_returns_valid_format(self, mock_boto_session):
         """Test that generate_presigned_url returns properly formatted URL."""
@@ -69,6 +84,19 @@ class TestAgentCoreRuntimeClientIntegration:
         assert "runtimes" in presigned_url
         assert "X-Amz-Algorithm" in presigned_url
         assert "X-Amz-Signature" in presigned_url
+        # Verify session ID is in query params
+        assert "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id=" in presigned_url
+
+    def test_generate_presigned_url_with_session_id(self, mock_boto_session):
+        """Test that generate_presigned_url includes session ID in query params."""
+        client = AgentCoreRuntimeClient(region="us-west-2")
+        runtime_arn = "arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/test-runtime"
+        test_session_id = "integration-test-presigned-session"
+
+        presigned_url = client.generate_presigned_url(runtime_arn, session_id=test_session_id)
+
+        # Verify session ID is in query params
+        assert f"X-Amzn-Bedrock-AgentCore-Runtime-Session-Id={test_session_id}" in presigned_url
 
     @pytest.mark.skip(reason="Requires actual runtime endpoint")
     async def test_connect_with_generated_headers(self):

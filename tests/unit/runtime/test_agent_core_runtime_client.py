@@ -181,6 +181,26 @@ class TestGenerateWsConnection:
 
         assert ws_url is not None
         assert headers is not None
+        # Verify session ID is in headers
+        assert "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id" in headers
+        assert headers["X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"] == "test-session-123"
+
+    @patch("bedrock_agentcore.runtime.agent_core_runtime_client.boto3.Session")
+    @patch("bedrock_agentcore.runtime.agent_core_runtime_client.get_data_plane_endpoint")
+    def test_generate_connection_user_agent(self, mock_endpoint, mock_session):
+        """Test that User-Agent header is set correctly."""
+        mock_endpoint.return_value = "https://example.aws.dev"
+        mock_creds = Mock()
+        mock_creds.get_frozen_credentials.return_value = Mock(access_key="AKIATEST", secret_key="secret", token=None)
+        mock_session.return_value.get_credentials.return_value = mock_creds
+
+        client = AgentCoreRuntimeClient(region="us-west-2")
+        runtime_arn = "arn:aws:bedrock-agentcore:us-west-2:123:runtime/my-runtime"
+
+        ws_url, headers = client.generate_ws_connection(runtime_arn)
+
+        assert "User-Agent" in headers
+        assert headers["User-Agent"] == "AgentCoreRuntimeClient/1.0"
 
     @patch("bedrock_agentcore.runtime.agent_core_runtime_client.boto3.Session")
     @patch("bedrock_agentcore.runtime.agent_core_runtime_client.get_data_plane_endpoint")
@@ -273,6 +293,23 @@ class TestGeneratePresignedUrl:
 
     @patch("bedrock_agentcore.runtime.agent_core_runtime_client.boto3.Session")
     @patch("bedrock_agentcore.runtime.agent_core_runtime_client.get_data_plane_endpoint")
+    def test_generate_presigned_url_with_session_id(self, mock_endpoint, mock_session):
+        """Test generating presigned URL with explicit session ID."""
+        mock_endpoint.return_value = "https://example.aws.dev"
+        mock_creds = Mock()
+        mock_creds.get_frozen_credentials.return_value = Mock(access_key="AKIATEST", secret_key="secret", token=None)
+        mock_session.return_value.get_credentials.return_value = mock_creds
+
+        client = AgentCoreRuntimeClient(region="us-west-2")
+        runtime_arn = "arn:aws:bedrock-agentcore:us-west-2:123:runtime/my-runtime"
+
+        presigned_url = client.generate_presigned_url(runtime_arn, session_id="test-session-456")
+
+        # Verify session ID is in query params
+        assert "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id=test-session-456" in presigned_url
+
+    @patch("bedrock_agentcore.runtime.agent_core_runtime_client.boto3.Session")
+    @patch("bedrock_agentcore.runtime.agent_core_runtime_client.get_data_plane_endpoint")
     def test_generate_presigned_url_with_custom_expires(self, mock_endpoint, mock_session):
         """Test generating presigned URL with custom expiration."""
         mock_endpoint.return_value = "https://example.aws.dev"
@@ -286,6 +323,8 @@ class TestGeneratePresignedUrl:
         presigned_url = client.generate_presigned_url(runtime_arn, expires=60)
 
         assert "X-Amz-Expires=60" in presigned_url
+        # Verify auto-generated session ID is present
+        assert "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id=" in presigned_url
 
     def test_generate_presigned_url_exceeds_max_expires_raises_error(self):
         """Test that exceeding max expiration raises ValueError."""
