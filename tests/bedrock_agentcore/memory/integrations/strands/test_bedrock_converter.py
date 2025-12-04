@@ -96,3 +96,94 @@ class TestAgentCoreMemoryConverter:
         message = (long_text, long_text)
         result = AgentCoreMemoryConverter.exceeds_conversational_limit(message)
         assert result is True
+
+    def test_filter_empty_text_removes_empty_string(self):
+        """Test filtering removes empty text items."""
+        message = {"role": "user", "content": [{"text": ""}, {"text": "hello"}]}
+        result = AgentCoreMemoryConverter._filter_empty_text(message)
+        assert len(result["content"]) == 1
+        assert result["content"][0]["text"] == "hello"
+
+    def test_filter_empty_text_removes_whitespace_only(self):
+        """Test filtering removes whitespace-only text items."""
+        message = {"role": "user", "content": [{"text": "   "}, {"text": "hello"}]}
+        result = AgentCoreMemoryConverter._filter_empty_text(message)
+        assert len(result["content"]) == 1
+        assert result["content"][0]["text"] == "hello"
+
+    def test_filter_empty_text_keeps_non_text_items(self):
+        """Test filtering keeps non-text items like toolUse."""
+        message = {"role": "user", "content": [{"text": ""}, {"toolUse": {"name": "test"}}]}
+        result = AgentCoreMemoryConverter._filter_empty_text(message)
+        assert len(result["content"]) == 1
+        assert "toolUse" in result["content"][0]
+
+    def test_filter_empty_text_all_empty_returns_empty_content(self):
+        """Test filtering all empty text returns empty content array."""
+        message = {"role": "user", "content": [{"text": ""}]}
+        result = AgentCoreMemoryConverter._filter_empty_text(message)
+        assert result["content"] == []
+
+    def test_message_to_payload_skips_all_empty_text(self):
+        """Test message_to_payload returns empty list when all text is empty."""
+        message = SessionMessage(
+            message_id=1, message={"role": "user", "content": [{"text": ""}]}, created_at="2023-01-01T00:00:00Z"
+        )
+        result = AgentCoreMemoryConverter.message_to_payload(message)
+        assert result == []
+
+    def test_message_to_payload_filters_empty_text_items(self):
+        """Test message_to_payload filters out empty text but keeps valid content."""
+        message = SessionMessage(
+            message_id=1,
+            message={"role": "user", "content": [{"text": ""}, {"text": "hello"}]},
+            created_at="2023-01-01T00:00:00Z",
+        )
+        result = AgentCoreMemoryConverter.message_to_payload(message)
+        assert len(result) == 1
+        parsed = json.loads(result[0][0])
+        assert len(parsed["message"]["content"]) == 1
+        assert parsed["message"]["content"][0]["text"] == "hello"
+
+    def test_events_to_messages_filters_empty_text_conversational(self):
+        """Test events_to_messages filters empty text from conversational payloads."""
+        msg_with_empty = SessionMessage(
+            message_id=1,
+            message={"role": "user", "content": [{"text": ""}, {"text": "hello"}]},
+            created_at="2023-01-01T00:00:00Z",
+        )
+        events = [
+            {
+                "payload": [
+                    {"conversational": {"content": {"text": json.dumps(msg_with_empty.to_dict())}, "role": "USER"}}
+                ]
+            }
+        ]
+        result = AgentCoreMemoryConverter.events_to_messages(events)
+        assert len(result) == 1
+        assert len(result[0].message["content"]) == 1
+        assert result[0].message["content"][0]["text"] == "hello"
+
+    def test_events_to_messages_drops_all_empty_conversational(self):
+        """Test events_to_messages drops messages with only empty text."""
+        empty_msg = SessionMessage(
+            message_id=1, message={"role": "user", "content": [{"text": ""}]}, created_at="2023-01-01T00:00:00Z"
+        )
+        events = [
+            {"payload": [{"conversational": {"content": {"text": json.dumps(empty_msg.to_dict())}, "role": "USER"}}]}
+        ]
+        result = AgentCoreMemoryConverter.events_to_messages(events)
+        assert len(result) == 0
+
+    def test_events_to_messages_filters_empty_text_blob(self):
+        """Test events_to_messages filters empty text from blob payloads."""
+        msg_with_empty = SessionMessage(
+            message_id=1,
+            message={"role": "user", "content": [{"text": ""}, {"text": "hello"}]},
+            created_at="2023-01-01T00:00:00Z",
+        )
+        events = [{"payload": [{"blob": json.dumps([json.dumps(msg_with_empty.to_dict()), "user"])}]}]
+        result = AgentCoreMemoryConverter.events_to_messages(events)
+        assert len(result) == 1
+        assert len(result[0].message["content"]) == 1
+        assert result[0].message["content"][0]["text"] == "hello"
