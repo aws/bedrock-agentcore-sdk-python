@@ -335,6 +335,28 @@ class TestGeneratePresignedUrl:
             client.generate_presigned_url(runtime_arn, expires=400)
 
     @patch("bedrock_agentcore.runtime.agent_core_runtime_client.boto3.Session")
+    @patch("bedrock_agentcore.runtime.agent_core_runtime_client.get_data_plane_endpoint")
+    def test_generate_presigned_url_session_id_in_query_params(self, mock_endpoint, mock_session):
+        """Test that session_id is properly included as query parameter in presigned URL."""
+        mock_endpoint.return_value = "https://example.aws.dev"
+        mock_creds = Mock()
+        mock_creds.get_frozen_credentials.return_value = Mock(access_key="AKIATEST", secret_key="secret", token=None)
+        mock_session.return_value.get_credentials.return_value = mock_creds
+
+        client = AgentCoreRuntimeClient(region="us-west-2")
+        runtime_arn = "arn:aws:bedrock-agentcore:us-west-2:123:runtime/my-runtime"
+        test_session_id = "test-session-query-param"
+
+        presigned_url = client.generate_presigned_url(runtime_arn, session_id=test_session_id)
+
+        # Verify session ID is in query params (not headers)
+        assert f"X-Amzn-Bedrock-AgentCore-Runtime-Session-Id={test_session_id}" in presigned_url
+        # Verify it appears before AWS signature params
+        session_param_pos = presigned_url.find(f"X-Amzn-Bedrock-AgentCore-Runtime-Session-Id={test_session_id}")
+        signature_pos = presigned_url.find("X-Amz-Signature=")
+        assert session_param_pos < signature_pos
+
+    @patch("bedrock_agentcore.runtime.agent_core_runtime_client.boto3.Session")
     def test_generate_presigned_url_no_credentials_raises_error(self, mock_session):
         """Test that missing credentials raises RuntimeError."""
         mock_session.return_value.get_credentials.return_value = None

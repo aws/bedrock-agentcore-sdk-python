@@ -241,6 +241,7 @@ class AgentCoreRuntimeClient:
             runtime_arn (str): Full runtime ARN
                 (e.g., 'arn:aws:bedrock-agentcore:us-west-2:123:runtime/my-runtime-abc')
             session_id (Optional[str]): Session ID to use. If None, auto-generates a UUID.
+                Will be included as X-Amzn-Bedrock-AgentCore-Runtime-Session-Id query parameter.
             endpoint_name (Optional[str]): Endpoint name to use as 'qualifier' query parameter.
                 If provided, adds ?qualifier={endpoint_name} to the URL before signing.
             custom_headers (Optional[Dict[str, str]]): Additional query parameters to include
@@ -249,6 +250,7 @@ class AgentCoreRuntimeClient:
 
         Returns:
             str: Presigned WebSocket URL with query string parameters including:
+                - Session ID (X-Amzn-Bedrock-AgentCore-Runtime-Session-Id)
                 - Original query params (qualifier, custom_headers)
                 - SigV4 auth params (X-Amz-Algorithm, X-Amz-Credential, etc.)
 
@@ -279,16 +281,15 @@ class AgentCoreRuntimeClient:
             session_id = str(uuid.uuid4())
             self.logger.debug("Auto-generated session ID: %s", session_id)
 
-        # Add session_id to custom_headers (which become query params)
-        if custom_headers is None:
-            custom_headers = {}
-        custom_headers["X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"] = session_id
-
         # Build WebSocket URL with query parameters
         ws_url = self._build_websocket_url(runtime_arn, endpoint_name, custom_headers)
 
         # Convert wss:// to https:// for signing
         https_url = ws_url.replace("wss://", "https://")
+        
+        # Add session_id as query parameter
+        separator = "&" if "?" in https_url else "?"
+        https_url += f"{separator}X-Amzn-Bedrock-AgentCore-Runtime-Session-Id={session_id}"
 
         # Parse URL
         url = urlparse(https_url)
