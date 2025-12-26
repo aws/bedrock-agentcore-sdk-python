@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.2] - 2025-12-26
+
+### Fixed
+- fix: Removed pre-commit from dependencies (#195) (4f8c625)
+- fix: dont save empty text messages (breaks Converse API) (#185) (049ccdc)
+
+### Other Changes
+- feat(runtime): Add session_id support to WebSocket connection methods (#186) (62d297d)
+- chore: bump version to 1.1.1 (#184) (92272e7)
+
 ## [1.1.1] - 2025-12-03
 
 ### Other Changes
