@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, List, Optional
+from typing import Any
 
 import boto3
 from botocore.config import Config
@@ -40,7 +40,7 @@ def _validate_spans(spans):
     return hasattr(first_span, "context") and hasattr(first_span, "instrumentation_scope")
 
 
-def _is_adot_format(spans: List[Any]) -> bool:
+def _is_adot_format(spans: list[Any]) -> bool:
     """Check if spans are already in ADOT format.
 
     ADOT format is detected by presence of 'scope' dict with 'name' field.
@@ -82,7 +82,7 @@ class StrandsEvalsAgentCoreEvaluator(Evaluator[str, str]):
         evaluator_id: str,
         region: str = DEFAULT_REGION,
         test_pass_score: float = 0.7,
-        config: Optional[Config] = None,
+        config: Config | None = None,
     ):
         """Initialize the evaluator.
 
@@ -109,7 +109,7 @@ class StrandsEvalsAgentCoreEvaluator(Evaluator[str, str]):
             read_timeout=300,
         )
 
-    def evaluate(self, evaluation_case: EvaluationData[InputT, OutputT]) -> List[EvaluationOutput]:
+    def evaluate(self, evaluation_case: EvaluationData[InputT, OutputT]) -> list[EvaluationOutput]:
         """Evaluate agent output using AgentCore Evaluation API.
 
         Args:
@@ -153,7 +153,7 @@ class StrandsEvalsAgentCoreEvaluator(Evaluator[str, str]):
             for r in response["evaluationResults"]
         ]
 
-    async def evaluate_async(self, evaluation_case: EvaluationData[InputT, OutputT]) -> List[EvaluationOutput]:
+    async def evaluate_async(self, evaluation_case: EvaluationData[InputT, OutputT]) -> list[EvaluationOutput]:
         """Evaluate agent output asynchronously using AgentCore Evaluation API.
 
         Args:

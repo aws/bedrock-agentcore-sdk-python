@@ -23,7 +23,7 @@ def convert_complex_objects(obj: Any, _depth: int = 0) -> Any:
         return {k: convert_complex_objects(v, _depth + 1) for k, v in obj.items()}
 
     # Handle lists and tuples recursively
-    elif isinstance(obj, (list, tuple)):
+    elif isinstance(obj, list | tuple):
         return [convert_complex_objects(item, _depth + 1) for item in obj]
 
     # Handle sets (convert to list)

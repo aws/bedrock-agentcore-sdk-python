@@ -18,8 +18,8 @@ def test_list_events_api(client: MemoryClient, memory_id: str):
     logger.info("TESTING LIST_EVENTS PUBLIC API (Issue #1)")
     logger.info("=" * 80)
 
-    actor_id = "test-list-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
-    session_id = "session-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
+    actor_id = "test-list-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
+    session_id = "session-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
 
     # Create some events
     logger.info("\n1. Creating test events...")
@@ -30,8 +30,8 @@ def test_list_events_api(client: MemoryClient, memory_id: str):
             actor_id=actor_id,
             session_id=session_id,
             messages=[
-                ("Message %d from user" % (i + 1), "USER"),
-                ("Response %d from assistant" % (i + 1), "ASSISTANT"),
+                (f"Message {i + 1} from user", "USER"),
+                (f"Response {i + 1} from assistant", "ASSISTANT"),
             ],
         )
         logger.info("Created event %d: %s", i + 1, event["eventId"])
@@ -79,7 +79,7 @@ def test_strategy_polling_fix(client: MemoryClient):
     # Create memory without strategies
     logger.info("\n1. Creating memory without strategies...")
     memory = client.create_memory_and_wait(
-        name="PollingTest_%s" % datetime.now().strftime("%Y%m%d%H%M%S"),
+        name="PollingTest_{}".format(datetime.now().strftime("%Y%m%d%H%M%S")),
         strategies=[],  # No strategies initially
         event_expiry_days=7,
     )
@@ -90,7 +90,9 @@ def test_strategy_polling_fix(client: MemoryClient):
     logger.info("\n2. Adding summary strategy with polling...")
     try:
         memory = client.add_summary_strategy_and_wait(
-            memory_id=memory_id, name="TestSummary", namespaces=["summaries/{sessionId}"]
+            memory_id=memory_id,
+            name="TestSummary",
+            namespaces=["summaries/{sessionId}"],
         )
         logger.info("✓ Added summary strategy, memory is %s", memory["status"])
     except Exception as e:
@@ -114,9 +116,14 @@ def test_strategy_polling_fix(client: MemoryClient):
     logger.info("\n4. Adding user preference strategy immediately...")
     try:
         memory = client.add_user_preference_strategy_and_wait(
-            memory_id=memory_id, name="TestPreferences", namespaces=["preferences/{actorId}"]
+            memory_id=memory_id,
+            name="TestPreferences",
+            namespaces=["preferences/{actorId}"],
         )
-        logger.info("✓ Added user preference strategy without error, memory is %s", memory["status"])
+        logger.info(
+            "✓ Added user preference strategy without error, memory is %s",
+            memory["status"],
+        )
     except Exception as e:
         logger.error("❌ Failed due to CREATING state: %s", e)
         raise
@@ -135,8 +142,8 @@ def test_get_last_k_turns_fix(client: MemoryClient, memory_id: str):
     logger.info("TESTING GET_LAST_K_TURNS FIX (Issue #3)")
     logger.info("=" * 80)
 
-    actor_id = "restaurant-user-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
-    session_id = "restaurant-session-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
+    actor_id = "restaurant-user-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
+    session_id = "restaurant-session-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
 
     # Create the exact conversation from the issue
     logger.info("\n1. Creating restaurant conversation...")
@@ -146,7 +153,10 @@ def test_get_last_k_turns_fix(client: MemoryClient, memory_id: str):
         actor_id=actor_id,
         session_id=session_id,
         messages=[
-            ("I'm vegetarian and I prefer restaurants with a quiet atmosphere.", "USER"),
+            (
+                "I'm vegetarian and I prefer restaurants with a quiet atmosphere.",
+                "USER",
+            ),
             (
                 "Thank you for letting me know. I'll make sure to recommend restaurants that are "
                 "vegetarian-friendly and have a quiet atmosphere. Is there any specific cuisine "
@@ -205,7 +215,11 @@ def test_get_last_k_turns_fix(client: MemoryClient, memory_id: str):
     logger.info("\n3. Testing get_last_k_turns with branch_name='main'...")
     try:
         turns = client.get_last_k_turns(
-            memory_id=memory_id, actor_id=actor_id, session_id=session_id, branch_name="main", k=2
+            memory_id=memory_id,
+            actor_id=actor_id,
+            session_id=session_id,
+            branch_name="main",
+            k=2,
         )
         logger.info("✓ Retrieved %d turns (branch_name='main')", len(turns))
 
@@ -242,7 +256,10 @@ def test_namespace_wildcards(client: MemoryClient, memory_id: str):
     logger.info("\n1. Checking memory strategy configuration:")
     strategies = client.get_memory_strategies(memory_id)
     for strategy in strategies:
-        logger.info("Strategy type: %s", strategy.get("type") or strategy.get("memoryStrategyType"))
+        logger.info(
+            "Strategy type: %s",
+            strategy.get("type") or strategy.get("memoryStrategyType"),
+        )
         logger.info("Strategy namespaces: %s", strategy.get("namespaces", []))
 
     # Create multiple test events with different actor/session combinations
@@ -252,8 +269,11 @@ def test_namespace_wildcards(client: MemoryClient, memory_id: str):
     session_ids = []
 
     for i in range(3):
-        actor_id = "wildcard-test-%s-%d" % (datetime.now().strftime("%Y%m%d%H%M%S"), i)
-        session_id = "wildcard-session-%s-%d" % (datetime.now().strftime("%Y%m%d%H%M%S"), i)
+        actor_id = "wildcard-test-{}-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"), i)
+        session_id = "wildcard-session-{}-{}".format(
+            datetime.now().strftime("%Y%m%d%H%M%S"),
+            i,
+        )
         actor_ids.append(actor_id)
         session_ids.append(session_id)
 
@@ -262,8 +282,14 @@ def test_namespace_wildcards(client: MemoryClient, memory_id: str):
             actor_id=actor_id,
             session_id=session_id,
             messages=[
-                (f"Test message {i + 1} for wildcard testing with specific keyword", "USER"),
-                (f"Response {i + 1} for wildcard testing with specific keyword", "ASSISTANT"),
+                (
+                    f"Test message {i + 1} for wildcard testing with specific keyword",
+                    "USER",
+                ),
+                (
+                    f"Response {i + 1} for wildcard testing with specific keyword",
+                    "ASSISTANT",
+                ),
             ],
         )
         logger.info("✓ Created event %d: %s", i + 1, event["eventId"])
@@ -276,7 +302,11 @@ def test_namespace_wildcards(client: MemoryClient, memory_id: str):
     logger.info("\n3. Testing with wildcard namespace '*'...")
 
     result = client.wait_for_memories(
-        memory_id=memory_id, namespace="*", test_query="specific keyword", max_wait=30, poll_interval=10
+        memory_id=memory_id,
+        namespace="*",
+        test_query="specific keyword",
+        max_wait=30,
+        poll_interval=10,
     )
 
     if not result:
@@ -330,7 +360,11 @@ def test_namespace_wildcards(client: MemoryClient, memory_id: str):
 
         if memories:
             for i, mem in enumerate(memories[:2]):
-                logger.info("  Memory %d: %s", i + 1, mem.get("content", {}).get("text", "")[:80])
+                logger.info(
+                    "  Memory %d: %s",
+                    i + 1,
+                    mem.get("content", {}).get("text", "")[:80],
+                )
 
 
 def main():
@@ -357,7 +391,7 @@ def main():
     logger.info("\n\nCreating memory for remaining tests...")
     # Explicitly define strategy with clear namespace pattern for testing
     memory = client.create_memory_and_wait(
-        name="RetrievalTest_%s" % datetime.now().strftime("%Y%m%d%H%M%S"),
+        name="RetrievalTest_{}".format(datetime.now().strftime("%Y%m%d%H%M%S")),
         strategies=[
             {
                 "semanticMemoryStrategy": {

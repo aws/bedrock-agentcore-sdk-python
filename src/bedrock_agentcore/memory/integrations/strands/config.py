@@ -1,7 +1,5 @@
 """Configuration for AgentCore Memory Session Manager."""
 
-from typing import Dict, Optional
-
 from pydantic import BaseModel, Field
 
 
@@ -17,8 +15,8 @@ class RetrievalConfig(BaseModel):
 
     top_k: int = Field(default=10, gt=0, le=1000)
     relevance_score: float = Field(default=0.2, ge=0.0, le=1.0)
-    strategy_id: Optional[str] = None
-    initialization_query: Optional[str] = None
+    strategy_id: str | None = None
+    initialization_query: str | None = None
 
 
 class AgentCoreMemoryConfig(BaseModel):
@@ -34,4 +32,4 @@ class AgentCoreMemoryConfig(BaseModel):
     memory_id: str = Field(min_length=1)
     session_id: str = Field(min_length=1)
     actor_id: str = Field(min_length=1)
-    retrieval_config: Optional[Dict[str, RetrievalConfig]] = None
+    retrieval_config: dict[str, RetrievalConfig] | None = None

@@ -1,12 +1,12 @@
 """Dictionary wrapper module for bedrock-agentcore memory models."""
 
-from typing import Any, Dict
+from typing import Any
 
 
 class DictWrapper:
     """A wrapper class that provides dictionary-like access to data."""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]):
         """Initialize the DictWrapper with data.
 
         Args:

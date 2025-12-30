@@ -11,8 +11,8 @@ import logging
 import threading
 import time
 import uuid
-from collections.abc import Sequence
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -79,7 +79,7 @@ class BedrockAgentCoreApp(Starlette):
     def __init__(
         self,
         debug: bool = False,
-        lifespan: Optional[Lifespan] = None,
+        lifespan: Lifespan | None = None,
         middleware: Sequence[Middleware] | None = None,
     ):
         """Initialize Bedrock AgentCore application.
@@ -89,12 +89,12 @@ class BedrockAgentCoreApp(Starlette):
             lifespan: Optional lifespan context manager for startup/shutdown
             middleware: Optional sequence of Starlette Middleware objects (or Middleware(...) entries)
         """
-        self.handlers: Dict[str, Callable] = {}
-        self._ping_handler: Optional[Callable] = None
-        self._websocket_handler: Optional[Callable] = None
-        self._active_tasks: Dict[int, Dict[str, Any]] = {}
+        self.handlers: dict[str, Callable] = {}
+        self._ping_handler: Callable | None = None
+        self._websocket_handler: Callable | None = None
+        self._active_tasks: dict[int, dict[str, Any]] = {}
         self._task_counter_lock: threading.Lock = threading.Lock()
-        self._forced_ping_status: Optional[PingStatus] = None
+        self._forced_ping_status: PingStatus | None = None
         self._last_status_update_time: float = time.time()
 
         routes = [
@@ -220,7 +220,7 @@ class BedrockAgentCoreApp(Starlette):
         """Clear forced status and resume automatic."""
         self._forced_ping_status = None
 
-    def get_async_task_info(self) -> Dict[str, Any]:
+    def get_async_task_info(self) -> dict[str, Any]:
         """Get info about running async tasks."""
         running_jobs = []
         for t in self._active_tasks.values():
@@ -234,7 +234,7 @@ class BedrockAgentCoreApp(Starlette):
 
         return {"active_count": len(self._active_tasks), "running_jobs": running_jobs}
 
-    def add_async_task(self, name: str, metadata: Optional[Dict] = None) -> int:
+    def add_async_task(self, name: str, metadata: dict | None = None) -> int:
         """Register an async task for interactive health tracking.
 
         This method provides granular control over async task lifecycle,
@@ -434,7 +434,7 @@ class BedrockAgentCoreApp(Starlette):
             except Exception:
                 pass
 
-    def run(self, port: int = 8080, host: Optional[str] = None, **kwargs):
+    def run(self, port: int = 8080, host: str | None = None, **kwargs):
         """Start the Bedrock AgentCore server.
 
         Args:
@@ -478,7 +478,7 @@ class BedrockAgentCoreApp(Starlette):
             self.logger.debug("Handler '%s' execution failed", handler_name)
             raise
 
-    def _handle_task_action(self, payload: dict) -> Optional[JSONResponse]:
+    def _handle_task_action(self, payload: dict) -> JSONResponse | None:
         """Handle task management actions if present in payload."""
         action = payload.get("_agent_core_app_action")
         if not action:

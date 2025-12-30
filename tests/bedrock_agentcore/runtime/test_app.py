@@ -1388,7 +1388,7 @@ class TestSerializationEdgeCases:
 
         # Should fallback to string representation or error object
         parsed = json.loads(result)
-        assert isinstance(parsed, (str, dict))
+        assert isinstance(parsed, str | dict)
 
         # If it's a string, should contain some representation
         if isinstance(parsed, str):

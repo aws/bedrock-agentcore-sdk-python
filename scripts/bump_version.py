@@ -3,7 +3,6 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
 
 
 def get_current_version() -> str:
@@ -16,7 +15,7 @@ def get_current_version() -> str:
     return match.group(1)
 
 
-def parse_version(version: str) -> Tuple[int, int, int, Optional[str]]:
+def parse_version(version: str) -> tuple[int, int, int, str | None]:
     """Parse semantic version string."""
     match = re.match(r"(\d+)\.(\d+)\.(\d+)(?:-(.+))?", version)
     if not match:
@@ -135,7 +134,7 @@ def format_git_log(git_log: str) -> str:
     return "\n\n".join(sections)
 
 
-def get_git_log(since_tag: Optional[str] = None) -> str:
+def get_git_log(since_tag: str | None = None) -> str:
     """Get git commit messages since last tag."""
     cmd = ["git", "log", "--pretty=format:- %s (%h)"]
     if since_tag:
@@ -219,7 +218,7 @@ def main():
         print(f"\n✓ Version bumped from {current} to {new}")
         print("\nNext steps:")
         print("1. Review changes: git diff")
-        print("2. Commit: git add -A && git commit -m 'chore: bump version to {}'".format(new))
+        print(f"2. Commit: git add -A && git commit -m 'chore: bump version to {new}'")
         print("3. Create PR or push to trigger release workflow")
 
     except Exception as e:

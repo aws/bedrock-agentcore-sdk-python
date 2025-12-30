@@ -5,7 +5,8 @@ import logging
 import time
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Literal, Optional, Union
+from collections.abc import Callable
+from typing import Any, Literal
 
 import boto3
 from pydantic import BaseModel
@@ -97,8 +98,8 @@ class IdentityClient:
         return self.cp_client.create_api_key_credential_provider(**req)
 
     def get_workload_access_token(
-        self, workload_name: str, user_token: Optional[str] = None, user_id: Optional[str] = None
-    ) -> Dict:
+        self, workload_name: str, user_token: str | None = None, user_id: str | None = None
+    ) -> dict:
         """Get a workload access token using workload name and optionally user token."""
         if user_token:
             if user_id is not None:
@@ -116,8 +117,8 @@ class IdentityClient:
         return resp
 
     def create_workload_identity(
-        self, name: Optional[str] = None, allowed_resource_oauth_2_return_urls: Optional[list[str]] = None
-    ) -> Dict:
+        self, name: str | None = None, allowed_resource_oauth_2_return_urls: list[str] | None = None
+    ) -> dict:
         """Create workload identity with optional name."""
         self.logger.info("Creating workload identity...")
         if not name:
@@ -126,7 +127,7 @@ class IdentityClient:
             name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls or []
         )
 
-    def update_workload_identity(self, name: str, allowed_resource_oauth_2_return_urls: list[str]) -> Dict:
+    def update_workload_identity(self, name: str, allowed_resource_oauth_2_return_urls: list[str]) -> dict:
         """Update an existing workload identity with allowed resource OAuth2 callback urls."""
         self.logger.info(
             "Updating workload identity '%s' with callback urls: %s", name, allowed_resource_oauth_2_return_urls
@@ -135,14 +136,12 @@ class IdentityClient:
             name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls
         )
 
-    def get_workload_identity(self, name: str) -> Dict:
+    def get_workload_identity(self, name: str) -> dict:
         """Retrieves information about a workload identity."""
         self.logger.info("Fetching workload identity '%s'", name)
         return self.cp_client.get_workload_identity(name=name)
 
-    def complete_resource_token_auth(
-        self, session_uri: str, user_identifier: Union[UserTokenIdentifier, UserIdIdentifier]
-    ):
+    def complete_resource_token_auth(self, session_uri: str, user_identifier: UserTokenIdentifier | UserIdIdentifier):
         """Confirms the user authentication session for obtaining OAuth2.0 tokens for a resource."""
         self.logger.info("Completing 3LO OAuth2 flow...")
 
@@ -160,15 +159,15 @@ class IdentityClient:
         self,
         *,
         provider_name: str,
-        scopes: Optional[List[str]] = None,
+        scopes: list[str] | None = None,
         agent_identity_token: str,
-        on_auth_url: Optional[Callable[[str], Any]] = None,
+        on_auth_url: Callable[[str], Any] | None = None,
         auth_flow: Literal["M2M", "USER_FEDERATION"],
-        callback_url: Optional[str] = None,
+        callback_url: str | None = None,
         force_authentication: bool = False,
-        token_poller: Optional[TokenPoller] = None,
-        custom_state: Optional[str] = None,
-        custom_parameters: Optional[Dict[str, str]] = None,
+        token_poller: TokenPoller | None = None,
+        custom_state: str | None = None,
+        custom_parameters: dict[str, str] | None = None,
     ) -> str:
         """Get an OAuth2 access token for the specified provider.
 

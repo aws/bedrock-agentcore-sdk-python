@@ -24,7 +24,7 @@ import os
 import threading
 import time
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any
 
 from strands import Agent, tool
 
@@ -76,13 +76,13 @@ class DataProcessor:
         total_seconds = duration_minutes * 60
         self.base_processing_speed = self.total_items / total_seconds
 
-    def get_current_stage(self) -> Dict[str, Any]:
+    def get_current_stage(self) -> dict[str, Any]:
         """Get current processing stage info."""
         if self.current_stage_index < len(self.PROCESSING_STAGES):
             return self.PROCESSING_STAGES[self.current_stage_index]
         return {"name": "completed", "weight": 0, "description": "Processing completed"}
 
-    def calculate_progress(self) -> Dict[str, Any]:
+    def calculate_progress(self) -> dict[str, Any]:
         """Calculate detailed progress information."""
         current_stage = self.get_current_stage()
 
@@ -297,7 +297,7 @@ def start_data_processing(
 
 
 @tool
-def get_processing_progress(task_id: Optional[int] = None) -> str:
+def get_processing_progress(task_id: int | None = None) -> str:
     """Get current progress of data processing task.
 
     Args:
@@ -330,7 +330,7 @@ No active or recent data processing tasks detected.
    `start_data_processing(dataset_size="medium", processing_type="data_analysis")`"""
 
     try:
-        with open(result_file, "r") as f:
+        with open(result_file) as f:
             progress = json.load(f)
 
         status = progress.get("status", "unknown")

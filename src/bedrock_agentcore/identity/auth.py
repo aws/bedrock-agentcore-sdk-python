@@ -4,8 +4,9 @@ import asyncio
 import contextvars
 import logging
 import os
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 import boto3
 from botocore.exceptions import ClientError
@@ -23,14 +24,14 @@ def requires_access_token(
     *,
     provider_name: str,
     into: str = "access_token",
-    scopes: List[str],
-    on_auth_url: Optional[Callable[[str], Any]] = None,
+    scopes: list[str],
+    on_auth_url: Callable[[str], Any] | None = None,
     auth_flow: Literal["M2M", "USER_FEDERATION"],
-    callback_url: Optional[str] = None,
+    callback_url: str | None = None,
     force_authentication: bool = False,
-    token_poller: Optional[TokenPoller] = None,
-    custom_state: Optional[str] = None,
-    custom_parameters: Optional[Dict[str, str]] = None,
+    token_poller: TokenPoller | None = None,
+    custom_state: str | None = None,
+    custom_parameters: dict[str, str] | None = None,
 ) -> Callable:
     """Decorator that fetches an OAuth2 access token before calling the decorated function.
 
@@ -103,10 +104,10 @@ def requires_access_token(
 
 def requires_iam_access_token(
     *,
-    audience: List[str],
+    audience: list[str],
     signing_algorithm: str = "ES384",
     duration_seconds: int = 300,
-    tags: Optional[List[Dict[str, str]]] = None,
+    tags: list[dict[str, str]] | None = None,
     into: str = "access_token",
 ) -> Callable:
     """Decorator that fetches an AWS IAM JWT token before calling the decorated function.
@@ -268,7 +269,7 @@ def requires_api_key(*, provider_name: str, into: str = "api_key") -> Callable:
     return decorator
 
 
-def _get_oauth2_callback_url(user_provided_oauth2_callback_url: Optional[str]):
+def _get_oauth2_callback_url(user_provided_oauth2_callback_url: str | None):
     if user_provided_oauth2_callback_url:
         return user_provided_oauth2_callback_url
 
@@ -301,7 +302,7 @@ async def _set_up_local_auth(client: IdentityClient) -> str:
     config = {}
     if config_path.exists():
         try:
-            with open(config_path, "r", encoding="utf-8") as file:
+            with open(config_path, encoding="utf-8") as file:
                 config = json.load(file) or {}
         except Exception:
             print("Could not find existing workload identity and user id")
