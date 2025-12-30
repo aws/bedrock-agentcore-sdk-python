@@ -3,8 +3,9 @@
 import logging
 import os
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import boto3
 from botocore.config import Config as BotocoreConfig
@@ -98,9 +99,9 @@ class MemorySessionManager:
     def __init__(
         self,
         memory_id: str,
-        region_name: Optional[str] = None,
-        boto3_session: Optional[boto3.Session] = None,
-        boto_client_config: Optional[BotocoreConfig] = None,
+        region_name: str | None = None,
+        boto3_session: boto3.Session | None = None,
+        boto_client_config: BotocoreConfig | None = None,
     ):
         """Initialize a MemorySessionManager instance.
 
@@ -147,7 +148,7 @@ class MemorySessionManager:
             "batch_update_memory_records",
         }
 
-    def _validate_and_resolve_region(self, region_name: Optional[str], session: Optional[boto3.Session]) -> str:
+    def _validate_and_resolve_region(self, region_name: str | None, session: boto3.Session | None) -> str:
         """Validate region consistency and resolve the final region to use.
 
         Args:
@@ -175,7 +176,7 @@ class MemorySessionManager:
             region_name or session_region or os.environ.get("AWS_REGION") or boto3.Session().region_name or "us-west-2"
         )
 
-    def _build_client_config(self, boto_client_config: Optional[BotocoreConfig]) -> BotocoreConfig:
+    def _build_client_config(self, boto_client_config: BotocoreConfig | None) -> BotocoreConfig:
         """Build the final boto3 client configuration with SDK user agent.
 
         Args:
@@ -255,11 +256,11 @@ class MemorySessionManager:
         actor_id: str,
         session_id: str,
         user_input: str,
-        llm_callback: Callable[[str, List[Dict[str, Any]]], str],
-        retrieval_config: Optional[Dict[str, RetrievalConfig]],
-        metadata: Optional[Dict[str, MetadataValue]] = None,
-        event_timestamp: Optional[datetime] = None,
-    ) -> Tuple[List[Dict[str, Any]], str, Dict[str, Any]]:
+        llm_callback: Callable[[str, list[dict[str, Any]]], str],
+        retrieval_config: dict[str, RetrievalConfig] | None,
+        metadata: dict[str, MetadataValue] | None = None,
+        event_timestamp: datetime | None = None,
+    ) -> tuple[list[dict[str, Any]], str, dict[str, Any]]:
         r"""Complete conversation turn with LLM callback integration.
 
         This method combines memory retrieval, LLM invocation, and response storage
@@ -334,11 +335,11 @@ class MemorySessionManager:
         actor_id: str,
         session_id: str,
         user_input: str,
-        llm_callback: Callable[[str, List[Dict[str, Any]]], Awaitable[str]],
-        retrieval_config: Optional[Dict[str, RetrievalConfig]],
-        metadata: Optional[Dict[str, MetadataValue]] = None,
-        event_timestamp: Optional[datetime] = None,
-    ) -> Tuple[List[Dict[str, Any]], str, Dict[str, Any]]:
+        llm_callback: Callable[[str, list[dict[str, Any]]], Awaitable[str]],
+        retrieval_config: dict[str, RetrievalConfig] | None,
+        metadata: dict[str, MetadataValue] | None = None,
+        event_timestamp: datetime | None = None,
+    ) -> tuple[list[dict[str, Any]], str, dict[str, Any]]:
         r"""Complete conversation turn with async LLM callback integration.
 
         This method combines memory retrieval, LLM invocation, and response storage
@@ -384,8 +385,8 @@ class MemorySessionManager:
         actor_id: str,
         session_id: str,
         user_input: str,
-        retrieval_config: Optional[Dict[str, RetrievalConfig]],
-    ) -> List[Dict[str, Any]]:
+        retrieval_config: dict[str, RetrievalConfig] | None,
+    ) -> list[dict[str, Any]]:
         """Helper method to retrieve memories for LLM context."""
         retrieved_memories = []
         if retrieval_config:
@@ -417,9 +418,9 @@ class MemorySessionManager:
         session_id: str,
         user_input: str,
         agent_response: str,
-        metadata: Optional[Dict[str, MetadataValue]],
-        event_timestamp: Optional[datetime],
-    ) -> Dict[str, Any]:
+        metadata: dict[str, MetadataValue] | None,
+        event_timestamp: datetime | None,
+    ) -> dict[str, Any]:
         """Helper method to save conversation turn."""
         event = self.add_turns(
             actor_id=actor_id,
@@ -438,10 +439,10 @@ class MemorySessionManager:
         self,
         actor_id: str,
         session_id: str,
-        messages: List[Union[ConversationalMessage, BlobMessage]],
-        branch: Optional[Dict[str, str]] = None,
-        metadata: Optional[Dict[str, MetadataValue]] = None,
-        event_timestamp: Optional[datetime] = None,
+        messages: list[ConversationalMessage | BlobMessage],
+        branch: dict[str, str] | None = None,
+        metadata: dict[str, MetadataValue] | None = None,
+        event_timestamp: datetime | None = None,
     ) -> Event:
         """Adds conversational turns or blob objects to short-term memory.
 
@@ -529,10 +530,10 @@ class MemorySessionManager:
         session_id: str,
         root_event_id: str,
         branch_name: str,
-        messages: List[Union[ConversationalMessage, BlobMessage]],
-        metadata: Optional[Dict[str, MetadataValue]] = None,
-        event_timestamp: Optional[datetime] = None,
-    ) -> Dict[str, Any]:
+        messages: list[ConversationalMessage | BlobMessage],
+        metadata: dict[str, MetadataValue] | None = None,
+        event_timestamp: datetime | None = None,
+    ) -> dict[str, Any]:
         """Fork a conversation from a specific event to create a new branch."""
         try:
             branch = {"rootEventId": root_event_id, "name": branch_name}
@@ -557,12 +558,12 @@ class MemorySessionManager:
         self,
         actor_id: str,
         session_id: str,
-        branch_name: Optional[str] = None,
+        branch_name: str | None = None,
         include_parent_branches: bool = False,
-        eventMetadata: Optional[List[EventMetadataFilter]] = None,
+        eventMetadata: list[EventMetadataFilter] | None = None,
         max_results: int = 100,
         include_payload: bool = True,
-    ) -> List[Event]:
+    ) -> list[Event]:
         """List all events in a session with pagination support.
 
         This method provides direct access to the raw events API, allowing developers
@@ -634,7 +635,7 @@ class MemorySessionManager:
             ```
         """
         try:
-            all_events: List[Event] = []
+            all_events: list[Event] = []
             next_token = None
             max_iterations = 1000  # Safety limit to prevent infinite loops
 
@@ -692,7 +693,7 @@ class MemorySessionManager:
             logger.error("Failed to list events: %s", e)
             raise
 
-    def list_branches(self, actor_id: str, session_id: str) -> List[Branch]:
+    def list_branches(self, actor_id: str, session_id: str) -> list[Branch]:
         """List all branches in a session.
 
         This method handles pagination automatically and provides a structured view
@@ -755,7 +756,7 @@ class MemorySessionManager:
                     main_branch_events.append(event)
 
             # Build result list
-            result: List[Branch] = []
+            result: list[Branch] = []
 
             # Only add main branch if there are actual events
             if main_branch_events:
@@ -784,10 +785,10 @@ class MemorySessionManager:
         actor_id: str,
         session_id: str,
         k: int = 5,
-        branch_name: Optional[str] = None,
+        branch_name: str | None = None,
         include_parent_branches: bool = False,
         max_results: int = 100,
-    ) -> List[List[EventMessage]]:
+    ) -> list[list[EventMessage]]:
         """Get the last K conversation turns.
 
         A "turn" typically consists of a user message followed by assistant response(s).
@@ -875,7 +876,7 @@ class MemorySessionManager:
         top_k: int = 3,
         strategy_id: str = None,
         max_results: int = 20,
-    ) -> List[MemoryRecord]:
+    ) -> list[MemoryRecord]:
         """Performs a semantic search against the long-term memory for this actor.
 
         Maps to: bedrock-agentcore.retrieve_memory_records.
@@ -903,8 +904,8 @@ class MemorySessionManager:
             raise
 
     def list_long_term_memory_records(
-        self, namespace_prefix: str, strategy_id: Optional[str] = None, max_results: int = 10
-    ) -> List[MemoryRecord]:
+        self, namespace_prefix: str, strategy_id: str | None = None, max_results: int = 10
+    ) -> list[MemoryRecord]:
         """Lists all long-term memory records for this actor without a semantic query.
 
         Maps to: bedrock-agentcore.list_memory_records.
@@ -923,7 +924,7 @@ class MemorySessionManager:
                 params["memoryStrategyId"] = strategy_id
 
             pages = paginator.paginate(**params)
-            all_records: List[MemoryRecord] = []
+            all_records: list[MemoryRecord] = []
 
             for page in pages:
                 memory_records = page.get("memoryRecords", [])
@@ -944,7 +945,7 @@ class MemorySessionManager:
             logger.error("     ❌ Error listing long-term records: %s", e)
             raise
 
-    def list_actors(self) -> List[ActorSummary]:
+    def list_actors(self) -> list[ActorSummary]:
         """Lists all actors who have events in a specific memory.
 
         Maps to: bedrock-agentcore.list_actors.
@@ -991,7 +992,7 @@ class MemorySessionManager:
             logger.error("  ❌ Error deleting record: %s", e)
             raise
 
-    def list_actor_sessions(self, actor_id: str) -> List[SessionSummary]:
+    def list_actor_sessions(self, actor_id: str) -> list[SessionSummary]:
         """Lists all sessions for a specific actor in a specific memory.
 
         Maps to: bedrock-agentcore.list_sessions.
@@ -1000,7 +1001,7 @@ class MemorySessionManager:
         try:
             paginator = self._data_plane_client.get_paginator("list_sessions")
             pages = paginator.paginate(memoryId=self._memory_id, actorId=actor_id)
-            all_sessions: List[SessionSummary] = []
+            all_sessions: list[SessionSummary] = []
             for page in pages:
                 response = page.get("sessionSummaries", [])
                 all_sessions.extend([SessionSummary(session) for session in response])
@@ -1010,7 +1011,7 @@ class MemorySessionManager:
             logger.error("  ❌ Error listing sessions: %s", e)
             raise
 
-    def delete_all_long_term_memories_in_namespace(self, namespace: str) -> Dict[str, Any]:
+    def delete_all_long_term_memories_in_namespace(self, namespace: str) -> dict[str, Any]:
         """Delete all long-term memory records within a specific namespace.
 
         This method retrieves all memory records in the specified namespace and performs
@@ -1083,27 +1084,27 @@ class MemorySession(DictWrapper):
         self._manager = manager
         super().__init__(self._construct_session_dict())
 
-    def _construct_session_dict(self) -> Dict[str, Any]:
+    def _construct_session_dict(self) -> dict[str, Any]:
         """Constructs a dictionary representing the session."""
         return {"memoryId": self._memory_id, "actorId": self._actor_id, "sessionId": self._session_id}
 
     def add_turns(
         self,
-        messages: List[Union[ConversationalMessage, BlobMessage]],
-        branch: Optional[Dict[str, str]] = None,
-        metadata: Optional[Dict[str, MetadataValue]] = None,
-        event_timestamp: Optional[datetime] = None,
+        messages: list[ConversationalMessage | BlobMessage],
+        branch: dict[str, str] | None = None,
+        metadata: dict[str, MetadataValue] | None = None,
+        event_timestamp: datetime | None = None,
     ) -> Event:
         """Delegates to manager.add_turns."""
         return self._manager.add_turns(self._actor_id, self._session_id, messages, branch, metadata, event_timestamp)
 
     def fork_conversation(
         self,
-        messages: List[Union[ConversationalMessage, BlobMessage]],
+        messages: list[ConversationalMessage | BlobMessage],
         root_event_id: str,
         branch_name: str,
-        metadata: Optional[Dict[str, MetadataValue]] = None,
-        event_timestamp: Optional[datetime] = None,
+        metadata: dict[str, MetadataValue] | None = None,
+        event_timestamp: datetime | None = None,
     ) -> Event:
         """Delegates to manager.fork_conversation."""
         return self._manager.fork_conversation(
@@ -1113,11 +1114,11 @@ class MemorySession(DictWrapper):
     def process_turn_with_llm(
         self,
         user_input: str,
-        llm_callback: Callable[[str, List[Dict[str, Any]]], str],
-        retrieval_config: Optional[Dict[str, RetrievalConfig]],
-        metadata: Optional[Dict[str, MetadataValue]] = None,
-        event_timestamp: Optional[datetime] = None,
-    ) -> Tuple[List[Dict[str, Any]], str, Dict[str, Any]]:
+        llm_callback: Callable[[str, list[dict[str, Any]]], str],
+        retrieval_config: dict[str, RetrievalConfig] | None,
+        metadata: dict[str, MetadataValue] | None = None,
+        event_timestamp: datetime | None = None,
+    ) -> tuple[list[dict[str, Any]], str, dict[str, Any]]:
         """Delegates to manager.process_turn_with_llm."""
         return self._manager.process_turn_with_llm(
             self._actor_id,
@@ -1132,11 +1133,11 @@ class MemorySession(DictWrapper):
     async def process_turn_with_llm_async(
         self,
         user_input: str,
-        llm_callback: Callable[[str, List[Dict[str, Any]]], Awaitable[str]],
-        retrieval_config: Optional[Dict[str, RetrievalConfig]],
-        metadata: Optional[Dict[str, MetadataValue]] = None,
-        event_timestamp: Optional[datetime] = None,
-    ) -> Tuple[List[Dict[str, Any]], str, Dict[str, Any]]:
+        llm_callback: Callable[[str, list[dict[str, Any]]], Awaitable[str]],
+        retrieval_config: dict[str, RetrievalConfig] | None,
+        metadata: dict[str, MetadataValue] | None = None,
+        event_timestamp: datetime | None = None,
+    ) -> tuple[list[dict[str, Any]], str, dict[str, Any]]:
         """Delegates to manager.process_turn_with_llm_async."""
         return await self._manager.process_turn_with_llm_async(
             self._actor_id,
@@ -1151,10 +1152,10 @@ class MemorySession(DictWrapper):
     def get_last_k_turns(
         self,
         k: int = 5,
-        branch_name: Optional[str] = None,
-        include_parent_branches: Optional[bool] = None,
+        branch_name: str | None = None,
+        include_parent_branches: bool | None = None,
         max_results: int = 100,
-    ) -> List[List[EventMessage]]:
+    ) -> list[list[EventMessage]]:
         """Delegates to manager.get_last_k_turns."""
         return self._manager.get_last_k_turns(
             self._actor_id, self._session_id, k, branch_name, include_parent_branches, max_results
@@ -1181,30 +1182,30 @@ class MemorySession(DictWrapper):
         query: str,
         namespace_prefix: str,
         top_k: int = 3,
-        strategy_id: Optional[str] = None,
+        strategy_id: str | None = None,
         max_results: int = 20,
-    ) -> List[MemoryRecord]:
+    ) -> list[MemoryRecord]:
         """Delegates to manager.search_long_term_memories."""
         return self._manager.search_long_term_memories(query, namespace_prefix, top_k, strategy_id, max_results)
 
     def list_long_term_memory_records(
-        self, namespace_prefix: str, strategy_id: Optional[str] = None, max_results: int = 10
-    ) -> List[MemoryRecord]:
+        self, namespace_prefix: str, strategy_id: str | None = None, max_results: int = 10
+    ) -> list[MemoryRecord]:
         """Delegates to manager.list_long_term_memory_records."""
         return self._manager.list_long_term_memory_records(namespace_prefix, strategy_id, max_results)
 
-    def list_actors(self) -> List[ActorSummary]:
+    def list_actors(self) -> list[ActorSummary]:
         """Delegates to manager.list_actors."""
         return self._manager.list_actors()
 
     def list_events(
         self,
-        branch_name: Optional[str] = None,
+        branch_name: str | None = None,
         include_parent_branches: bool = False,
-        eventMetadata: Optional[List[EventMetadataFilter]] = None,
+        eventMetadata: list[EventMetadataFilter] | None = None,
         max_results: int = 100,
         include_payload: bool = True,
-    ) -> List[Event]:
+    ) -> list[Event]:
         """Delegates to manager.list_events."""
         return self._manager.list_events(
             actor_id=self._actor_id,
@@ -1216,7 +1217,7 @@ class MemorySession(DictWrapper):
             max_results=max_results,
         )
 
-    def list_branches(self) -> List[Branch]:
+    def list_branches(self) -> list[Branch]:
         """Delegates to manager.list_branches."""
         return self._manager.list_branches(self._actor_id, self._session_id)
 
@@ -1238,12 +1239,12 @@ class Actor(DictWrapper):
         self._session_manager = session_manager
         super().__init__(self._construct_session_dict())
 
-    def _construct_session_dict(self) -> Dict[str, Any]:
+    def _construct_session_dict(self) -> dict[str, Any]:
         """Constructs a dictionary representing the actor."""
         return {
             "actorId": self._id,
         }
 
-    def list_sessions(self) -> List[SessionSummary]:
+    def list_sessions(self) -> list[SessionSummary]:
         """Delegates to _session_manager.list_actor_sessions."""
         return self._session_manager.list_actor_sessions(self._id)

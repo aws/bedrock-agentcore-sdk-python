@@ -5,7 +5,6 @@ browser and code interpreter configurations.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 
 @dataclass
@@ -17,10 +16,10 @@ class VpcConfig:
         subnets: List of subnet IDs
     """
 
-    security_groups: List[str]
-    subnets: List[str]
+    security_groups: list[str]
+    subnets: list[str]
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to API-compatible dictionary."""
         return {"securityGroups": self.security_groups, "subnets": self.subnets}
 
@@ -35,7 +34,7 @@ class NetworkConfiguration:
     """
 
     network_mode: str = "PUBLIC"
-    vpc_config: Optional[VpcConfig] = None
+    vpc_config: VpcConfig | None = None
 
     def __post_init__(self):
         """Validate configuration."""
@@ -45,7 +44,7 @@ class NetworkConfiguration:
         if self.network_mode == "VPC" and not self.vpc_config:
             raise ValueError("vpc_config is required when network_mode is 'VPC'")
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to API-compatible dictionary."""
         config = {"networkMode": self.network_mode}
         if self.vpc_config:
@@ -58,7 +57,7 @@ class NetworkConfiguration:
         return cls(network_mode="PUBLIC")
 
     @classmethod
-    def vpc(cls, security_groups: List[str], subnets: List[str]) -> "NetworkConfiguration":
+    def vpc(cls, security_groups: list[str], subnets: list[str]) -> "NetworkConfiguration":
         """Create a VPC network configuration.
 
         Args:
@@ -81,9 +80,9 @@ class S3Location:
     """
 
     bucket: str
-    key_prefix: Optional[str] = None
+    key_prefix: str | None = None
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to API-compatible dictionary."""
         location = {"bucket": self.bucket}
         if self.key_prefix:
@@ -101,9 +100,9 @@ class RecordingConfiguration:
     """
 
     enabled: bool = True
-    s3_location: Optional[S3Location] = None
+    s3_location: S3Location | None = None
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to API-compatible dictionary."""
         config = {"enabled": self.enabled}
         if self.s3_location:
@@ -116,7 +115,7 @@ class RecordingConfiguration:
         return cls(enabled=False)
 
     @classmethod
-    def enabled_with_location(cls, bucket: str, key_prefix: Optional[str] = None) -> "RecordingConfiguration":
+    def enabled_with_location(cls, bucket: str, key_prefix: str | None = None) -> "RecordingConfiguration":
         """Create an enabled recording configuration with S3 location.
 
         Args:
@@ -141,7 +140,7 @@ class BrowserSigningConfiguration:
 
     enabled: bool = True
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to API-compatible dictionary."""
         return {"enabled": self.enabled}
 
@@ -168,7 +167,7 @@ class ViewportConfiguration:
     width: int
     height: int
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to API-compatible dictionary."""
         return {"width": self.width, "height": self.height}
 
@@ -217,12 +216,12 @@ class BrowserConfiguration:
     name: str
     execution_role_arn: str
     network_configuration: NetworkConfiguration
-    description: Optional[str] = None
-    recording: Optional[RecordingConfiguration] = None
-    browser_signing: Optional[BrowserSigningConfiguration] = None
-    tags: Optional[Dict[str, str]] = field(default_factory=dict)
+    description: str | None = None
+    recording: RecordingConfiguration | None = None
+    browser_signing: BrowserSigningConfiguration | None = None
+    tags: dict[str, str] | None = field(default_factory=dict)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to API-compatible dictionary for create_browser."""
         config = {
             "name": self.name,
@@ -260,10 +259,10 @@ class CodeInterpreterConfiguration:
     name: str
     execution_role_arn: str
     network_configuration: NetworkConfiguration
-    description: Optional[str] = None
-    tags: Optional[Dict[str, str]] = field(default_factory=dict)
+    description: str | None = None
+    tags: dict[str, str] | None = field(default_factory=dict)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to API-compatible dictionary for create_code_interpreter."""
         config = {
             "name": self.name,
@@ -285,13 +284,13 @@ def create_browser_config(
     execution_role_arn: str,
     enable_web_bot_auth: bool = False,
     enable_recording: bool = False,
-    recording_bucket: Optional[str] = None,
-    recording_prefix: Optional[str] = None,
+    recording_bucket: str | None = None,
+    recording_prefix: str | None = None,
     use_vpc: bool = False,
-    security_groups: Optional[List[str]] = None,
-    subnets: Optional[List[str]] = None,
-    description: Optional[str] = None,
-    tags: Optional[Dict[str, str]] = None,
+    security_groups: list[str] | None = None,
+    subnets: list[str] | None = None,
+    description: str | None = None,
+    tags: dict[str, str] | None = None,
 ) -> BrowserConfiguration:
     """Create a browser configuration with common options.
 

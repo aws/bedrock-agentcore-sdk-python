@@ -10,7 +10,7 @@ converter module that implements framework-specific extractors and orchestration
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .adot_models import (
     ADOTDocumentBuilder,
@@ -36,7 +36,7 @@ class StrandsEventParser:
     EVENT_TOOL_MESSAGE = "gen_ai.tool.message"
 
     @classmethod
-    def extract_conversation_turn(cls, events: List[Any]) -> Optional[ConversationTurn]:
+    def extract_conversation_turn(cls, events: list[Any]) -> ConversationTurn | None:
         """Extract conversation turn from Strands span events."""
         user_message = None
         assistant_messages = []
@@ -83,7 +83,7 @@ class StrandsEventParser:
         return None
 
     @classmethod
-    def extract_tool_execution(cls, events: List[Any]) -> Optional[ToolExecution]:
+    def extract_tool_execution(cls, events: list[Any]) -> ToolExecution | None:
         """Extract tool execution from Strands span events."""
         tool_input = ""
         tool_output = ""
@@ -126,7 +126,7 @@ class StrandsToADOTConverter:
         self.event_parser = StrandsEventParser()
         self.doc_builder = ADOTDocumentBuilder()
 
-    def convert_span(self, span) -> List[Dict[str, Any]]:
+    def convert_span(self, span) -> list[dict[str, Any]]:
         """Convert a single span to ADOT documents."""
         documents = []
 
@@ -160,7 +160,7 @@ class StrandsToADOTConverter:
 
         return documents
 
-    def convert(self, raw_spans: List[Any]) -> List[Dict[str, Any]]:
+    def convert(self, raw_spans: list[Any]) -> list[dict[str, Any]]:
         """Convert list of Strands OTel spans to ADOT documents."""
         documents = []
         for span in raw_spans:
@@ -174,7 +174,7 @@ class StrandsToADOTConverter:
 # ==============================================================================
 
 
-def convert_strands_to_adot(raw_spans: List[Any]) -> List[Dict[str, Any]]:
+def convert_strands_to_adot(raw_spans: list[Any]) -> list[dict[str, Any]]:
     """Convert Strands OTel spans to ADOT format for AgentCore evaluation.
 
     Args:

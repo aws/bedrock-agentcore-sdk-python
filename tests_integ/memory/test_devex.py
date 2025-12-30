@@ -43,8 +43,8 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
     logger.info("COMPLETE AGENT WORKFLOW TEST")
     logger.info("=" * 80)
 
-    actor_id = "customer-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
-    session_id = "support-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
+    actor_id = "customer-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
+    session_id = "support-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
 
     logger.info("\n1. Memory strategies already configured during creation")
 
@@ -56,13 +56,20 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
         while attempt < max_retries:
             try:
                 return client.save_conversation(
-                    memory_id=memory_id, actor_id=actor_id, session_id=session_id, messages=messages, branch=branch
+                    memory_id=memory_id,
+                    actor_id=actor_id,
+                    session_id=session_id,
+                    messages=messages,
+                    branch=branch,
                 )
             except Exception as e:
                 if "ThrottledException" in str(e) and attempt < max_retries - 1:
                     attempt += 1
                     logger.info(
-                        "Rate limit hit, retrying in %d seconds (attempt %d/%d)...", wait_time, attempt, max_retries
+                        "Rate limit hit, retrying in %d seconds (attempt %d/%d)...",
+                        wait_time,
+                        attempt,
+                        max_retries,
                     )
                     time.sleep(wait_time)
                     wait_time *= 2  # Exponential backoff
@@ -80,14 +87,20 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
             ("Hi, I'm having trouble with my order #12345", "USER"),
             ("I'm sorry to hear that. Let me look up your order.", "ASSISTANT"),
             ("lookup_order(order_id='12345')", "TOOL"),
-            ("I see your order was shipped 3 days ago. What specific issue are you experiencing?", "ASSISTANT"),
+            (
+                "I see your order was shipped 3 days ago. What specific issue are you experiencing?",
+                "ASSISTANT",
+            ),
             ("Actually, before that - I also want to change my email address", "USER"),
             (
                 "Of course! I can help with both. Let's start with updating your email. What's your new email?",
                 "ASSISTANT",
             ),
             ("newemail@example.com", "USER"),
-            ("update_customer_email(old='old@example.com', new='newemail@example.com')", "TOOL"),
+            (
+                "update_customer_email(old='old@example.com', new='newemail@example.com')",
+                "TOOL",
+            ),
             ("Email updated successfully! Now, about your order issue?", "ASSISTANT"),
             ("The package arrived damaged", "USER"),
         ],
@@ -105,7 +118,10 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
         root_event_id=initial["eventId"],
         branch_name="immediate-refund",
         new_messages=[
-            ("I'm very sorry about the damaged package. I'll process an immediate refund.", "ASSISTANT"),
+            (
+                "I'm very sorry about the damaged package. I'll process an immediate refund.",
+                "ASSISTANT",
+            ),
         ],
     )
 
@@ -116,7 +132,10 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
         actor_id=actor_id,
         session_id=session_id,
         messages=[
-            ("process_refund(order_id='12345', reason='damaged', amount='full')", "TOOL"),
+            (
+                "process_refund(order_id='12345', reason='damaged', amount='full')",
+                "TOOL",
+            ),
         ],
         branch={"name": "immediate-refund", "rootEventId": initial["eventId"]},
     )
@@ -127,7 +146,10 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
         actor_id=actor_id,
         session_id=session_id,
         messages=[
-            ("Refund processed! You'll see it in 3-5 business days. Is there anything else?", "ASSISTANT"),
+            (
+                "Refund processed! You'll see it in 3-5 business days. Is there anything else?",
+                "ASSISTANT",
+            ),
             ("That was fast, thank you!", "USER"),
         ],
         branch={"name": "immediate-refund", "rootEventId": initial["eventId"]},
@@ -139,7 +161,10 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
         actor_id=actor_id,
         session_id=session_id,
         messages=[
-            ("You're welcome! I've also added a 10% discount to your account for next purchase.", "ASSISTANT"),
+            (
+                "You're welcome! I've also added a 10% discount to your account for next purchase.",
+                "ASSISTANT",
+            ),
         ],
         branch={"name": "immediate-refund", "rootEventId": initial["eventId"]},
     )
@@ -153,7 +178,10 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
         root_event_id=initial["eventId"],
         branch_name="replacement-offer",
         new_messages=[
-            ("I apologize for the damaged item. Would you prefer a replacement or refund?", "ASSISTANT"),
+            (
+                "I apologize for the damaged item. Would you prefer a replacement or refund?",
+                "ASSISTANT",
+            ),
         ],
     )
 
@@ -176,7 +204,10 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
         session_id=session_id,
         messages=[
             ("check_inventory(item='ORD-12345-ITEM')", "TOOL"),
-            ("We have it in stock! I can send a replacement with express shipping - arrives in 2 days.", "ASSISTANT"),
+            (
+                "We have it in stock! I can send a replacement with express shipping - arrives in 2 days.",
+                "ASSISTANT",
+            ),
         ],
         branch={"name": "replacement-offer", "rootEventId": initial["eventId"]},
     )
@@ -199,7 +230,10 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
         actor_id=actor_id,
         session_id=session_id,
         messages=[
-            ("Perfect! Replacement ordered with express shipping. You'll get tracking info shortly.", "ASSISTANT"),
+            (
+                "Perfect! Replacement ordered with express shipping. You'll get tracking info shortly.",
+                "ASSISTANT",
+            ),
         ],
         branch={"name": "replacement-offer", "rootEventId": initial["eventId"]},
     )
@@ -213,7 +247,10 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
         root_event_id=initial["eventId"],
         branch_name="escalation-required",
         new_messages=[
-            ("I understand this is frustrating. Let me connect you with a specialist who can help.", "ASSISTANT"),
+            (
+                "I understand this is frustrating. Let me connect you with a specialist who can help.",
+                "ASSISTANT",
+            ),
         ],
     )
 
@@ -250,7 +287,10 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
         actor_id=actor_id,
         session_id=session_id,
         messages=[
-            ("create_escalation_ticket(priority='high', history='multiple_damages')", "TOOL"),
+            (
+                "create_escalation_ticket(priority='high', history='multiple_damages')",
+                "TOOL",
+            ),
             ("ticket_created: ESC-78901", "TOOL"),
         ],
         branch={"name": "escalation-required", "rootEventId": initial["eventId"]},
@@ -304,8 +344,14 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
                     if last_customer and last_agent:
                         break
 
-                logger.info("  Customer sentiment: %s", last_customer[:50] if last_customer else "N/A")
-                logger.info("  Final resolution: %s", last_agent[:80] + "..." if last_agent else "N/A")
+                logger.info(
+                    "  Customer sentiment: %s",
+                    last_customer[:50] if last_customer else "N/A",
+                )
+                logger.info(
+                    "  Final resolution: %s",
+                    last_agent[:80] + "..." if last_agent else "N/A",
+                )
 
     # Phase 4: Continue in best branch
     logger.info("\n5. Continuing conversation in best branch...")
@@ -329,7 +375,10 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
         session_id=session_id,
         messages=[
             ("Wonderful! I'm glad we could resolve this quickly.", "ASSISTANT"),
-            ("save_positive_feedback(case_id='12345', rating=5, branch='replacement')", "TOOL"),
+            (
+                "save_positive_feedback(case_id='12345', rating=5, branch='replacement')",
+                "TOOL",
+            ),
         ],
         branch={"name": "replacement-offer", "rootEventId": initial["eventId"]},
     )
@@ -356,12 +405,15 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
     logger.info("Waiting 30 seconds for extraction to trigger...")
     time.sleep(30)
 
-    namespace = "support/facts/%s" % session_id
+    namespace = f"support/facts/{session_id}"
     if client.wait_for_memories(memory_id, namespace, max_wait=180):
         logger.info("✓ Memories extracted and indexed successfully")
 
         memories = client.retrieve_memories(
-            memory_id=memory_id, namespace=namespace, query="customer order issues damaged package", top_k=5
+            memory_id=memory_id,
+            namespace=namespace,
+            query="customer order issues damaged package",
+            top_k=5,
         )
 
         logger.info("Retrieved %d relevant memories", len(memories))
@@ -387,7 +439,12 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
                     logger.info("%s  - %s: %s", prefix, msg["role"], msg["text"])
 
         for branch_name, sub_branch in branch_data.get("branches", {}).items():
-            logger.info("%s└─ Branch '%s': %d events", prefix, branch_name, len(sub_branch.get("events", [])))
+            logger.info(
+                "%s└─ Branch '%s': %d events",
+                prefix,
+                branch_name,
+                len(sub_branch.get("events", [])),
+            )
             if sub_branch.get("events"):
                 for msg in sub_branch["events"][0].get("messages", []):
                     logger.info("%s     - %s: %s", prefix, msg["role"], msg["text"])
@@ -411,8 +468,8 @@ def test_bedrock_integration(client: MemoryClient, memory_id: str):
         logger.info("Skipping Bedrock test - ensure AWS credentials are configured")
         return
 
-    actor_id = "bedrock-test-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
-    session_id = "bedrock-session-%s" % datetime.now().strftime("%Y%m%d%H%M%S")
+    actor_id = "bedrock-test-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
+    session_id = "bedrock-session-{}".format(datetime.now().strftime("%Y%m%d%H%M%S"))
 
     # Create initial context
     logger.info("\n1. Creating initial conversation context...")
@@ -423,9 +480,15 @@ def test_bedrock_integration(client: MemoryClient, memory_id: str):
         session_id=session_id,
         messages=[
             ("I'm planning a trip to Japan in April", "USER"),
-            ("That's exciting! April is cherry blossom season. What cities are you planning to visit?", "ASSISTANT"),
+            (
+                "That's exciting! April is cherry blossom season. What cities are you planning to visit?",
+                "ASSISTANT",
+            ),
             ("Tokyo and Kyoto for sure. I love photography", "USER"),
-            ("Perfect for photography! The cherry blossoms in Maruyama Park in Kyoto are stunning.", "ASSISTANT"),
+            (
+                "Perfect for photography! The cherry blossoms in Maruyama Park in Kyoto are stunning.",
+                "ASSISTANT",
+            ),
         ],
     )
 
@@ -439,7 +502,7 @@ def test_bedrock_integration(client: MemoryClient, memory_id: str):
 
     # Retrieve relevant memories
     logger.info("\n4. Retrieving relevant context...")
-    namespace = "support/facts/%s" % session_id
+    namespace = f"support/facts/{session_id}"
     memories = client.retrieve_memories(memory_id=memory_id, namespace=namespace, query=user_query, top_k=5)
 
     context = ""
@@ -453,7 +516,10 @@ def test_bedrock_integration(client: MemoryClient, memory_id: str):
     messages = []
     if context:
         messages.append(
-            {"role": "assistant", "content": "Here's what I know from our previous conversation:\n%s" % context}
+            {
+                "role": "assistant",
+                "content": f"Here's what I know from our previous conversation:\n{context}",
+            }
         )
 
     messages.append({"role": "user", "content": user_query})
@@ -558,12 +624,15 @@ def test_edge_cases_and_validation(client: MemoryClient, memory_id: str):
     # MODIFIED: Split long conversation into smaller batches
     for i in range(20):
         messages = []
-        messages.append(("Question %d about the product" % i, "USER"))
-        messages.append(("Answer %d with detailed information" % i, "ASSISTANT"))
+        messages.append((f"Question {i} about the product", "USER"))
+        messages.append((f"Answer {i} with detailed information", "ASSISTANT"))
 
         try:
             long_event = client.save_conversation(
-                memory_id=memory_id, actor_id=actor_id, session_id=session_id, messages=messages
+                memory_id=memory_id,
+                actor_id=actor_id,
+                session_id=session_id,
+                messages=messages,
             )
             logger.info("✓ Saved messages %d: %s", i + 1, long_event["eventId"])
             time.sleep(0.5)  # Small delay between batches
@@ -591,8 +660,8 @@ def test_edge_cases_and_validation(client: MemoryClient, memory_id: str):
                 actor_id=actor_id,
                 session_id="rapid-branch-test",
                 root_event_id=base_event["eventId"],
-                branch_name="branch-%d" % i,
-                new_messages=[("Branch %d message" % i, "ASSISTANT")],
+                branch_name=f"branch-{i}",
+                new_messages=[(f"Branch {i} message", "ASSISTANT")],
             )
             logger.info("✓ Created branch-%d", i)
         except Exception as e:
@@ -634,7 +703,10 @@ def test_edge_cases_and_validation(client: MemoryClient, memory_id: str):
             memory_id=memory_id,
             actor_id=actor_id,
             session_id=session_id,
-            messages=[("", "USER"), ("I didn't catch that. Could you repeat?", "ASSISTANT")],
+            messages=[
+                ("", "USER"),
+                ("I didn't catch that. Could you repeat?", "ASSISTANT"),
+            ],
         )
         logger.info("✓ Handled empty message content")
     except Exception as e:
@@ -651,7 +723,10 @@ def generate_developer_report(client: MemoryClient):
     logger.info("\n🎯 KEY IMPROVEMENTS")
 
     improvements = [
-        {"area": "Conversation Flexibility", "impact": "90% reduction in code for complex flows"},
+        {
+            "area": "Conversation Flexibility",
+            "impact": "90% reduction in code for complex flows",
+        },
         {"area": "Branch Management", "impact": "New scenarios now possible"},
         {"area": "Developer Intuition", "impact": "Faster onboarding, fewer errors"},
         {"area": "Real-world Scenarios", "impact": "Better user experiences"},
@@ -694,7 +769,7 @@ def main():
 
     logger.info("\nCreating test memory with strategies...")
     memory = client.create_memory(
-        name="DXTest_%s" % datetime.now().strftime("%Y%m%d%H%M%S"),
+        name="DXTest_{}".format(datetime.now().strftime("%Y%m%d%H%M%S")),
         description="Developer experience evaluation",
         strategies=[
             {

@@ -4,9 +4,10 @@ import subprocess
 import threading
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Generator
 from contextlib import contextmanager
 from subprocess import Popen
-from typing import IO, Generator
+from typing import IO
 
 logger = logging.getLogger("sdk-runtime-base-test")
 

@@ -10,8 +10,8 @@ import datetime
 import logging
 import secrets
 import uuid
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Dict, Generator, Optional, Tuple
 from urllib.parse import urlparse
 
 import boto3
@@ -69,22 +69,22 @@ class BrowserClient:
         self._session_id = None
 
     @property
-    def identifier(self) -> Optional[str]:
+    def identifier(self) -> str | None:
         """Get the current browser identifier."""
         return self._identifier
 
     @identifier.setter
-    def identifier(self, value: Optional[str]):
+    def identifier(self, value: str | None):
         """Set the browser identifier."""
         self._identifier = value
 
     @property
-    def session_id(self) -> Optional[str]:
+    def session_id(self) -> str | None:
         """Get the current session ID."""
         return self._session_id
 
     @session_id.setter
-    def session_id(self, value: Optional[str]):
+    def session_id(self, value: str | None):
         """Set the session ID."""
         self._session_id = value
 
@@ -92,13 +92,13 @@ class BrowserClient:
         self,
         name: str,
         execution_role_arn: str,
-        network_configuration: Optional[Dict] = None,
-        description: Optional[str] = None,
-        recording: Optional[Dict] = None,
-        browser_signing: Optional[Dict] = None,
-        tags: Optional[Dict[str, str]] = None,
-        client_token: Optional[str] = None,
-    ) -> Dict:
+        network_configuration: dict | None = None,
+        description: str | None = None,
+        recording: dict | None = None,
+        browser_signing: dict | None = None,
+        tags: dict[str, str] | None = None,
+        client_token: str | None = None,
+    ) -> dict:
         """Create a custom browser with specific configuration.
 
         This is a control plane operation that provisions a new browser with
@@ -183,7 +183,7 @@ class BrowserClient:
         response = self.control_plane_client.create_browser(**request_params)
         return response
 
-    def delete_browser(self, browser_id: str, client_token: Optional[str] = None) -> Dict:
+    def delete_browser(self, browser_id: str, client_token: str | None = None) -> dict:
         """Delete a custom browser.
 
         Args:
@@ -208,7 +208,7 @@ class BrowserClient:
         response = self.control_plane_client.delete_browser(**request_params)
         return response
 
-    def get_browser(self, browser_id: str) -> Dict:
+    def get_browser(self, browser_id: str) -> dict:
         """Get detailed information about a browser.
 
         Args:
@@ -237,10 +237,10 @@ class BrowserClient:
 
     def list_browsers(
         self,
-        browser_type: Optional[str] = None,
+        browser_type: str | None = None,
         max_results: int = 10,
-        next_token: Optional[str] = None,
-    ) -> Dict:
+        next_token: str | None = None,
+    ) -> dict:
         """List all browsers in the account.
 
         Args:
@@ -272,10 +272,10 @@ class BrowserClient:
 
     def start(
         self,
-        identifier: Optional[str] = DEFAULT_IDENTIFIER,
-        name: Optional[str] = None,
-        session_timeout_seconds: Optional[int] = DEFAULT_SESSION_TIMEOUT,
-        viewport: Optional[Dict[str, int]] = None,
+        identifier: str | None = DEFAULT_IDENTIFIER,
+        name: str | None = None,
+        session_timeout_seconds: int | None = DEFAULT_SESSION_TIMEOUT,
+        viewport: dict[str, int] | None = None,
     ) -> str:
         """Start a browser sandbox session.
 
@@ -341,7 +341,7 @@ class BrowserClient:
         self.session_id = None
         return True
 
-    def get_session(self, browser_id: Optional[str] = None, session_id: Optional[str] = None) -> Dict:
+    def get_session(self, browser_id: str | None = None, session_id: str | None = None) -> dict:
         """Get detailed information about a browser session.
 
         Args:
@@ -377,11 +377,11 @@ class BrowserClient:
 
     def list_sessions(
         self,
-        browser_id: Optional[str] = None,
-        status: Optional[str] = None,
+        browser_id: str | None = None,
+        status: str | None = None,
         max_results: int = 10,
-        next_token: Optional[str] = None,
-    ) -> Dict:
+        next_token: str | None = None,
+    ) -> dict:
         """List browser sessions for a specific browser.
 
         Args:
@@ -419,8 +419,8 @@ class BrowserClient:
     def update_stream(
         self,
         stream_status: str,
-        browser_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        browser_id: str | None = None,
+        session_id: str | None = None,
     ) -> None:
         """Update the browser automation stream status.
 
@@ -451,7 +451,7 @@ class BrowserClient:
             streamUpdate={"automationStreamUpdate": {"streamStatus": stream_status}},
         )
 
-    def generate_ws_headers(self) -> Tuple[str, Dict[str, str]]:
+    def generate_ws_headers(self) -> tuple[str, dict[str, str]]:
         """Generate the WebSocket headers needed for connecting to the browser sandbox.
 
         Returns:
@@ -568,7 +568,7 @@ class BrowserClient:
 
 @contextmanager
 def browser_session(
-    region: str, viewport: Optional[Dict[str, int]] = None, identifier: Optional[str] = None
+    region: str, viewport: dict[str, int] | None = None, identifier: str | None = None
 ) -> Generator[BrowserClient, None, None]:
     """Context manager for creating and managing a browser sandbox session.
 

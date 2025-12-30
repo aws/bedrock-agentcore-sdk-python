@@ -6,8 +6,8 @@ applications to start, stop, and invoke code execution in a managed sandbox envi
 
 import logging
 import uuid
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Dict, Generator, Optional
 
 import boto3
 
@@ -33,7 +33,7 @@ class CodeInterpreter:
         session_id (str, optional): The active session ID.
     """
 
-    def __init__(self, region: str, session: Optional[boto3.Session] = None) -> None:
+    def __init__(self, region: str, session: boto3.Session | None = None) -> None:
         """Initialize a Code Interpreter client for the specified AWS region.
 
         Args:
@@ -64,22 +64,22 @@ class CodeInterpreter:
         self._session_id = None
 
     @property
-    def identifier(self) -> Optional[str]:
+    def identifier(self) -> str | None:
         """Get the current code interpreter identifier."""
         return self._identifier
 
     @identifier.setter
-    def identifier(self, value: Optional[str]):
+    def identifier(self, value: str | None):
         """Set the code interpreter identifier."""
         self._identifier = value
 
     @property
-    def session_id(self) -> Optional[str]:
+    def session_id(self) -> str | None:
         """Get the current session ID."""
         return self._session_id
 
     @session_id.setter
-    def session_id(self, value: Optional[str]):
+    def session_id(self, value: str | None):
         """Set the session ID."""
         self._session_id = value
 
@@ -87,11 +87,11 @@ class CodeInterpreter:
         self,
         name: str,
         execution_role_arn: str,
-        network_configuration: Optional[Dict] = None,
-        description: Optional[str] = None,
-        tags: Optional[Dict[str, str]] = None,
-        client_token: Optional[str] = None,
-    ) -> Dict:
+        network_configuration: dict | None = None,
+        description: str | None = None,
+        tags: dict[str, str] | None = None,
+        client_token: str | None = None,
+    ) -> dict:
         """Create a custom code interpreter with specific configuration.
 
         This is a control plane operation that provisions a new code interpreter
@@ -157,7 +157,7 @@ class CodeInterpreter:
         response = self.control_plane_client.create_code_interpreter(**request_params)
         return response
 
-    def delete_code_interpreter(self, interpreter_id: str, client_token: Optional[str] = None) -> Dict:
+    def delete_code_interpreter(self, interpreter_id: str, client_token: str | None = None) -> dict:
         """Delete a custom code interpreter.
 
         Args:
@@ -182,7 +182,7 @@ class CodeInterpreter:
         response = self.control_plane_client.delete_code_interpreter(**request_params)
         return response
 
-    def get_code_interpreter(self, interpreter_id: str) -> Dict:
+    def get_code_interpreter(self, interpreter_id: str) -> dict:
         """Get detailed information about a code interpreter.
 
         Args:
@@ -207,10 +207,10 @@ class CodeInterpreter:
 
     def list_code_interpreters(
         self,
-        interpreter_type: Optional[str] = None,
+        interpreter_type: str | None = None,
         max_results: int = 10,
-        next_token: Optional[str] = None,
-    ) -> Dict:
+        next_token: str | None = None,
+    ) -> dict:
         """List all code interpreters in the account.
 
         Args:
@@ -242,9 +242,9 @@ class CodeInterpreter:
 
     def start(
         self,
-        identifier: Optional[str] = DEFAULT_IDENTIFIER,
-        name: Optional[str] = None,
-        session_timeout_seconds: Optional[int] = DEFAULT_TIMEOUT,
+        identifier: str | None = DEFAULT_IDENTIFIER,
+        name: str | None = None,
+        session_timeout_seconds: int | None = DEFAULT_TIMEOUT,
     ) -> str:
         """Start a code interpreter sandbox session.
 
@@ -302,7 +302,7 @@ class CodeInterpreter:
         self.session_id = None
         return True
 
-    def get_session(self, interpreter_id: Optional[str] = None, session_id: Optional[str] = None) -> Dict:
+    def get_session(self, interpreter_id: str | None = None, session_id: str | None = None) -> dict:
         """Get detailed information about a code interpreter session.
 
         Args:
@@ -335,11 +335,11 @@ class CodeInterpreter:
 
     def list_sessions(
         self,
-        interpreter_id: Optional[str] = None,
-        status: Optional[str] = None,
+        interpreter_id: str | None = None,
+        status: str | None = None,
         max_results: int = 10,
-        next_token: Optional[str] = None,
-    ) -> Dict:
+        next_token: str | None = None,
+    ) -> dict:
         """List code interpreter sessions for a specific interpreter.
 
         Args:
@@ -374,7 +374,7 @@ class CodeInterpreter:
         response = self.data_plane_client.list_code_interpreter_sessions(**request_params)
         return response
 
-    def invoke(self, method: str, params: Optional[Dict] = None):
+    def invoke(self, method: str, params: dict | None = None):
         r"""Invoke a method in the code interpreter sandbox.
 
         If no session is active, automatically starts a new session.
@@ -407,7 +407,7 @@ class CodeInterpreter:
 
 @contextmanager
 def code_session(
-    region: str, session: Optional[boto3.Session] = None, identifier: Optional[str] = None
+    region: str, session: boto3.Session | None = None, identifier: str | None = None
 ) -> Generator[CodeInterpreter, None, None]:
     """Context manager for creating and managing a code interpreter session.
 

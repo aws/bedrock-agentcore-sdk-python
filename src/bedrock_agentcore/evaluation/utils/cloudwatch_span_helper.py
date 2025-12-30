@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from datetime import datetime
-from typing import Any, List
+from typing import Any
 
 import boto3
 
@@ -43,7 +43,7 @@ class CloudWatchSpanHelper:
         session_id: str,
         start_time: datetime,
         end_time: datetime,
-    ) -> List[dict]:
+    ) -> list[dict]:
         """Query a single CloudWatch log group for session data.
 
         Args:
@@ -133,7 +133,7 @@ class CloudWatchSpanHelper:
         session_id: str,
         event_log_group: str,
         start_time: datetime,
-    ) -> List[dict]:
+    ) -> list[dict]:
         """Fetch ADOT spans from CloudWatch with configurable event log group.
 
         ADOT spans are always fetched from aws/spans. Event logs can be fetched from
@@ -185,7 +185,7 @@ def fetch_spans_from_cloudwatch(
     event_log_group: str,
     start_time: datetime,
     region: str = DEFAULT_REGION,
-) -> List[dict]:
+) -> list[dict]:
     """Fetch ADOT spans from CloudWatch with configurable event log group.
 
     Convenience function that creates a CloudWatchSpanFetcher and fetches spans.

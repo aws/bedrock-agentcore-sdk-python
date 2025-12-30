@@ -11,7 +11,7 @@ telemetry frameworks (Strands, LangGraph, etc.).
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class SpanMetadata:
 
     trace_id: str
     span_id: str
-    parent_span_id: Optional[str]
+    parent_span_id: str | None
     name: str
     start_time: int
     end_time: int
@@ -41,7 +41,7 @@ class SpanMetadata:
 class ResourceInfo:
     """Span resource and scope information."""
 
-    resource_attributes: Dict[str, Any]
+    resource_attributes: dict[str, Any]
     scope_name: str
     scope_version: str
 
@@ -51,8 +51,8 @@ class ConversationTurn:
     """A single user-assistant conversation turn."""
 
     user_message: str
-    assistant_messages: List[Dict[str, Any]]
-    tool_results: List[str]
+    assistant_messages: list[dict[str, Any]]
+    tool_results: list[str]
 
 
 @dataclass
@@ -115,7 +115,7 @@ class SpanParser:
         )
 
     @staticmethod
-    def get_span_attributes(span) -> Dict[str, Any]:
+    def get_span_attributes(span) -> dict[str, Any]:
         """Safely extract span attributes."""
         return dict(span.attributes) if hasattr(span, "attributes") and span.attributes else {}
 
@@ -140,8 +140,8 @@ class ADOTDocumentBuilder:
     def build_span_document(
         metadata: SpanMetadata,
         resource_info: ResourceInfo,
-        attributes: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        attributes: dict[str, Any],
+    ) -> dict[str, Any]:
         """Build ADOT span document."""
         return {
             "resource": {"attributes": resource_info.resource_attributes},
@@ -167,8 +167,8 @@ class ADOTDocumentBuilder:
         cls,
         metadata: SpanMetadata,
         resource_info: ResourceInfo,
-        body: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        body: dict[str, Any],
+    ) -> dict[str, Any]:
         """Build base ADOT log record structure shared by all log types."""
         return {
             "resource": {"attributes": resource_info.resource_attributes},
@@ -190,7 +190,7 @@ class ADOTDocumentBuilder:
         conversation: ConversationTurn,
         metadata: SpanMetadata,
         resource_info: ResourceInfo,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build ADOT log record for conversation turn."""
         output_messages = []
         for i, msg in enumerate(conversation.assistant_messages):
@@ -217,7 +217,7 @@ class ADOTDocumentBuilder:
         tool_exec: ToolExecution,
         metadata: SpanMetadata,
         resource_info: ResourceInfo,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build ADOT log record for tool execution."""
         body = {
             "output": {

@@ -9,7 +9,6 @@ import datetime
 import logging
 import secrets
 import uuid
-from typing import Dict, Optional, Tuple
 from urllib.parse import quote, urlencode, urlparse
 
 import boto3
@@ -34,7 +33,7 @@ class AgentCoreRuntimeClient:
         session (boto3.Session): The boto3 session for AWS credentials.
     """
 
-    def __init__(self, region: str, session: Optional[boto3.Session] = None) -> None:
+    def __init__(self, region: str, session: boto3.Session | None = None) -> None:
         """Initialize an AgentCoreRuntime client for the specified AWS region.
 
         Args:
@@ -50,7 +49,7 @@ class AgentCoreRuntimeClient:
 
         self.session = session
 
-    def _parse_runtime_arn(self, runtime_arn: str) -> Dict[str, str]:
+    def _parse_runtime_arn(self, runtime_arn: str) -> dict[str, str]:
         """Parse runtime ARN and extract components.
 
         Args:
@@ -94,8 +93,8 @@ class AgentCoreRuntimeClient:
     def _build_websocket_url(
         self,
         runtime_arn: str,
-        endpoint_name: Optional[str] = None,
-        custom_headers: Optional[Dict[str, str]] = None,
+        endpoint_name: str | None = None,
+        custom_headers: dict[str, str] | None = None,
     ) -> str:
         """Build WebSocket URL with query parameters.
 
@@ -137,9 +136,9 @@ class AgentCoreRuntimeClient:
     def generate_ws_connection(
         self,
         runtime_arn: str,
-        session_id: Optional[str] = None,
-        endpoint_name: Optional[str] = None,
-    ) -> Tuple[str, Dict[str, str]]:
+        session_id: str | None = None,
+        endpoint_name: str | None = None,
+    ) -> tuple[str, dict[str, str]]:
         """Generate WebSocket URL and SigV4 signed headers for runtime connection.
 
         Args:
@@ -227,9 +226,9 @@ class AgentCoreRuntimeClient:
     def generate_presigned_url(
         self,
         runtime_arn: str,
-        session_id: Optional[str] = None,
-        endpoint_name: Optional[str] = None,
-        custom_headers: Optional[Dict[str, str]] = None,
+        session_id: str | None = None,
+        endpoint_name: str | None = None,
+        custom_headers: dict[str, str] | None = None,
         expires: int = DEFAULT_PRESIGNED_URL_TIMEOUT,
     ) -> str:
         """Generate a presigned WebSocket URL for runtime connection.
@@ -325,9 +324,9 @@ class AgentCoreRuntimeClient:
         self,
         runtime_arn: str,
         bearer_token: str,
-        session_id: Optional[str] = None,
-        endpoint_name: Optional[str] = None,
-    ) -> Tuple[str, Dict[str, str]]:
+        session_id: str | None = None,
+        endpoint_name: str | None = None,
+    ) -> tuple[str, dict[str, str]]:
         """Generate WebSocket URL and OAuth headers for runtime connection.
 
         This method uses OAuth bearer token authentication instead of AWS SigV4.

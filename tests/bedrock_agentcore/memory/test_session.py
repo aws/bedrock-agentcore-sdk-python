@@ -3,7 +3,7 @@
 import asyncio
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any
 from unittest import mock
 from unittest.mock import MagicMock, Mock, patch
 
@@ -402,7 +402,7 @@ class TestSessionManager:
                 mock_event = {"eventId": "event-123", "memoryId": "testMemory-1234567890"}
                 with patch.object(manager, "add_turns", return_value=Event(mock_event)):
                     # Define LLM callback
-                    def mock_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                    def mock_llm_callback(user_input: str, memories: list[dict[str, Any]]) -> str:
                         return f"Response to: {user_input} with {len(memories)} memories"
 
                     # Test process_turn_with_llm with new RetrievalConfig API
@@ -434,7 +434,7 @@ class TestSessionManager:
             mock_event = {"eventId": "event-123", "memoryId": "testMemory-1234567890"}
             with patch.object(manager, "add_turns", return_value=Event(mock_event)):
                 # Define LLM callback
-                def mock_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                def mock_llm_callback(user_input: str, memories: list[dict[str, Any]]) -> str:
                     return f"Response to: {user_input}"
 
                 # Test process_turn_with_llm without retrieval (None retrieval_config)
@@ -465,7 +465,7 @@ class TestSessionManager:
             mock_event = {"eventId": "event-123", "memoryId": "testMemory-1234567890"}
             with patch.object(manager, "add_turns", return_value=Event(mock_event)):
                 # Define async LLM callback
-                async def mock_async_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                async def mock_async_llm_callback(user_input: str, memories: list[dict[str, Any]]) -> str:
                     return f"Async method response to: {user_input}"
 
                 # Test process_turn_with_llm_async
@@ -496,7 +496,7 @@ class TestSessionManager:
             manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
 
             # Define failing LLM callback
-            def failing_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+            def failing_llm_callback(user_input: str, memories: list[dict[str, Any]]) -> str:
                 raise Exception("LLM service error")
 
             # Test process_turn_with_llm with callback error
@@ -523,7 +523,7 @@ class TestSessionManager:
             manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
 
             # Define callback that returns non-string
-            def invalid_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> int:
+            def invalid_llm_callback(user_input: str, memories: list[dict[str, Any]]) -> int:
                 return 123  # type: ignore
 
             # Test process_turn_with_llm with invalid return type
@@ -1778,7 +1778,7 @@ class TestSession:
                 manager, "process_turn_with_llm", return_value=(mock_memories, mock_response, mock_event)
             ) as mock_process:
 
-                def mock_llm(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                def mock_llm(user_input: str, memories: list[dict[str, Any]]) -> str:
                     return "Response"
 
                 memories, response, event = session.process_turn_with_llm(
@@ -2045,7 +2045,7 @@ class TestEdgeCases:
                 mock_event = {"eventId": "event-123"}
                 with patch.object(manager, "add_turns", return_value=Event(mock_event)):
 
-                    def mock_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                    def mock_llm_callback(user_input: str, memories: list[dict[str, Any]]) -> str:
                         return "Response"
 
                     # Test with custom retrieval config
@@ -2589,7 +2589,7 @@ class TestEventMetadataFlow:
                 manager, "process_turn_with_llm", return_value=(mock_memories, mock_response, mock_event)
             ) as mock_process:
 
-                def mock_llm(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                def mock_llm(user_input: str, memories: list[dict[str, Any]]) -> str:
                     return "Response"
 
                 memories, response, event = session.process_turn_with_llm(
@@ -2619,7 +2619,7 @@ class TestEventMetadataFlow:
                 mock_event = {"eventId": "event-123", "memoryId": "testMemory-1234567890"}
                 with patch.object(manager, "add_turns", return_value=Event(mock_event)) as mock_add_turns:
                     # Define LLM callback
-                    def mock_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                    def mock_llm_callback(user_input: str, memories: list[dict[str, Any]]) -> str:
                         return f"Response to: {user_input} with {len(memories)} memories"
 
                     # Test process_turn_with_llm with metadata
@@ -2733,7 +2733,7 @@ class TestAdditionalCoverage:
                 mock_event = {"eventId": "event-123"}
                 with patch.object(manager, "add_turns", return_value=Event(mock_event)):
 
-                    def mock_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                    def mock_llm_callback(user_input: str, memories: list[dict[str, Any]]) -> str:
                         return "Response"
 
                     # Test with retrieval_config but no retrieval_query (should use user_input)
@@ -2865,7 +2865,7 @@ class TestAdditionalCoverage:
                 mock_event = {"eventId": "event-123"}
                 with patch.object(manager, "add_turns", return_value=Event(mock_event)):
 
-                    def mock_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                    def mock_llm_callback(user_input: str, memories: list[dict[str, Any]]) -> str:
                         return f"Response with {len(memories)} memories"
 
                     # Test with relevance_score filtering (should filter out low relevance)
@@ -3094,7 +3094,7 @@ class TestAdditionalCoverage:
                 mock_event = {"eventId": "event-123"}
                 with patch.object(manager, "add_turns", return_value=Event(mock_event)):
 
-                    def mock_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                    def mock_llm_callback(user_input: str, memories: list[dict[str, Any]]) -> str:
                         return "Response"
 
                     # Test with RetrievalConfig that has a very low relevance_score (effectively no filtering)
@@ -3716,7 +3716,7 @@ class TestAddTurnsWithDataClasses:
                 # Mock search_long_term_memories to ensure it's not called
                 with patch.object(manager, "search_long_term_memories") as mock_search:
 
-                    def mock_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                    def mock_llm_callback(user_input: str, memories: list[dict[str, Any]]) -> str:
                         return "Response"
 
                     # Test without retrieval_config (should not call search)
