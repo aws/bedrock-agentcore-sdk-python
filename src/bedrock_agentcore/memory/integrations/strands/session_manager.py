@@ -1,5 +1,6 @@
 """AgentCore Memory-based session manager for Bedrock AgentCore Memory integration."""
 
+import contextvars
 import json
 import logging
 import threading
@@ -31,6 +32,11 @@ logger = logging.getLogger(__name__)
 SESSION_PREFIX = "session_"
 AGENT_PREFIX = "agent_"
 MESSAGE_PREFIX = "message_"
+
+# Context variable for request-scoped actor_id override
+_actor_id_override: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "actor_id_override", default=None
+)
 
 
 class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository):
@@ -124,6 +130,46 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         )
         super().__init__(session_id=self.config.session_id, session_repository=self)
 
+    @property
+    def actor_id(self) -> str:
+        """Get the current actor_id, respecting request-scoped overrides.
+
+        Returns the request-scoped actor_id if set via set_actor_id_for_request(),
+        otherwise returns the default actor_id from config.
+        """
+        override = _actor_id_override.get()
+        return override if override is not None else self.config.actor_id
+
+    def set_actor_id_for_request(self, actor_id: str) -> contextvars.Token:
+        """Set the actor_id for the current request context.
+
+        This method is safe for concurrent requests - each request gets its own
+        isolated actor_id via Python's contextvars mechanism.
+
+        Args:
+            actor_id: The actor_id to use for this request.
+
+        Returns:
+            A token that can be used to reset the actor_id via reset_actor_id().
+
+        Example:
+            token = session_manager.set_actor_id_for_request("user-123")
+            try:
+                # All memory operations in this context use "user-123"
+                await agent.stream_async(prompt)
+            finally:
+                session_manager.reset_actor_id(token)
+        """
+        return _actor_id_override.set(actor_id)
+
+    def reset_actor_id(self, token: contextvars.Token) -> None:
+        """Reset the actor_id to its previous value.
+
+        Args:
+            token: The token returned by set_actor_id_for_request().
+        """
+        _actor_id_override.reset(token)
+
     def _get_full_session_id(self, session_id: str) -> str:
         """Get the full session ID with the configured prefix.
 
@@ -134,9 +180,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             str: The full session ID with the prefix.
         """
         full_session_id = f"{SESSION_PREFIX}{session_id}"
-        if full_session_id == self.config.actor_id:
+        if full_session_id == self.actor_id:
             raise SessionException(
-                f"Cannot have session [ {full_session_id} ] with the same ID as the actor ID: {self.config.actor_id}"
+                f"Cannot have session [ {full_session_id} ] with the same ID as the actor ID: {self.actor_id}"
             )
         return full_session_id
 
@@ -150,10 +196,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             str: The full agent ID with the prefix.
         """
         full_agent_id = f"{AGENT_PREFIX}{agent_id}"
-        if full_agent_id == self.config.actor_id:
+        if full_agent_id == self.actor_id:
             raise SessionException(
-                f"Cannot create agent [ {full_agent_id} ] with the same ID as the actor ID: {self.config.actor_id}"
+                f"Cannot create agent [ {full_agent_id} ] with the same ID as the actor ID: {self.actor_id}"
             )
+        return full_agent_id
         return full_agent_id
 
     # region SessionRepository interface implementation
@@ -361,7 +408,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             if not AgentCoreMemoryConverter.exceeds_conversational_limit(messages[0]):
                 event = self.memory_client.create_event(
                     memory_id=self.config.memory_id,
-                    actor_id=self.config.actor_id,
+                    actor_id=self.actor_id,
                     session_id=session_id,
                     messages=messages,
                     event_timestamp=monotonic_timestamp,
@@ -369,7 +416,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             else:
                 event = self.memory_client.gmdp_client.create_event(
                     memoryId=self.config.memory_id,
-                    actorId=self.config.actor_id,
+                    actorId=self.actor_id,
                     sessionId=session_id,
                     payload=[
                         {"blob": json.dumps(messages[0])},
@@ -399,7 +446,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             updating messages is not supported in AgentCore Memory.
         """
         result = self.memory_client.gmdp_client.get_event(
-            memoryId=self.config.memory_id, actorId=self.config.actor_id, sessionId=session_id, eventId=message_id
+            memoryId=self.config.memory_id, actorId=self.actor_id, sessionId=session_id, eventId=message_id
         )
         return SessionMessage.from_dict(result) if result else None
 
@@ -451,7 +498,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             max_results = (limit + offset) if limit else 100
             events = self.memory_client.list_events(
                 memory_id=self.config.memory_id,
-                actor_id=self.config.actor_id,
+                actor_id=self.actor_id,
                 session_id=session_id,
                 max_results=max_results,
             )
@@ -499,7 +546,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         def retrieve_for_namespace(namespace: str, retrieval_config: AgentCoreMemoryConfig):
             """Helper function to retrieve memories for a single namespace."""
             resolved_namespace = namespace.format(
-                actorId=self.config.actor_id,
+                actorId=self.actor_id,
                 sessionId=self.config.session_id,
                 memoryStrategyId=retrieval_config.strategy_id or "",
             )
