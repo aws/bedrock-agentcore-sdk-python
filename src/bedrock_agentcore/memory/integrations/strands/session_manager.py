@@ -201,7 +201,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 f"Cannot create agent [ {full_agent_id} ] with the same ID as the actor ID: {self.actor_id}"
             )
         return full_agent_id
-        return full_agent_id
 
     # region SessionRepository interface implementation
     def create_session(self, session: Session, **kwargs: Any) -> Session:
