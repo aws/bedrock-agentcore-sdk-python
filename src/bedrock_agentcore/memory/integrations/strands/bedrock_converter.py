@@ -32,11 +32,13 @@ class AgentCoreMemoryConverter:
             list[Tuple[str, str]]: list of (text, role) tuples for Bedrock AgentCore Memory.
                 Returns empty list if message has no content after filtering.
         """
-        filtered_message = AgentCoreMemoryConverter._filter_empty_text(session_message.message)
+        # First convert to dict (which encodes bytes to base64),
+        # then filter empty text on the encoded version
+        session_dict = session_message.to_dict()
+        filtered_message = AgentCoreMemoryConverter._filter_empty_text(session_dict["message"])
         if not filtered_message.get("content"):
             logger.debug("Skipping message with no content after filtering empty text")
             return []
-        session_dict = session_message.to_dict()
         session_dict["message"] = filtered_message
         return [(json.dumps(session_dict), filtered_message["role"])]
 
