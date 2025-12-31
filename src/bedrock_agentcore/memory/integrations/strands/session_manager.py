@@ -34,9 +34,7 @@ AGENT_PREFIX = "agent_"
 MESSAGE_PREFIX = "message_"
 
 # Context variable for request-scoped actor_id override
-_actor_id_override: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
-    "actor_id_override", default=None
-)
+_actor_id_override: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("actor_id_override", default=None)
 
 
 class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository):

@@ -1,5 +1,8 @@
 """Tests for AgentCoreMemorySessionManager."""
 
+import asyncio
+import time
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock, patch
 
 import pytest
@@ -12,7 +15,10 @@ from strands.types.session import Session, SessionAgent, SessionMessage, Session
 
 from bedrock_agentcore.memory.integrations.strands.bedrock_converter import AgentCoreMemoryConverter
 from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
-from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
+from bedrock_agentcore.memory.integrations.strands.session_manager import (
+    AgentCoreMemorySessionManager,
+    _actor_id_override,
+)
 
 
 @pytest.fixture
@@ -1047,3 +1053,146 @@ class TestAgentCoreMemorySessionManager:
 
                     # Should not raise exception, just log error
                     manager.retrieve_customer_context(event)
+
+
+class TestActorIdContextVar:
+    """Test actor_id contextvar-based isolation for concurrent requests."""
+
+    def test_actor_id_property_returns_config_default(self, session_manager):
+        """Test actor_id property returns config value when no override is set."""
+        assert session_manager.actor_id == "test-actor-789"
+
+    def test_set_actor_id_for_request_overrides_actor_id(self, session_manager):
+        """Test set_actor_id_for_request overrides the actor_id property."""
+        token = session_manager.set_actor_id_for_request("custom-actor")
+        try:
+            assert session_manager.actor_id == "custom-actor"
+        finally:
+            session_manager.reset_actor_id(token)
+
+    def test_reset_actor_id_restores_default(self, session_manager):
+        """Test reset_actor_id restores the default actor_id."""
+        token = session_manager.set_actor_id_for_request("custom-actor")
+        session_manager.reset_actor_id(token)
+        assert session_manager.actor_id == "test-actor-789"
+
+    def test_actor_id_isolation_between_threads(self, session_manager):
+        """Test actor_id is isolated between concurrent threads."""
+        results = {}
+
+        def simulate_request(request_id, actor_id, delay):
+            token = session_manager.set_actor_id_for_request(actor_id)
+            try:
+                start_val = session_manager.actor_id
+                time.sleep(delay)
+                end_val = session_manager.actor_id
+                results[request_id] = {
+                    "expected": actor_id,
+                    "start": start_val,
+                    "end": end_val,
+                    "isolated": start_val == actor_id and end_val == actor_id,
+                }
+            finally:
+                session_manager.reset_actor_id(token)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            f1 = executor.submit(simulate_request, 1, "user-A", 0.2)
+            time.sleep(0.05)
+            f2 = executor.submit(simulate_request, 2, "user-B", 0)
+            f1.result()
+            f2.result()
+
+        assert results[1]["isolated"], f"Thread 1 failed: {results[1]}"
+        assert results[2]["isolated"], f"Thread 2 failed: {results[2]}"
+
+    def test_actor_id_isolation_between_async_tasks(self, session_manager):
+        """Test actor_id is isolated between concurrent async tasks."""
+        results = {}
+
+        async def simulate_request(request_id, actor_id, delay):
+            token = session_manager.set_actor_id_for_request(actor_id)
+            try:
+                start_val = session_manager.actor_id
+                await asyncio.sleep(delay)
+                end_val = session_manager.actor_id
+                results[request_id] = {
+                    "expected": actor_id,
+                    "start": start_val,
+                    "end": end_val,
+                    "isolated": start_val == actor_id and end_val == actor_id,
+                }
+            finally:
+                session_manager.reset_actor_id(token)
+
+        async def run_test():
+            await asyncio.gather(
+                simulate_request(1, "async-A", 0.2),
+                simulate_request(2, "async-B", 0),
+            )
+
+        asyncio.run(run_test())
+
+        assert results[1]["isolated"], f"Task 1 failed: {results[1]}"
+        assert results[2]["isolated"], f"Task 2 failed: {results[2]}"
+
+    def test_contextvar_module_level_isolation(self):
+        """Test the module-level contextvar provides isolation."""
+        results = {}
+
+        def set_and_check(request_id, value, delay):
+            token = _actor_id_override.set(value)
+            try:
+                start_val = _actor_id_override.get()
+                time.sleep(delay)
+                end_val = _actor_id_override.get()
+                results[request_id] = start_val == value and end_val == value
+            finally:
+                _actor_id_override.reset(token)
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            executor.submit(set_and_check, 1, "val-1", 0.15)
+            time.sleep(0.02)
+            executor.submit(set_and_check, 2, "val-2", 0.1)
+            time.sleep(0.02)
+            executor.submit(set_and_check, 3, "val-3", 0)
+
+        # Wait for all to complete
+        time.sleep(0.3)
+
+        assert all(results.values()), f"Some requests failed isolation: {results}"
+
+    def test_actor_id_used_in_create_message(self, session_manager, mock_memory_client):
+        """Test that create_message uses the actor_id property."""
+        mock_memory_client.create_event.return_value = {"eventId": "event-123"}
+        session_manager.memory_client = mock_memory_client
+
+        message = SessionMessage(
+            message={"role": "user", "content": [{"text": "Hello"}]},
+            message_id=1,
+            created_at="2024-01-01T12:00:00Z",
+        )
+
+        # Set custom actor_id for this request
+        token = session_manager.set_actor_id_for_request("custom-actor-for-message")
+        try:
+            session_manager.create_message("test-session-456", "test-agent", message)
+
+            # Verify the custom actor_id was used
+            call_kwargs = mock_memory_client.create_event.call_args[1]
+            assert call_kwargs["actor_id"] == "custom-actor-for-message"
+        finally:
+            session_manager.reset_actor_id(token)
+
+    def test_actor_id_used_in_list_messages(self, session_manager, mock_memory_client):
+        """Test that list_messages uses the actor_id property."""
+        mock_memory_client.list_events.return_value = []
+        session_manager.memory_client = mock_memory_client
+
+        token = session_manager.set_actor_id_for_request("custom-actor-for-list")
+        try:
+            session_manager.list_messages("test-session-456", "test-agent")
+
+            call_kwargs = mock_memory_client.list_events.call_args[1]
+            assert call_kwargs["actor_id"] == "custom-actor-for-list"
+        finally:
+            session_manager.reset_actor_id(token)
