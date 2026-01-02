@@ -88,16 +88,16 @@ print("✅ Test 5 passed\n")
 
 
 # Test 6: Execute shell command
-print("Test 6: Execute shell command using execute_shell()")
+print("Test 6: Execute shell command using execute_command()")
 with code_session("us-west-2") as client:
     # Check Python version
-    result = client.execute_shell("python --version")
+    result = client.execute_command("python --version")
     print("Shell command result:")
     for event in result["stream"]:
         print(event["result"]["content"])
 
     # List directory
-    result = client.execute_shell("ls -la")
+    result = client.execute_command("ls -la")
     print("Directory listing:")
     for event in result["stream"]:
         print(event["result"]["content"])
@@ -218,7 +218,7 @@ print("Plot saved to sine_wave.png")
         print(event["result"]["content"])
 
     # Verify file was created
-    list_result = client.execute_shell("ls -la *.png")
+    list_result = client.execute_command("ls -la *.png")
     for event in list_result["stream"]:
         print(event["result"]["content"])
 print("✅ Test 10 passed\n")

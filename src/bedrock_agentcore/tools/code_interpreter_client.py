@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from typing import Any, Dict, Generator, List, Optional, Union
 
 import boto3
+from botocore.config import Config
 
 from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
 
@@ -83,6 +84,7 @@ class CodeInterpreter:
             "bedrock-agentcore",
             region_name=region,
             endpoint_url=get_data_plane_endpoint(region),
+            config=Config(read_timeout=300),
         )
 
         self._identifier = None
@@ -490,7 +492,7 @@ class CodeInterpreter:
         result = self.invoke("writeFiles", {"content": [file_content]})
 
         # Store description as metadata (available for future LLM context)
-        if description and hasattr(self, "_file_descriptions"):
+        if description:
             self._file_descriptions[path] = description
 
         return result
@@ -500,6 +502,9 @@ class CodeInterpreter:
         files: List[Dict[str, str]],
     ) -> Dict[str, Any]:
         """Upload multiple files to the code interpreter environment.
+
+        This operation is atomic - either all files are written or none are.
+        If any file fails, the entire operation fails.
 
         Args:
             files: List of file specifications, each containing:
@@ -666,6 +671,7 @@ class CodeInterpreter:
                     Default is 'python'.
             clear_context: If True, clears all previous variable state before execution.
                         Default is False (variables persist across calls).
+                        Note: Only supported for Python. Ignored for JavaScript/TypeScript.
 
         Returns:
             Dict containing execution results including stdout, stderr, exit_code.
@@ -696,7 +702,7 @@ class CodeInterpreter:
             },
         )
 
-    def execute_shell(
+    def execute_command(
         self,
         command: str,
     ) -> Dict[str, Any]:
@@ -712,13 +718,41 @@ class CodeInterpreter:
 
         Example:
             >>> # List files
-            >>> result = client.execute_shell('ls -la')
+            >>> result = client.execute_command('ls -la')
 
             >>> # Check Python version
-            >>> result = client.execute_shell('python --version')
+            >>> result = client.execute_command('python --version')
         """
         self.logger.info("Executing shell command: %s...", command[:50])
         return self.invoke("executeCommand", {"command": command})
+
+    def clear_context(self) -> Dict[str, Any]:
+        """Clear all variable state in the Python execution context.
+
+        This resets the interpreter to a fresh state, removing all
+        previously defined variables, imports, and function definitions.
+
+        Note: Only affects Python context. JavaScript/TypeScript contexts
+        are not affected.
+
+        Returns:
+            Dict containing the result of the clear operation.
+
+        Example:
+            >>> client.execute_code('x = 10')
+            >>> client.execute_code('print(x)')  # prints 10
+            >>> client.clear_context()
+            >>> client.execute_code('print(x)')  # NameError: x is not defined
+        """
+        self.logger.info("Clearing Python execution context")
+        return self.invoke(
+            "executeCode",
+            {
+                "code": "# Context cleared",
+                "language": "python",
+                "clearContext": True,
+            },
+        )
 
 
 @contextmanager

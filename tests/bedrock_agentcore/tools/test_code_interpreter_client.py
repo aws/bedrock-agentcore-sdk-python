@@ -1,6 +1,6 @@
 import base64
 import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -34,7 +34,10 @@ class TestCodeInterpreterClient:
             endpoint_url="https://mock-control-endpoint.com",
         )
         mock_session.client.assert_any_call(
-            "bedrock-agentcore", region_name=region, endpoint_url="https://mock-data-endpoint.com"
+            "bedrock-agentcore",
+            region_name=region,
+            endpoint_url="https://mock-data-endpoint.com",
+            config=ANY,
         )
         assert client.control_plane_client == mock_control_client
         assert client.data_plane_client == mock_data_client
@@ -1273,7 +1276,7 @@ class TestCodeInterpreterClient:
         client.data_plane_client.invoke_code_interpreter.return_value = mock_response
 
         # Act
-        result = client.execute_shell("ls -la")
+        result = client.execute_command("ls -la")
 
         # Assert
         client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
@@ -1300,7 +1303,7 @@ class TestCodeInterpreterClient:
         client.data_plane_client.invoke_code_interpreter.return_value = mock_response
 
         # Act
-        result = client.execute_shell("python --version")
+        result = client.execute_command("python --version")
 
         # Assert
         client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
