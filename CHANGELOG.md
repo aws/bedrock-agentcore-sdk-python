@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.3] - 2026-01-07
+
+### Other Changes
+- feat(code-interpreter): Add convenience methods for file operations and package management (#202) (bcdc6eb)
+- chore: bump version to 1.1.2 (#197) (b414068)
+
 ## [1.1.2] - 2025-12-26
 
 ### Fixed
