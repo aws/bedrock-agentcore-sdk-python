@@ -187,3 +187,37 @@ class TestAgentCoreMemoryConverter:
         assert len(result) == 1
         assert len(result[0].message["content"]) == 1
         assert result[0].message["content"][0]["text"] == "hello"
+
+    def test_message_to_payload_with_bytes_encodes_before_filtering(self):
+        """Test message_to_payload encodes bytes to base64 before filtering empty text.
+
+        This test verifies the fix for issue #198 where json.dumps() failed with
+        'Object of type bytes is not JSON serializable' when messages contained
+        image data with raw bytes. The fix ensures to_dict() (which encodes bytes
+        to base64) is called before _filter_empty_text.
+        """
+        message = SessionMessage(
+            message_id=1,
+            message={
+                "role": "user",
+                "content": [
+                    {"text": ""},  # Empty text that will be filtered out
+                    {"image": {"source": {"bytes": b"fake image data"}}},
+                ],
+            },
+            created_at="2023-01-01T00:00:00Z",
+        )
+
+        # This should not raise "Object of type bytes is not JSON serializable"
+        result = AgentCoreMemoryConverter.message_to_payload(message)
+
+        assert len(result) == 1
+        # Verify json.dumps succeeded and bytes were encoded
+        parsed = json.loads(result[0][0])
+        assert len(parsed["message"]["content"]) == 1
+        assert "image" in parsed["message"]["content"][0]
+        # Verify bytes were encoded (strands uses __bytes_encoded__ format)
+        encoded_bytes = parsed["message"]["content"][0]["image"]["source"]["bytes"]
+        assert isinstance(encoded_bytes, dict)
+        assert encoded_bytes.get("__bytes_encoded__") is True
+        assert "data" in encoded_bytes
