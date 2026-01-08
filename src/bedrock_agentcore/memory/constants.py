@@ -13,6 +13,7 @@ class StrategyType(Enum):
     SEMANTIC = "semanticMemoryStrategy"
     SUMMARY = "summaryMemoryStrategy"
     USER_PREFERENCE = "userPreferenceMemoryStrategy"
+    EPISODIC = "episodicMemoryStrategy"
     CUSTOM = "customMemoryStrategy"
 
 
@@ -22,6 +23,7 @@ class MemoryStrategyTypeEnum(Enum):
     SEMANTIC = "SEMANTIC"
     SUMMARIZATION = "SUMMARIZATION"
     USER_PREFERENCE = "USER_PREFERENCE"
+    EPISODIC = "EPISODIC"
     CUSTOM = "CUSTOM"
 
 
@@ -31,6 +33,7 @@ class OverrideType(Enum):
     SEMANTIC_OVERRIDE = "SEMANTIC_OVERRIDE"
     SUMMARY_OVERRIDE = "SUMMARY_OVERRIDE"
     USER_PREFERENCE_OVERRIDE = "USER_PREFERENCE_OVERRIDE"
+    EPISODIC_OVERRIDE = "EPISODIC_OVERRIDE"
 
 
 class MemoryStatus(Enum):
@@ -70,9 +73,10 @@ class MessageRole(Enum):
 
 # Default namespaces for each strategy type
 DEFAULT_NAMESPACES: Dict[StrategyType, List[str]] = {
-    StrategyType.SEMANTIC: ["/actor/{actorId}/strategy/{strategyId}/{sessionId}"],
-    StrategyType.SUMMARY: ["/actor/{actorId}/strategy/{strategyId}/{sessionId}"],
-    StrategyType.USER_PREFERENCE: ["/actor/{actorId}/strategy/{strategyId}"],
+    StrategyType.SEMANTIC: ["/strategies/{memoryStrategyId}/actors/{actorId}"],
+    StrategyType.SUMMARY: ["/strategies/{memoryStrategyId}/actors/{actorId}/sessions/{sessionId}"],
+    StrategyType.USER_PREFERENCE: ["/strategies/{memoryStrategyId}/actors/{actorId}"],
+    StrategyType.EPISODIC: ["/strategies/{memoryStrategyId}/actors/{actorId}/sessions/{sessionId}"],
 }
 
 
@@ -86,12 +90,18 @@ EXTRACTION_WRAPPER_KEYS: Dict[MemoryStrategyTypeEnum, str] = {
 CUSTOM_EXTRACTION_WRAPPER_KEYS: Dict[OverrideType, str] = {
     OverrideType.SEMANTIC_OVERRIDE: "semanticExtractionOverride",
     OverrideType.USER_PREFERENCE_OVERRIDE: "userPreferenceExtractionOverride",
+    OverrideType.EPISODIC_OVERRIDE: "episodicExtractionOverride",
 }
 
 CUSTOM_CONSOLIDATION_WRAPPER_KEYS: Dict[OverrideType, str] = {
     OverrideType.SEMANTIC_OVERRIDE: "semanticConsolidationOverride",
     OverrideType.SUMMARY_OVERRIDE: "summaryConsolidationOverride",
     OverrideType.USER_PREFERENCE_OVERRIDE: "userPreferenceConsolidationOverride",
+    OverrideType.EPISODIC_OVERRIDE: "episodicConsolidationOverride",
+}
+
+CUSTOM_REFLECTION_WRAPPER_KEYS: Dict[OverrideType, str] = {
+    OverrideType.EPISODIC_OVERRIDE: "episodicReflectionOverride",
 }
 
 
