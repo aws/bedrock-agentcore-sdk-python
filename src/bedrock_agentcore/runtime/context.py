@@ -4,7 +4,7 @@ Contains metadata extracted from HTTP requests that handlers can optionally acce
 """
 
 from contextvars import ContextVar
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -14,6 +14,12 @@ class RequestContext(BaseModel):
 
     session_id: Optional[str] = Field(None)
     request_headers: Optional[Dict[str, str]] = Field(None)
+    request: Optional[Any] = Field(None, description="The underlying Starlette request object")
+
+    class Config:
+        """Allow non-serializable types like Starlette Request."""
+
+        arbitrary_types_allowed = True
 
 
 class BedrockAgentCoreContext:

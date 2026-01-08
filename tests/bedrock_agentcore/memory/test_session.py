@@ -3608,7 +3608,7 @@ class TestAddTurnsWithDataClasses:
                     manager.search_long_term_memories(query="invalid query", namespace_prefix="test/namespace")
 
                 # Verify info logging was called (not error logging)
-                mock_logger.info.assert_called_with("     ❌ Error querying long-term memory", mock.ANY)
+                mock_logger.info.assert_called_with("     ❌ Error querying long-term memory: %s", mock.ANY)
 
     def test_list_long_term_memory_records_multiple_pages(self):
         """Test list_long_term_memory_records with multiple pages - covers line 533."""

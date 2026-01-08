@@ -17,8 +17,9 @@ from typing import Any, Callable, Dict, Optional
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.responses import JSONResponse, Response, StreamingResponse
-from starlette.routing import Route
+from starlette.routing import Route, WebSocketRoute
 from starlette.types import Lifespan
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from .context import BedrockAgentCoreContext, RequestContext
 from .models import (
@@ -90,6 +91,7 @@ class BedrockAgentCoreApp(Starlette):
         """
         self.handlers: Dict[str, Callable] = {}
         self._ping_handler: Optional[Callable] = None
+        self._websocket_handler: Optional[Callable] = None
         self._active_tasks: Dict[int, Dict[str, Any]] = {}
         self._task_counter_lock: threading.Lock = threading.Lock()
         self._forced_ping_status: Optional[PingStatus] = None
@@ -98,6 +100,7 @@ class BedrockAgentCoreApp(Starlette):
         routes = [
             Route("/invocations", self._handle_invocation, methods=["POST"]),
             Route("/ping", self._handle_ping, methods=["GET"]),
+            WebSocketRoute("/ws", self._handle_websocket),
         ]
         super().__init__(routes=routes, lifespan=lifespan, middleware=middleware)
         self.debug = debug  # Set after super().__init__ to avoid override
@@ -133,6 +136,24 @@ class BedrockAgentCoreApp(Starlette):
             The decorated function
         """
         self._ping_handler = func
+        return func
+
+    def websocket(self, func: Callable) -> Callable:
+        """Decorator to register a WebSocket handler at /ws endpoint.
+
+        Args:
+            func: The function to register as WebSocket handler
+
+        Returns:
+            The decorated function
+
+        Example:
+            @app.websocket
+            async def handler(websocket, context):
+                await websocket.accept()
+                # ... handle messages ...
+        """
+        self._websocket_handler = func
         return func
 
     def async_task(self, func: Callable) -> Callable:
@@ -314,12 +335,16 @@ class BedrockAgentCoreApp(Starlette):
             # Get the headers from context to pass to RequestContext
             req_headers = BedrockAgentCoreContext.get_request_headers()
 
-            return RequestContext(session_id=session_id, request_headers=req_headers)
+            return RequestContext(
+                session_id=session_id,
+                request_headers=req_headers,
+                request=request,  # Pass through the Starlette request object
+            )
         except Exception as e:
             self.logger.warning("Failed to build request context: %s: %s", type(e).__name__, e)
             request_id = str(uuid.uuid4())
             BedrockAgentCoreContext.set_request_context(request_id, None)
-            return RequestContext(session_id=None)
+            return RequestContext(session_id=None, request=None)
 
     def _takes_context(self, handler: Callable) -> bool:
         try:
@@ -385,6 +410,29 @@ class BedrockAgentCoreApp(Starlette):
         except Exception:
             self.logger.exception("Ping endpoint failed")
             return JSONResponse({"status": PingStatus.HEALTHY.value, "time_of_last_update": int(time.time())})
+
+    async def _handle_websocket(self, websocket: WebSocket):
+        """Handle WebSocket connections."""
+        request_context = self._build_request_context(websocket)
+
+        try:
+            handler = self._websocket_handler
+            if not handler:
+                self.logger.error("No WebSocket handler defined")
+                await websocket.close(code=1011)
+                return
+
+            self.logger.debug("WebSocket connection established")
+            await handler(websocket, request_context)
+
+        except WebSocketDisconnect:
+            self.logger.debug("WebSocket disconnected")
+        except Exception:
+            self.logger.exception("WebSocket handler failed")
+            try:
+                await websocket.close(code=1011)
+            except Exception:
+                pass
 
     def run(self, port: int = 8080, host: Optional[str] = None, **kwargs):
         """Start the Bedrock AgentCore server.

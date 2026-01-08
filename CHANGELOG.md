@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.1.4] - 2026-01-08
+
+### Fixed
+- fix: encode bytes before filtering empty text in message_to_payload (#199) (3f01653)
+
+### Other Changes
+- test: add unit test for bytes serialization fix in message_to_payload (#205) (a9745ce)
+- Release v1.1.3 (#204) (2ec6639)
+
+## [1.1.3] - 2026-01-07
+
+- feat(code-interpreter): Add convenience methods for file operations and package management (#202) (bcdc6eb)
+
+## [1.1.2] - 2025-12-26
+
+### Fixed
+- fix: Removed pre-commit from dependencies (#195) (4f8c625)
+- fix: dont save empty text messages (breaks Converse API) (#185) (049ccdc)
+
+### Other Changes
+- feat(runtime): Add session_id support to WebSocket connection methods (#186) (62d297d)
+- chore: bump version to 1.1.1 (#184) (92272e7)
+
+## [1.1.1] - 2025-12-03
+
+### Other Changes
+- feat(identity):  Add @requires_iam_access_token decorator for AWS STS JWT tokens (#179) (4ab6072)
+- Add Strands AgentCore Evaluation integration (#183) (f242836)
+- chore: bump version to 1.1.0 (#182) (042d4bf)
+
+## [1.1.0] - 2025-12-02
+
+### Added
+- feat: add websockets as main dependency for @app.websocket decorator (#181) (9146d3e)
+
+### Other Changes
+- Feature/bidirectional streaming (#180) (535faa5)
+- feat(runtime): Add middleware data support to request context (#178) (95bbfa4)
+- chore: bump version to 1.0.7 (#173) (18a78b9)
+
 ## [1.0.7] - 2025-11-25
 
 ### Added

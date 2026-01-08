@@ -1,5 +1,6 @@
+import base64
 import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -33,7 +34,10 @@ class TestCodeInterpreterClient:
             endpoint_url="https://mock-control-endpoint.com",
         )
         mock_session.client.assert_any_call(
-            "bedrock-agentcore", region_name=region, endpoint_url="https://mock-data-endpoint.com"
+            "bedrock-agentcore",
+            region_name=region,
+            endpoint_url="https://mock-data-endpoint.com",
+            config=ANY,
         )
         assert client.control_plane_client == mock_control_client
         assert client.data_plane_client == mock_data_client
@@ -652,3 +656,687 @@ class TestCodeInterpreterClient:
         mock_client_class.assert_called_once_with("us-west-2", session=None)
         mock_client.start.assert_called_once_with(identifier="custom-interpreter-123")
         mock_client.stop.assert_called_once()
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_upload_file_text_content(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        result = client.upload_file(path="data.csv", content="col1,col2\n1,2\n3,4", description="Test CSV file")
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="writeFiles",
+            arguments={"content": [{"path": "data.csv", "text": "col1,col2\n1,2\n3,4"}]},
+        )
+        assert result == mock_response
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_upload_file_binary_content(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        binary_content = b"\x89PNG\r\n\x1a\n"  # PNG header bytes
+        expected_b64 = base64.b64encode(binary_content).decode("utf-8")
+
+        # Act
+        result = client.upload_file(path="image.png", content=binary_content)
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="writeFiles",
+            arguments={"content": [{"path": "image.png", "blob": expected_b64}]},
+        )
+        assert result == mock_response
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_upload_file_nested_path(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        client.upload_file(path="scripts/analysis.py", content="print('hello')")
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="writeFiles",
+            arguments={"content": [{"path": "scripts/analysis.py", "text": "print('hello')"}]},
+        )
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_upload_file_absolute_path_error(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="Path must be relative, not absolute"):
+            client.upload_file(path="/absolute/path/file.txt", content="test")
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_upload_files_multiple(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        files = [
+            {"path": "data.csv", "content": "a,b\n1,2"},
+            {"path": "config.json", "content": '{"key": "value"}'},
+        ]
+
+        # Act
+        result = client.upload_files(files)
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="writeFiles",
+            arguments={
+                "content": [
+                    {"path": "data.csv", "text": "a,b\n1,2"},
+                    {"path": "config.json", "text": '{"key": "value"}'},
+                ]
+            },
+        )
+        assert result == mock_response
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_upload_files_mixed_content(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        binary_content = b"\x00\x01\x02\x03"
+        expected_b64 = base64.b64encode(binary_content).decode("utf-8")
+
+        files = [
+            {"path": "text.txt", "content": "hello world"},
+            {"path": "binary.bin", "content": binary_content},
+        ]
+
+        # Act
+        client.upload_files(files)
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="writeFiles",
+            arguments={
+                "content": [
+                    {"path": "text.txt", "text": "hello world"},
+                    {"path": "binary.bin", "blob": expected_b64},
+                ]
+            },
+        )
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_upload_files_absolute_path_error(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        files = [
+            {"path": "valid.txt", "content": "valid"},
+            {"path": "/invalid/path.txt", "content": "invalid"},
+        ]
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="Path must be relative, not absolute"):
+            client.upload_files(files)
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_install_packages_basic(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        result = client.install_packages(["pandas", "numpy", "matplotlib"])
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="executeCommand",
+            arguments={"command": "pip install pandas numpy matplotlib"},
+        )
+        assert result == mock_response
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_install_packages_with_versions(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        client.install_packages(["pandas>=2.0", "numpy<2.0", "scikit-learn==1.3.0"])
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="executeCommand",
+            arguments={"command": "pip install pandas>=2.0 numpy<2.0 scikit-learn==1.3.0"},
+        )
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_install_packages_with_upgrade(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        client.install_packages(["pandas"], upgrade=True)
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="executeCommand",
+            arguments={"command": "pip install --upgrade pandas"},
+        )
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_install_packages_empty_list_error(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="At least one package name must be provided"):
+            client.install_packages([])
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_install_packages_invalid_characters_error(
+        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        # Act & Assert - semicolon
+        with pytest.raises(ValueError, match="Invalid characters in package name"):
+            client.install_packages(["pandas; rm -rf /"])
+
+        # Act & Assert - pipe
+        with pytest.raises(ValueError, match="Invalid characters in package name"):
+            client.install_packages(["pandas | cat /etc/passwd"])
+
+        # Act & Assert - ampersand
+        with pytest.raises(ValueError, match="Invalid characters in package name"):
+            client.install_packages(["pandas && malicious"])
+
+        # Act & Assert - backtick
+        with pytest.raises(ValueError, match="Invalid characters in package name"):
+            client.install_packages(["pandas`whoami`"])
+
+        # Act & Assert - dollar sign
+        with pytest.raises(ValueError, match="Invalid characters in package name"):
+            client.install_packages(["pandas$HOME"])
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_download_file_text(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {
+            "stream": [
+                {
+                    "result": {
+                        "content": [
+                            {"type": "resource", "resource": {"uri": "file://data.csv", "text": "col1,col2\n1,2\n3,4"}}
+                        ]
+                    }
+                }
+            ]
+        }
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        result = client.download_file("data.csv")
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="readFiles",
+            arguments={"paths": ["data.csv"]},
+        )
+        assert result == "col1,col2\n1,2\n3,4"
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_download_file_binary(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        original_content = "binary content as text"
+        encoded_content = base64.b64encode(original_content.encode("utf-8")).decode("utf-8")
+
+        mock_response = {
+            "stream": [
+                {
+                    "result": {
+                        "content": [
+                            {"type": "resource", "resource": {"uri": "file://data.bin", "blob": encoded_content}}
+                        ]
+                    }
+                }
+            ]
+        }
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        result = client.download_file("data.bin")
+
+        # Assert
+        assert result == original_content
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_download_file_not_found(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"stream": []}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act & Assert
+        with pytest.raises(FileNotFoundError, match="Could not read file"):
+            client.download_file("nonexistent.txt")
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_download_files_multiple(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {
+            "stream": [
+                {
+                    "result": {
+                        "content": [
+                            {"type": "resource", "resource": {"uri": "file://data.csv", "text": "col1,col2\n1,2"}},
+                            {"type": "resource", "resource": {"uri": "file://config.json", "text": '{"key": "value"}'}},
+                        ]
+                    }
+                }
+            ]
+        }
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        result = client.download_files(["data.csv", "config.json"])
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="readFiles",
+            arguments={"paths": ["data.csv", "config.json"]},
+        )
+        assert result == {"data.csv": "col1,col2\n1,2", "config.json": '{"key": "value"}'}
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_download_files_empty_result(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"stream": []}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        result = client.download_files(["nonexistent.txt"])
+
+        # Assert
+        assert result == {}
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_execute_code_python_default(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        code = "print('Hello, World!')"
+
+        # Act
+        result = client.execute_code(code)
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="executeCode",
+            arguments={"code": code, "language": "python", "clearContext": False},
+        )
+        assert result == mock_response
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_execute_code_javascript(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        code = "console.log('Hello');"
+
+        # Act
+        client.execute_code(code, language="javascript")
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="executeCode",
+            arguments={"code": code, "language": "javascript", "clearContext": False},
+        )
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_execute_code_typescript(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        code = "const x: number = 5;"
+
+        # Act
+        client.execute_code(code, language="typescript")
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="executeCode",
+            arguments={"code": code, "language": "typescript", "clearContext": False},
+        )
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_execute_code_with_clear_context(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        code = "x = 10"
+
+        # Act
+        client.execute_code(code, clear_context=True)
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="executeCode",
+            arguments={"code": code, "language": "python", "clearContext": True},
+        )
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_execute_code_invalid_language_error(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="Language must be one of"):
+            client.execute_code("code", language="ruby")
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_execute_shell_basic(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        result = client.execute_command("ls -la")
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="executeCommand",
+            arguments={"command": "ls -la"},
+        )
+        assert result == mock_response
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_execute_shell_python_version(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "Python 3.10.0"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        result = client.execute_command("python --version")
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="executeCommand",
+            arguments={"command": "python --version"},
+        )
+        assert result == mock_response
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_execute_code_auto_starts_session(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_data_client = MagicMock()
+        mock_session.client.return_value = mock_data_client
+        mock_boto3.Session.return_value = mock_session
+
+        client = CodeInterpreter("us-west-2")
+        client.identifier = None
+        client.session_id = None
+
+        mock_start_response = {"codeInterpreterIdentifier": "aws.codeinterpreter.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_code_interpreter_session.return_value = mock_start_response
+
+        mock_invoke_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_invoke_response
+
+        # Act
+        client.execute_code("print('hello')")
+
+        # Assert
+        client.data_plane_client.start_code_interpreter_session.assert_called_once()
+        client.data_plane_client.invoke_code_interpreter.assert_called_once()

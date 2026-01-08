@@ -12,6 +12,7 @@ from bedrock_agentcore.identity.auth import (
     _set_up_local_auth,
     requires_access_token,
     requires_api_key,
+    requires_iam_access_token,
 )
 
 
@@ -270,6 +271,310 @@ class TestRequiresAccessTokenDecorator:
                         on_auth_url=None,
                         custom_parameters=custom_params,
                     )
+
+
+class TestRequiresIamAccessTokenDecorator:
+    """Test the requires_iam_access_token decorator."""
+
+    @pytest.mark.asyncio
+    async def test_async_function_decoration(self):
+        """Test decorator with async function."""
+        with patch("bedrock_agentcore.identity.auth.boto3.client") as mock_boto3_client:
+            mock_sts = Mock()
+            mock_boto3_client.return_value = mock_sts
+            mock_sts.get_web_identity_token.return_value = {"WebIdentityToken": "test-aws-jwt-token"}
+
+            with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+
+                @requires_iam_access_token(
+                    audience=["https://api.example.com"],
+                    signing_algorithm="ES384",
+                    duration_seconds=300,
+                )
+                async def test_async_func(param1, access_token=None):
+                    return f"param1={param1}, token={access_token}"
+
+                result = await test_async_func("value1")
+
+                assert result == "param1=value1, token=test-aws-jwt-token"
+                mock_sts.get_web_identity_token.assert_called_once_with(
+                    Audience=["https://api.example.com"],
+                    SigningAlgorithm="ES384",
+                    DurationSeconds=300,
+                )
+
+    def test_sync_function_decoration(self):
+        """Test decorator with sync function."""
+        with patch("bedrock_agentcore.identity.auth.boto3.client") as mock_boto3_client:
+            mock_sts = Mock()
+            mock_boto3_client.return_value = mock_sts
+            mock_sts.get_web_identity_token.return_value = {"WebIdentityToken": "test-aws-jwt-token-sync"}
+
+            with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+
+                @requires_iam_access_token(
+                    audience=["https://api.example.com"],
+                )
+                def test_sync_func(param1, access_token=None):
+                    return f"param1={param1}, token={access_token}"
+
+                result = test_sync_func("value1")
+
+                assert result == "param1=value1, token=test-aws-jwt-token-sync"
+
+    @pytest.mark.asyncio
+    async def test_with_custom_into_parameter(self):
+        """Test decorator with custom parameter name for token injection."""
+        with patch("bedrock_agentcore.identity.auth.boto3.client") as mock_boto3_client:
+            mock_sts = Mock()
+            mock_boto3_client.return_value = mock_sts
+            mock_sts.get_web_identity_token.return_value = {"WebIdentityToken": "custom-jwt-token"}
+
+            with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+
+                @requires_iam_access_token(
+                    audience=["https://api.example.com"],
+                    into="jwt_token",
+                )
+                async def test_func(jwt_token=None):
+                    return f"token={jwt_token}"
+
+                result = await test_func()
+
+                assert result == "token=custom-jwt-token"
+
+    @pytest.mark.asyncio
+    async def test_with_tags(self):
+        """Test decorator with custom tags."""
+        with patch("bedrock_agentcore.identity.auth.boto3.client") as mock_boto3_client:
+            mock_sts = Mock()
+            mock_boto3_client.return_value = mock_sts
+            mock_sts.get_web_identity_token.return_value = {"WebIdentityToken": "tagged-jwt-token"}
+
+            with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+                custom_tags = [
+                    {"Key": "environment", "Value": "production"},
+                    {"Key": "service", "Value": "my-agent"},
+                ]
+
+                @requires_iam_access_token(
+                    audience=["https://api.example.com"],
+                    tags=custom_tags,
+                )
+                async def test_func(access_token=None):
+                    return access_token
+
+                result = await test_func()
+
+                assert result == "tagged-jwt-token"
+                mock_sts.get_web_identity_token.assert_called_once_with(
+                    Audience=["https://api.example.com"],
+                    SigningAlgorithm="ES384",
+                    DurationSeconds=300,
+                    Tags=custom_tags,
+                )
+
+    @pytest.mark.asyncio
+    async def test_with_rs256_algorithm(self):
+        """Test decorator with RS256 signing algorithm."""
+        with patch("bedrock_agentcore.identity.auth.boto3.client") as mock_boto3_client:
+            mock_sts = Mock()
+            mock_boto3_client.return_value = mock_sts
+            mock_sts.get_web_identity_token.return_value = {"WebIdentityToken": "rs256-jwt-token"}
+
+            with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+
+                @requires_iam_access_token(
+                    audience=["https://legacy-api.example.com"],
+                    signing_algorithm="RS256",
+                )
+                async def test_func(access_token=None):
+                    return access_token
+
+                result = await test_func()
+
+                assert result == "rs256-jwt-token"
+                call_args = mock_sts.get_web_identity_token.call_args[1]
+                assert call_args["SigningAlgorithm"] == "RS256"
+
+    @pytest.mark.asyncio
+    async def test_with_custom_duration(self):
+        """Test decorator with custom duration."""
+        with patch("bedrock_agentcore.identity.auth.boto3.client") as mock_boto3_client:
+            mock_sts = Mock()
+            mock_boto3_client.return_value = mock_sts
+            mock_sts.get_web_identity_token.return_value = {"WebIdentityToken": "long-lived-jwt-token"}
+
+            with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+
+                @requires_iam_access_token(
+                    audience=["https://api.example.com"],
+                    duration_seconds=3600,  # 1 hour
+                )
+                async def test_func(access_token=None):
+                    return access_token
+
+                result = await test_func()
+
+                assert result == "long-lived-jwt-token"
+                call_args = mock_sts.get_web_identity_token.call_args[1]
+                assert call_args["DurationSeconds"] == 3600
+
+    @pytest.mark.asyncio
+    async def test_with_multiple_audiences(self):
+        """Test decorator with multiple audiences."""
+        with patch("bedrock_agentcore.identity.auth.boto3.client") as mock_boto3_client:
+            mock_sts = Mock()
+            mock_boto3_client.return_value = mock_sts
+            mock_sts.get_web_identity_token.return_value = {"WebIdentityToken": "multi-audience-jwt-token"}
+
+            with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+                audiences = [
+                    "https://api1.example.com",
+                    "https://api2.example.com",
+                    "https://api3.example.com",
+                ]
+
+                @requires_iam_access_token(
+                    audience=audiences,
+                )
+                async def test_func(access_token=None):
+                    return access_token
+
+                result = await test_func()
+
+                assert result == "multi-audience-jwt-token"
+                call_args = mock_sts.get_web_identity_token.call_args[1]
+                assert call_args["Audience"] == audiences
+
+    @pytest.mark.asyncio
+    async def test_feature_disabled_error(self):
+        """Test error handling when AWS JWT federation is not enabled."""
+        from botocore.exceptions import ClientError
+
+        with patch("bedrock_agentcore.identity.auth.boto3.client") as mock_boto3_client:
+            mock_sts = Mock()
+            mock_boto3_client.return_value = mock_sts
+            mock_sts.get_web_identity_token.side_effect = ClientError(
+                {"Error": {"Code": "FeatureDisabledException", "Message": "Feature not enabled"}}, "GetWebIdentityToken"
+            )
+
+            with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+
+                @requires_iam_access_token(
+                    audience=["https://api.example.com"],
+                )
+                async def test_func(access_token=None):
+                    return access_token
+
+                with pytest.raises(RuntimeError, match="AWS IAM Outbound Web Identity Federation is not enabled"):
+                    await test_func()
+
+    @pytest.mark.asyncio
+    async def test_other_client_error(self):
+        """Test that other ClientErrors are re-raised."""
+        from botocore.exceptions import ClientError
+
+        with patch("bedrock_agentcore.identity.auth.boto3.client") as mock_boto3_client:
+            mock_sts = Mock()
+            mock_boto3_client.return_value = mock_sts
+            mock_sts.get_web_identity_token.side_effect = ClientError(
+                {"Error": {"Code": "AccessDenied", "Message": "Access denied"}}, "GetWebIdentityToken"
+            )
+
+            with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+
+                @requires_iam_access_token(
+                    audience=["https://api.example.com"],
+                )
+                async def test_func(access_token=None):
+                    return access_token
+
+                with pytest.raises(ClientError):
+                    await test_func()
+
+
+class TestRequiresIamAccessTokenValidation:
+    """Test parameter validation for requires_iam_access_token decorator."""
+
+    def test_missing_audience(self):
+        """Test that audience is required."""
+        with pytest.raises(ValueError, match="audience is required"):
+
+            @requires_iam_access_token(
+                audience=[],  # Empty audience
+            )
+            def test_func():
+                pass
+
+    def test_invalid_signing_algorithm(self):
+        """Test that signing_algorithm must be ES384 or RS256."""
+        with pytest.raises(ValueError, match="signing_algorithm must be 'ES384' or 'RS256'"):
+
+            @requires_iam_access_token(
+                audience=["https://api.example.com"],
+                signing_algorithm="INVALID",
+            )
+            def test_func():
+                pass
+
+    def test_duration_too_short(self):
+        """Test that duration_seconds minimum is 60."""
+        with pytest.raises(ValueError, match="duration_seconds must be between 60 and 3600"):
+
+            @requires_iam_access_token(
+                audience=["https://api.example.com"],
+                duration_seconds=30,  # Too short
+            )
+            def test_func():
+                pass
+
+    def test_duration_too_long(self):
+        """Test that duration_seconds maximum is 3600."""
+        with pytest.raises(ValueError, match="duration_seconds must be between 60 and 3600"):
+
+            @requires_iam_access_token(
+                audience=["https://api.example.com"],
+                duration_seconds=7200,  # Too long
+            )
+            def test_func():
+                pass
+
+    def test_valid_min_duration(self):
+        """Test that 60 seconds is valid minimum."""
+        with patch("bedrock_agentcore.identity.auth.boto3.client") as mock_boto3_client:
+            mock_sts = Mock()
+            mock_boto3_client.return_value = mock_sts
+            mock_sts.get_web_identity_token.return_value = {"WebIdentityToken": "test"}
+
+            with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+                # Should not raise
+                @requires_iam_access_token(
+                    audience=["https://api.example.com"],
+                    duration_seconds=60,
+                )
+                def test_func(access_token=None):
+                    return access_token
+
+                assert test_func is not None
+
+    def test_valid_max_duration(self):
+        """Test that 3600 seconds is valid maximum."""
+        with patch("bedrock_agentcore.identity.auth.boto3.client") as mock_boto3_client:
+            mock_sts = Mock()
+            mock_boto3_client.return_value = mock_sts
+            mock_sts.get_web_identity_token.return_value = {"WebIdentityToken": "test"}
+
+            with patch("bedrock_agentcore.identity.auth._get_region", return_value="us-west-2"):
+                # Should not raise
+                @requires_iam_access_token(
+                    audience=["https://api.example.com"],
+                    duration_seconds=3600,
+                )
+                def test_func(access_token=None):
+                    return access_token
+
+                assert test_func is not None
 
 
 class TestRequiresApiKeyDecorator:

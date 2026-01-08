@@ -8,6 +8,7 @@ from functools import wraps
 from typing import Any, Callable, Dict, List, Literal, Optional
 
 import boto3
+from botocore.exceptions import ClientError
 
 from bedrock_agentcore.runtime import BedrockAgentCoreContext
 from bedrock_agentcore.services.identity import IdentityClient, TokenPoller
@@ -96,6 +97,122 @@ def requires_access_token(
             return async_wrapper
         else:
             return sync_wrapper
+
+    return decorator
+
+
+def requires_iam_access_token(
+    *,
+    audience: List[str],
+    signing_algorithm: str = "ES384",
+    duration_seconds: int = 300,
+    tags: Optional[List[Dict[str, str]]] = None,
+    into: str = "access_token",
+) -> Callable:
+    """Decorator that fetches an AWS IAM JWT token before calling the decorated function.
+
+    This decorator obtains a signed JWT from AWS STS using the GetWebIdentityToken API.
+    The JWT can be used to authenticate with external services that support OIDC token
+    validation. No client secrets are required - the token is signed by AWS.
+
+    This is separate from @requires_access_token which uses AgentCore Identity for
+    OAuth 2.0 flows. Use this decorator for M2M authentication with services that
+    accept AWS-signed JWTs.
+
+    Args:
+        audience: List of intended token recipients (populates 'aud' claim in JWT).
+                  Must match what the external service expects.
+        signing_algorithm: Algorithm for signing the JWT.
+                        'ES384' (default) or 'RS256'.
+        duration_seconds: Token lifetime in seconds (60-3600, default 300).
+        tags: Optional custom claims as [{'Key': str, 'Value': str}, ...].
+              These are added to the JWT as additional claims.
+        into: Parameter name to inject the token into (default: 'access_token').
+
+    Returns:
+        Decorator function that wraps the target function.
+
+    Raises:
+        ValueError: If parameters are invalid.
+        RuntimeError: If AWS JWT federation is not enabled for the account.
+        ClientError: If the STS API call fails.
+
+    Example:
+        @tool
+        @requires_iam_access_token(
+            audience=["https://api.example.com"],
+            signing_algorithm="ES384",
+            duration_seconds=300,
+        )
+        def call_external_api(query: str, *, access_token: str) -> str:
+            '''Call external API with AWS JWT authentication.'''
+            import requests
+            response = requests.get(
+                "https://api.example.com/data",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"q": query},
+            )
+            return response.text
+
+    Note:
+        Before using this decorator, you must:
+        1. Enable AWS IAM Outbound Web Identity Federation for your account
+           (via `agentcore identity setup-aws-jwt` or IAM API)
+        2. Ensure the execution role has `sts:GetWebIdentityToken` permission
+        3. Configure the external service to trust your AWS account's issuer URL
+    """
+    # Validate parameters
+    if not audience:
+        raise ValueError("audience is required")
+    if signing_algorithm not in ["ES384", "RS256"]:
+        raise ValueError("signing_algorithm must be 'ES384' or 'RS256'")
+    if not (60 <= duration_seconds <= 3600):
+        raise ValueError("duration_seconds must be between 60 and 3600")
+
+    logger = logging.getLogger(__name__)
+
+    def _get_iam_jwt_token(region: str) -> str:
+        """Get JWT from AWS STS - NO IdentityClient involved."""
+        logger.info("Getting AWS IAM JWT token from STS...")
+        sts_client = boto3.client("sts", region_name=region)
+
+        params = {
+            "Audience": audience,
+            "SigningAlgorithm": signing_algorithm,
+            "DurationSeconds": duration_seconds,
+        }
+        if tags:
+            params["Tags"] = tags
+
+        try:
+            response = sts_client.get_web_identity_token(**params)
+            logger.info("Successfully obtained AWS IAM JWT token")
+            return response["WebIdentityToken"]
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code in ["FeatureDisabledException", "FeatureDisabled"]:
+                raise RuntimeError("AWS IAM Outbound Web Identity Federation is not enabled.") from e
+            logger.error("Failed to get AWS IAM JWT token: %s", str(e))
+            raise
+
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def async_wrapper(*args: Any, **kwargs_func: Any) -> Any:
+            region = _get_region()
+            token = _get_iam_jwt_token(region)
+            kwargs_func[into] = token
+            return await func(*args, **kwargs_func)
+
+        @wraps(func)
+        def sync_wrapper(*args: Any, **kwargs_func: Any) -> Any:
+            region = _get_region()
+            token = _get_iam_jwt_token(region)
+            kwargs_func[into] = token
+            return func(*args, **kwargs_func)
+
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        return sync_wrapper
 
     return decorator
 

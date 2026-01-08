@@ -4,12 +4,14 @@ This module provides a client for the AWS Code Interpreter sandbox, allowing
 applications to start, stop, and invoke code execution in a managed sandbox environment.
 """
 
+import base64
 import logging
 import uuid
 from contextlib import contextmanager
-from typing import Dict, Generator, Optional
+from typing import Any, Dict, Generator, List, Optional, Union
 
 import boto3
+from botocore.config import Config
 
 from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
 
@@ -31,6 +33,30 @@ class CodeInterpreter:
         client: The boto3 client for interacting with the service.
         identifier (str, optional): The code interpreter identifier.
         session_id (str, optional): The active session ID.
+
+    Basic Usage:
+        >>> from bedrock_agentcore.tools.code_interpreter_client import CodeInterpreter
+        >>>
+        >>> client = CodeInterpreter('us-west-2')
+        >>> client.start()
+        >>>
+        >>> # Execute code
+        >>> result = client.execute_code("print('Hello, World!')")
+        >>>
+        >>> # Install packages
+        >>> client.install_packages(['pandas', 'matplotlib'])
+        >>>
+        >>> # Upload and process data
+        >>> client.upload_file('data.csv', csv_content, description='Sales data')
+        >>>
+        >>> client.stop()
+
+    Context Manager Usage:
+        >>> from bedrock_agentcore.tools.code_interpreter_client import code_session
+        >>>
+        >>> with code_session('us-west-2') as client:
+        ...     client.install_packages(['numpy'])
+        ...     result = client.execute_code('import numpy as np; print(np.pi)')
     """
 
     def __init__(self, region: str, session: Optional[boto3.Session] = None) -> None:
@@ -58,10 +84,12 @@ class CodeInterpreter:
             "bedrock-agentcore",
             region_name=region,
             endpoint_url=get_data_plane_endpoint(region),
+            config=Config(read_timeout=300),
         )
 
         self._identifier = None
         self._session_id = None
+        self._file_descriptions: Dict[str, str] = {}
 
     @property
     def identifier(self) -> Optional[str]:
@@ -402,6 +430,328 @@ class CodeInterpreter:
             sessionId=self.session_id,
             name=method,
             arguments=params or {},
+        )
+
+    def upload_file(
+        self,
+        path: str,
+        content: Union[str, bytes],
+        description: str = "",
+    ) -> Dict[str, Any]:
+        r"""Upload a file to the code interpreter environment.
+
+        This is a convenience wrapper around the writeFiles method that provides
+        a cleaner interface for file uploads with optional semantic descriptions.
+
+        Args:
+            path: Relative path where the file should be saved (e.g., 'data.csv',
+                'scripts/analysis.py'). Must be relative to the working directory.
+                Absolute paths starting with '/' are not allowed.
+            content: File content as string (text files) or bytes (binary files).
+                    Binary content will be base64 encoded automatically.
+            description: Optional semantic description of the file contents.
+                        This is stored as metadata and can help LLMs understand
+                        the data structure (e.g., "CSV with columns: date, revenue, product_id").
+
+        Returns:
+            Dict containing the result of the write operation.
+
+        Raises:
+            ValueError: If path is absolute or content type is invalid.
+
+        Example:
+            >>> # Upload a CSV file
+            >>> client.upload_file(
+            ...     path='sales_data.csv',
+            ...     content='date,revenue\n2024-01-01,1000\n2024-01-02,1500',
+            ...     description='Daily sales data with columns: date, revenue'
+            ... )
+
+            >>> # Upload a Python script
+            >>> client.upload_file(
+            ...     path='scripts/analyze.py',
+            ...     content='import pandas as pd\ndf = pd.read_csv("sales_data.csv")'
+            ... )
+        """
+        if path.startswith("/"):
+            raise ValueError(
+                f"Path must be relative, not absolute. Got: {path}. Use paths like 'data.csv' or 'scripts/analysis.py'."
+            )
+
+        # Handle binary content
+        if isinstance(content, bytes):
+            file_content = {"path": path, "blob": base64.b64encode(content).decode("utf-8")}
+        else:
+            file_content = {"path": path, "text": content}
+
+        if description:
+            self.logger.info("Uploading file: %s (%s)", path, description)
+        else:
+            self.logger.info("Uploading file: %s", path)
+
+        result = self.invoke("writeFiles", {"content": [file_content]})
+
+        # Store description as metadata (available for future LLM context)
+        if description:
+            self._file_descriptions[path] = description
+
+        return result
+
+    def upload_files(
+        self,
+        files: List[Dict[str, str]],
+    ) -> Dict[str, Any]:
+        """Upload multiple files to the code interpreter environment.
+
+        This operation is atomic - either all files are written or none are.
+        If any file fails, the entire operation fails.
+
+        Args:
+            files: List of file specifications, each containing:
+                - 'path': Relative file path
+                - 'content': File content (string or bytes)
+                - 'description': Optional semantic description
+
+        Returns:
+            Dict containing the result of the write operation.
+
+        Example:
+            >>> client.upload_files([
+            ...     {'path': 'data.csv', 'content': csv_data, 'description': 'Sales data'},
+            ...     {'path': 'config.json', 'content': json_config}
+            ... ])
+        """
+        file_contents = []
+        for file_spec in files:
+            path = file_spec["path"]
+            content = file_spec["content"]
+
+            if path.startswith("/"):
+                raise ValueError(f"Path must be relative, not absolute. Got: {path}")
+
+            if isinstance(content, bytes):
+                file_contents.append({"path": path, "blob": base64.b64encode(content).decode("utf-8")})
+            else:
+                file_contents.append({"path": path, "text": content})
+
+        self.logger.info("Uploading %d files", len(files))
+        return self.invoke("writeFiles", {"content": file_contents})
+
+    def install_packages(
+        self,
+        packages: List[str],
+        upgrade: bool = False,
+    ) -> Dict[str, Any]:
+        """Install Python packages in the code interpreter environment.
+
+        This is a convenience wrapper around executeCommand that handles
+        pip install commands with proper formatting.
+
+        Args:
+            packages: List of package names to install. Can include version
+                    specifiers (e.g., ['pandas>=2.0', 'numpy', 'scikit-learn==1.3.0']).
+            upgrade: If True, adds --upgrade flag to update existing packages.
+
+        Returns:
+            Dict containing the command execution result with stdout/stderr.
+
+        Example:
+            >>> # Install multiple packages
+            >>> client.install_packages(['pandas', 'matplotlib', 'scikit-learn'])
+
+            >>> # Install with version constraints
+            >>> client.install_packages(['pandas>=2.0', 'numpy<2.0'])
+
+            >>> # Upgrade existing packages
+            >>> client.install_packages(['pandas'], upgrade=True)
+        """
+        if not packages:
+            raise ValueError("At least one package name must be provided")
+
+        # Sanitize package names (basic validation)
+        for pkg in packages:
+            if any(char in pkg for char in [";", "&", "|", "`", "$"]):
+                raise ValueError(f"Invalid characters in package name: {pkg}")
+
+        packages_str = " ".join(packages)
+        upgrade_flag = "--upgrade " if upgrade else ""
+        command = f"pip install {upgrade_flag}{packages_str}"
+
+        self.logger.info("Installing packages: %s", packages_str)
+        return self.invoke("executeCommand", {"command": command})
+
+    def download_file(
+        self,
+        path: str,
+    ) -> str:
+        """Download/read a file from the code interpreter environment.
+
+        Args:
+            path: Path to the file to read.
+
+        Returns:
+            File content as string.
+
+        Raises:
+            FileNotFoundError: If the file doesn't exist.
+
+        Example:
+            >>> # Read a generated file
+            >>> content = client.download_file('output/results.csv')
+            >>> print(content)
+        """
+        self.logger.info("Downloading file: %s", path)
+        result = self.invoke("readFiles", {"paths": [path]})
+
+        # Parse the response to extract file content
+        # Response structure from the API
+        if "stream" in result:
+            for event in result["stream"]:
+                if "result" in event:
+                    for content_item in event["result"].get("content", []):
+                        if content_item.get("type") == "resource":
+                            resource = content_item.get("resource", {})
+                            if "text" in resource:
+                                return resource["text"]
+                            elif "blob" in resource:
+                                return base64.b64decode(resource["blob"]).decode("utf-8")
+
+        raise FileNotFoundError(f"Could not read file: {path}")
+
+    def download_files(
+        self,
+        paths: List[str],
+    ) -> Dict[str, str]:
+        """Download/read multiple files from the code interpreter environment.
+
+        Args:
+            paths: List of file paths to read.
+
+        Returns:
+            Dict mapping file paths to their contents.
+
+        Example:
+            >>> files = client.download_files(['data.csv', 'results.json'])
+            >>> print(files['data.csv'])
+        """
+        self.logger.info("Downloading %d files", len(paths))
+        result = self.invoke("readFiles", {"paths": paths})
+
+        files = {}
+        if "stream" in result:
+            for event in result["stream"]:
+                if "result" in event:
+                    for content_item in event["result"].get("content", []):
+                        if content_item.get("type") == "resource":
+                            resource = content_item.get("resource", {})
+                            uri = resource.get("uri", "")
+                            file_path = uri.replace("file://", "")
+
+                            if "text" in resource:
+                                files[file_path] = resource["text"]
+                            elif "blob" in resource:
+                                files[file_path] = base64.b64decode(resource["blob"]).decode("utf-8")
+
+        return files
+
+    def execute_code(
+        self,
+        code: str,
+        language: str = "python",
+        clear_context: bool = False,
+    ) -> Dict[str, Any]:
+        """Execute code in the interpreter environment.
+
+        This is a convenience wrapper around the executeCode method with
+        typed parameters for better IDE support and validation.
+
+        Args:
+            code: The code to execute.
+            language: Programming language - 'python', 'javascript', or 'typescript'.
+                    Default is 'python'.
+            clear_context: If True, clears all previous variable state before execution.
+                        Default is False (variables persist across calls).
+                        Note: Only supported for Python. Ignored for JavaScript/TypeScript.
+
+        Returns:
+            Dict containing execution results including stdout, stderr, exit_code.
+
+        Example:
+            >>> # Execute Python code
+            >>> result = client.execute_code('''
+            ... import pandas as pd
+            ... df = pd.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6]})
+            ... print(df.describe())
+            ... ''')
+
+            >>> # Clear context and start fresh
+            >>> result = client.execute_code('x = 10', clear_context=True)
+        """
+        valid_languages = ["python", "javascript", "typescript"]
+        if language not in valid_languages:
+            raise ValueError(f"Language must be one of {valid_languages}, got: {language}")
+
+        self.logger.info("Executing %s code (%d chars)", language, len(code))
+
+        return self.invoke(
+            "executeCode",
+            {
+                "code": code,
+                "language": language,
+                "clearContext": clear_context,
+            },
+        )
+
+    def execute_command(
+        self,
+        command: str,
+    ) -> Dict[str, Any]:
+        """Execute a shell command in the interpreter environment.
+
+        This is a convenience wrapper around executeCommand.
+
+        Args:
+            command: Shell command to execute.
+
+        Returns:
+            Dict containing command execution results.
+
+        Example:
+            >>> # List files
+            >>> result = client.execute_command('ls -la')
+
+            >>> # Check Python version
+            >>> result = client.execute_command('python --version')
+        """
+        self.logger.info("Executing shell command: %s...", command[:50])
+        return self.invoke("executeCommand", {"command": command})
+
+    def clear_context(self) -> Dict[str, Any]:
+        """Clear all variable state in the Python execution context.
+
+        This resets the interpreter to a fresh state, removing all
+        previously defined variables, imports, and function definitions.
+
+        Note: Only affects Python context. JavaScript/TypeScript contexts
+        are not affected.
+
+        Returns:
+            Dict containing the result of the clear operation.
+
+        Example:
+            >>> client.execute_code('x = 10')
+            >>> client.execute_code('print(x)')  # prints 10
+            >>> client.clear_context()
+            >>> client.execute_code('print(x)')  # NameError: x is not defined
+        """
+        self.logger.info("Clearing Python execution context")
+        return self.invoke(
+            "executeCode",
+            {
+                "code": "# Context cleared",
+                "language": "python",
+                "clearContext": True,
+            },
         )
 
 

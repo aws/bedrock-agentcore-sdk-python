@@ -665,7 +665,8 @@ def test_delete_memory_wait_for_deletion_timeout():
         mock_client.get_memory.return_value = {"memory": {"id": "mem-persistent", "status": "DELETING"}}
 
         # Mock time to simulate timeout
-        with patch("time.time", side_effect=[0, 301]):
+        # Provide enough values for multiple time.time() calls in the loop
+        with patch("time.time", side_effect=[0, 0, 0, 301, 301, 301]):
             with patch("time.sleep"):
                 with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
                     try:

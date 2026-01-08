@@ -358,7 +358,8 @@ def test_create_memory_and_wait_timeout():
         mock_gmcp.get_memory.return_value = {"memory": {"memoryId": "test-mem-timeout", "status": "CREATING"}}
 
         # Mock time to simulate timeout
-        with patch("time.time", side_effect=[0, 301]):
+        # Provide enough values: start_time=0, then loop checks (0,0,0), then timeout (301,301,301)
+        with patch("time.time", side_effect=[0, 0, 0, 301, 301, 301]):
             with patch("time.sleep"):
                 with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
                     try:
