@@ -427,7 +427,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         )
 
     def list_messages(
-        self, session_id: str, agent_id: str, limit: Optional[int] = None, offset: int = 0, **kwargs: Any
+        self,
+        session_id: str,
+        agent_id: str,
+        limit: Optional[int] = None,
+        offset: int = 0,
+        fetch_all: bool = False,
+        **kwargs: Any,
     ) -> list[SessionMessage]:
         """List messages for an agent from AgentCore Memory with pagination.
 
@@ -436,6 +442,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             agent_id (str): The agent ID to list messages for.
             limit (Optional[int], optional): Maximum number of messages to return. Defaults to None.
             offset (int, optional): Number of messages to skip. Defaults to 0.
+            fetch_all (bool, optional): If True, fetch all messages. Defaults to False.
             **kwargs (Any): Additional keyword arguments.
 
         Returns:
@@ -448,7 +455,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session_id}")
 
         try:
-            max_results = (limit + offset) if limit else 100
+            if fetch_all:
+                max_results = 10000
+            elif limit:
+                max_results = limit + offset
+            else:
+                max_results = 100
+
             events = self.memory_client.list_events(
                 memory_id=self.config.memory_id,
                 actor_id=self.config.actor_id,

@@ -1804,8 +1804,8 @@ class TestSession:
                 result = session.get_last_k_turns(k=3)
 
                 assert result == mock_turns
-                # Updated to match the new method signature with include_parent_branches parameter
-                mock_get_turns.assert_called_once_with("user-123", "session-456", 3, None, None, 100)
+                # Updated to match the new method signature with max_results=None (auto-calculated)
+                mock_get_turns.assert_called_once_with("user-123", "session-456", 3, None, None, None)
 
     def test_session_get_event_delegation(self):
         """Test MemorySession.get_event delegates to manager."""
@@ -3854,3 +3854,47 @@ class TestAddTurnsWithDataClasses:
             # Verify nextToken was passed in second call
             second_call_args = mock_client_instance.list_events.call_args_list[1][1]
             assert second_call_args["nextToken"] == "token-123"
+
+    def test_get_last_k_turns_auto_max_results(self):
+        """Test get_last_k_turns auto-calculates max_results based on k."""
+        with patch("boto3.Session") as mock_boto_client:
+            mock_client_instance = MagicMock()
+            mock_boto_client.return_value = mock_client_instance
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            mock_events = []
+            with patch.object(manager, "list_events", return_value=mock_events) as mock_list_events:
+                # Test with k=5, max_results should be max(100, 5*3) = 100
+                manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
+                call_kwargs = mock_list_events.call_args[1]
+                assert call_kwargs["max_results"] == 100
+
+                mock_list_events.reset_mock()
+
+                # Test with k=50, max_results should be max(100, 50*3) = 150
+                manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=50)
+                call_kwargs = mock_list_events.call_args[1]
+                assert call_kwargs["max_results"] == 150
+
+                mock_list_events.reset_mock()
+
+                # Test with k=200, max_results should be max(100, 200*3) = 600
+                manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=200)
+                call_kwargs = mock_list_events.call_args[1]
+                assert call_kwargs["max_results"] == 600
+
+    def test_get_last_k_turns_explicit_max_results(self):
+        """Test get_last_k_turns respects explicitly provided max_results."""
+        with patch("boto3.Session") as mock_boto_client:
+            mock_client_instance = MagicMock()
+            mock_boto_client.return_value = mock_client_instance
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            mock_events = []
+            with patch.object(manager, "list_events", return_value=mock_events) as mock_list_events:
+                # Test with explicit max_results=50
+                manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=200, max_results=50)
+                call_kwargs = mock_list_events.call_args[1]
+                assert call_kwargs["max_results"] == 50

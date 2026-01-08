@@ -1096,3 +1096,49 @@ class TestAgentCoreMemorySessionManager:
                     assert "High relevance 2" in injected_context
                     assert "Low relevance 1" not in injected_context
                     assert "Low relevance 2" not in injected_context
+
+    def test_list_messages_fetch_all(self, session_manager, mock_memory_client):
+        """Test listing messages with fetch_all=True fetches all messages."""
+        mock_memory_client.list_events.return_value = [
+            {
+                "eventId": "event-1",
+                "eventTimestamp": "2024-01-01T12:00:00Z",
+                "payload": [
+                    {
+                        "conversational": {
+                            "content": {
+                                "text": '{"message": {"role": "user", "content": [{"text": "Hello"}]}, "message_id": 1}'
+                            },
+                            "role": "USER",
+                        }
+                    }
+                ],
+            },
+        ]
+
+        session_manager.list_messages("test-session-456", "test-agent-123", fetch_all=True)
+
+        # Verify list_events was called with max_results=10000
+        mock_memory_client.list_events.assert_called_once()
+        call_kwargs = mock_memory_client.list_events.call_args[1]
+        assert call_kwargs["max_results"] == 10000
+
+    def test_list_messages_default_max_results(self, session_manager, mock_memory_client):
+        """Test listing messages without limit uses default max_results=100."""
+        mock_memory_client.list_events.return_value = []
+
+        session_manager.list_messages("test-session-456", "test-agent-123")
+
+        mock_memory_client.list_events.assert_called_once()
+        call_kwargs = mock_memory_client.list_events.call_args[1]
+        assert call_kwargs["max_results"] == 100
+
+    def test_list_messages_with_limit_calculates_max_results(self, session_manager, mock_memory_client):
+        """Test listing messages with limit calculates max_results correctly."""
+        mock_memory_client.list_events.return_value = []
+
+        session_manager.list_messages("test-session-456", "test-agent-123", limit=500, offset=50)
+
+        mock_memory_client.list_events.assert_called_once()
+        call_kwargs = mock_memory_client.list_events.call_args[1]
+        assert call_kwargs["max_results"] == 550  # limit + offset
