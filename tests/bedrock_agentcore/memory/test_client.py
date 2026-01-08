@@ -2851,3 +2851,197 @@ def test_create_or_get_memory_general_exception():
                 raise AssertionError("Exception was not raised")
             except Exception as e:
                 assert "Unexpected error" in str(e)
+
+
+def test_add_episodic_strategy():
+    """Test add_episodic_strategy functionality."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        mock_gmcp = MagicMock()
+        client.gmcp_client = mock_gmcp
+        mock_gmcp.update_memory.return_value = {"memory": {"memoryId": "mem-123", "status": "CREATING"}}
+
+        with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
+            client.add_episodic_strategy(
+                memory_id="mem-123",
+                name="Test Episodic Strategy",
+                description="Episodic test description",
+                namespaces=["episodes/{actorId}/{sessionId}"],
+                reflection_namespaces=["reflections/{actorId}"],
+            )
+
+            assert mock_gmcp.update_memory.called
+
+            args, kwargs = mock_gmcp.update_memory.call_args
+            assert "memoryStrategies" in kwargs
+            assert "addMemoryStrategies" in kwargs["memoryStrategies"]
+
+            add_strategies = kwargs["memoryStrategies"]["addMemoryStrategies"]
+            assert len(add_strategies) == 1
+
+            strategy = add_strategies[0]
+            assert "episodicMemoryStrategy" in strategy
+
+            episodic_config = strategy["episodicMemoryStrategy"]
+            assert episodic_config["name"] == "Test Episodic Strategy"
+            assert episodic_config["description"] == "Episodic test description"
+            assert episodic_config["namespaces"] == ["episodes/{actorId}/{sessionId}"]
+            assert episodic_config["reflectionConfiguration"] == {"namespaces": ["reflections/{actorId}"]}
+
+            assert kwargs["memoryId"] == "mem-123"
+
+
+def test_add_custom_episodic_strategy():
+    """Test add_custom_episodic_strategy functionality."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        mock_gmcp = MagicMock()
+        client.gmcp_client = mock_gmcp
+        mock_gmcp.update_memory.return_value = {"memory": {"memoryId": "mem-456", "status": "CREATING"}}
+
+        with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
+            extraction_config = {
+                "prompt": "Extract episodes from conversation",
+                "modelId": "anthropic.claude-3-sonnet-20240229-v1:0",
+            }
+            consolidation_config = {
+                "prompt": "Consolidate episodes",
+                "modelId": "anthropic.claude-3-haiku-20240307-v1:0",
+            }
+            reflection_config = {
+                "prompt": "Generate reflections from episodes",
+                "modelId": "anthropic.claude-3-sonnet-20240229-v1:0",
+                "namespaces": ["reflections/{actorId}"],
+            }
+
+            client.add_custom_episodic_strategy(
+                memory_id="mem-456",
+                name="Test Custom Episodic Strategy",
+                extraction_config=extraction_config,
+                consolidation_config=consolidation_config,
+                reflection_config=reflection_config,
+                description="Custom episodic test",
+                namespaces=["custom/{actorId}/{sessionId}"],
+            )
+
+            assert mock_gmcp.update_memory.called
+
+            args, kwargs = mock_gmcp.update_memory.call_args
+            add_strategies = kwargs["memoryStrategies"]["addMemoryStrategies"]
+            strategy = add_strategies[0]
+            assert "customMemoryStrategy" in strategy
+
+            custom_config = strategy["customMemoryStrategy"]
+            assert custom_config["name"] == "Test Custom Episodic Strategy"
+            assert "episodicOverride" in custom_config["configuration"]
+
+            episodic_override = custom_config["configuration"]["episodicOverride"]
+            assert episodic_override["extraction"]["appendToPrompt"] == "Extract episodes from conversation"
+            assert episodic_override["consolidation"]["appendToPrompt"] == "Consolidate episodes"
+            assert episodic_override["reflection"]["appendToPrompt"] == "Generate reflections from episodes"
+            assert episodic_override["reflection"]["namespaces"] == ["reflections/{actorId}"]
+
+
+def test_add_episodic_strategy_and_wait():
+    """Test add_episodic_strategy_and_wait functionality."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        mock_gmcp = MagicMock()
+        client.gmcp_client = mock_gmcp
+        mock_gmcp.update_memory.return_value = {"memory": {"memoryId": "mem-123", "status": "CREATING"}}
+        mock_gmcp.get_memory.return_value = {"memory": {"memoryId": "mem-123", "status": "ACTIVE"}}
+
+        with patch("time.time", return_value=0):
+            with patch("time.sleep"):
+                with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
+                    result = client.add_episodic_strategy_and_wait(
+                        memory_id="mem-123",
+                        name="Test Episodic Strategy",
+                        reflection_namespaces=["reflections/{actorId}"],
+                    )
+
+                    assert result["memoryId"] == "mem-123"
+                    assert result["status"] == "ACTIVE"
+                    assert mock_gmcp.update_memory.called
+                    assert mock_gmcp.get_memory.called
+
+
+def test_add_custom_episodic_strategy_and_wait():
+    """Test add_custom_episodic_strategy_and_wait functionality."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        mock_gmcp = MagicMock()
+        client.gmcp_client = mock_gmcp
+        mock_gmcp.update_memory.return_value = {"memory": {"memoryId": "mem-456", "status": "CREATING"}}
+        mock_gmcp.get_memory.return_value = {"memory": {"memoryId": "mem-456", "status": "ACTIVE"}}
+
+        with patch("time.time", return_value=0):
+            with patch("time.sleep"):
+                with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
+                    result = client.add_custom_episodic_strategy_and_wait(
+                        memory_id="mem-456",
+                        name="Test Custom Episodic",
+                        extraction_config={"prompt": "Extract", "modelId": "model-1"},
+                        consolidation_config={"prompt": "Consolidate", "modelId": "model-2"},
+                        reflection_config={
+                            "prompt": "Reflect",
+                            "modelId": "model-3",
+                            "namespaces": ["actor/{actorId}"],
+                        },
+                    )
+
+                    assert result["memoryId"] == "mem-456"
+                    assert result["status"] == "ACTIVE"
+                    assert mock_gmcp.update_memory.called
+                    assert mock_gmcp.get_memory.called
+
+
+def test_wrap_configuration_custom_episodic_override():
+    """Test _wrap_configuration with CUSTOM strategy and EPISODIC_OVERRIDE."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        config = {
+            "extraction": {"appendToPrompt": "Extract episodes", "modelId": "extraction-model"},
+            "consolidation": {"appendToPrompt": "Consolidate episodes", "modelId": "consolidation-model"},
+            "reflection": {
+                "appendToPrompt": "Reflect on episodes",
+                "modelId": "reflection-model",
+                "namespaces": ["actor/{actorId}"],
+            },
+        }
+
+        wrapped = client._wrap_configuration(config, "CUSTOM", "EPISODIC_OVERRIDE")
+
+        # Should wrap extraction
+        assert "extraction" in wrapped
+        assert "customExtractionConfiguration" in wrapped["extraction"]
+        assert "episodicExtractionOverride" in wrapped["extraction"]["customExtractionConfiguration"]
+        assert (
+            wrapped["extraction"]["customExtractionConfiguration"]["episodicExtractionOverride"]["appendToPrompt"]
+            == "Extract episodes"
+        )
+
+        # Should wrap consolidation
+        assert "consolidation" in wrapped
+        assert "customConsolidationConfiguration" in wrapped["consolidation"]
+        assert "episodicConsolidationOverride" in wrapped["consolidation"]["customConsolidationConfiguration"]
+        assert (
+            wrapped["consolidation"]["customConsolidationConfiguration"]["episodicConsolidationOverride"][
+                "appendToPrompt"
+            ]
+            == "Consolidate episodes"
+        )
+
+        # Should wrap reflection
+        assert "reflection" in wrapped
+        assert "customReflectionConfiguration" in wrapped["reflection"]
+        assert "episodicReflectionOverride" in wrapped["reflection"]["customReflectionConfiguration"]
+        assert (
+            wrapped["reflection"]["customReflectionConfiguration"]["episodicReflectionOverride"]["appendToPrompt"]
+            == "Reflect on episodes"
+        )
