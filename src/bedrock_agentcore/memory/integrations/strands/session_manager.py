@@ -8,6 +8,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
+# Constants
+MAIN_BRANCH_NAME = "main"
+
 import boto3
 from botocore.config import Config as BotocoreConfig
 from strands.agent.state import AgentState
@@ -86,7 +89,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if (
             branch
             and self.config.default_branch
-            and self.config.default_branch.name != "main"
+            and self.config.default_branch.name != MAIN_BRANCH_NAME
         ):
             event_params["branch"] = self.config.default_branch.to_agentcore_format()
 
@@ -104,7 +107,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             self.config.default_branch
             and branch
             and self.config.short_term_retrieval_config.branch_filter
-            and self.config.default_branch.name != "main"
+            and self.config.default_branch.name != MAIN_BRANCH_NAME
         ):
             params["branch_name"] = self.config.default_branch.name
 
@@ -183,7 +186,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         """Get branch root event ID and cache it."""
         if self._branch_root_events.get(branch_name):
             return self._branch_root_events[branch_name]
-        if branch_name == "main":
+        if branch_name == MAIN_BRANCH_NAME:
             return None
         # Check if branch exists
         list_params = self._prepare_list_params(max_results=1)
@@ -195,7 +198,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             return root_event_id
 
         # Branch doesn't exist - get main branch root
-        if branch_name != "main":
+        if branch_name != MAIN_BRANCH_NAME:
             main_params = self._prepare_list_params(max_results=1, branch=False)
 
             main_events = self.memory_session_manager.list_events(**main_params)
@@ -247,7 +250,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             if self.config.metadata:
                 metadata.update(self.config.metadata)
 
-            if branch_name == "main":
+            if branch_name == MAIN_BRANCH_NAME:
                 event_params = self._prepare_event_params(
                     payload=[
                         {"blob": json.dumps({"session_agent": session_agent.to_dict()})}
@@ -338,7 +341,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self._validate_session_id(session_id)
         self.agent_id = session_agent.agent_id
         try:
-            if self.config.default_branch.name == "main":
+            if self.config.default_branch.name == MAIN_BRANCH_NAME:
                 metadata = {
                     "agent_id": StringValue.build(session_agent.agent_id),
                     "event_type": StringValue.build("session_agent"),
@@ -477,12 +480,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 if role in self.config.message_types:
                     content = message.get("content", [{}])[0].get("text", "")
                     mapped_role = role_map.get(role, MessageRole.ASSISTANT)
-                    if role == "user":
+                    if mapped_role == MessageRole.USER:
                         content = self.remove_user_context(content)
                     filtered_messages.append(
                         ConversationalMessage(content, mapped_role)
                     )
-                if role == "user":
+                if mapped_role == MessageRole.USER:
                     break
 
             logger.debug(f"Filtered {len(filtered_messages)} messages to save..")
@@ -510,7 +513,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 "metadata": event_metadata,
                 "event_timestamp": self._get_monotonic_timestamp(),
             }
-            if self.config.default_branch and self.config.default_branch.name != "main":
+            if self.config.default_branch and self.config.default_branch.name != MAIN_BRANCH_NAME:
                 event_params["branch"] = (
                     self.config.default_branch.to_agentcore_format()
                 )
@@ -557,7 +560,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
             events = self.memory_session_manager.list_events(**list_params)
             logger.debug(f"Found {len(events)} events")
-            return AgentCoreMemoryConverter.events_to_messages(events) if events else []
+            if not events:
+                return []
+            return AgentCoreMemoryConverter.events_to_messages(events)
 
         except Exception as e:
             logger.error("Failed to list messages from AgentCore Memory: %s", e)
@@ -646,7 +651,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         try:
             all_context = []
             # Check if retrieval_config exists and is not empty
-            if not self.config.retrieval_config:
+            if not self.config.retrieval_config or not isinstance(self.config.retrieval_config, dict):
                 return
 
             # Retrieve from long-term memory in parallel
