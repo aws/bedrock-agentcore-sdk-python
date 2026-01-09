@@ -22,6 +22,7 @@ from botocore.exceptions import ClientError
 from .constants import (
     CUSTOM_CONSOLIDATION_WRAPPER_KEYS,
     CUSTOM_EXTRACTION_WRAPPER_KEYS,
+    CUSTOM_REFLECTION_WRAPPER_KEYS,
     DEFAULT_NAMESPACES,
     EXTRACTION_WRAPPER_KEYS,
     MemoryStatus,
@@ -1419,6 +1420,51 @@ class MemoryClient:
         self.add_user_preference_strategy(memory_id, name, description, namespaces)
         return self._wait_for_memory_active(memory_id, max_wait, poll_interval)
 
+    def add_episodic_strategy(
+        self,
+        memory_id: str,
+        name: str,
+        reflection_namespaces: List[str],
+        description: Optional[str] = None,
+        namespaces: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Add an episodic memory strategy.
+
+        Args:
+            memory_id: Memory resource ID
+            name: Strategy name
+            reflection_namespaces: Namespaces for reflections (can be less nested than episode namespaces)
+            description: Optional description
+            namespaces: Optional namespaces for episodes
+        """
+        strategy: Dict = {
+            StrategyType.EPISODIC.value: {
+                "name": name,
+                "reflectionConfiguration": {"namespaces": reflection_namespaces},
+            }
+        }
+
+        if description:
+            strategy[StrategyType.EPISODIC.value]["description"] = description
+        if namespaces:
+            strategy[StrategyType.EPISODIC.value]["namespaces"] = namespaces
+
+        return self._add_strategy(memory_id, strategy)
+
+    def add_episodic_strategy_and_wait(
+        self,
+        memory_id: str,
+        name: str,
+        reflection_namespaces: List[str],
+        description: Optional[str] = None,
+        namespaces: Optional[List[str]] = None,
+        max_wait: int = 300,
+        poll_interval: int = 10,
+    ) -> Dict[str, Any]:
+        """Add an episodic strategy and wait for memory to return to ACTIVE state."""
+        self.add_episodic_strategy(memory_id, name, reflection_namespaces, description, namespaces)
+        return self._wait_for_memory_active(memory_id, max_wait, poll_interval)
+
     def add_custom_semantic_strategy(
         self,
         memory_id: str,
@@ -1479,6 +1525,78 @@ class MemoryClient:
         """Add a custom semantic strategy and wait for memory to return to ACTIVE state."""
         self.add_custom_semantic_strategy(
             memory_id, name, extraction_config, consolidation_config, description, namespaces
+        )
+        return self._wait_for_memory_active(memory_id, max_wait, poll_interval)
+
+    def add_custom_episodic_strategy(
+        self,
+        memory_id: str,
+        name: str,
+        extraction_config: Dict[str, Any],
+        consolidation_config: Dict[str, Any],
+        reflection_config: Dict[str, Any],
+        description: Optional[str] = None,
+        namespaces: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Add a custom episodic strategy with prompts.
+
+        Args:
+            memory_id: Memory resource ID
+            name: Strategy name
+            extraction_config: {"prompt": "...", "modelId": "..."}
+            consolidation_config: {"prompt": "...", "modelId": "..."}
+            reflection_config: {"prompt": "...", "modelId": "...", "namespaces": [...]}
+            description: Optional description
+            namespaces: Optional namespaces list
+        """
+        reflection = {
+            "appendToPrompt": reflection_config["prompt"],
+            "modelId": reflection_config["modelId"],
+        }
+        if "namespaces" in reflection_config:
+            reflection["namespaces"] = reflection_config["namespaces"]
+
+        strategy = {
+            StrategyType.CUSTOM.value: {
+                "name": name,
+                "configuration": {
+                    "episodicOverride": {
+                        "extraction": {
+                            "appendToPrompt": extraction_config["prompt"],
+                            "modelId": extraction_config["modelId"],
+                        },
+                        "consolidation": {
+                            "appendToPrompt": consolidation_config["prompt"],
+                            "modelId": consolidation_config["modelId"],
+                        },
+                        "reflection": reflection,
+                    }
+                },
+            }
+        }
+
+        if description:
+            strategy[StrategyType.CUSTOM.value]["description"] = description
+        if namespaces:
+            strategy[StrategyType.CUSTOM.value]["namespaces"] = namespaces
+
+        return self._add_strategy(memory_id, strategy)
+
+    def add_custom_episodic_strategy_and_wait(
+        self,
+        memory_id: str,
+        name: str,
+        extraction_config: Dict[str, Any],
+        consolidation_config: Dict[str, Any],
+        reflection_config: Dict[str, Any],
+        description: Optional[str] = None,
+        namespaces: Optional[List[str]] = None,
+        max_wait: int = 300,
+        poll_interval: int = 10,
+    ) -> Dict[str, Any]:
+        """Add a custom episodic strategy and wait for memory to return to ACTIVE state."""
+        self.add_custom_episodic_strategy(
+            memory_id, name, extraction_config, consolidation_config, reflection_config, description, namespaces
         )
         return self._wait_for_memory_active(memory_id, max_wait, poll_interval)
 
@@ -1811,7 +1929,10 @@ class MemoryClient:
         if "extraction" in config:
             extraction = config["extraction"]
 
-            if any(key in extraction for key in ["triggerEveryNMessages", "historicalContextWindowSize"]):
+            builtin_config_keys = ["triggerEveryNMessages", "historicalContextWindowSize"]
+            custom_override_keys = ["appendToPrompt", "modelId"]
+
+            if any(key in extraction for key in builtin_config_keys):
                 strategy_type_enum = MemoryStrategyTypeEnum(strategy_type)
 
                 if strategy_type == "SEMANTIC":
@@ -1820,10 +1941,16 @@ class MemoryClient:
                     wrapped_config["extraction"] = {EXTRACTION_WRAPPER_KEYS[strategy_type_enum]: extraction}
                 elif strategy_type == "CUSTOM" and override_type:
                     override_enum = OverrideType(override_type)
-                    if override_type in ["SEMANTIC_OVERRIDE", "USER_PREFERENCE_OVERRIDE"]:
+                    if override_enum in CUSTOM_EXTRACTION_WRAPPER_KEYS:
                         wrapped_config["extraction"] = {
                             "customExtractionConfiguration": {CUSTOM_EXTRACTION_WRAPPER_KEYS[override_enum]: extraction}
                         }
+            elif strategy_type == "CUSTOM" and override_type and any(key in extraction for key in custom_override_keys):
+                override_enum = OverrideType(override_type)
+                if override_enum in CUSTOM_EXTRACTION_WRAPPER_KEYS:
+                    wrapped_config["extraction"] = {
+                        "customExtractionConfiguration": {CUSTOM_EXTRACTION_WRAPPER_KEYS[override_enum]: extraction}
+                    }
             else:
                 wrapped_config["extraction"] = extraction
 
@@ -1849,5 +1976,17 @@ class MemoryClient:
                         }
             else:
                 wrapped_config["consolidation"] = consolidation
+
+        if "reflection" in config:
+            reflection = config["reflection"]
+
+            if strategy_type == "CUSTOM" and override_type:
+                override_enum = OverrideType(override_type)
+                if override_enum in CUSTOM_REFLECTION_WRAPPER_KEYS:
+                    wrapped_config["reflection"] = {
+                        "customReflectionConfiguration": {CUSTOM_REFLECTION_WRAPPER_KEYS[override_enum]: reflection}
+                    }
+            else:
+                wrapped_config["reflection"] = reflection
 
         return wrapped_config
