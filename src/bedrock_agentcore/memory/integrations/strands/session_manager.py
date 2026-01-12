@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 SESSION_PREFIX = "session_"
 AGENT_PREFIX = "agent_"
 MESSAGE_PREFIX = "message_"
+MAX_FETCH_ALL_RESULTS = 10000
 
 
 class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository):
@@ -456,7 +457,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         try:
             if fetch_all:
-                max_results = 10000
+                max_results = MAX_FETCH_ALL_RESULTS
             elif limit:
                 max_results = limit + offset
             else:
