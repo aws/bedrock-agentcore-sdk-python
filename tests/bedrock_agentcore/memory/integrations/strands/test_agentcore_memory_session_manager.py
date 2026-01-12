@@ -1047,3 +1047,52 @@ class TestAgentCoreMemorySessionManager:
 
                     # Should not raise exception, just log error
                     manager.retrieve_customer_context(event)
+
+    def test_retrieve_customer_context_filters_by_relevance_score(self, mock_memory_client):
+        """Test retrieve_customer_context filters memories below relevance_score threshold."""
+        # Return memories with varying relevance scores
+        mock_memory_client.retrieve_memories.return_value = [
+            {"content": {"text": "Low relevance 1"}, "relevanceScore": 0.1},
+            {"content": {"text": "Low relevance 2"}, "relevanceScore": 0.4},
+            {"content": {"text": "High relevance 1"}, "relevanceScore": 0.6},
+            {"content": {"text": "High relevance 2"}, "relevanceScore": 0.9},
+        ]
+
+        # Config with single namespace and relevance_score threshold of 0.5
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            retrieval_config={"test_namespace": RetrievalConfig(top_k=10, relevance_score=0.5)},
+        )
+
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            return_value=mock_memory_client,
+        ):
+            with patch("boto3.Session") as mock_boto_session:
+                mock_session = Mock()
+                mock_session.region_name = "us-west-2"
+                mock_session.client.return_value = Mock()
+                mock_boto_session.return_value = mock_session
+
+                with patch(
+                    "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
+                ):
+                    manager = AgentCoreMemorySessionManager(config)
+
+                    mock_agent = Mock()
+                    mock_agent.messages = [{"role": "user", "content": [{"text": "test query"}]}]
+
+                    event = MessageAddedEvent(agent=mock_agent, message={"role": "user", "content": [{"text": "test"}]})
+                    manager.retrieve_customer_context(event)
+
+                    # Verify context was injected
+                    assert len(mock_agent.messages) == 2
+                    injected_context = mock_agent.messages[1]["content"][0]["text"]
+
+                    # With threshold 0.5, only scores >= 0.5 should be included (0.6 and 0.9)
+                    assert "High relevance 1" in injected_context
+                    assert "High relevance 2" in injected_context
+                    assert "Low relevance 1" not in injected_context
+                    assert "Low relevance 2" not in injected_context

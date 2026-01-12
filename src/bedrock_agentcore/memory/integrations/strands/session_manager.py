@@ -21,7 +21,7 @@ from typing_extensions import override
 from bedrock_agentcore.memory.client import MemoryClient
 
 from .bedrock_converter import AgentCoreMemoryConverter
-from .config import AgentCoreMemoryConfig
+from .config import AgentCoreMemoryConfig, RetrievalConfig
 
 if TYPE_CHECKING:
     from strands.agent.agent import Agent
@@ -496,7 +496,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         user_query = messages[-1]["content"][0]["text"]
 
-        def retrieve_for_namespace(namespace: str, retrieval_config: AgentCoreMemoryConfig):
+        def retrieve_for_namespace(namespace: str, retrieval_config: RetrievalConfig):
             """Helper function to retrieve memories for a single namespace."""
             resolved_namespace = namespace.format(
                 actorId=self.config.actor_id,
@@ -510,6 +510,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 query=user_query,
                 top_k=retrieval_config.top_k,
             )
+            if retrieval_config.relevance_score:
+                memories = [
+                    m for m in memories
+                    if m.get("relevanceScore", retrieval_config.relevance_score) >= retrieval_config.relevance_score
+                ]
             context_items = []
             for memory in memories:
                 if isinstance(memory, dict):
