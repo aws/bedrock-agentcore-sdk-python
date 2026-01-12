@@ -1087,7 +1087,7 @@ class MemoryClient:
         session_id: str,
         k: int = 5,
         branch_name: Optional[str] = None,
-        include_parent_branches: bool = False,
+        include_branches: bool = False,
         max_results: Optional[int] = None,
     ) -> List[List[Dict[str, Any]]]:
         """Get the last K conversation turns.
@@ -1102,8 +1102,6 @@ class MemoryClient:
         Returns:
             List of turns, where each turn is a list of message dictionaries
         """
-        from .pagination import paginate_turns
-
         base_params = {
             "memoryId": memory_id,
             "actorId": actor_id,
@@ -1112,18 +1110,55 @@ class MemoryClient:
 
         if branch_name and branch_name != "main":
             base_params["filter"] = {
-                "branch": {"name": branch_name, "includeParentBranches": include_parent_branches}
+                "branch": {"name": branch_name, "includeParentBranches": include_branches}
             }
 
         try:
-            return paginate_turns(
-                list_events_fn=self.gmdp_client.list_events,
-                base_params=base_params,
-                k=k,
-                max_results=max_results,
-                user_role_value=Role.USER.value,
-                wrap_message=lambda x: x,
-            )
+            turns: List[List[Dict[str, Any]]] = []
+            current_turn: List[Dict[str, Any]] = []
+            next_token = None
+            total_fetched = 0
+
+            while len(turns) < k:
+                if max_results is not None:
+                    remaining = max_results - total_fetched
+                    if remaining <= 0:
+                        break
+                    batch_size = min(100, remaining)
+                else:
+                    batch_size = 100
+
+                params = {**base_params, "maxResults": batch_size, "includePayloads": True}
+                if next_token:
+                    params["nextToken"] = next_token
+
+                response = self.gmdp_client.list_events(**params)
+                events = response.get("events", [])
+
+                if not events:
+                    break
+
+                total_fetched += len(events)
+
+                for event in events:
+                    if len(turns) >= k:
+                        break
+                    for payload_item in event.get("payload", []):
+                        if "conversational" in payload_item:
+                            role = payload_item["conversational"].get("role")
+                            if role == Role.USER.value and current_turn:
+                                turns.append(current_turn)
+                                current_turn = []
+                            current_turn.append(payload_item["conversational"])
+
+                next_token = response.get("nextToken")
+                if not next_token:
+                    break
+
+            if current_turn and len(turns) < k:
+                turns.append(current_turn)
+
+            return turns[:k]
         except ClientError as e:
             logger.error("Failed to get last K turns: %s", e)
             raise
