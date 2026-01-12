@@ -17,6 +17,9 @@ from urllib.parse import urlparse
 import boto3
 from botocore.auth import SigV4Auth, SigV4QueryAuth
 from botocore.awsrequest import AWSRequest
+from botocore.config import Config
+
+from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
 from .._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
 
@@ -42,20 +45,29 @@ class BrowserClient:
         session_id (str, optional): The active session ID.
     """
 
-    def __init__(self, region: str) -> None:
+    def __init__(self, region: str, integration_source: Optional[str] = None) -> None:
         """Initialize a Browser client for the specified AWS region.
 
         Args:
             region (str): The AWS region to use for the Browser service.
+            integration_source (Optional[str]): Framework integration identifier
+                for telemetry (e.g., 'langchain', 'crewai'). Used to track
+                customer acquisition from different integrations.
         """
         self.region = region
         self.logger = logging.getLogger(__name__)
+        self.integration_source = integration_source
+
+        # Build config with user-agent for telemetry
+        user_agent_extra = build_user_agent_suffix(integration_source)
+        client_config = Config(user_agent_extra=user_agent_extra)
 
         # Control plane client for browser management
         self.control_plane_client = boto3.client(
             "bedrock-agentcore-control",
             region_name=region,
             endpoint_url=get_control_plane_endpoint(region),
+            config=client_config,
         )
 
         # Data plane client for session operations
@@ -63,6 +75,7 @@ class BrowserClient:
             "bedrock-agentcore",
             region_name=region,
             endpoint_url=get_data_plane_endpoint(region),
+            config=client_config,
         )
 
         self._identifier = None

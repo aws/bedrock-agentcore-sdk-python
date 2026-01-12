@@ -26,12 +26,11 @@ class TestCodeInterpreterClient:
         client = CodeInterpreter(region)
 
         # Assert
-        mock_boto3.Session.assert_called_once()
-        assert mock_session.client.call_count == 2
         mock_session.client.assert_any_call(
             "bedrock-agentcore-control",
             region_name=region,
             endpoint_url="https://mock-control-endpoint.com",
+            config=ANY,
         )
         mock_session.client.assert_any_call(
             "bedrock-agentcore",
@@ -43,6 +42,28 @@ class TestCodeInterpreterClient:
         assert client.data_plane_client == mock_data_client
         assert client.identifier is None
         assert client.session_id is None
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_init_with_integration_source(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_control_client = MagicMock()
+        mock_data_client = MagicMock()
+        mock_session.client.side_effect = [mock_control_client, mock_data_client]
+        mock_boto3.Session.return_value = mock_session
+        mock_get_control_endpoint.return_value = "https://mock-control-endpoint.com"
+        mock_get_data_endpoint.return_value = "https://mock-data-endpoint.com"
+        region = "us-west-2"
+        integration_source = "strands"
+
+        # Act
+        client = CodeInterpreter(region, integration_source=integration_source)
+
+        # Assert
+        assert client.integration_source == integration_source
+        assert mock_session.client.call_count == 2
 
     @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")

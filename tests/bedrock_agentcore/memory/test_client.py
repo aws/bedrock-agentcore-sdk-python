@@ -24,6 +24,25 @@ def test_client_initialization():
 
         # Check that the region was set correctly and boto3.client was called twice
         assert client.region_name == "us-west-2"
+        assert client.integration_source is None
+        assert mock_boto_client.call_count == 2
+
+        # Verify config was passed to boto3.client calls
+        for call in mock_boto_client.call_args_list:
+            assert "config" in call.kwargs
+
+
+def test_client_initialization_with_integration_source():
+    """Test client initialization with integration_source."""
+    with patch("boto3.client") as mock_boto_client:
+        mock_client_instance = MagicMock()
+        mock_client_instance.meta.region_name = "us-west-2"
+        mock_boto_client.return_value = mock_client_instance
+
+        client = MemoryClient(region_name="us-west-2", integration_source="langchain")
+
+        assert client.region_name == "us-west-2"
+        assert client.integration_source == "langchain"
         assert mock_boto_client.call_count == 2
 
 

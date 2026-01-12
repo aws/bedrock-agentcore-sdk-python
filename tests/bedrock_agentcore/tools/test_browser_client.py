@@ -1,5 +1,5 @@
 import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -32,15 +32,39 @@ class TestBrowserClient:
             "bedrock-agentcore-control",
             region_name=region,
             endpoint_url="https://mock-control-endpoint.com",
+            config=ANY,
         )
         mock_boto3.client.assert_any_call(
-            "bedrock-agentcore", region_name=region, endpoint_url="https://mock-data-endpoint.com"
+            "bedrock-agentcore",
+            region_name=region,
+            endpoint_url="https://mock-data-endpoint.com",
+            config=ANY,
         )
         assert client.control_plane_client == mock_control_client
         assert client.data_plane_client == mock_data_client
         assert client.region == region
         assert client.identifier is None
         assert client.session_id is None
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    def test_init_with_integration_source(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_control_client = MagicMock()
+        mock_data_client = MagicMock()
+        mock_boto3.client.side_effect = [mock_control_client, mock_data_client]
+        mock_get_control_endpoint.return_value = "https://mock-control-endpoint.com"
+        mock_get_data_endpoint.return_value = "https://mock-data-endpoint.com"
+        region = "us-west-2"
+        integration_source = "langchain"
+
+        # Act
+        client = BrowserClient(region, integration_source=integration_source)
+
+        # Assert
+        assert client.integration_source == integration_source
+        assert mock_boto3.client.call_count == 2
 
     @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")

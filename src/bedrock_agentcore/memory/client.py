@@ -17,7 +17,10 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
+
+from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
 from .constants import (
     CUSTOM_CONSOLIDATION_WRAPPER_KEYS,
@@ -60,12 +63,17 @@ class MemoryClient:
         "list_memory_strategies",
     }
 
-    def __init__(self, region_name: Optional[str] = None):
+    def __init__(self, region_name: Optional[str] = None, integration_source: Optional[str] = None):
         """Initialize the Memory client."""
         self.region_name = region_name or boto3.Session().region_name or "us-west-2"
+        self.integration_source = integration_source
 
-        self.gmcp_client = boto3.client("bedrock-agentcore-control", region_name=self.region_name)
-        self.gmdp_client = boto3.client("bedrock-agentcore", region_name=self.region_name)
+        # Build config with user-agent for telemetry
+        user_agent_extra = build_user_agent_suffix(integration_source)
+        client_config = Config(user_agent_extra=user_agent_extra)
+
+        self.gmcp_client = boto3.client("bedrock-agentcore-control", region_name=self.region_name, config=client_config)
+        self.gmdp_client = boto3.client("bedrock-agentcore", region_name=self.region_name, config=client_config)
 
         logger.info(
             "Initialized MemoryClient for control plane: %s, data plane: %s",
