@@ -807,9 +807,7 @@ class MemorySessionManager:
         }
 
         if branch_name and branch_name != "main":
-            base_params["filter"] = {
-                "branch": {"name": branch_name, "includeParentBranches": include_parent_branches}
-            }
+            base_params["filter"] = {"branch": {"name": branch_name, "includeParentBranches": include_parent_branches}}
 
         try:
             turns: List[List[EventMessage]] = []

@@ -3075,9 +3075,7 @@ def test_get_last_k_turns_auto_pagination():
         ]
 
         # Request 2 turns without max_results - should paginate automatically
-        turns = client.get_last_k_turns(
-            memory_id="mem-123", actor_id="user-123", session_id="session-456", k=2
-        )
+        turns = client.get_last_k_turns(memory_id="mem-123", actor_id="user-123", session_id="session-456", k=2)
 
         assert len(turns) == 2
         assert mock_gmdp.list_events.call_count == 2

@@ -2283,11 +2283,13 @@ class TestEdgeCases:
             # Mock _data_plane_client.list_events with many events
             events = []
             for i in range(10):  # Create 10 events, each with a USER message (new turn)
-                events.append({
-                    "eventId": f"event-{i}",
-                    "eventTimestamp": f"2023-01-01T10:{i:02d}:00Z",
-                    "payload": [{"conversational": {"role": "USER", "content": {"text": f"Message {i}"}}}],
-                })
+                events.append(
+                    {
+                        "eventId": f"event-{i}",
+                        "eventTimestamp": f"2023-01-01T10:{i:02d}:00Z",
+                        "payload": [{"conversational": {"role": "USER", "content": {"text": f"Message {i}"}}}],
+                    }
+                )
 
             manager._data_plane_client.list_events.return_value = {"events": events}
 
