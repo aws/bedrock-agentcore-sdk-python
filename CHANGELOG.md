@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.0] - 2026-01-13
+
+### Fixed
+- fix: apply relevance_score filtering in Strands integration (#190) (#211) (952b018)
+
+### Other Changes
+- fix(memory): Improve pagination behavior in get_last_k_turns() and list_messages() (#209) (2b047ff)
+- Add integration_source parameter for framework attribution telemetry (#210) (43c6c3c)
+- feat(memory): add episodic memory strategy support (#208) (0df9757)
+- chore: bump version to 1.1.4 (#207) (b3e4b4b)
+
 ## [1.1.4] - 2026-01-08
 
 ### Fixed
