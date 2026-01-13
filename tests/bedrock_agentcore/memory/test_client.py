@@ -3064,3 +3064,67 @@ def test_wrap_configuration_custom_episodic_override():
             wrapped["reflection"]["customReflectionConfiguration"]["episodicReflectionOverride"]["appendToPrompt"]
             == "Reflect on episodes"
         )
+
+
+def test_get_last_k_turns_auto_pagination():
+    """Test get_last_k_turns automatically paginates until k turns are found."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        # First call returns events but not enough turns, with next_token
+        # Second call returns more events, no next_token
+        mock_gmdp.list_events.side_effect = [
+            {
+                "events": [
+                    {"payload": [{"conversational": {"role": "USER", "content": {"text": "Hi"}}}]},
+                    {"payload": [{"conversational": {"role": "ASSISTANT", "content": {"text": "Hello"}}}]},
+                ],
+                "nextToken": "token-123",
+            },
+            {
+                "events": [
+                    {"payload": [{"conversational": {"role": "USER", "content": {"text": "How are you?"}}}]},
+                    {"payload": [{"conversational": {"role": "ASSISTANT", "content": {"text": "Good"}}}]},
+                ],
+                "nextToken": None,
+            },
+        ]
+
+        # Request 2 turns without max_results - should paginate automatically
+        turns = client.get_last_k_turns(memory_id="mem-123", actor_id="user-123", session_id="session-456", k=2)
+
+        assert len(turns) == 2
+        assert mock_gmdp.list_events.call_count == 2
+
+
+def test_get_last_k_turns_explicit_max_results():
+    """Test get_last_k_turns respects explicitly provided max_results (backward compatible)."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        # Return events with next_token, but max_results should limit fetching
+        mock_gmdp.list_events.return_value = {
+            "events": [
+                {"payload": [{"conversational": {"role": "USER", "content": {"text": "Hi"}}}]},
+            ],
+            "nextToken": "token-123",
+        }
+
+        # Request with explicit max_results=50 - should respect limit
+        client.get_last_k_turns(
+            memory_id="mem-123", actor_id="user-123", session_id="session-456", k=200, max_results=50
+        )
+
+        # First call should request up to max_results (min of 100 and 50 = 50)
+        first_call_args = mock_gmdp.list_events.call_args_list[0]
+        assert first_call_args[1]["maxResults"] == 50
+
+        # Total events fetched should not exceed max_results
+        total_fetched = sum(1 for _ in mock_gmdp.list_events.call_args_list)
+        assert total_fetched <= 50  # Should stop after fetching 50 events worth of calls

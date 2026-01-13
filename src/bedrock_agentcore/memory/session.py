@@ -786,53 +786,75 @@ class MemorySessionManager:
         k: int = 5,
         branch_name: Optional[str] = None,
         include_parent_branches: bool = False,
-        max_results: int = 100,
+        max_results: Optional[int] = None,
     ) -> List[List[EventMessage]]:
         """Get the last K conversation turns.
 
         A "turn" typically consists of a user message followed by assistant response(s).
         This method groups messages into logical turns for easier processing.
 
+        If max_results is specified, fetches up to that many events and finds turns within them
+        (backward compatible behavior).
+        If max_results is None, automatically paginates until k turns are found.
+
         Returns:
             List of turns, where each turn is a list of message dictionaries
         """
+        base_params = {
+            "memoryId": self._memory_id,
+            "actorId": actor_id,
+            "sessionId": session_id,
+        }
+
+        if branch_name and branch_name != "main":
+            base_params["filter"] = {"branch": {"name": branch_name, "includeParentBranches": include_parent_branches}}
+
         try:
-            events = self.list_events(
-                actor_id=actor_id,
-                session_id=session_id,
-                branch_name=branch_name,
-                include_parent_branches=include_parent_branches,
-                max_results=max_results,
-            )
+            turns: List[List[EventMessage]] = []
+            current_turn: List[EventMessage] = []
+            next_token = None
+            total_fetched = 0
 
-            if not events:
-                return []
+            while len(turns) < k:
+                if max_results is not None:
+                    remaining = max_results - total_fetched
+                    if remaining <= 0:
+                        break
+                    batch_size = min(100, remaining)
+                else:
+                    batch_size = 100
 
-            # Process events to group into turns
-            turns = []
-            current_turn = []
+                params = {**base_params, "maxResults": batch_size, "includePayloads": True}
+                if next_token:
+                    params["nextToken"] = next_token
 
-            for event in events:
-                if len(turns) >= k:
-                    break  # Only need last K turns
-                for payload_item in event.get("payload", []):
-                    if "conversational" in payload_item:
-                        role = payload_item["conversational"].get("role")
+                response = self._data_plane_client.list_events(**params)
+                events = response.get("events", [])
 
-                        # Start new turn on USER message
-                        if role == MessageRole.USER.value and current_turn:
-                            turns.append(current_turn)
-                            current_turn = []
+                if not events:
+                    break
 
-                        current_turn.append(EventMessage(payload_item["conversational"]))
+                total_fetched += len(events)
 
-            # Don't forget the last turn
-            if current_turn:
+                for event in events:
+                    if len(turns) >= k:
+                        break
+                    for payload_item in event.get("payload", []):
+                        if "conversational" in payload_item:
+                            role = payload_item["conversational"].get("role")
+                            if role == MessageRole.USER.value and current_turn:
+                                turns.append(current_turn)
+                                current_turn = []
+                            current_turn.append(EventMessage(payload_item["conversational"]))
+
+                next_token = response.get("nextToken")
+                if not next_token:
+                    break
+
+            if current_turn and len(turns) < k:
                 turns.append(current_turn)
 
-            # Return the last k turns
-            return turns[:k] if len(turns) > k else turns
-
+            return turns[:k]
         except ClientError as e:
             logger.error("Failed to get last K turns: %s", e)
             raise
@@ -1153,7 +1175,7 @@ class MemorySession(DictWrapper):
         k: int = 5,
         branch_name: Optional[str] = None,
         include_parent_branches: Optional[bool] = None,
-        max_results: int = 100,
+        max_results: Optional[int] = None,
     ) -> List[List[EventMessage]]:
         """Delegates to manager.get_last_k_turns."""
         return self._manager.get_last_k_turns(

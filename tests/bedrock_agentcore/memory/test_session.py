@@ -951,39 +951,37 @@ class TestSessionManager:
 
             manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
 
-            # Mock list_events
-            mock_events = [
-                Event(
+            # Mock _data_plane_client.list_events to return dict format
+            manager._data_plane_client.list_events.return_value = {
+                "events": [
                     {
                         "eventId": "event-1",
-                        "eventTimestamp": datetime(2023, 1, 1, 10, 0, 0),
+                        "eventTimestamp": "2023-01-01T10:00:00Z",
                         "payload": [
                             {"conversational": {"role": "USER", "content": {"text": "Hello"}}},
                             {"conversational": {"role": "ASSISTANT", "content": {"text": "Hi there"}}},
                         ],
-                    }
-                ),
-                Event(
+                    },
                     {
                         "eventId": "event-2",
-                        "eventTimestamp": datetime(2023, 1, 1, 10, 5, 0),
+                        "eventTimestamp": "2023-01-01T10:05:00Z",
                         "payload": [
                             {"conversational": {"role": "USER", "content": {"text": "How are you?"}}},
                             {"conversational": {"role": "ASSISTANT", "content": {"text": "I'm doing well"}}},
                         ],
-                    }
-                ),
-            ]
-            with patch.object(manager, "list_events", return_value=mock_events):
-                result = manager.get_last_k_turns(
-                    actor_id="user-123",
-                    session_id="session-456",
-                    k=2,
-                )
+                    },
+                ]
+            }
 
-                assert len(result) == 2
-                assert len(result[0]) == 2  # First turn has 2 messages
-                assert all(isinstance(msg, EventMessage) for msg in result[0])
+            result = manager.get_last_k_turns(
+                actor_id="user-123",
+                session_id="session-456",
+                k=2,
+            )
+
+            assert len(result) == 2
+            assert len(result[0]) == 2  # First turn has 2 messages
+            assert all(isinstance(msg, EventMessage) for msg in result[0])
 
     def test_get_last_k_turns_empty_events(self):
         """Test get_last_k_turns with no events."""
@@ -997,10 +995,11 @@ class TestSessionManager:
             manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
 
             # Mock empty list_events
-            with patch.object(manager, "list_events", return_value=[]):
-                result = manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
+            manager._data_plane_client.list_events.return_value = {"events": []}
 
-                assert result == []
+            result = manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
+
+            assert result == []
 
     def test_get_last_k_turns_client_error(self):
         """Test get_last_k_turns with ClientError."""
@@ -1013,16 +1012,13 @@ class TestSessionManager:
 
             manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
 
-            # Mock list_events to raise ClientError
-            with patch.object(
-                manager,
-                "list_events",
-                side_effect=ClientError(
-                    {"Error": {"Code": "ValidationException", "Message": "Invalid parameters"}}, "ListEvents"
-                ),
-            ):
-                with pytest.raises(ClientError):
-                    manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
+            # Mock _data_plane_client.list_events to raise ClientError
+            manager._data_plane_client.list_events.side_effect = ClientError(
+                {"Error": {"Code": "ValidationException", "Message": "Invalid parameters"}}, "ListEvents"
+            )
+
+            with pytest.raises(ClientError):
+                manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
 
     def test_get_last_k_turns_with_include_parent_branches_parameter(self):
         """Test get_last_k_turns with include_parent_branches parameter to cover new functionality."""
@@ -1035,73 +1031,47 @@ class TestSessionManager:
 
             manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
 
-            # Mock list_events
-            mock_events = [
-                Event(
+            # Mock _data_plane_client.list_events
+            manager._data_plane_client.list_events.return_value = {
+                "events": [
                     {
                         "eventId": "event-1",
-                        "eventTimestamp": datetime(2023, 1, 1, 10, 0, 0),
+                        "eventTimestamp": "2023-01-01T10:00:00Z",
                         "payload": [
                             {"conversational": {"role": "USER", "content": {"text": "Hello from branch"}}},
                             {"conversational": {"role": "ASSISTANT", "content": {"text": "Hi from branch"}}},
                         ],
-                    }
-                ),
-                Event(
+                    },
                     {
                         "eventId": "event-2",
-                        "eventTimestamp": datetime(2023, 1, 1, 10, 5, 0),
+                        "eventTimestamp": "2023-01-01T10:05:00Z",
                         "payload": [
                             {"conversational": {"role": "USER", "content": {"text": "Another message"}}},
                             {"conversational": {"role": "ASSISTANT", "content": {"text": "Another response"}}},
                         ],
-                    }
-                ),
-            ]
-            with patch.object(manager, "list_events", return_value=mock_events) as mock_list_events:
-                # Test with include_parent_branches=True
-                result = manager.get_last_k_turns(
-                    actor_id="user-123",
-                    session_id="session-456",
-                    k=3,
-                    branch_name="test-branch",
-                    include_parent_branches=True,
-                    max_results=50,
-                )
+                    },
+                ]
+            }
 
-                assert len(result) == 2
-                assert len(result[0]) == 2  # First turn has 2 messages
-                assert len(result[1]) == 2  # Second turn has 2 messages
-                assert all(isinstance(msg, EventMessage) for msg in result[0])
-                assert all(isinstance(msg, EventMessage) for msg in result[1])
+            # Test with include_parent_branches=True
+            result = manager.get_last_k_turns(
+                actor_id="user-123",
+                session_id="session-456",
+                k=3,
+                branch_name="test-branch",
+                include_parent_branches=True,
+                max_results=50,
+            )
 
-                # Verify list_events was called with include_parent_branches=True when include_parent_branches=True
-                mock_list_events.assert_called_once_with(
-                    actor_id="user-123",
-                    session_id="session-456",
-                    branch_name="test-branch",
-                    include_parent_branches=True,  # This should be True when include_parent_branches=True
-                    max_results=50,
-                )
+            assert len(result) == 2
+            assert len(result[0]) == 2  # First turn has 2 messages
+            assert len(result[1]) == 2  # Second turn has 2 messages
+            assert all(isinstance(msg, EventMessage) for msg in result[0])
+            assert all(isinstance(msg, EventMessage) for msg in result[1])
 
-                # Test with include_parent_branches=False (default behavior)
-                mock_list_events.reset_mock()
-                manager.get_last_k_turns(
-                    actor_id="user-123",
-                    session_id="session-456",
-                    k=2,
-                    branch_name="test-branch",
-                    include_parent_branches=False,
-                )
-
-                # Verify list_events was called with include_parent_branches=False when include_parent_branches=False
-                mock_list_events.assert_called_once_with(
-                    actor_id="user-123",
-                    session_id="session-456",
-                    branch_name="test-branch",
-                    include_parent_branches=False,  # This should be False when include_parent_branches=False
-                    max_results=100,  # Default max_results
-                )
+            # Verify _data_plane_client.list_events was called with correct filter
+            call_kwargs = manager._data_plane_client.list_events.call_args[1]
+            assert call_kwargs["filter"]["branch"]["includeParentBranches"] is True
 
     def test_get_event_success(self):
         """Test get_event successful execution."""
@@ -1804,8 +1774,8 @@ class TestSession:
                 result = session.get_last_k_turns(k=3)
 
                 assert result == mock_turns
-                # Updated to match the new method signature with include_parent_branches parameter
-                mock_get_turns.assert_called_once_with("user-123", "session-456", 3, None, None, 100)
+                # Updated to match the new method signature with max_results=None (auto-calculated)
+                mock_get_turns.assert_called_once_with("user-123", "session-456", 3, None, None, None)
 
     def test_session_get_event_delegation(self):
         """Test MemorySession.get_event delegates to manager."""
@@ -2091,29 +2061,27 @@ class TestEdgeCases:
 
             manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
 
-            # Mock events with multiple turns
-            mock_events = [
-                Event(
+            # Mock _data_plane_client.list_events with multiple turns
+            manager._data_plane_client.list_events.return_value = {
+                "events": [
                     {
                         "eventId": "event-1",
                         "payload": [
                             {"conversational": {"role": "USER", "content": {"text": "Hello"}}},
                             {"conversational": {"role": "ASSISTANT", "content": {"text": "Hi"}}},
-                            {
-                                "conversational": {"role": "USER", "content": {"text": "How are you?"}}
-                            },  # New turn starts
+                            {"conversational": {"role": "USER", "content": {"text": "How are you?"}}},
                             {"conversational": {"role": "ASSISTANT", "content": {"text": "Good"}}},
                         ],
                     }
-                )
-            ]
-            with patch.object(manager, "list_events", return_value=mock_events):
-                result = manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
+                ]
+            }
 
-                # Should group into 2 turns
-                assert len(result) == 2
-                assert len(result[0]) == 2  # First turn: USER + ASSISTANT
-                assert len(result[1]) == 2  # Second turn: USER + ASSISTANT
+            result = manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
+
+            # Should group into 2 turns
+            assert len(result) == 2
+            assert len(result[0]) == 2  # First turn: USER + ASSISTANT
+            assert len(result[1]) == 2  # Second turn: USER + ASSISTANT
 
     def test_session_delegation_with_optional_parameters(self):
         """Test MemorySession methods properly pass optional parameters."""
@@ -2289,20 +2257,20 @@ class TestEdgeCases:
 
             manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
 
-            # Mock events with non-conversational payload
-            mock_events = [
-                Event(
+            # Mock _data_plane_client.list_events with non-conversational payload
+            manager._data_plane_client.list_events.return_value = {
+                "events": [
                     {
                         "eventId": "event-1",
-                        "eventTimestamp": datetime(2023, 1, 1, 10, 0, 0),
+                        "eventTimestamp": "2023-01-01T10:00:00Z",
                         "payload": [{"blob": {"data": "some_data"}}],  # Non-conversational payload
                     }
-                )
-            ]
-            with patch.object(manager, "list_events", return_value=mock_events):
-                result = manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
+                ]
+            }
 
-                assert len(result) == 0  # No turns due to no conversational messages
+            result = manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
+
+            assert len(result) == 0  # No turns due to no conversational messages
 
     def test_get_last_k_turns_break_on_k_limit(self):
         """Test get_last_k_turns breaks when k limit is reached."""
@@ -2312,24 +2280,23 @@ class TestEdgeCases:
 
             manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
 
-            # Mock many events to test k limit
-            mock_events = []
+            # Mock _data_plane_client.list_events with many events
+            events = []
             for i in range(10):  # Create 10 events, each with a USER message (new turn)
-                mock_events.append(
-                    Event(
-                        {
-                            "eventId": f"event-{i}",
-                            "eventTimestamp": datetime(2023, 1, 1, 10, i, 0),
-                            "payload": [{"conversational": {"role": "USER", "content": {"text": f"Message {i}"}}}],
-                        }
-                    )
+                events.append(
+                    {
+                        "eventId": f"event-{i}",
+                        "eventTimestamp": f"2023-01-01T10:{i:02d}:00Z",
+                        "payload": [{"conversational": {"role": "USER", "content": {"text": f"Message {i}"}}}],
+                    }
                 )
 
-            with patch.object(manager, "list_events", return_value=mock_events):
-                result = manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=3)
+            manager._data_plane_client.list_events.return_value = {"events": events}
 
-                # Should only return 3 turns even though there are 10 events
-                assert len(result) == 3
+            result = manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=3)
+
+            # Should only return 3 turns even though there are 10 events
+            assert len(result) == 3
 
     def test_actor_list_sessions_return_type(self):
         """Test Actor.list_sessions returns correct type."""
@@ -3648,35 +3615,30 @@ class TestAddTurnsWithDataClasses:
 
             manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
 
-            # Mock list_events
-            mock_events = [
-                Event(
+            # Mock _data_plane_client.list_events
+            manager._data_plane_client.list_events.return_value = {
+                "events": [
                     {
                         "eventId": "event-1",
-                        "eventTimestamp": datetime(2023, 1, 1, 10, 0, 0),
+                        "eventTimestamp": "2023-01-01T10:00:00Z",
                         "payload": [{"conversational": {"role": "USER", "content": {"text": "Hello"}}}],
                     }
-                )
-            ]
-            with patch.object(manager, "list_events", return_value=mock_events) as mock_list_events:
-                result = manager.get_last_k_turns(
-                    actor_id="user-123",
-                    session_id="session-456",
-                    k=2,
-                    branch_name="test-branch",
-                    include_parent_branches=True,  # This should trigger include_parent_branches=True
-                )
+                ]
+            }
 
-                assert len(result) == 1
+            result = manager.get_last_k_turns(
+                actor_id="user-123",
+                session_id="session-456",
+                k=2,
+                branch_name="test-branch",
+                include_parent_branches=True,
+            )
 
-                # Verify list_events was called with include_parent_branches=True
-                mock_list_events.assert_called_once_with(
-                    actor_id="user-123",
-                    session_id="session-456",
-                    branch_name="test-branch",
-                    include_parent_branches=True,  # This is the key parameter
-                    max_results=100,
-                )
+            assert len(result) == 1
+
+            # Verify _data_plane_client.list_events was called with correct filter
+            call_kwargs = manager._data_plane_client.list_events.call_args[1]
+            assert call_kwargs["filter"]["branch"]["includeParentBranches"] is True
 
     def test_getattr_debug_logging(self):
         """Test __getattr__ debug logging when method is found."""
@@ -3854,3 +3816,33 @@ class TestAddTurnsWithDataClasses:
             # Verify nextToken was passed in second call
             second_call_args = mock_client_instance.list_events.call_args_list[1][1]
             assert second_call_args["nextToken"] == "token-123"
+
+    def test_get_last_k_turns_auto_max_results(self):
+        """Test get_last_k_turns auto-calculates max_results based on k."""
+        with patch("boto3.Session") as mock_boto_client:
+            mock_client_instance = MagicMock()
+            mock_boto_client.return_value = mock_client_instance
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            manager._data_plane_client.list_events.return_value = {"events": []}
+
+            # Test with k=5, should paginate with batch_size=100
+            manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
+            call_kwargs = manager._data_plane_client.list_events.call_args[1]
+            assert call_kwargs["maxResults"] == 100
+
+    def test_get_last_k_turns_explicit_max_results(self):
+        """Test get_last_k_turns respects explicitly provided max_results."""
+        with patch("boto3.Session") as mock_boto_client:
+            mock_client_instance = MagicMock()
+            mock_boto_client.return_value = mock_client_instance
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            manager._data_plane_client.list_events.return_value = {"events": []}
+
+            # Test with explicit max_results=50
+            manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=200, max_results=50)
+            call_kwargs = manager._data_plane_client.list_events.call_args[1]
+            assert call_kwargs["maxResults"] == 50

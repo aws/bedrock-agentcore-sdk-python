@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 SESSION_PREFIX = "session_"
 AGENT_PREFIX = "agent_"
 MESSAGE_PREFIX = "message_"
+MAX_FETCH_ALL_RESULTS = 10000
 
 
 class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository):
@@ -427,7 +428,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         )
 
     def list_messages(
-        self, session_id: str, agent_id: str, limit: Optional[int] = None, offset: int = 0, **kwargs: Any
+        self,
+        session_id: str,
+        agent_id: str,
+        limit: Optional[int] = None,
+        offset: int = 0,
+        **kwargs: Any,
     ) -> list[SessionMessage]:
         """List messages for an agent from AgentCore Memory with pagination.
 
@@ -448,7 +454,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session_id}")
 
         try:
-            max_results = (limit + offset) if limit else 100
+            max_results = (limit + offset) if limit else MAX_FETCH_ALL_RESULTS
+
             events = self.memory_client.list_events(
                 memory_id=self.config.memory_id,
                 actor_id=self.config.actor_id,
@@ -512,7 +519,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             )
             if retrieval_config.relevance_score:
                 memories = [
-                    m for m in memories
+                    m
+                    for m in memories
                     if m.get("relevanceScore", retrieval_config.relevance_score) >= retrieval_config.relevance_score
                 ]
             context_items = []
