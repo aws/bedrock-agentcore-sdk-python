@@ -34,7 +34,7 @@ def build_user_agent_suffix(integration_source: Optional[str] = None) -> str:
 
     if integration_source:
         # Sanitize to prevent header injection
-        sanitized = "".join(c for c in integration_source if c.isalnum() or c in "-_")
+        sanitized = "".join(c for c in integration_source.lower() if c.isalnum() or c in "-_")
         return f"{base} (integration_source={sanitized})"
 
     return base
