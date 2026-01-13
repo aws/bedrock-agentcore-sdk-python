@@ -14,6 +14,7 @@ import boto3
 from botocore.config import Config
 
 from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
+from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
 DEFAULT_IDENTIFIER = "aws.codeinterpreter.v1"
 DEFAULT_TIMEOUT = 900
@@ -59,24 +60,40 @@ class CodeInterpreter:
         ...     result = client.execute_code('import numpy as np; print(np.pi)')
     """
 
-    def __init__(self, region: str, session: Optional[boto3.Session] = None) -> None:
+    def __init__(
+        self, region: str, session: Optional[boto3.Session] = None, integration_source: Optional[str] = None
+    ) -> None:
         """Initialize a Code Interpreter client for the specified AWS region.
 
         Args:
             region (str): The AWS region to use.
             session (Optional[boto3.Session]): Optional boto3 session.
+            integration_source (Optional[str]): Framework integration identifier
+                for telemetry (e.g., 'langchain', 'crewai'). Used to track
+                customer acquisition from different integrations.
         """
         self.region = region
         self.logger = logging.getLogger(__name__)
+        self.integration_source = integration_source
 
         if session is None:
             session = boto3.Session()
+
+        # Build config with user-agent for telemetry
+        user_agent_extra = build_user_agent_suffix(integration_source)
+
+        # Control plane config (no special timeout)
+        control_config = Config(user_agent_extra=user_agent_extra)
+
+        # Data plane config (preserve existing read_timeout)
+        data_config = Config(read_timeout=300, user_agent_extra=user_agent_extra)
 
         # Control plane client for interpreter management
         self.control_plane_client = session.client(
             "bedrock-agentcore-control",
             region_name=region,
             endpoint_url=get_control_plane_endpoint(region),
+            config=control_config,
         )
 
         # Data plane client for session operations
@@ -84,7 +101,7 @@ class CodeInterpreter:
             "bedrock-agentcore",
             region_name=region,
             endpoint_url=get_data_plane_endpoint(region),
-            config=Config(read_timeout=300),
+            config=data_config,
         )
 
         self._identifier = None
