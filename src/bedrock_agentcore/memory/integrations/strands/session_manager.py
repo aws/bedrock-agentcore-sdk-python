@@ -728,7 +728,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         """
         if self.storage_version == "v2":
             registry.add_callback(AgentInitializedEvent, lambda event: self.initialize(event.agent))
-            registry.add_callback(MessageAddedEvent, lambda event: self.save_message_with_state(event.message, event.agent))
+            registry.add_callback(
+                MessageAddedEvent, lambda event: self.save_message_with_state(event.message, event.agent)
+            )
             registry.add_callback(AfterInvocationEvent, lambda event: self._sync_agent_state(event.agent))
             registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
         else:

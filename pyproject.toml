@@ -94,6 +94,9 @@ testpaths = [
     "tests"
 ]
 asyncio_mode = "auto"
+markers = [
+    "integration: marks tests as integration tests (require AWS credentials, deselect with '-m \"not integration\"')",
+]
 
 [tool.coverage.run]
 branch = true

@@ -221,3 +221,101 @@ class TestAgentCoreMemoryConverter:
         assert isinstance(encoded_bytes, dict)
         assert encoded_bytes.get("__bytes_encoded__") is True
         assert "data" in encoded_bytes
+
+    def test_events_to_messages_v2_format(self):
+        """Test parsing v2 format with _type marker."""
+        session_message = SessionMessage(
+            message_id=1, message={"role": "user", "content": [{"text": "Hello"}]}, created_at="2023-01-01T00:00:00Z"
+        )
+
+        v2_payload = {
+            "_type": "message",
+            "data": [json.dumps(session_message.to_dict()), "user"]
+        }
+        events = [{"payload": [{"blob": json.dumps(v2_payload)}]}]
+
+        result = AgentCoreMemoryConverter.events_to_messages(events)
+
+        assert len(result) == 1
+        assert result[0].message["role"] == "user"
+        assert result[0].message["content"][0]["text"] == "Hello"
+
+    def test_events_to_messages_v2_skips_agent_state(self):
+        """Test v2 format skips agent_state payloads."""
+        session_message = SessionMessage(
+            message_id=1, message={"role": "user", "content": [{"text": "Hello"}]}, created_at="2023-01-01T00:00:00Z"
+        )
+
+        message_payload = {
+            "_type": "message",
+            "data": [json.dumps(session_message.to_dict()), "user"]
+        }
+        agent_state_payload = {
+            "_type": "agent_state",
+            "_agent_id": "test-agent",
+            "agent_id": "test-agent",
+            "state": {},
+            "conversation_manager_state": {}
+        }
+        events = [
+            {"payload": [
+                {"blob": json.dumps(message_payload)},
+                {"blob": json.dumps(agent_state_payload)}
+            ]}
+        ]
+
+        result = AgentCoreMemoryConverter.events_to_messages(events)
+
+        assert len(result) == 1
+        assert result[0].message["content"][0]["text"] == "Hello"
+
+    def test_events_to_messages_v2_multiple_messages_reversed(self):
+        """Test v2 format returns messages in chronological order (reversed from API)."""
+        msg1 = SessionMessage(
+            message_id=1,
+            message={"role": "user", "content": [{"text": "First"}]},
+            created_at="2023-01-01T00:00:00Z",
+        )
+        msg2 = SessionMessage(
+            message_id=2,
+            message={"role": "assistant", "content": [{"text": "Second"}]},
+            created_at="2023-01-01T00:00:01Z",
+        )
+
+        # API returns newest first
+        v2_msg2 = {"_type": "message", "data": [json.dumps(msg2.to_dict()), "assistant"]}
+        v2_msg1 = {"_type": "message", "data": [json.dumps(msg1.to_dict()), "user"]}
+        events = [
+            {"payload": [{"blob": json.dumps(v2_msg2)}]},
+            {"payload": [{"blob": json.dumps(v2_msg1)}]},
+        ]
+
+        result = AgentCoreMemoryConverter.events_to_messages(events)
+
+        assert len(result) == 2
+        assert result[0].message["content"][0]["text"] == "First"
+        assert result[1].message["content"][0]["text"] == "Second"
+
+    def test_events_to_messages_mixed_v2_and_legacy(self):
+        """Test handling mixed v2 and legacy formats."""
+        msg_v2 = SessionMessage(
+            message_id=1,
+            message={"role": "user", "content": [{"text": "V2 message"}]},
+            created_at="2023-01-01T00:00:00Z",
+        )
+        msg_legacy = SessionMessage(
+            message_id=2,
+            message={"role": "assistant", "content": [{"text": "Legacy message"}]},
+            created_at="2023-01-01T00:00:01Z",
+        )
+
+        v2_payload = {"_type": "message", "data": [json.dumps(msg_v2.to_dict()), "user"]}
+        legacy_payload = [json.dumps(msg_legacy.to_dict()), "assistant"]
+        events = [
+            {"payload": [{"blob": json.dumps(v2_payload)}]},
+            {"payload": [{"blob": json.dumps(legacy_payload)}]},
+        ]
+
+        result = AgentCoreMemoryConverter.events_to_messages(events)
+
+        assert len(result) == 2

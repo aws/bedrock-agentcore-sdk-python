@@ -91,7 +91,8 @@ class AgentCoreMemoryConverter:
                                 data = blob_data.get("data", [])
                                 if isinstance(data, (tuple, list)) and len(data) == 2:
                                     session_msg = SessionMessage.from_dict(json.loads(data[0]))
-                                    session_msg.message = AgentCoreMemoryConverter._filter_empty_text(session_msg.message)
+                                    filtered = AgentCoreMemoryConverter._filter_empty_text(session_msg.message)
+                                    session_msg.message = filtered
                                     if session_msg.message.get("content"):
                                         messages.append(session_msg)
                                 continue

@@ -1116,3 +1116,256 @@ class TestAgentCoreMemorySessionManager:
         mock_memory_client.list_events.assert_called_once()
         call_kwargs = mock_memory_client.list_events.call_args[1]
         assert call_kwargs["max_results"] == 550  # limit + offset
+
+
+class TestStorageVersionV2:
+    """Tests for storage_version='v2' functionality."""
+
+    @pytest.fixture
+    def agentcore_config(self):
+        """Create a test AgentCore Memory configuration."""
+        return AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789"
+        )
+
+    @pytest.fixture
+    def mock_memory_client(self):
+        """Create a mock MemoryClient."""
+        client = Mock()
+        client.create_event.return_value = {"eventId": "event_123456"}
+        client.list_events.return_value = []
+        client.retrieve_memories.return_value = []
+        client.gmcp_client = Mock()
+        client.gmdp_client = Mock()
+        client.gmdp_client.create_event.return_value = {"event": {"eventId": "event_123456"}}
+        return client
+
+    @pytest.fixture
+    def session_manager_v2(self, agentcore_config, mock_memory_client):
+        """Create AgentCoreMemorySessionManager with storage_version='v2'."""
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            return_value=mock_memory_client
+        ):
+            with patch("boto3.Session") as mock_boto_session:
+                mock_session = Mock()
+                mock_session.region_name = "us-west-2"
+                mock_session.client.return_value = Mock()
+                mock_boto_session.return_value = mock_session
+
+                with patch(
+                    "strands.session.repository_session_manager.RepositorySessionManager.__init__",
+                    return_value=None
+                ):
+                    manager = AgentCoreMemorySessionManager(
+                        agentcore_config,
+                        storage_version="v2"
+                    )
+                    manager.session_id = agentcore_config.session_id
+                    manager.session = Session(
+                        session_id=agentcore_config.session_id,
+                        session_type=SessionType.AGENT
+                    )
+                    manager.memory_client = mock_memory_client
+                    manager._latest_agent_message = {}
+                    return manager
+
+    def test_init_storage_version_default(self, agentcore_config):
+        """Test default storage_version is 'v1'."""
+        with patch("bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient"):
+            with patch("boto3.Session") as mock_boto_session:
+                mock_session = Mock()
+                mock_session.region_name = "us-west-2"
+                mock_boto_session.return_value = mock_session
+
+                with patch(
+                    "strands.session.repository_session_manager.RepositorySessionManager.__init__",
+                    return_value=None
+                ):
+                    manager = AgentCoreMemorySessionManager(agentcore_config)
+                    assert manager.storage_version == "v1"
+
+    def test_init_storage_version_v2(self, agentcore_config):
+        """Test storage_version can be set to 'v2'."""
+        with patch("bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient"):
+            with patch("boto3.Session") as mock_boto_session:
+                mock_session = Mock()
+                mock_session.region_name = "us-west-2"
+                mock_boto_session.return_value = mock_session
+
+                with patch(
+                    "strands.session.repository_session_manager.RepositorySessionManager.__init__",
+                    return_value=None
+                ):
+                    manager = AgentCoreMemorySessionManager(
+                        agentcore_config,
+                        storage_version="v2"
+                    )
+                    assert manager.storage_version == "v2"
+
+    def test_register_hooks_v2_registers_agent_initialized(self, session_manager_v2):
+        """Test v2 registers AgentInitializedEvent hook."""
+        from strands.hooks import AgentInitializedEvent
+        from strands.hooks.registry import HookRegistry
+
+        registry = HookRegistry()
+        session_manager_v2.register_hooks(registry)
+
+        assert AgentInitializedEvent in registry._registered_callbacks
+        assert len(registry._registered_callbacks[AgentInitializedEvent]) == 1
+
+    def test_register_hooks_v2_message_callbacks(self, session_manager_v2):
+        """Test v2 registers correct MessageAddedEvent callbacks."""
+        from strands.hooks import MessageAddedEvent
+        from strands.hooks.registry import HookRegistry
+
+        registry = HookRegistry()
+        session_manager_v2.register_hooks(registry)
+
+        # v2: save_message_with_state + retrieve_customer_context
+        assert MessageAddedEvent in registry._registered_callbacks
+        assert len(registry._registered_callbacks[MessageAddedEvent]) == 2
+
+    def test_save_message_with_state_batches_payloads(self, session_manager_v2, mock_memory_client):
+        """Test save_message_with_state creates single API call with batched payloads."""
+        import json
+
+        mock_agent = Mock()
+        mock_agent.agent_id = "test-agent"
+
+        mock_session_agent = SessionAgent(
+            agent_id="test-agent",
+            state={"key": "value"},
+            conversation_manager_state={"cm_key": "cm_value"}
+        )
+
+        message = {"role": "user", "content": [{"text": "Hello"}]}
+
+        with patch.object(SessionAgent, "from_agent", return_value=mock_session_agent):
+            session_manager_v2.save_message_with_state(message, mock_agent)
+
+        mock_memory_client.gmdp_client.create_event.assert_called_once()
+        call_kwargs = mock_memory_client.gmdp_client.create_event.call_args[1]
+
+        # Should have 2 payloads: message + agent_state
+        assert len(call_kwargs["payload"]) == 2
+
+        # Verify message payload format
+        msg_payload = json.loads(call_kwargs["payload"][0]["blob"])
+        assert msg_payload["_type"] == "message"
+        assert "data" in msg_payload
+
+        # Verify agent_state payload format
+        agent_payload = json.loads(call_kwargs["payload"][1]["blob"])
+        assert agent_payload["_type"] == "agent_state"
+        assert agent_payload["_agent_id"] == "test-agent"
+
+    def test_read_agent_v2_format(self, session_manager_v2, mock_memory_client):
+        """Test read_agent correctly parses v2 format with _type marker."""
+        import json
+
+        agent_state_payload = {
+            "_type": "agent_state",
+            "_agent_id": "test-agent",
+            "agent_id": "test-agent",
+            "state": {"key": "value"},
+            "conversation_manager_state": {"cm_key": "cm_value"}
+        }
+
+        mock_memory_client.list_events.return_value = [
+            {
+                "eventId": "event-1",
+                "payload": [{"blob": json.dumps(agent_state_payload)}]
+            }
+        ]
+
+        result = session_manager_v2.read_agent("test-session-456", "test-agent")
+
+        assert result is not None
+        assert result.agent_id == "test-agent"
+        assert result.state == {"key": "value"}
+
+    def test_read_agent_v2_skips_message_payloads(self, session_manager_v2, mock_memory_client):
+        """Test read_agent skips message payloads when looking for agent state."""
+        import json
+
+        from strands.types.session import SessionMessage
+
+        msg = SessionMessage(
+            message_id=1,
+            message={"role": "user", "content": [{"text": "Hello"}]},
+            created_at="2023-01-01T00:00:00Z"
+        )
+        message_payload = {
+            "_type": "message",
+            "data": [json.dumps(msg.to_dict()), "user"]
+        }
+        agent_state_payload = {
+            "_type": "agent_state",
+            "_agent_id": "test-agent",
+            "agent_id": "test-agent",
+            "state": {},
+            "conversation_manager_state": {}
+        }
+
+        mock_memory_client.list_events.return_value = [
+            {
+                "eventId": "event-1",
+                "payload": [
+                    {"blob": json.dumps(message_payload)},
+                    {"blob": json.dumps(agent_state_payload)}
+                ]
+            }
+        ]
+
+        result = session_manager_v2.read_agent("test-session-456", "test-agent")
+
+        assert result is not None
+        assert result.agent_id == "test-agent"
+
+    def test_create_agent_v2_format(self, session_manager_v2, mock_memory_client):
+        """Test create_agent saves in v2 format with _type marker."""
+        import json
+
+        session_agent = SessionAgent(
+            agent_id="test-agent",
+            state={"key": "value"},
+            conversation_manager_state={}
+        )
+
+        session_manager_v2.create_agent("test-session-456", session_agent)
+
+        mock_memory_client.gmdp_client.create_event.assert_called_once()
+        call_kwargs = mock_memory_client.gmdp_client.create_event.call_args[1]
+
+        payload_data = json.loads(call_kwargs["payload"][0]["blob"])
+        assert payload_data["_type"] == "agent_state"
+        assert payload_data["_agent_id"] == "test-agent"
+        assert payload_data["agent_id"] == "test-agent"
+
+    def test_list_messages_parses_v2_format(self, session_manager_v2, mock_memory_client):
+        """Test list_messages correctly parses v2 format messages."""
+        import json
+
+        from strands.types.session import SessionMessage
+
+        msg = SessionMessage(
+            message_id=1,
+            message={"role": "user", "content": [{"text": "Hello from v2"}]},
+            created_at="2023-01-01T00:00:00Z"
+        )
+        message_payload = {
+            "_type": "message",
+            "data": [json.dumps(msg.to_dict()), "user"]
+        }
+
+        mock_memory_client.list_events.return_value = [
+            {"eventId": "event-1", "payload": [{"blob": json.dumps(message_payload)}]}
+        ]
+
+        result = session_manager_v2.list_messages("test-session-456", "test-agent")
+
+        assert len(result) == 1
+        assert result[0].message["content"][0]["text"] == "Hello from v2"
