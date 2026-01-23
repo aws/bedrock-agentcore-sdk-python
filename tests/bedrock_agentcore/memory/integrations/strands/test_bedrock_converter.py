@@ -228,10 +228,7 @@ class TestAgentCoreMemoryConverter:
             message_id=1, message={"role": "user", "content": [{"text": "Hello"}]}, created_at="2023-01-01T00:00:00Z"
         )
 
-        v2_payload = {
-            "_type": "message",
-            "data": [json.dumps(session_message.to_dict()), "user"]
-        }
+        v2_payload = {"_type": "message", "data": [json.dumps(session_message.to_dict()), "user"]}
         events = [{"payload": [{"blob": json.dumps(v2_payload)}]}]
 
         result = AgentCoreMemoryConverter.events_to_messages(events)
@@ -246,23 +243,15 @@ class TestAgentCoreMemoryConverter:
             message_id=1, message={"role": "user", "content": [{"text": "Hello"}]}, created_at="2023-01-01T00:00:00Z"
         )
 
-        message_payload = {
-            "_type": "message",
-            "data": [json.dumps(session_message.to_dict()), "user"]
-        }
+        message_payload = {"_type": "message", "data": [json.dumps(session_message.to_dict()), "user"]}
         agent_state_payload = {
             "_type": "agent_state",
             "_agent_id": "test-agent",
             "agent_id": "test-agent",
             "state": {},
-            "conversation_manager_state": {}
+            "conversation_manager_state": {},
         }
-        events = [
-            {"payload": [
-                {"blob": json.dumps(message_payload)},
-                {"blob": json.dumps(agent_state_payload)}
-            ]}
-        ]
+        events = [{"payload": [{"blob": json.dumps(message_payload)}, {"blob": json.dumps(agent_state_payload)}]}]
 
         result = AgentCoreMemoryConverter.events_to_messages(events)
 

@@ -9,6 +9,11 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import boto3
 from botocore.config import Config as BotocoreConfig
+from strands.experimental.hooks.multiagent import (
+    AfterMultiAgentInvocationEvent,
+    AfterNodeCallEvent,
+    MultiAgentInitializedEvent,
+)
 from strands.hooks import AfterInvocationEvent, AgentInitializedEvent, MessageAddedEvent
 from strands.hooks.registry import HookRegistry
 from strands.session.repository_session_manager import RepositorySessionManager
@@ -732,6 +737,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         registry.add_callback(MessageAddedEvent, lambda e: self._save_message_with_state(e.message, e.agent))
         registry.add_callback(AfterInvocationEvent, lambda event: self._sync_agent_state_if_changed(event.agent))
         registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
+
+        # Multi-agent hooks
+        registry.add_callback(MultiAgentInitializedEvent, lambda event: self.initialize_multi_agent(event.source))
+        registry.add_callback(AfterNodeCallEvent, lambda event: self.sync_multi_agent(event.source))
+        registry.add_callback(AfterMultiAgentInvocationEvent, lambda event: self.sync_multi_agent(event.source))
 
     @override
     def initialize(self, agent: "Agent", **kwargs: Any) -> None:

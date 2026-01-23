@@ -1125,9 +1125,7 @@ class TestOptimizedStorage:
     def agentcore_config(self):
         """Create a test AgentCore Memory configuration."""
         return AgentCoreMemoryConfig(
-            memory_id="test-memory-123",
-            session_id="test-session-456",
-            actor_id="test-actor-789"
+            memory_id="test-memory-123", session_id="test-session-456", actor_id="test-actor-789"
         )
 
     @pytest.fixture
@@ -1147,7 +1145,7 @@ class TestOptimizedStorage:
         """Create AgentCoreMemorySessionManager."""
         with patch(
             "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
-            return_value=mock_memory_client
+            return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
                 mock_session = Mock()
@@ -1156,15 +1154,11 @@ class TestOptimizedStorage:
                 mock_boto_session.return_value = mock_session
 
                 with patch(
-                    "strands.session.repository_session_manager.RepositorySessionManager.__init__",
-                    return_value=None
+                    "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
                 ):
                     manager = AgentCoreMemorySessionManager(agentcore_config)
                     manager.session_id = agentcore_config.session_id
-                    manager.session = Session(
-                        session_id=agentcore_config.session_id,
-                        session_type=SessionType.AGENT
-                    )
+                    manager.session = Session(session_id=agentcore_config.session_id, session_type=SessionType.AGENT)
                     manager.memory_client = mock_memory_client
                     manager._latest_agent_message = {}
                     return manager
@@ -1177,9 +1171,7 @@ class TestOptimizedStorage:
         mock_agent.agent_id = "test-agent"
 
         mock_session_agent = SessionAgent(
-            agent_id="test-agent",
-            state={"key": "value"},
-            conversation_manager_state={"cm_key": "cm_value"}
+            agent_id="test-agent", state={"key": "value"}, conversation_manager_state={"cm_key": "cm_value"}
         )
 
         message = {"role": "user", "content": [{"text": "Hello"}]}
@@ -1205,11 +1197,7 @@ class TestOptimizedStorage:
         mock_agent = Mock()
         mock_agent.agent_id = "test-agent"
 
-        mock_session_agent = SessionAgent(
-            agent_id="test-agent",
-            state={"key": "value"},
-            conversation_manager_state={}
-        )
+        mock_session_agent = SessionAgent(agent_id="test-agent", state={"key": "value"}, conversation_manager_state={})
 
         with patch.object(SessionAgent, "from_agent", return_value=mock_session_agent):
             # Set initial state hash
@@ -1234,14 +1222,14 @@ class TestOptimizedStorage:
             state={"key": "value"},
             conversation_manager_state={"cm_key": "cm_value"},
             created_at="2023-01-01T00:00:00Z",
-            updated_at="2023-01-01T00:00:00Z"
+            updated_at="2023-01-01T00:00:00Z",
         )
         session_agent_2 = SessionAgent(
             agent_id="test-agent",
             state={"key": "value"},
             conversation_manager_state={"cm_key": "cm_value"},
             created_at="2023-06-15T12:00:00Z",  # Different timestamp
-            updated_at="2023-12-31T23:59:59Z"   # Different timestamp
+            updated_at="2023-12-31T23:59:59Z",  # Different timestamp
         )
 
         with patch.object(SessionAgent, "from_agent", return_value=session_agent_1):
@@ -1259,14 +1247,12 @@ class TestOptimizedStorage:
         mock_agent.agent_id = "test-agent"
 
         session_agent_1 = SessionAgent(
-            agent_id="test-agent",
-            state={"key": "value1"},
-            conversation_manager_state={"cm_key": "cm_value"}
+            agent_id="test-agent", state={"key": "value1"}, conversation_manager_state={"cm_key": "cm_value"}
         )
         session_agent_2 = SessionAgent(
             agent_id="test-agent",
             state={"key": "value2"},  # Different state
-            conversation_manager_state={"cm_key": "cm_value"}
+            conversation_manager_state={"cm_key": "cm_value"},
         )
 
         with patch.object(SessionAgent, "from_agent", return_value=session_agent_1):
@@ -1284,9 +1270,7 @@ class TestOptimizedStorage:
         mock_agent.agent_id = "test-agent"
 
         mock_session_agent = SessionAgent(
-            agent_id="test-agent",
-            state={"key": "new_value"},
-            conversation_manager_state={}
+            agent_id="test-agent", state={"key": "new_value"}, conversation_manager_state={}
         )
 
         # Set different initial hash
@@ -1306,14 +1290,11 @@ class TestOptimizedStorage:
             "_agent_id": "test-agent",
             "agent_id": "test-agent",
             "state": {"key": "value"},
-            "conversation_manager_state": {"cm_key": "cm_value"}
+            "conversation_manager_state": {"cm_key": "cm_value"},
         }
 
         mock_memory_client.list_events.return_value = [
-            {
-                "eventId": "event-1",
-                "payload": [{"blob": json.dumps(agent_state_payload)}]
-            }
+            {"eventId": "event-1", "payload": [{"blob": json.dumps(agent_state_payload)}]}
         ]
 
         result = session_manager.read_agent("test-session-456", "test-agent")
@@ -1329,29 +1310,21 @@ class TestOptimizedStorage:
         from strands.types.session import SessionMessage
 
         msg = SessionMessage(
-            message_id=1,
-            message={"role": "user", "content": [{"text": "Hello"}]},
-            created_at="2023-01-01T00:00:00Z"
+            message_id=1, message={"role": "user", "content": [{"text": "Hello"}]}, created_at="2023-01-01T00:00:00Z"
         )
-        message_payload = {
-            "_type": "message",
-            "data": [json.dumps(msg.to_dict()), "user"]
-        }
+        message_payload = {"_type": "message", "data": [json.dumps(msg.to_dict()), "user"]}
         agent_state_payload = {
             "_type": "agent_state",
             "_agent_id": "test-agent",
             "agent_id": "test-agent",
             "state": {},
-            "conversation_manager_state": {}
+            "conversation_manager_state": {},
         }
 
         mock_memory_client.list_events.return_value = [
             {
                 "eventId": "event-1",
-                "payload": [
-                    {"blob": json.dumps(message_payload)},
-                    {"blob": json.dumps(agent_state_payload)}
-                ]
+                "payload": [{"blob": json.dumps(message_payload)}, {"blob": json.dumps(agent_state_payload)}],
             }
         ]
 
@@ -1368,16 +1341,12 @@ class TestOptimizedStorage:
         """
         import json
 
-        legacy_agent_data = {
-            "agent_id": "test-agent",
-            "state": {"legacy": "data"},
-            "conversation_manager_state": {}
-        }
+        legacy_agent_data = {"agent_id": "test-agent", "state": {"legacy": "data"}, "conversation_manager_state": {}}
 
         # First call (new format) returns empty, second call (legacy) returns data
         mock_memory_client.list_events.side_effect = [
             [],  # New format query with unified actor_id
-            [{"eventId": "event-1", "payload": [{"blob": json.dumps(legacy_agent_data)}]}]  # Legacy
+            [{"eventId": "event-1", "payload": [{"blob": json.dumps(legacy_agent_data)}]}],  # Legacy
         ]
 
         result = session_manager.read_agent("test-session-456", "test-agent")
@@ -1397,11 +1366,7 @@ class TestOptimizedStorage:
         """Test create_agent saves in new format with _type marker."""
         import json
 
-        session_agent = SessionAgent(
-            agent_id="test-agent",
-            state={"key": "value"},
-            conversation_manager_state={}
-        )
+        session_agent = SessionAgent(agent_id="test-agent", state={"key": "value"}, conversation_manager_state={})
 
         session_manager.create_agent("test-session-456", session_agent)
 
@@ -1419,14 +1384,9 @@ class TestOptimizedStorage:
         from strands.types.session import SessionMessage
 
         msg = SessionMessage(
-            message_id=1,
-            message={"role": "user", "content": [{"text": "Hello"}]},
-            created_at="2023-01-01T00:00:00Z"
+            message_id=1, message={"role": "user", "content": [{"text": "Hello"}]}, created_at="2023-01-01T00:00:00Z"
         )
-        message_payload = {
-            "_type": "message",
-            "data": [json.dumps(msg.to_dict()), "user"]
-        }
+        message_payload = {"_type": "message", "data": [json.dumps(msg.to_dict()), "user"]}
 
         mock_memory_client.list_events.return_value = [
             {"eventId": "event-1", "payload": [{"blob": json.dumps(message_payload)}]}
@@ -1447,14 +1407,14 @@ class TestOptimizedStorage:
             "_agent_id": "test-agent",
             "agent_id": "test-agent",
             "state": {"turn": 1},
-            "conversation_manager_state": {"removed_message_count": 0}
+            "conversation_manager_state": {"removed_message_count": 0},
         }
         latest_state = {
             "_type": "agent_state",
             "_agent_id": "test-agent",
             "agent_id": "test-agent",
             "state": {"turn": 2},
-            "conversation_manager_state": {"removed_message_count": 0}
+            "conversation_manager_state": {"removed_message_count": 0},
         }
 
         # Events returned oldest-first by API
@@ -1474,18 +1434,54 @@ class TestOptimizedStorage:
 
         # Interleaved states: agent-1 turn 1, agent-2 turn 1, agent-1 turn 2 (oldest first)
         events = [
-            {"eventId": "event-1", "payload": [{"blob": json.dumps({
-                "_type": "agent_state", "_agent_id": "agent-1", "agent_id": "agent-1",
-                "state": {"turn": 1}, "conversation_manager_state": {}
-            })}]},
-            {"eventId": "event-2", "payload": [{"blob": json.dumps({
-                "_type": "agent_state", "_agent_id": "agent-2", "agent_id": "agent-2",
-                "state": {"turn": 1}, "conversation_manager_state": {}
-            })}]},
-            {"eventId": "event-3", "payload": [{"blob": json.dumps({
-                "_type": "agent_state", "_agent_id": "agent-1", "agent_id": "agent-1",
-                "state": {"turn": 2}, "conversation_manager_state": {}
-            })}]},
+            {
+                "eventId": "event-1",
+                "payload": [
+                    {
+                        "blob": json.dumps(
+                            {
+                                "_type": "agent_state",
+                                "_agent_id": "agent-1",
+                                "agent_id": "agent-1",
+                                "state": {"turn": 1},
+                                "conversation_manager_state": {},
+                            }
+                        )
+                    }
+                ],
+            },
+            {
+                "eventId": "event-2",
+                "payload": [
+                    {
+                        "blob": json.dumps(
+                            {
+                                "_type": "agent_state",
+                                "_agent_id": "agent-2",
+                                "agent_id": "agent-2",
+                                "state": {"turn": 1},
+                                "conversation_manager_state": {},
+                            }
+                        )
+                    }
+                ],
+            },
+            {
+                "eventId": "event-3",
+                "payload": [
+                    {
+                        "blob": json.dumps(
+                            {
+                                "_type": "agent_state",
+                                "_agent_id": "agent-1",
+                                "agent_id": "agent-1",
+                                "state": {"turn": 2},
+                                "conversation_manager_state": {},
+                            }
+                        )
+                    }
+                ],
+            },
         ]
 
         mock_memory_client.list_events.return_value = events
@@ -1509,7 +1505,7 @@ class TestOptimizedStorage:
             "_agent_id": "agent-1",
             "agent_id": "agent-1",
             "state": {},
-            "conversation_manager_state": {}
+            "conversation_manager_state": {},
         }
 
         mock_memory_client.list_events.return_value = [
@@ -1519,7 +1515,7 @@ class TestOptimizedStorage:
         # agent-3 doesn't exist, and no legacy fallback
         mock_memory_client.list_events.side_effect = [
             [{"eventId": "event-1", "payload": [{"blob": json.dumps(agent1_state)}]}],
-            []  # Legacy fallback returns empty
+            [],  # Legacy fallback returns empty
         ]
         result = session_manager.read_agent("test-session-456", "agent-3")
         assert result is None

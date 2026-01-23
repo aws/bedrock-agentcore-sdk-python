@@ -83,7 +83,7 @@ class AgentCoreMemoryConverter:
                 elif "blob" in payload_item:
                     try:
                         blob_data = json.loads(payload_item["blob"])
-                        # V2 format: dict with _type marker
+                        # New format: dict with _type marker
                         if isinstance(blob_data, dict):
                             if blob_data.get("_type") == "agent_state":
                                 continue  # Skip agent state payloads

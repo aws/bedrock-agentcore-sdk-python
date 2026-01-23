@@ -87,15 +87,12 @@ class TestOptimizedStorageIntegration:
             region_name=region,
         )
 
-        model = BedrockModel(
-            model_id="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-            region_name=region
-        )
+        model = BedrockModel(model_id="us.anthropic.claude-haiku-4-5-20251001-v1:0", region_name=region)
 
         agent = Agent(
             model=model,
             session_manager=session_manager,
-            system_prompt="You are a helpful assistant. Keep responses very brief."
+            system_prompt="You are a helpful assistant. Keep responses very brief.",
         )
 
         # Count API calls
@@ -131,10 +128,7 @@ class TestOptimizedStorageIntegration:
             actor_id=actor_id,
         )
 
-        model = BedrockModel(
-            model_id="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-            region_name=region
-        )
+        model = BedrockModel(model_id="us.anthropic.claude-haiku-4-5-20251001-v1:0", region_name=region)
 
         # Turn 1: Tell the agent something to remember
         session_manager_1 = AgentCoreMemorySessionManager(
@@ -145,7 +139,7 @@ class TestOptimizedStorageIntegration:
         agent_1 = Agent(
             model=model,
             session_manager=session_manager_1,
-            system_prompt="You are a helpful assistant. Remember what the user tells you."
+            system_prompt="You are a helpful assistant. Remember what the user tells you.",
         )
 
         agent_1("My favorite color is blue. Remember this.")
@@ -159,7 +153,7 @@ class TestOptimizedStorageIntegration:
         agent_2 = Agent(
             model=model,
             session_manager=session_manager_2,
-            system_prompt="You are a helpful assistant. Remember what the user tells you."
+            system_prompt="You are a helpful assistant. Remember what the user tells you.",
         )
 
         # Verify messages were loaded
@@ -196,21 +190,14 @@ class TestOptimizedStorageIntegration:
             actor_id=actor_id,
         )
 
-        model = BedrockModel(
-            model_id="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-            region_name=region
-        )
+        model = BedrockModel(model_id="us.anthropic.claude-haiku-4-5-20251001-v1:0", region_name=region)
 
         session_manager = AgentCoreMemorySessionManager(
             agentcore_memory_config=config,
             region_name=region,
         )
 
-        agent = Agent(
-            model=model,
-            session_manager=session_manager,
-            system_prompt="You are a helpful assistant."
-        )
+        agent = Agent(model=model, session_manager=session_manager, system_prompt="You are a helpful assistant.")
 
         agent("Test message for format.")
 
@@ -264,10 +251,7 @@ class TestOptimizedStorageIntegration:
 
         actor_id = "test-user"
 
-        model = BedrockModel(
-            model_id="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-            region_name=region
-        )
+        model = BedrockModel(model_id="us.anthropic.claude-haiku-4-5-20251001-v1:0", region_name=region)
 
         config = AgentCoreMemoryConfig(
             memory_id=memory_id,
@@ -283,7 +267,7 @@ class TestOptimizedStorageIntegration:
             model=model,
             session_manager=session_manager,
             tools=[get_time, add_numbers],
-            system_prompt="You are a helpful assistant. Use tools when asked. Keep responses brief."
+            system_prompt="You are a helpful assistant. Use tools when asked. Keep responses brief.",
         )
 
         counter = APICallCounter()
