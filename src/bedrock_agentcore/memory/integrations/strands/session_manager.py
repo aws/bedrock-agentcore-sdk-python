@@ -5,7 +5,7 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import boto3
 from botocore.config import Config as BotocoreConfig
@@ -33,7 +33,7 @@ AGENT_PREFIX = "agent_"
 MESSAGE_PREFIX = "message_"
 MAX_FETCH_ALL_RESULTS = 10000
 
-# Payload type markers for v2 storage
+# Payload type markers for batched storage
 PAYLOAD_TYPE_MESSAGE = "message"
 PAYLOAD_TYPE_AGENT_STATE = "agent_state"
 
@@ -91,7 +91,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         region_name: Optional[str] = None,
         boto_session: Optional[boto3.Session] = None,
         boto_client_config: Optional[BotocoreConfig] = None,
-        storage_version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ):
         """Initialize AgentCoreMemorySessionManager with Bedrock AgentCore Memory.
@@ -102,17 +101,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             boto_session (Optional[boto3.Session], optional): Optional boto3 session. Defaults to None.
             boto_client_config (Optional[BotocoreConfig], optional): Optional boto3 client configuration.
                Defaults to None.
-            storage_version (Literal["v1", "v2"], optional): Storage version for API optimization.
-                - "v1" (default): Original behavior where agent state uses separate actorId.
-                - "v2": Unified actorId enabling batched API calls to reduce redundant requests.
-               Defaults to "v1" for backward compatibility.
             **kwargs (Any): Additional keyword arguments.
         """
         self.config = agentcore_memory_config
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
         self.has_existing_agent = False
-        self.storage_version = storage_version
+        self._last_synced_state_hash: Optional[int] = None
 
         # Override the clients if custom boto session or config is provided
         # Add strands-agents to the request user agent
@@ -167,7 +162,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             )
         return full_agent_id
 
-    # region Optimized Storage Methods (storage_version="v2")
+    # region Internal Storage Methods
 
     def _build_agent_state_payload(self, agent: "Agent") -> dict:
         """Create agent state payload for unified storage.
@@ -188,8 +183,26 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             **session_agent.to_dict(),
         }
 
-    def save_message_with_state(self, message: Message, agent: "Agent") -> None:
-        """Save message and agent state in a single batched API call (v2 only).
+    def _compute_state_hash(self, agent: "Agent") -> int:
+        """Compute hash of agent state for change detection.
+
+        Excludes timestamps (created_at, updated_at) as they change on every call.
+
+        Args:
+            agent (Agent): The agent whose state to hash.
+
+        Returns:
+            int: Hash of the agent state.
+        """
+        session_agent = SessionAgent.from_agent(agent)
+        state_dict = session_agent.to_dict()
+        # Exclude timestamps that change on every call
+        state_dict.pop("created_at", None)
+        state_dict.pop("updated_at", None)
+        return hash(json.dumps(state_dict, sort_keys=True))
+
+    def _save_message_with_state(self, message: Message, agent: "Agent") -> None:
+        """Save message and agent state in a single batched API call.
 
         Combines message and agent state into one API call instead of two separate calls.
 
@@ -197,27 +210,19 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             message (Message): The message to save.
             agent (Agent): The agent whose state to sync.
         """
-        if self.storage_version != "v2":
-            raise RuntimeError("save_message_with_state is only available in storage_version='v2'")
-
         session_message = SessionMessage.from_message(message, 0)
         messages = AgentCoreMemoryConverter.message_to_payload(session_message)
         if not messages:
             return
 
-        # Convert message to v2 payload format with type marker
         message_tuple = messages[0]
         message_payload = {"_type": PAYLOAD_TYPE_MESSAGE, "data": list(message_tuple)}
-
-        # Prepare agent state payload with type marker
         agent_state_payload = self._build_agent_state_payload(agent)
 
-        # Parse the original timestamp and use it as desired timestamp
         original_timestamp = datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00"))
         monotonic_timestamp = self._get_monotonic_timestamp(original_timestamp)
 
         try:
-            # Single batched API call with both payloads
             event = self.memory_client.gmdp_client.create_event(
                 memoryId=self.config.memory_id,
                 actorId=self.config.actor_id,
@@ -234,20 +239,25 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 agent.agent_id,
             )
 
-            # Update latest message tracking
             session_message = SessionMessage.from_message(message, event.get("event", {}).get("eventId"))
             self._latest_agent_message[agent.agent_id] = session_message
+            self._last_synced_state_hash = self._compute_state_hash(agent)
 
         except Exception as e:
             logger.error("Failed to save message with state: %s", e)
             raise SessionException(f"Failed to save message with state: {e}") from e
 
-    def _sync_agent_state(self, agent: "Agent") -> None:
-        """Sync agent state to AgentCore Memory using unified actorId.
+    def _sync_agent_state_if_changed(self, agent: "Agent") -> None:
+        """Sync agent state to AgentCore Memory only if state changed since last sync.
 
         Args:
             agent (Agent): The agent to sync.
         """
+        current_hash = self._compute_state_hash(agent)
+        if current_hash == self._last_synced_state_hash:
+            logger.debug("Agent state unchanged, skipping sync for agent=%s", agent.agent_id)
+            return
+
         agent_state_payload = self._build_agent_state_payload(agent)
 
         try:
@@ -258,13 +268,15 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 payload=[{"blob": json.dumps(agent_state_payload)}],
                 eventTimestamp=self._get_monotonic_timestamp(),
             )
+            self._last_synced_state_hash = current_hash
             logger.debug(
                 "Synced agent state: event=%s, agent=%s", event.get("event", {}).get("eventId"), agent.agent_id
             )
         except Exception as e:
             logger.error("Failed to sync agent state: %s", e)
+            raise SessionException(f"Failed to sync agent state: {e}") from e
 
-    # endregion Optimized Storage Methods
+    # endregion Internal Storage Methods
 
     # region SessionRepository interface implementation
     def create_session(self, session: Session, **kwargs: Any) -> Session:
@@ -346,7 +358,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         The agent's existence is inferred from the presence of events/messages in the memory system,
         but we validate the session_id matches our config.
 
-        For storage_version="v2", uses unified actorId with type markers.
+        Uses unified actorId with type markers for optimized storage.
 
         Args:
             session_id (str): The session ID to create the agent in.
@@ -359,29 +371,18 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if session_id != self.config.session_id:
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session_id}")
 
-        if self.storage_version == "v2":
-            # V2: Use unified actorId with type marker
-            agent_state_payload = {
-                "_type": PAYLOAD_TYPE_AGENT_STATE,
-                "_agent_id": session_agent.agent_id,
-                **session_agent.to_dict(),
-            }
-            event = self.memory_client.gmdp_client.create_event(
-                memoryId=self.config.memory_id,
-                actorId=self.config.actor_id,
-                sessionId=self.session_id,
-                payload=[{"blob": json.dumps(agent_state_payload)}],
-                eventTimestamp=self._get_monotonic_timestamp(),
-            )
-        else:
-            # V1: Use separate actorId for agent
-            event = self.memory_client.gmdp_client.create_event(
-                memoryId=self.config.memory_id,
-                actorId=self._get_full_agent_id(session_agent.agent_id),
-                sessionId=self.session_id,
-                payload=[{"blob": json.dumps(session_agent.to_dict())}],
-                eventTimestamp=self._get_monotonic_timestamp(),
-            )
+        agent_state_payload = {
+            "_type": PAYLOAD_TYPE_AGENT_STATE,
+            "_agent_id": session_agent.agent_id,
+            **session_agent.to_dict(),
+        }
+        event = self.memory_client.gmdp_client.create_event(
+            memoryId=self.config.memory_id,
+            actorId=self.config.actor_id,
+            sessionId=self.session_id,
+            payload=[{"blob": json.dumps(agent_state_payload)}],
+            eventTimestamp=self._get_monotonic_timestamp(),
+        )
 
         logger.info(
             "Created agent: %s in session: %s with event %s",
@@ -393,9 +394,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def read_agent(self, session_id: str, agent_id: str, **kwargs: Any) -> Optional[SessionAgent]:
         """Read agent data from AgentCore Memory events.
 
-        Uses the storage version specified at initialization:
-        - v1: Reads from separate actorId (agent_{id})
-        - v2: Reads from unified actorId with type markers
+        Uses dual-read approach: tries new format first (unified actorId with type markers),
+        falls back to legacy format (separate actorId) for backward compatibility.
 
         Args:
             session_id (str): The session ID to read from.
@@ -409,36 +409,37 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             return None
 
         try:
-            if self.storage_version == "v2":
-                # V2: Read from unified actorId, filter by type marker
-                events = self.memory_client.list_events(
-                    memory_id=self.config.memory_id,
-                    actor_id=self.config.actor_id,
-                    session_id=session_id,
-                    max_results=MAX_FETCH_ALL_RESULTS,
-                )
-                for event in events:
-                    for payload_item in event.get("payload", []):
-                        blob = payload_item.get("blob")
-                        if blob:
-                            try:
-                                data = json.loads(blob)
-                                if data.get("_type") == PAYLOAD_TYPE_AGENT_STATE and data.get("_agent_id") == agent_id:
-                                    agent_data = {k: v for k, v in data.items() if k not in ("_type", "_agent_id")}
-                                    return SessionAgent.from_dict(agent_data)
-                            except json.JSONDecodeError:
-                                continue
-            else:
-                # V1: Read from separate actorId
-                events = self.memory_client.list_events(
-                    memory_id=self.config.memory_id,
-                    actor_id=self._get_full_agent_id(agent_id),
-                    session_id=session_id,
-                    max_results=1,
-                )
-                if events:
-                    agent_data = json.loads(events[0].get("payload", {})[0].get("blob"))
-                    return SessionAgent.from_dict(agent_data)
+            events = self.memory_client.list_events(
+                memory_id=self.config.memory_id,
+                actor_id=self.config.actor_id,
+                session_id=session_id,
+                max_results=MAX_FETCH_ALL_RESULTS,
+            )
+
+            # Events are returned oldest-first, so reverse to get latest state
+            for event in reversed(events):
+                for payload_item in event.get("payload", []):
+                    blob = payload_item.get("blob")
+                    if blob:
+                        try:
+                            data = json.loads(blob)
+                            if data.get("_type") == PAYLOAD_TYPE_AGENT_STATE and data.get("_agent_id") == agent_id:
+                                agent_data = {k: v for k, v in data.items() if k not in ("_type", "_agent_id")}
+                                return SessionAgent.from_dict(agent_data)
+                        except json.JSONDecodeError:
+                            continue
+
+            # Fallback to legacy format for backward compatibility
+            legacy_events = self.memory_client.list_events(
+                memory_id=self.config.memory_id,
+                actor_id=self._get_full_agent_id(agent_id),
+                session_id=session_id,
+                max_results=1,
+            )
+            if legacy_events:
+                agent_data = json.loads(legacy_events[0].get("payload", {})[0].get("blob"))
+                return SessionAgent.from_dict(agent_data)
+
         except Exception as e:
             logger.error("Failed to read agent: %s", e)
 
@@ -464,7 +465,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         # Create a new agent as AgentCore Memory is immutable. We always get the latest one in `read_agent`
         self.create_agent(session_id, session_agent)
 
-    def create_message(
+    def create_message(  # type: ignore[override]
         self, session_id: str, agent_id: str, session_message: SessionMessage, **kwargs: Any
     ) -> Optional[dict[str, Any]]:
         """Create a new message in AgentCore Memory.
@@ -501,9 +502,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         try:
             messages = AgentCoreMemoryConverter.message_to_payload(session_message)
             if not messages:
-                return
+                return None
 
-            # Parse the original timestamp and use it as desired timestamp
             original_timestamp = datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00"))
             monotonic_timestamp = self._get_monotonic_timestamp(original_timestamp)
 
@@ -625,16 +625,28 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     # region RepositorySessionManager overrides
     @override
     def append_message(self, message: Message, agent: "Agent", **kwargs: Any) -> None:
-        """Append a message to the agent's session using AgentCore's eventId as message_id.
+        """Append a message to the agent's session with batched agent state sync.
+
+        Saves message and agent state in a single API call for optimization.
 
         Args:
             message: Message to add to the agent in the session
             agent: Agent to append the message to
             **kwargs: Additional keyword arguments for future extensibility.
         """
-        created_message = self.create_message(self.session_id, agent.agent_id, SessionMessage.from_message(message, 0))
-        session_message = SessionMessage.from_message(message, created_message.get("eventId"))
-        self._latest_agent_message[agent.agent_id] = session_message
+        self._save_message_with_state(message, agent)
+
+    @override
+    def sync_agent(self, agent: "Agent", **kwargs: Any) -> None:
+        """Sync agent state only if it changed since last sync.
+
+        Skips sync if agent state is unchanged, avoiding redundant API calls.
+
+        Args:
+            agent: Agent to sync to the session.
+            **kwargs: Additional keyword arguments for future extensibility.
+        """
+        self._sync_agent_state_if_changed(agent)
 
     def retrieve_customer_context(self, event: MessageAddedEvent) -> None:
         """Retrieve customer LTM context before processing support query.
@@ -643,7 +655,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             event (MessageAddedEvent): The message added event containing the agent and message data.
         """
         messages = event.agent.messages
-        if not messages or messages[-1].get("role") != "user" or "toolResult" in messages[-1].get("content")[0]:
+        content = messages[-1].get("content") if messages else None
+        if not messages or messages[-1].get("role") != "user" or not content or "toolResult" in content[0]:
             return None
         if not self.config.retrieval_config:
             # Only retrieve LTM
@@ -651,7 +664,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         user_query = messages[-1]["content"][0]["text"]
 
-        def retrieve_for_namespace(namespace: str, retrieval_config: RetrievalConfig):
+        def retrieve_for_namespace(namespace: str, retrieval_config: RetrievalConfig) -> list[str]:
             """Helper function to retrieve memories for a single namespace."""
             resolved_namespace = namespace.format(
                 actorId=self.config.actor_id,
@@ -713,29 +726,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             logger.error("Failed to retrieve customer context: %s", e)
 
     @override
-    def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
-        """Register hooks for session management.
-
-        For storage_version="v1" (default):
-            Uses parent class behavior with separate API calls for message and agent state.
-
-        For storage_version="v2":
-            Uses batched API calls to reduce redundant API calls.
-
-        Args:
-            registry (HookRegistry): The hook registry to register callbacks with.
-            **kwargs: Additional keyword arguments.
-        """
-        if self.storage_version == "v2":
-            registry.add_callback(AgentInitializedEvent, lambda event: self.initialize(event.agent))
-            registry.add_callback(
-                MessageAddedEvent, lambda event: self.save_message_with_state(event.message, event.agent)
-            )
-            registry.add_callback(AfterInvocationEvent, lambda event: self._sync_agent_state(event.agent))
-            registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
-        else:
-            RepositorySessionManager.register_hooks(self, registry, **kwargs)
-            registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
+    def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
+        """Register hooks for session management with optimized storage."""
+        registry.add_callback(AgentInitializedEvent, lambda event: self.initialize(event.agent))
+        registry.add_callback(MessageAddedEvent, lambda e: self._save_message_with_state(e.message, e.agent))
+        registry.add_callback(AfterInvocationEvent, lambda event: self._sync_agent_state_if_changed(event.agent))
+        registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
 
     @override
     def initialize(self, agent: "Agent", **kwargs: Any) -> None:
