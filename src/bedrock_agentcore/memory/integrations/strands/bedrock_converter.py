@@ -83,6 +83,19 @@ class AgentCoreMemoryConverter:
                 elif "blob" in payload_item:
                     try:
                         blob_data = json.loads(payload_item["blob"])
+                        # V2 format: dict with _type marker
+                        if isinstance(blob_data, dict):
+                            if blob_data.get("_type") == "agent_state":
+                                continue  # Skip agent state payloads
+                            if blob_data.get("_type") == "message":
+                                data = blob_data.get("data", [])
+                                if isinstance(data, (tuple, list)) and len(data) == 2:
+                                    session_msg = SessionMessage.from_dict(json.loads(data[0]))
+                                    session_msg.message = AgentCoreMemoryConverter._filter_empty_text(session_msg.message)
+                                    if session_msg.message.get("content"):
+                                        messages.append(session_msg)
+                                continue
+                        # Legacy format: tuple [json_string, role]
                         if isinstance(blob_data, (tuple, list)) and len(blob_data) == 2:
                             try:
                                 session_msg = SessionMessage.from_dict(json.loads(blob_data[0]))
@@ -91,8 +104,8 @@ class AgentCoreMemoryConverter:
                                     messages.append(session_msg)
                             except (json.JSONDecodeError, ValueError):
                                 logger.error("This is not a SessionMessage but just a blob message. Ignoring")
-                    except (json.JSONDecodeError, ValueError):
-                        logger.error("Failed to parse blob content: %s", payload_item)
+                    except Exception as e:
+                        logger.error("Failed to parse blob content: %s, error: %s", payload_item, e)
         return list(reversed(messages))
 
     @staticmethod

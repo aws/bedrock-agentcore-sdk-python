@@ -5,11 +5,11 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 import boto3
 from botocore.config import Config as BotocoreConfig
-from strands.hooks import MessageAddedEvent
+from strands.hooks import AfterInvocationEvent, AgentInitializedEvent, MessageAddedEvent
 from strands.hooks.registry import HookRegistry
 from strands.session.repository_session_manager import RepositorySessionManager
 from strands.session.session_repository import SessionRepository
@@ -32,6 +32,10 @@ SESSION_PREFIX = "session_"
 AGENT_PREFIX = "agent_"
 MESSAGE_PREFIX = "message_"
 MAX_FETCH_ALL_RESULTS = 10000
+
+# Payload type markers for v2 storage
+PAYLOAD_TYPE_MESSAGE = "message"
+PAYLOAD_TYPE_AGENT_STATE = "agent_state"
 
 
 class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository):
@@ -87,6 +91,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         region_name: Optional[str] = None,
         boto_session: Optional[boto3.Session] = None,
         boto_client_config: Optional[BotocoreConfig] = None,
+        storage_version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ):
         """Initialize AgentCoreMemorySessionManager with Bedrock AgentCore Memory.
@@ -97,12 +102,17 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             boto_session (Optional[boto3.Session], optional): Optional boto3 session. Defaults to None.
             boto_client_config (Optional[BotocoreConfig], optional): Optional boto3 client configuration.
                Defaults to None.
+            storage_version (Literal["v1", "v2"], optional): Storage version for API optimization.
+                - "v1" (default): Original behavior where agent state uses separate actorId.
+                - "v2": Unified actorId enabling batched API calls to reduce redundant requests.
+               Defaults to "v1" for backward compatibility.
             **kwargs (Any): Additional keyword arguments.
         """
         self.config = agentcore_memory_config
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
         self.has_existing_agent = False
+        self.storage_version = storage_version
 
         # Override the clients if custom boto session or config is provided
         # Add strands-agents to the request user agent
@@ -156,6 +166,105 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 f"Cannot create agent [ {full_agent_id} ] with the same ID as the actor ID: {self.config.actor_id}"
             )
         return full_agent_id
+
+    # region Optimized Storage Methods (storage_version="v2")
+
+    def _build_agent_state_payload(self, agent: "Agent") -> dict:
+        """Create agent state payload for unified storage.
+
+        Creates a SessionAgent-compatible payload that can be reconstructed
+        via SessionAgent.from_dict().
+
+        Args:
+            agent (Agent): The agent whose state to capture.
+
+        Returns:
+            dict: Agent state payload with type markers.
+        """
+        session_agent = SessionAgent.from_agent(agent)
+        return {
+            "_type": PAYLOAD_TYPE_AGENT_STATE,
+            "_agent_id": agent.agent_id,
+            **session_agent.to_dict(),
+        }
+
+    def save_message_with_state(self, message: Message, agent: "Agent") -> None:
+        """Save message and agent state in a single batched API call (v2 only).
+
+        Combines message and agent state into one API call instead of two separate calls.
+
+        Args:
+            message (Message): The message to save.
+            agent (Agent): The agent whose state to sync.
+        """
+        if self.storage_version != "v2":
+            raise RuntimeError("save_message_with_state is only available in storage_version='v2'")
+
+        session_message = SessionMessage.from_message(message, 0)
+        messages = AgentCoreMemoryConverter.message_to_payload(session_message)
+        if not messages:
+            return
+
+        # Convert message to v2 payload format with type marker
+        message_tuple = messages[0]
+        message_payload = {"_type": PAYLOAD_TYPE_MESSAGE, "data": list(message_tuple)}
+
+        # Prepare agent state payload with type marker
+        agent_state_payload = self._build_agent_state_payload(agent)
+
+        # Parse the original timestamp and use it as desired timestamp
+        original_timestamp = datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00"))
+        monotonic_timestamp = self._get_monotonic_timestamp(original_timestamp)
+
+        try:
+            # Single batched API call with both payloads
+            event = self.memory_client.gmdp_client.create_event(
+                memoryId=self.config.memory_id,
+                actorId=self.config.actor_id,
+                sessionId=self.session_id,
+                payload=[
+                    {"blob": json.dumps(message_payload)},
+                    {"blob": json.dumps(agent_state_payload)},
+                ],
+                eventTimestamp=monotonic_timestamp,
+            )
+            logger.debug(
+                "Saved message and agent state in single call: event=%s, agent=%s",
+                event.get("event", {}).get("eventId"),
+                agent.agent_id,
+            )
+
+            # Update latest message tracking
+            session_message = SessionMessage.from_message(message, event.get("event", {}).get("eventId"))
+            self._latest_agent_message[agent.agent_id] = session_message
+
+        except Exception as e:
+            logger.error("Failed to save message with state: %s", e)
+            raise SessionException(f"Failed to save message with state: {e}") from e
+
+    def _sync_agent_state(self, agent: "Agent") -> None:
+        """Sync agent state to AgentCore Memory using unified actorId.
+
+        Args:
+            agent (Agent): The agent to sync.
+        """
+        agent_state_payload = self._build_agent_state_payload(agent)
+
+        try:
+            event = self.memory_client.gmdp_client.create_event(
+                memoryId=self.config.memory_id,
+                actorId=self.config.actor_id,
+                sessionId=self.session_id,
+                payload=[{"blob": json.dumps(agent_state_payload)}],
+                eventTimestamp=self._get_monotonic_timestamp(),
+            )
+            logger.debug(
+                "Synced agent state: event=%s, agent=%s", event.get("event", {}).get("eventId"), agent.agent_id
+            )
+        except Exception as e:
+            logger.error("Failed to sync agent state: %s", e)
+
+    # endregion Optimized Storage Methods
 
     # region SessionRepository interface implementation
     def create_session(self, session: Session, **kwargs: Any) -> Session:
@@ -237,6 +346,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         The agent's existence is inferred from the presence of events/messages in the memory system,
         but we validate the session_id matches our config.
 
+        For storage_version="v2", uses unified actorId with type markers.
+
         Args:
             session_id (str): The session ID to create the agent in.
             session_agent (SessionAgent): The agent to create.
@@ -248,15 +359,30 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if session_id != self.config.session_id:
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session_id}")
 
-        event = self.memory_client.gmdp_client.create_event(
-            memoryId=self.config.memory_id,
-            actorId=self._get_full_agent_id(session_agent.agent_id),
-            sessionId=self.session_id,
-            payload=[
-                {"blob": json.dumps(session_agent.to_dict())},
-            ],
-            eventTimestamp=self._get_monotonic_timestamp(),
-        )
+        if self.storage_version == "v2":
+            # V2: Use unified actorId with type marker
+            agent_state_payload = {
+                "_type": PAYLOAD_TYPE_AGENT_STATE,
+                "_agent_id": session_agent.agent_id,
+                **session_agent.to_dict(),
+            }
+            event = self.memory_client.gmdp_client.create_event(
+                memoryId=self.config.memory_id,
+                actorId=self.config.actor_id,
+                sessionId=self.session_id,
+                payload=[{"blob": json.dumps(agent_state_payload)}],
+                eventTimestamp=self._get_monotonic_timestamp(),
+            )
+        else:
+            # V1: Use separate actorId for agent
+            event = self.memory_client.gmdp_client.create_event(
+                memoryId=self.config.memory_id,
+                actorId=self._get_full_agent_id(session_agent.agent_id),
+                sessionId=self.session_id,
+                payload=[{"blob": json.dumps(session_agent.to_dict())}],
+                eventTimestamp=self._get_monotonic_timestamp(),
+            )
+
         logger.info(
             "Created agent: %s in session: %s with event %s",
             session_agent.agent_id,
@@ -267,7 +393,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def read_agent(self, session_id: str, agent_id: str, **kwargs: Any) -> Optional[SessionAgent]:
         """Read agent data from AgentCore Memory events.
 
-        We reconstruct the agent state from the conversation history.
+        Uses the storage version specified at initialization:
+        - v1: Reads from separate actorId (agent_{id})
+        - v2: Reads from unified actorId with type markers
 
         Args:
             session_id (str): The session ID to read from.
@@ -279,22 +407,42 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         """
         if session_id != self.config.session_id:
             return None
+
         try:
-            events = self.memory_client.list_events(
-                memory_id=self.config.memory_id,
-                actor_id=self._get_full_agent_id(agent_id),
-                session_id=session_id,
-                max_results=1,
-            )
-
-            if not events:
-                return None
-
-            agent_data = json.loads(events[0].get("payload", {})[0].get("blob"))
-            return SessionAgent.from_dict(agent_data)
+            if self.storage_version == "v2":
+                # V2: Read from unified actorId, filter by type marker
+                events = self.memory_client.list_events(
+                    memory_id=self.config.memory_id,
+                    actor_id=self.config.actor_id,
+                    session_id=session_id,
+                    max_results=MAX_FETCH_ALL_RESULTS,
+                )
+                for event in events:
+                    for payload_item in event.get("payload", []):
+                        blob = payload_item.get("blob")
+                        if blob:
+                            try:
+                                data = json.loads(blob)
+                                if data.get("_type") == PAYLOAD_TYPE_AGENT_STATE and data.get("_agent_id") == agent_id:
+                                    agent_data = {k: v for k, v in data.items() if k not in ("_type", "_agent_id")}
+                                    return SessionAgent.from_dict(agent_data)
+                            except json.JSONDecodeError:
+                                continue
+            else:
+                # V1: Read from separate actorId
+                events = self.memory_client.list_events(
+                    memory_id=self.config.memory_id,
+                    actor_id=self._get_full_agent_id(agent_id),
+                    session_id=session_id,
+                    max_results=1,
+                )
+                if events:
+                    agent_data = json.loads(events[0].get("payload", {})[0].get("blob"))
+                    return SessionAgent.from_dict(agent_data)
         except Exception as e:
-            logger.error("Failed to read agent %s", e)
-            return None
+            logger.error("Failed to read agent: %s", e)
+
+        return None
 
     def update_agent(self, session_id: str, session_agent: SessionAgent, **kwargs: Any) -> None:
         """Update agent data.
@@ -566,14 +714,26 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
     @override
     def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
-        """Register additional hooks.
+        """Register hooks for session management.
+
+        For storage_version="v1" (default):
+            Uses parent class behavior with separate API calls for message and agent state.
+
+        For storage_version="v2":
+            Uses batched API calls to reduce redundant API calls.
 
         Args:
             registry (HookRegistry): The hook registry to register callbacks with.
             **kwargs: Additional keyword arguments.
         """
-        RepositorySessionManager.register_hooks(self, registry, **kwargs)
-        registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
+        if self.storage_version == "v2":
+            registry.add_callback(AgentInitializedEvent, lambda event: self.initialize(event.agent))
+            registry.add_callback(MessageAddedEvent, lambda event: self.save_message_with_state(event.message, event.agent))
+            registry.add_callback(AfterInvocationEvent, lambda event: self._sync_agent_state(event.agent))
+            registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
+        else:
+            RepositorySessionManager.register_hooks(self, registry, **kwargs)
+            registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
 
     @override
     def initialize(self, agent: "Agent", **kwargs: Any) -> None:
