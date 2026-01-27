@@ -1,4 +1,5 @@
 name: Slack Issue Notification
+# Notifies Slack when new issues are created
 
 on:
   issues:
