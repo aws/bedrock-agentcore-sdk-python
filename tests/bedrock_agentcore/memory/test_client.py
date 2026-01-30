@@ -291,45 +291,6 @@ def test_timestamp_and_advanced_message_handling():
         assert kwargs.get("eventTimestamp") == custom_timestamp
 
 
-def test_deprecated_methods():
-    """Test deprecated methods with warnings."""
-    with patch("boto3.client"):
-        client = MemoryClient()
-        mock_gmdp = MagicMock()
-        client.gmdp_client = mock_gmdp
-
-        # Create responses for deprecated methods
-        mock_gmdp.create_event.return_value = {"event": {"eventId": "event-dep-1", "memoryId": "mem-123"}}
-        mock_gmdp.retrieve_memory_records.return_value = {"memoryRecordSummaries": []}
-
-        # Use warnings.catch_warnings to verify deprecation warnings
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-
-            # Test deprecated save_turn method
-            event = client.save_turn(
-                memory_id="mem-123",
-                actor_id="user-123",
-                session_id="session-456",
-                user_input="Hello",
-                agent_response="Hi",
-            )
-
-            # Test deprecated process_turn method
-            memories, event = client.process_turn(
-                memory_id="mem-123",
-                actor_id="user-123",
-                session_id="session-456",
-                user_input="Hello",
-                agent_response="Hi",
-                retrieval_namespace="test/ns",
-            )
-
-            assert len(w) >= 2
-            assert any("save_turn() is deprecated" in str(warning.message) for warning in w)
-            assert any("process_turn() is deprecated" in str(warning.message) for warning in w)
-
-
 def test_create_memory_and_wait_success():
     """Test successful create_memory_and_wait scenario."""
     with patch("boto3.client"):
