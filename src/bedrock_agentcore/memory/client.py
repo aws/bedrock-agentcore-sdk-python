@@ -104,7 +104,7 @@ class MemoryClient:
             client = MemoryClient()
 
             # These calls are forwarded to the appropriate boto3 client
-            response = client.list_memory_records(memoryId="mem-123", namespace="test")
+            response = client.list_memory_records(memoryId="mem-123", namespace="test/")
             metadata = client.get_memory_metadata(memoryId="mem-123")
         """
         if name in self._ALLOWED_GMDP_METHODS and hasattr(self.gmdp_client, name):
@@ -296,12 +296,12 @@ class MemoryClient:
             # Correct - exact namespace
             memories = client.retrieve_memories(
                 memory_id="mem-123",
-                namespace="support/facts/session-456",
+                namespace="support/facts/session-456/",
                 query="customer preferences"
             )
 
             # Incorrect - wildcards not supported
-            # memories = client.retrieve_memories(..., namespace="support/facts/*", ...)
+            # memories = client.retrieve_memories(..., namespace="support/facts/*/", ...)
         """
         if "*" in namespace:
             logger.error("Wildcards are not supported in namespaces. Please provide exact namespace.")
@@ -730,7 +730,7 @@ class MemoryClient:
                 session_id="session-456",
                 user_input="What did we discuss yesterday?",
                 llm_callback=my_llm,
-                retrieval_namespace="support/facts/{sessionId}"
+                retrieval_namespace="support/facts/{sessionId}/"
             )
         """
         # Step 1: Retrieve relevant memories
@@ -1758,8 +1758,8 @@ class MemoryClient:
            existing memories in the namespace, this method may return True immediately
            even if new extractions haven't completed.
         2. Wildcards (*) are NOT supported in namespaces. You must provide the exact
-           namespace path with all variables resolved (e.g., "support/facts/session-123"
-           not "support/facts/*").
+           namespace path with all variables resolved (e.g., "support/facts/session-123/"
+           not "support/facts/*/").
 
         For subsequent extractions in populated namespaces, use a fixed wait time:
             time.sleep(150)  # Wait 2.5 minutes for extraction
@@ -1931,7 +1931,7 @@ class MemoryClient:
 
             if "namespaces" not in strategy_config:
                 strategy_type = StrategyType(strategy_type_key)
-                strategy_config["namespaces"] = DEFAULT_NAMESPACES.get(strategy_type, ["custom/{actorId}/{sessionId}"])
+                strategy_config["namespaces"] = DEFAULT_NAMESPACES.get(strategy_type, ["custom/{actorId}/{sessionId}/"])
 
             self._validate_strategy_config(strategy_copy, strategy_type_key)
 

@@ -90,7 +90,7 @@ def test_strategy_polling_fix(client: MemoryClient):
     logger.info("\n2. Adding summary strategy with polling...")
     try:
         memory = client.add_summary_strategy_and_wait(
-            memory_id=memory_id, name="TestSummary", namespaces=["summaries/{sessionId}"]
+            memory_id=memory_id, name="TestSummary", namespaces=["summaries/{sessionId}/"]
         )
         logger.info("✓ Added summary strategy, memory is %s", memory["status"])
     except Exception as e:
@@ -114,7 +114,7 @@ def test_strategy_polling_fix(client: MemoryClient):
     logger.info("\n4. Adding user preference strategy immediately...")
     try:
         memory = client.add_user_preference_strategy_and_wait(
-            memory_id=memory_id, name="TestPreferences", namespaces=["preferences/{actorId}"]
+            memory_id=memory_id, name="TestPreferences", namespaces=["preferences/{actorId}/"]
         )
         logger.info("✓ Added user preference strategy without error, memory is %s", memory["status"])
     except Exception as e:
@@ -302,7 +302,7 @@ def test_namespace_wildcards(client: MemoryClient, memory_id: str):
     session_id = session_ids[0]
 
     # Assuming semantic strategy with pattern "test/{actorId}/{sessionId}"
-    exact_namespace = f"test/{actor_id}/{session_id}"
+    exact_namespace = f"test/{actor_id}/{session_id}/"
 
     logger.info("Trying exact namespace: %s", exact_namespace)
     memories = client.retrieve_memories(memory_id=memory_id, namespace=exact_namespace, query="specific keyword")
@@ -362,7 +362,7 @@ def main():
             {
                 "semanticMemoryStrategy": {
                     "name": "TestStrategy",
-                    "namespaces": ["test/{actorId}/{sessionId}"],  # Explicit namespace pattern
+                    "namespaces": ["test/{actorId}/{sessionId}/"],  # Explicit namespace pattern
                 }
             }
         ],

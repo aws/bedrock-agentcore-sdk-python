@@ -72,7 +72,7 @@ class MemorySessionManager:
             session_id="session-789",
             user_input="What did we discuss?",
             llm_callback=my_llm,
-            retrieval_namespace="support/facts/{sessionId}"
+            retrieval_namespace="support/facts/{sessionId}/"
         )
         ```
 
@@ -298,8 +298,8 @@ class MemorySessionManager:
                 return response['content']
 
             retrieval_config = {
-                "support/facts/{sessionId}": RetrievalConfig(top_k=5, relevance_score=0.3),
-                "user/preferences/{actorId}": RetrievalConfig(top_k=3, relevance_score=0.5)
+                "support/facts/{sessionId}/": RetrievalConfig(top_k=5, relevance_score=0.3),
+                "user/preferences/{actorId}/": RetrievalConfig(top_k=3, relevance_score=0.5)
             }
 
             memories, response, event = manager.process_turn_with_llm(

@@ -131,7 +131,7 @@ class TestMemoryRecord:
         data = {
             "memoryRecordId": "record-123",
             "content": {"text": "This is a memory record"},
-            "namespace": "user/preferences",
+            "namespace": "user/preferences/",
             "relevanceScore": 0.95,
             "createdAt": "2023-01-01T00:00:00Z",
         }
@@ -144,7 +144,7 @@ class TestMemoryRecord:
 
     def test_memory_record_dict_access(self):
         """Test MemoryRecord dictionary-like access."""
-        data = {"memoryRecordId": "record-456", "namespace": "support/facts"}
+        data = {"memoryRecordId": "record-456", "namespace": "support/facts/"}
         memory_record = MemoryRecord(data)
 
         assert "memoryRecordId" in memory_record
