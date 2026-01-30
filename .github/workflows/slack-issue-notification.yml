@@ -18,6 +18,6 @@ jobs:
             issue_number: "${{ github.event.issue.number }}"
             issue_url: "${{ github.event.issue.html_url }}"
             issue_author: "${{ github.event.issue.user.login }}"
-            issue_body: "${{ github.event.issue.body }}"
+            issue_body: ${{ toJSON(github.event.issue.body) }}
             repository: "${{ github.repository }}"
             created_at: "${{ github.event.issue.created_at }}"
