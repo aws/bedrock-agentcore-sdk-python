@@ -35,6 +35,7 @@ from .constants import (
     Role,
     StrategyType,
 )
+from .models.filters import EventMetadataFilter, MetadataValue
 
 logger = logging.getLogger(__name__)
 
@@ -344,6 +345,7 @@ class MemoryClient:
         messages: List[Tuple[str, str]],
         event_timestamp: Optional[datetime] = None,
         branch: Optional[Dict[str, str]] = None,
+        metadata: Optional[Dict[str, MetadataValue]] = None,
     ) -> Dict[str, Any]:
         """Save an event of an agent interaction or conversation with a user.
 
@@ -360,6 +362,9 @@ class MemoryClient:
             branch: Optional branch info. For new branches: {"rootEventId": "...", "name": "..."}
                    For continuing existing branch: {"name": "..."} or {"name": "...", "rootEventId": "..."}
                    A branch is used when you want to have a different history of events.
+            metadata: Optional custom key-value metadata to attach to the event.
+                     Maximum 15 key-value pairs. Keys must be 1-128 characters.
+                     Example: {"location": {"stringValue": "NYC"}}
 
         Returns:
             Created event
@@ -439,6 +444,9 @@ class MemoryClient:
             if branch:
                 params["branch"] = branch
 
+            if metadata:
+                params["metadata"] = metadata
+
             response = self.gmdp_client.create_event(**params)
 
             event = response["event"]
@@ -458,6 +466,7 @@ class MemoryClient:
         blob_data: Any,
         event_timestamp: Optional[datetime] = None,
         branch: Optional[Dict[str, str]] = None,
+        metadata: Optional[Dict[str, MetadataValue]] = None,
     ) -> Dict[str, Any]:
         """Save a blob event to AgentCore Memory.
 
@@ -468,17 +477,20 @@ class MemoryClient:
             blob_data: Binary or structured data to store
             event_timestamp: Optional timestamp for the event
             branch: Optional branch info
+            metadata: Optional custom key-value metadata to attach to the event.
+                     Maximum 15 key-value pairs. Keys must be 1-128 characters.
+                     Example: {"location": {"stringValue": "NYC"}}
 
         Returns:
             Created event
 
         Example:
-            # Store binary data
             event = client.create_blob_event(
                 memory_id="mem-xyz",
                 actor_id="user-123",
                 session_id="session-456",
-                blob_data={"file_content": "base64_encoded_data", "metadata": {"type": "image"}}
+                blob_data={"file_content": "base64_encoded_data"},
+                metadata={"type": {"stringValue": "image"}}
             )
         """
         try:
@@ -497,6 +509,9 @@ class MemoryClient:
 
             if branch:
                 params["branch"] = branch
+
+            if metadata:
+                params["metadata"] = metadata
 
             response = self.gmdp_client.create_event(**params)
 
@@ -771,6 +786,7 @@ class MemoryClient:
         session_id: str,
         branch_name: Optional[str] = None,
         include_parent_branches: bool = False,
+        event_metadata: Optional[List[EventMetadataFilter]] = None,
         max_results: int = 100,
         include_payload: bool = True,
     ) -> List[Dict[str, Any]]:
@@ -785,6 +801,9 @@ class MemoryClient:
             session_id: Session identifier
             branch_name: Optional branch name to filter events (None for all branches)
             include_parent_branches: Whether to include parent branch events (only applies with branch_name)
+            event_metadata: Optional list of event metadata filters to apply.
+                           Example: [{"left": {"metadataKey": "location"}, "operator": "EQUALS_TO",
+                                      "right": {"metadataValue": {"stringValue": "NYC"}}}]
             max_results: Maximum number of events to return
             include_payload: Whether to include event payloads in response
 
@@ -795,11 +814,15 @@ class MemoryClient:
             # Get all events
             events = client.list_events(memory_id, actor_id, session_id)
 
-            # Get only main branch events
-            main_events = client.list_events(memory_id, actor_id, session_id, branch_name="main")
-
-            # Get events from a specific branch
-            branch_events = client.list_events(memory_id, actor_id, session_id, branch_name="test-branch")
+            # Get events filtered by metadata
+            events = client.list_events(
+                memory_id, actor_id, session_id,
+                event_metadata=[{
+                    "left": {"metadataKey": "location"},
+                    "operator": "EQUALS_TO",
+                    "right": {"metadataValue": {"stringValue": "NYC"}}
+                }]
+            )
         """
         try:
             all_events = []
@@ -817,11 +840,19 @@ class MemoryClient:
                 if next_token:
                     params["nextToken"] = next_token
 
+                # Build filter map
+                filter_map = {}
+
                 # Add branch filter if specified (but not for "main")
                 if branch_name and branch_name != "main":
-                    params["filter"] = {
-                        "branch": {"name": branch_name, "includeParentBranches": include_parent_branches}
-                    }
+                    filter_map["branch"] = {"name": branch_name, "includeParentBranches": include_parent_branches}
+
+                # Add event metadata filter if specified
+                if event_metadata:
+                    filter_map["eventMetadata"] = event_metadata
+
+                if filter_map:
+                    params["filter"] = filter_map
 
                 response = self.gmdp_client.list_events(**params)
 
@@ -1178,6 +1209,7 @@ class MemoryClient:
         branch_name: str,
         new_messages: List[Tuple[str, str]],
         event_timestamp: Optional[datetime] = None,
+        metadata: Optional[Dict[str, MetadataValue]] = None,
     ) -> Dict[str, Any]:
         """Fork a conversation from a specific event to create a new branch."""
         try:
@@ -1190,6 +1222,7 @@ class MemoryClient:
                 messages=new_messages,
                 branch=branch,
                 event_timestamp=event_timestamp,
+                metadata=metadata,
             )
 
             logger.info("Created branch '%s' from event %s", branch_name, root_event_id)

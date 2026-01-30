@@ -573,6 +573,104 @@ def test_list_events_with_branch_filter():
         assert kwargs["filter"]["branch"]["includeParentBranches"] is True
 
 
+def test_list_events_with_event_metadata_filter():
+    """Test list_events with event metadata filtering."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        # Mock the client
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        # Mock response with events containing metadata
+        mock_events = [
+            {
+                "eventId": "event-nyc-1",
+                "eventTimestamp": datetime(2023, 1, 1, 10, 0, 0),
+                "metadata": {"location": {"stringValue": "NYC"}},
+                "payload": [{"conversational": {"role": "USER", "content": {"text": "NYC message"}}}],
+            },
+            {
+                "eventId": "event-nyc-2",
+                "eventTimestamp": datetime(2023, 1, 1, 10, 1, 0),
+                "metadata": {"location": {"stringValue": "NYC"}},
+                "payload": [{"conversational": {"role": "USER", "content": {"text": "Another NYC message"}}}],
+            },
+        ]
+        mock_gmdp.list_events.return_value = {"events": mock_events, "nextToken": None}
+
+        # Test with event metadata filter
+        event_metadata_filter = [
+            {
+                "left": {"metadataKey": "location"},
+                "operator": "EQUALS_TO",
+                "right": {"metadataValue": {"stringValue": "NYC"}},
+            }
+        ]
+        events = client.list_events(
+            memory_id="mem-123",
+            actor_id="user-123",
+            session_id="session-456",
+            event_metadata=event_metadata_filter,
+        )
+
+        assert len(events) == 2
+        assert events[0]["eventId"] == "event-nyc-1"
+        assert events[1]["eventId"] == "event-nyc-2"
+
+        # Verify filter was applied correctly
+        args, kwargs = mock_gmdp.list_events.call_args
+        assert "filter" in kwargs
+        assert "eventMetadata" in kwargs["filter"]
+        assert kwargs["filter"]["eventMetadata"] == event_metadata_filter
+
+
+def test_list_events_with_branch_and_event_metadata_filter():
+    """Test list_events with both branch and event metadata filtering."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        # Mock the client
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        # Mock response
+        mock_events = [
+            {
+                "eventId": "event-branch-meta-1",
+                "eventTimestamp": datetime(2023, 1, 1, 10, 0, 0),
+                "branch": {"name": "test-branch", "rootEventId": "event-0"},
+                "metadata": {"location": {"stringValue": "NYC"}},
+            }
+        ]
+        mock_gmdp.list_events.return_value = {"events": mock_events, "nextToken": None}
+
+        # Test with both filters
+        event_metadata_filter = [
+            {
+                "left": {"metadataKey": "location"},
+                "operator": "EQUALS_TO",
+                "right": {"metadataValue": {"stringValue": "NYC"}},
+            }
+        ]
+        events = client.list_events(
+            memory_id="mem-123",
+            actor_id="user-123",
+            session_id="session-456",
+            branch_name="test-branch",
+            include_parent_branches=True,
+            event_metadata=event_metadata_filter,
+        )
+
+        assert len(events) == 1
+
+        # Verify both filters were applied
+        args, kwargs = mock_gmdp.list_events.call_args
+        assert "filter" in kwargs
+        assert kwargs["filter"]["branch"]["name"] == "test-branch"
+        assert kwargs["filter"]["eventMetadata"] == event_metadata_filter
+
+
 def test_list_events_max_results_limit():
     """Test list_events respects max_results limit."""
     with patch("boto3.client"):
@@ -1758,6 +1856,46 @@ def test_fork_conversation():
             assert len(kwargs["payload"]) == 2
 
 
+def test_fork_conversation_with_metadata():
+    """Test fork_conversation with metadata parameter."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        # Mock the client
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        # Mock create_event response with metadata
+        metadata = {"fork_reason": {"stringValue": "alternative_response"}}
+        mock_gmdp.create_event.return_value = {
+            "event": {
+                "eventId": "event-fork-meta-123",
+                "memoryId": "mem-123",
+                "metadata": metadata,
+            }
+        }
+
+        # Test fork_conversation with metadata
+        result = client.fork_conversation(
+            memory_id="mem-123",
+            actor_id="user-123",
+            session_id="session-456",
+            root_event_id="event-root-456",
+            branch_name="test-branch",
+            new_messages=[("Forked message", "USER")],
+            metadata=metadata,
+        )
+
+        assert result["eventId"] == "event-fork-meta-123"
+        assert result["metadata"] == metadata
+
+        # Verify metadata was passed correctly along with branch info
+        args, kwargs = mock_gmdp.create_event.call_args
+        assert kwargs["metadata"] == metadata
+        assert kwargs["branch"]["name"] == "test-branch"
+        assert kwargs["branch"]["rootEventId"] == "event-root-456"
+
+
 def test_delete_strategy():
     """Test delete_strategy functionality."""
     with patch("boto3.client"):
@@ -1876,6 +2014,84 @@ def test_create_event_with_branch():
         # Verify branch was passed correctly
         args, kwargs = mock_gmdp.create_event.call_args
         assert kwargs["branch"] == branch
+
+
+def test_create_event_with_metadata():
+    """Test create_event with metadata parameter."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        # Mock the client
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        # Mock create_event response with metadata
+        mock_gmdp.create_event.return_value = {
+            "event": {
+                "eventId": "event-meta-123",
+                "memoryId": "mem-123",
+                "metadata": {"location": {"stringValue": "NYC"}},
+            }
+        }
+
+        # Test create_event with metadata
+        metadata = {"location": {"stringValue": "NYC"}}
+        result = client.create_event(
+            memory_id="mem-123",
+            actor_id="user-123",
+            session_id="session-456",
+            messages=[("Hello from NYC", "USER")],
+            metadata=metadata,
+        )
+
+        assert result["eventId"] == "event-meta-123"
+        assert result["metadata"] == metadata
+
+        # Verify metadata was passed correctly
+        args, kwargs = mock_gmdp.create_event.call_args
+        assert kwargs["metadata"] == metadata
+
+
+def test_create_event_with_multiple_metadata_keys():
+    """Test create_event with multiple metadata key-value pairs."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        # Mock the client
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        # Mock create_event response
+        metadata = {
+            "location": {"stringValue": "NYC"},
+            "category": {"stringValue": "weather"},
+            "priority": {"stringValue": "high"},
+        }
+        mock_gmdp.create_event.return_value = {
+            "event": {
+                "eventId": "event-multi-meta-123",
+                "memoryId": "mem-123",
+                "metadata": metadata,
+            }
+        }
+
+        # Test create_event with multiple metadata keys
+        result = client.create_event(
+            memory_id="mem-123",
+            actor_id="user-123",
+            session_id="session-456",
+            messages=[("Weather check", "USER")],
+            metadata=metadata,
+        )
+
+        assert result["eventId"] == "event-multi-meta-123"
+        assert result["metadata"]["location"]["stringValue"] == "NYC"
+        assert result["metadata"]["category"]["stringValue"] == "weather"
+        assert result["metadata"]["priority"]["stringValue"] == "high"
+
+        # Verify all metadata keys were passed
+        args, kwargs = mock_gmdp.create_event.call_args
+        assert len(kwargs["metadata"]) == 3
 
 
 def test_create_memory_and_wait_client_error():
@@ -2734,6 +2950,44 @@ def test_create_blob_event_with_branch():
         # Verify branch was passed correctly
         args, kwargs = mock_gmdp.create_event.call_args
         assert kwargs["branch"] == branch
+
+
+def test_create_blob_event_with_metadata():
+    """Test create_blob_event with metadata parameter."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        # Mock the client
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        # Mock create_event response with metadata
+        metadata = {"file_type": {"stringValue": "pdf"}}
+        mock_gmdp.create_event.return_value = {
+            "event": {
+                "eventId": "event-blob-meta-123",
+                "memoryId": "mem-123",
+                "metadata": metadata,
+            }
+        }
+
+        # Test create_blob_event with metadata
+        blob_data = {"file_content": "base64_encoded_data"}
+        result = client.create_blob_event(
+            memory_id="mem-123",
+            actor_id="user-123",
+            session_id="session-456",
+            blob_data=blob_data,
+            metadata=metadata,
+        )
+
+        assert result["eventId"] == "event-blob-meta-123"
+        assert result["metadata"] == metadata
+
+        # Verify metadata was passed correctly
+        args, kwargs = mock_gmdp.create_event.call_args
+        assert kwargs["metadata"] == metadata
+        assert "blob" in kwargs["payload"][0]
 
 
 def test_create_blob_event_client_error():
