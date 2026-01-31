@@ -229,14 +229,17 @@ class TestAgentCoreMemorySessionManager:
 
         assert result is None
 
-    def test_read_agent_legacy_migration(self, session_manager, mock_memory_client):
+    @patch("bedrock_agentcore.memory.integrations.strands.session_manager.time.sleep")
+    def test_read_agent_legacy_migration(self, mock_sleep, session_manager, mock_memory_client):
         """Test reading a legacy agent event triggers migration."""
         legacy_agent_data = '{"agent_id": "test-agent-123", "state": {}, "conversation_manager_state": {}}'
 
-        # First call (new approach with metadata) returns empty
-        # Second call (legacy actor_id) returns the legacy event
+        # New approach with metadata is retried 3 times (all return empty)
+        # Then legacy actor_id approach returns the legacy event
         mock_memory_client.list_events.side_effect = [
-            [],  # New approach returns nothing
+            [],  # New approach - attempt 1
+            [],  # New approach - attempt 2
+            [],  # New approach - attempt 3
             [{"eventId": "legacy-agent-event-1", "payload": [{"blob": legacy_agent_data}]}],  # Legacy approach
         ]
         mock_memory_client.gmdp_client.create_event.return_value = {"event": {"eventId": "new-agent-event-1"}}

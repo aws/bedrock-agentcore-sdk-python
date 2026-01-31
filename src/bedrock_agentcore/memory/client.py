@@ -860,7 +860,8 @@ class MemoryClient:
                 all_events.extend(events)
 
                 next_token = response.get("nextToken")
-                if not next_token or len(all_events) >= max_results:
+                # Break if: no more pages, reached max, or current page was empty (filter found nothing)
+                if not next_token or len(all_events) >= max_results or not events:
                     break
 
             logger.info("Retrieved total of %d events", len(all_events))
