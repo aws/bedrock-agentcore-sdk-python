@@ -160,6 +160,37 @@ class TestAgentCoreMemorySessionManager:
 
         assert result is None
 
+    def test_read_session_legacy_migration(self, session_manager, mock_memory_client):
+        """Test reading a legacy session event triggers migration."""
+        legacy_session_data = '{"session_id": "test-session-456", "session_type": "AGENT"}'
+
+        # First call (new approach with metadata) returns empty
+        # Second call (legacy actor_id) returns the legacy event
+        mock_memory_client.list_events.side_effect = [
+            [],  # New approach returns nothing
+            [{"eventId": "legacy-event-1", "payload": [{"blob": legacy_session_data}]}],  # Legacy approach
+        ]
+        mock_memory_client.gmdp_client.create_event.return_value = {"event": {"eventId": "new-event-1"}}
+
+        result = session_manager.read_session("test-session-456")
+
+        # Verify session was returned
+        assert result is not None
+        assert result.session_id == "test-session-456"
+        assert result.session_type == SessionType.AGENT
+
+        # Verify migration: new event created with metadata
+        mock_memory_client.gmdp_client.create_event.assert_called_once()
+        create_call_kwargs = mock_memory_client.gmdp_client.create_event.call_args.kwargs
+        assert "metadata" in create_call_kwargs
+        assert create_call_kwargs["metadata"]["stateType"]["stringValue"] == "SESSION"
+
+        # Verify migration: old event deleted
+        mock_memory_client.gmdp_client.delete_event.assert_called_once()
+        delete_call_kwargs = mock_memory_client.gmdp_client.delete_event.call_args.kwargs
+        assert delete_call_kwargs["actorId"] == "session_test-session-456"
+        assert delete_call_kwargs["eventId"] == "legacy-event-1"
+
     def test_create_agent(self, session_manager):
         """Test creating an agent."""
         session_agent = SessionAgent(agent_id="test-agent-123", state={}, conversation_manager_state={})
@@ -197,6 +228,37 @@ class TestAgentCoreMemorySessionManager:
         result = session_manager.read_agent("test-session-456", "test-agent-123")
 
         assert result is None
+
+    def test_read_agent_legacy_migration(self, session_manager, mock_memory_client):
+        """Test reading a legacy agent event triggers migration."""
+        legacy_agent_data = '{"agent_id": "test-agent-123", "state": {}, "conversation_manager_state": {}}'
+
+        # First call (new approach with metadata) returns empty
+        # Second call (legacy actor_id) returns the legacy event
+        mock_memory_client.list_events.side_effect = [
+            [],  # New approach returns nothing
+            [{"eventId": "legacy-agent-event-1", "payload": [{"blob": legacy_agent_data}]}],  # Legacy approach
+        ]
+        mock_memory_client.gmdp_client.create_event.return_value = {"event": {"eventId": "new-agent-event-1"}}
+
+        result = session_manager.read_agent("test-session-456", "test-agent-123")
+
+        # Verify agent was returned
+        assert result is not None
+        assert result.agent_id == "test-agent-123"
+
+        # Verify migration: new event created with metadata
+        mock_memory_client.gmdp_client.create_event.assert_called_once()
+        create_call_kwargs = mock_memory_client.gmdp_client.create_event.call_args.kwargs
+        assert "metadata" in create_call_kwargs
+        assert create_call_kwargs["metadata"]["stateType"]["stringValue"] == "AGENT"
+        assert create_call_kwargs["metadata"]["agentId"]["stringValue"] == "test-agent-123"
+
+        # Verify migration: old event deleted
+        mock_memory_client.gmdp_client.delete_event.assert_called_once()
+        delete_call_kwargs = mock_memory_client.gmdp_client.delete_event.call_args.kwargs
+        assert delete_call_kwargs["actorId"] == "agent_test-agent-123"
+        assert delete_call_kwargs["eventId"] == "legacy-agent-event-1"
 
     def test_create_message(self, session_manager, mock_memory_client):
         """Test creating a message."""
@@ -924,22 +986,6 @@ class TestAgentCoreMemorySessionManager:
                 ):
                     manager = AgentCoreMemorySessionManager(agentcore_config, boto_client_config=boto_config)
                     assert manager.memory_client is not None
-
-    def test_get_full_session_id_conflict(self, session_manager):
-        """Test session ID conflict with actor ID."""
-        # Set up a scenario where session ID would conflict with actor ID
-        session_manager.config.actor_id = "session_test-session"
-
-        with pytest.raises(SessionException, match="Cannot have session"):
-            session_manager._get_full_session_id("test-session")
-
-    def test_get_full_agent_id_conflict(self, session_manager):
-        """Test agent ID conflict with actor ID."""
-        # Set up a scenario where agent ID would conflict with actor ID
-        session_manager.config.actor_id = "agent_test-agent"
-
-        with pytest.raises(SessionException, match="Cannot create agent"):
-            session_manager._get_full_agent_id("test-agent")
 
     def test_retrieve_customer_context_no_messages(self, agentcore_config_with_retrieval, mock_memory_client):
         """Test retrieve_customer_context with no messages."""

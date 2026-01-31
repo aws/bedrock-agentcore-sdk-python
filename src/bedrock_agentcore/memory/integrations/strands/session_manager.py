@@ -5,6 +5,7 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
 import boto3
@@ -19,6 +20,7 @@ from strands.types.session import Session, SessionAgent, SessionMessage
 from typing_extensions import override
 
 from bedrock_agentcore.memory.client import MemoryClient
+from bedrock_agentcore.memory.models.filters import EventMetadataFilter, LeftExpression, OperatorType, RightExpression
 
 from .bedrock_converter import AgentCoreMemoryConverter
 from .config import AgentCoreMemoryConfig, RetrievalConfig
@@ -28,10 +30,22 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SESSION_PREFIX = "session_"
-AGENT_PREFIX = "agent_"
-MESSAGE_PREFIX = "message_"
 MAX_FETCH_ALL_RESULTS = 10000
+
+# Legacy prefixes for backwards compatibility with old events
+LEGACY_SESSION_PREFIX = "session_"
+LEGACY_AGENT_PREFIX = "agent_"
+
+# Metadata keys for event identification
+STATE_TYPE_KEY = "stateType"
+AGENT_ID_KEY = "agentId"
+
+
+class StateType(Enum):
+    """State type for distinguishing session and agent metadata in events."""
+
+    SESSION = "SESSION"
+    AGENT = "AGENT"
 
 
 class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository):
@@ -125,38 +139,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         )
         super().__init__(session_id=self.config.session_id, session_repository=self)
 
-    def _get_full_session_id(self, session_id: str) -> str:
-        """Get the full session ID with the configured prefix.
-
-        Args:
-            session_id (str): The session ID.
-
-        Returns:
-            str: The full session ID with the prefix.
-        """
-        full_session_id = f"{SESSION_PREFIX}{session_id}"
-        if full_session_id == self.config.actor_id:
-            raise SessionException(
-                f"Cannot have session [ {full_session_id} ] with the same ID as the actor ID: {self.config.actor_id}"
-            )
-        return full_session_id
-
-    def _get_full_agent_id(self, agent_id: str) -> str:
-        """Get the full agent ID with the configured prefix.
-
-        Args:
-            agent_id (str): The agent ID.
-
-        Returns:
-            str: The full agent ID with the prefix.
-        """
-        full_agent_id = f"{AGENT_PREFIX}{agent_id}"
-        if full_agent_id == self.config.actor_id:
-            raise SessionException(
-                f"Cannot create agent [ {full_agent_id} ] with the same ID as the actor ID: {self.config.actor_id}"
-            )
-        return full_agent_id
-
     # region SessionRepository interface implementation
     def create_session(self, session: Session, **kwargs: Any) -> Session:
         """Create a new session in AgentCore Memory.
@@ -179,12 +161,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         event = self.memory_client.gmdp_client.create_event(
             memoryId=self.config.memory_id,
-            actorId=self._get_full_session_id(session.session_id),
+            actorId=self.config.actor_id,
             sessionId=self.session_id,
             payload=[
                 {"blob": json.dumps(session.to_dict())},
             ],
             eventTimestamp=self._get_monotonic_timestamp(),
+            metadata={STATE_TYPE_KEY: {"stringValue": StateType.SESSION.value}},
         )
         logger.info("Created session: %s with event: %s", session.session_id, event.get("event", {}).get("eventId"))
         return session
@@ -206,17 +189,50 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if session_id != self.config.session_id:
             return None
 
+        # 1. Try new approach (metadata filter)
+        event_metadata = [
+            EventMetadataFilter.build_expression(
+                left_operand=LeftExpression.build(STATE_TYPE_KEY),
+                operator=OperatorType.EQUALS_TO,
+                right_operand=RightExpression.build(StateType.SESSION.value),
+            )
+        ]
+
         events = self.memory_client.list_events(
             memory_id=self.config.memory_id,
-            actor_id=self._get_full_session_id(session_id),
+            actor_id=self.config.actor_id,
+            session_id=session_id,
+            event_metadata=event_metadata,
+            max_results=1,
+        )
+        if events:
+            session_data = json.loads(events[0].get("payload", {})[0].get("blob"))
+            return Session.from_dict(session_data)
+
+        # 2. Fallback: check for legacy event and migrate
+        legacy_actor_id = f"{LEGACY_SESSION_PREFIX}{session_id}"
+        events = self.memory_client.list_events(
+            memory_id=self.config.memory_id,
+            actor_id=legacy_actor_id,
             session_id=session_id,
             max_results=1,
         )
-        if not events:
-            return None
+        if events:
+            old_event = events[0]
+            session_data = json.loads(old_event.get("payload", {})[0].get("blob"))
+            session = Session.from_dict(session_data)
+            # Migrate: create new event with metadata, delete old
+            self.create_session(session)
+            self.memory_client.gmdp_client.delete_event(
+                memoryId=self.config.memory_id,
+                actorId=legacy_actor_id,
+                sessionId=session_id,
+                eventId=old_event.get("eventId"),
+            )
+            logger.info("Migrated legacy session event for session: %s", session_id)
+            return session
 
-        session_data = json.loads(events[0].get("payload", {})[0].get("blob"))
-        return Session.from_dict(session_data)
+        return None
 
     def delete_session(self, session_id: str, **kwargs: Any) -> None:
         """Delete session and all associated data.
@@ -250,12 +266,16 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         event = self.memory_client.gmdp_client.create_event(
             memoryId=self.config.memory_id,
-            actorId=self._get_full_agent_id(session_agent.agent_id),
+            actorId=self.config.actor_id,
             sessionId=self.session_id,
             payload=[
                 {"blob": json.dumps(session_agent.to_dict())},
             ],
             eventTimestamp=self._get_monotonic_timestamp(),
+            metadata={
+                STATE_TYPE_KEY: {"stringValue": StateType.AGENT.value},
+                AGENT_ID_KEY: {"stringValue": session_agent.agent_id},
+            },
         )
         logger.info(
             "Created agent: %s in session: %s with event %s",
@@ -280,18 +300,56 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if session_id != self.config.session_id:
             return None
         try:
+            # 1. Try new approach (metadata filter)
+            event_metadata = [
+                EventMetadataFilter.build_expression(
+                    left_operand=LeftExpression.build(STATE_TYPE_KEY),
+                    operator=OperatorType.EQUALS_TO,
+                    right_operand=RightExpression.build(StateType.AGENT.value),
+                ),
+                EventMetadataFilter.build_expression(
+                    left_operand=LeftExpression.build(AGENT_ID_KEY),
+                    operator=OperatorType.EQUALS_TO,
+                    right_operand=RightExpression.build(agent_id),
+                ),
+            ]
+
             events = self.memory_client.list_events(
                 memory_id=self.config.memory_id,
-                actor_id=self._get_full_agent_id(agent_id),
+                actor_id=self.config.actor_id,
                 session_id=session_id,
+                event_metadata=event_metadata,
                 max_results=1,
             )
 
-            if not events:
-                return None
+            if events:
+                agent_data = json.loads(events[0].get("payload", {})[0].get("blob"))
+                return SessionAgent.from_dict(agent_data)
 
-            agent_data = json.loads(events[0].get("payload", {})[0].get("blob"))
-            return SessionAgent.from_dict(agent_data)
+            # 2. Fallback: check for legacy event and migrate
+            legacy_actor_id = f"{LEGACY_AGENT_PREFIX}{agent_id}"
+            events = self.memory_client.list_events(
+                memory_id=self.config.memory_id,
+                actor_id=legacy_actor_id,
+                session_id=session_id,
+                max_results=1,
+            )
+            if events:
+                old_event = events[0]
+                agent_data = json.loads(old_event.get("payload", {})[0].get("blob"))
+                agent = SessionAgent.from_dict(agent_data)
+                # Migrate: create new event with metadata, delete old
+                self.create_agent(session_id, agent)
+                self.memory_client.gmdp_client.delete_event(
+                    memoryId=self.config.memory_id,
+                    actorId=legacy_actor_id,
+                    sessionId=session_id,
+                    eventId=old_event.get("eventId"),
+                )
+                logger.info("Migrated legacy agent event for agent: %s", agent_id)
+                return agent
+
+            return None
         except Exception as e:
             logger.error("Failed to read agent %s", e)
             return None
