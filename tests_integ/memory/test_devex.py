@@ -356,7 +356,7 @@ def test_complete_agent_workflow(client: MemoryClient, memory_id: str):
     logger.info("Waiting 30 seconds for extraction to trigger...")
     time.sleep(30)
 
-    namespace = "support/facts/%s" % session_id
+    namespace = "support/facts/%s/" % session_id
     if client.wait_for_memories(memory_id, namespace, max_wait=180):
         logger.info("✓ Memories extracted and indexed successfully")
 
@@ -439,7 +439,7 @@ def test_bedrock_integration(client: MemoryClient, memory_id: str):
 
     # Retrieve relevant memories
     logger.info("\n4. Retrieving relevant context...")
-    namespace = "support/facts/%s" % session_id
+    namespace = "support/facts/%s/" % session_id
     memories = client.retrieve_memories(memory_id=memory_id, namespace=namespace, query=user_query, top_k=5)
 
     context = ""
@@ -701,7 +701,7 @@ def main():
                 "semanticMemoryStrategy": {
                     "name": "CustomerInfo",
                     "description": "Extract customer information and issues",
-                    "namespaces": ["support/facts/{sessionId}"],
+                    "namespaces": ["support/facts/{sessionId}/"],
                     # NO configuration block
                 }
             },
@@ -709,7 +709,7 @@ def main():
                 "userPreferenceMemoryStrategy": {
                     "name": "CustomerPreferences",
                     "description": "Track customer preferences and history",
-                    "namespaces": ["customers/{actorId}/preferences"],
+                    "namespaces": ["customers/{actorId}/preferences/"],
                     # NO configuration block
                 }
             },

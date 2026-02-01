@@ -406,7 +406,7 @@ class TestSessionManager:
                         return f"Response to: {user_input} with {len(memories)} memories"
 
                     # Test process_turn_with_llm with new RetrievalConfig API
-                    retrieval_config = {"test/namespace": RetrievalConfig(top_k=5)}
+                    retrieval_config = {"test/namespace/": RetrievalConfig(top_k=5)}
                     memories, response, event = manager.process_turn_with_llm(
                         actor_id="user-123",
                         session_id="session-456",
@@ -1176,7 +1176,7 @@ class TestSessionManager:
             }
             mock_client_instance.retrieve_memory_records.return_value = mock_response
 
-            result = manager.search_long_term_memories(query="test query", namespace_prefix="test/namespace", top_k=5)
+            result = manager.search_long_term_memories(query="test query", namespace_prefix="test/namespace/", top_k=5)
 
             assert len(result) == 2
             assert all(isinstance(record, MemoryRecord) for record in result)
@@ -1188,7 +1188,7 @@ class TestSessionManager:
             assert call_args["memoryId"] == "testMemory-1234567890"
             assert call_args["searchCriteria"]["searchQuery"] == "test query"
             assert call_args["searchCriteria"]["topK"] == 5
-            assert call_args["namespace"] == "test/namespace"
+            assert call_args["namespace"] == "test/namespace/"
 
     def test_search_long_term_memories_with_strategy(self):
         """Test search_long_term_memories with strategy_id."""
@@ -1206,7 +1206,7 @@ class TestSessionManager:
             mock_client_instance.retrieve_memory_records.return_value = mock_response
 
             result = manager.search_long_term_memories(
-                query="test query", namespace_prefix="test/namespace", strategy_id="strategy-123"
+                query="test query", namespace_prefix="test/namespace/", strategy_id="strategy-123"
             )
 
             assert result == []
@@ -1233,7 +1233,7 @@ class TestSessionManager:
             )
 
             with pytest.raises(ClientError):
-                manager.search_long_term_memories(query="invalid query", namespace_prefix="test/namespace")
+                manager.search_long_term_memories(query="invalid query", namespace_prefix="test/namespace/")
 
     def test_list_long_term_memory_records_success(self):
         """Test list_long_term_memory_records successful execution."""
@@ -1253,7 +1253,7 @@ class TestSessionManager:
                 {"memoryRecords": [{"memoryRecordId": "rec-1"}, {"memoryRecordId": "rec-2"}]}
             ]
 
-            result = manager.list_long_term_memory_records(namespace_prefix="test/namespace")
+            result = manager.list_long_term_memory_records(namespace_prefix="test/namespace/")
 
             assert len(result) == 2
             assert all(isinstance(record, MemoryRecord) for record in result)
@@ -1275,7 +1275,7 @@ class TestSessionManager:
             mock_paginator.paginate.return_value = [{"memoryRecords": []}]
 
             result = manager.list_long_term_memory_records(
-                namespace_prefix="test/namespace", strategy_id="strategy-123"
+                namespace_prefix="test/namespace/", strategy_id="strategy-123"
             )
 
             assert result == []
@@ -1303,7 +1303,7 @@ class TestSessionManager:
             )
 
             with pytest.raises(ClientError):
-                manager.list_long_term_memory_records(namespace_prefix="invalid/namespace")
+                manager.list_long_term_memory_records(namespace_prefix="invalid/namespace/")
 
     def test_list_actors_success(self):
         """Test list_actors successful execution."""
@@ -1449,7 +1449,7 @@ class TestSessionManager:
                 }
                 mock_client_instance.batch_delete_memory_records.return_value = mock_response
 
-                result = manager.delete_all_long_term_memories_in_namespace("test/namespace")
+                result = manager.delete_all_long_term_memories_in_namespace("test/namespace/")
 
                 assert len(result["successfulRecords"]) == 2
                 assert len(result["failedRecords"]) == 0
@@ -1473,7 +1473,7 @@ class TestSessionManager:
 
             # Mock empty list_long_term_memory_records
             with patch.object(manager, "list_long_term_memory_records", return_value=[]):
-                result = manager.delete_all_long_term_memories_in_namespace("empty/namespace")
+                result = manager.delete_all_long_term_memories_in_namespace("empty/namespace/")
 
                 assert result == {"successfulRecords": [], "failedRecords": []}
                 # Should not call batch_delete_memory_records
@@ -1500,7 +1500,7 @@ class TestSessionManager:
                 )
 
                 with pytest.raises(ClientError):
-                    manager.delete_all_long_term_memories_in_namespace("test/namespace")
+                    manager.delete_all_long_term_memories_in_namespace("test/namespace/")
 
     def test_delete_all_long_term_memories_in_namespace_over_100_records(self):
         """Test deleting more than 100 records in namespace."""
@@ -1525,7 +1525,7 @@ class TestSessionManager:
                     },
                 ]
 
-                result = manager.delete_all_long_term_memories_in_namespace("test/namespace")
+                result = manager.delete_all_long_term_memories_in_namespace("test/namespace/")
 
                 # Verify two batch calls were made
                 assert mock_client_instance.batch_delete_memory_records.call_count == 2
@@ -1568,7 +1568,7 @@ class TestSessionManager:
                 }
                 mock_client_instance.batch_delete_memory_records.return_value = mock_response
 
-                result = manager.delete_all_long_term_memories_in_namespace("test/namespace")
+                result = manager.delete_all_long_term_memories_in_namespace("test/namespace/")
 
                 assert len(result["successfulRecords"]) == 2
                 assert len(result["failedRecords"]) == 1
@@ -1848,10 +1848,10 @@ class TestSession:
             # Mock manager method
             mock_records = [MemoryRecord({"memoryRecordId": "rec-123"})]
             with patch.object(manager, "search_long_term_memories", return_value=mock_records) as mock_search:
-                result = session.search_long_term_memories(query="test query", namespace_prefix="test/namespace")
+                result = session.search_long_term_memories(query="test query", namespace_prefix="test/namespace/")
 
                 assert result == mock_records
-                mock_search.assert_called_once_with("test query", "test/namespace", 3, None, 20)
+                mock_search.assert_called_once_with("test query", "test/namespace/", 3, None, 20)
 
     def test_session_list_long_term_memory_records_delegation(self):
         """Test MemorySession.list_long_term_memory_records delegates to manager."""
@@ -1864,10 +1864,10 @@ class TestSession:
             # Mock manager method
             mock_records = [MemoryRecord({"memoryRecordId": "rec-123"})]
             with patch.object(manager, "list_long_term_memory_records", return_value=mock_records) as mock_list:
-                result = session.list_long_term_memory_records(namespace_prefix="test/namespace")
+                result = session.list_long_term_memory_records(namespace_prefix="test/namespace/")
 
                 assert result == mock_records
-                mock_list.assert_called_once_with("test/namespace", None, 10)
+                mock_list.assert_called_once_with("test/namespace/", None, 10)
 
     def test_session_list_actors_delegation(self):
         """Test MemorySession.list_actors delegates to manager."""
@@ -2019,7 +2019,7 @@ class TestEdgeCases:
                         return "Response"
 
                     # Test with custom retrieval config
-                    retrieval_config = {"test/namespace": RetrievalConfig(top_k=5, retrieval_query="custom query")}
+                    retrieval_config = {"test/namespace/": RetrievalConfig(top_k=5, retrieval_query="custom query")}
                     manager.process_turn_with_llm(
                         actor_id="user-123",
                         session_id="session-456",
@@ -2030,7 +2030,7 @@ class TestEdgeCases:
 
                     # Verify custom query was used
                     mock_search.assert_called_once_with(
-                        query="custom query Hello", namespace_prefix="test/namespace", top_k=5
+                        query="custom query Hello", namespace_prefix="test/namespace/", top_k=5
                     )
 
     def test_list_events_max_results_respected(self):
@@ -2176,7 +2176,7 @@ class TestEdgeCases:
             mock_response = {"memoryRecordSummaries": []}
             mock_client_instance.retrieve_memory_records.return_value = mock_response
 
-            result = manager.search_long_term_memories(query="test query", namespace_prefix="test/namespace")
+            result = manager.search_long_term_memories(query="test query", namespace_prefix="test/namespace/")
 
             assert result == []
 
@@ -2200,7 +2200,7 @@ class TestEdgeCases:
             mock_client_instance.get_paginator.return_value = mock_paginator
             mock_paginator.paginate.return_value = [{"memoryRecords": []}]
 
-            result = manager.list_long_term_memory_records(namespace_prefix="test/namespace")
+            result = manager.list_long_term_memory_records(namespace_prefix="test/namespace/")
 
             assert result == []
 
@@ -2590,7 +2590,7 @@ class TestEventMetadataFlow:
                         return f"Response to: {user_input} with {len(memories)} memories"
 
                     # Test process_turn_with_llm with metadata
-                    retrieval_config = {"test/namespace": RetrievalConfig(top_k=5)}
+                    retrieval_config = {"test/namespace/": RetrievalConfig(top_k=5)}
                     metadata = {"location": {"stringValue": "NYC"}}
 
                     memories, response, event = manager.process_turn_with_llm(
@@ -2704,7 +2704,7 @@ class TestAdditionalCoverage:
                         return "Response"
 
                     # Test with retrieval_config but no retrieval_query (should use user_input)
-                    retrieval_config = {"test/namespace": RetrievalConfig(top_k=3, retrieval_query=None)}
+                    retrieval_config = {"test/namespace/": RetrievalConfig(top_k=3, retrieval_query=None)}
                     manager.process_turn_with_llm(
                         actor_id="user-123",
                         session_id="session-456",
@@ -2714,7 +2714,7 @@ class TestAdditionalCoverage:
                     )
 
                     # Verify user_input was used as query
-                    mock_search.assert_called_once_with(query="Hello", namespace_prefix="test/namespace", top_k=3)
+                    mock_search.assert_called_once_with(query="Hello", namespace_prefix="test/namespace/", top_k=3)
 
     def test_add_turns_with_custom_timestamp(self):
         """Test add_turns with custom timestamp."""
@@ -2836,7 +2836,7 @@ class TestAdditionalCoverage:
                         return f"Response with {len(memories)} memories"
 
                     # Test with relevance_score filtering (should filter out low relevance)
-                    retrieval_config = {"test/namespace": RetrievalConfig(top_k=5, relevance_score=0.4)}
+                    retrieval_config = {"test/namespace/": RetrievalConfig(top_k=5, relevance_score=0.4)}
                     memories, response, event = manager.process_turn_with_llm(
                         actor_id="user-123",
                         session_id="session-456",
@@ -3065,7 +3065,7 @@ class TestAdditionalCoverage:
                         return "Response"
 
                     # Test with RetrievalConfig that has a very low relevance_score (effectively no filtering)
-                    retrieval_config = {"test/namespace": RetrievalConfig(top_k=3, relevance_score=0.0)}
+                    retrieval_config = {"test/namespace/": RetrievalConfig(top_k=3, relevance_score=0.0)}
                     memories, response, event = manager.process_turn_with_llm(
                         actor_id="user-123",
                         session_id="session-456",
@@ -3198,7 +3198,7 @@ class TestAdditionalCoverage:
                 }
             ]
 
-            result = manager.list_long_term_memory_records(namespace_prefix="test/namespace")
+            result = manager.list_long_term_memory_records(namespace_prefix="test/namespace/")
 
             assert len(result) == 2
             assert all(isinstance(record, MemoryRecord) for record in result)
@@ -3572,7 +3572,7 @@ class TestAddTurnsWithDataClasses:
 
             with patch("bedrock_agentcore.memory.session.logger") as mock_logger:
                 with pytest.raises(ClientError):
-                    manager.search_long_term_memories(query="invalid query", namespace_prefix="test/namespace")
+                    manager.search_long_term_memories(query="invalid query", namespace_prefix="test/namespace/")
 
                 # Verify info logging was called (not error logging)
                 mock_logger.info.assert_called_with("     ❌ Error querying long-term memory: %s", mock.ANY)
@@ -3598,7 +3598,7 @@ class TestAddTurnsWithDataClasses:
                 {"memoryRecords": [{"memoryRecordId": "rec-3"}, {"memoryRecordId": "rec-4"}]},
             ]
 
-            result = manager.list_long_term_memory_records(namespace_prefix="test/namespace")
+            result = manager.list_long_term_memory_records(namespace_prefix="test/namespace/")
 
             assert len(result) == 4
             assert all(isinstance(record, MemoryRecord) for record in result)

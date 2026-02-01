@@ -112,19 +112,19 @@ comprehensive_memory = client.create_memory_and_wait(
         {
             "summaryMemoryStrategy": {
                 "name": "SessionSummarizer",
-                "namespaces": ["/summaries/{actorId}/{sessionId}"]
+                "namespaces": ["/summaries/{actorId}/{sessionId}/"]
             }
         },
         {
             "userPreferenceMemoryStrategy": {
                 "name": "PreferenceLearner",
-                "namespaces": ["/preferences/{actorId}"]
+                "namespaces": ["/preferences/{actorId}/"]
             }
         },
         {
             "semanticMemoryStrategy": {
                 "name": "FactExtractor",
-                "namespaces": ["/facts/{actorId}"]
+                "namespaces": ["/facts/{actorId}/"]
             }
         }
     ]
@@ -143,7 +143,7 @@ config = AgentCoreMemoryConfig(
     session_id=SESSION_ID,
     actor_id=ACTOR_ID,
     retrieval_config={
-        "/preferences/{actorId}": RetrievalConfig(
+        "/preferences/{actorId}/": RetrievalConfig(
             top_k=5,
             relevance_score=0.7
         )
@@ -161,15 +161,15 @@ config = AgentCoreMemoryConfig(
     session_id=SESSION_ID,
     actor_id=ACTOR_ID,
     retrieval_config={
-        "/preferences/{actorId}": RetrievalConfig(
+        "/preferences/{actorId}/": RetrievalConfig(
             top_k=5,
             relevance_score=0.7
         ),
-        "/facts/{actorId}": RetrievalConfig(
+        "/facts/{actorId}/": RetrievalConfig(
             top_k=10,
             relevance_score=0.3
         ),
-        "/summaries/{actorId}/{sessionId}": RetrievalConfig(
+        "/summaries/{actorId}/{sessionId}/": RetrievalConfig(
             top_k=5,
             relevance_score=0.5
         )
@@ -233,9 +233,9 @@ https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-strategies.
 
 ### Namespace Patterns
 
-- `/preferences/{actorId}`: User-specific preferences
-- `/facts/{actorId}`: User-specific facts
-- `/summaries/{actorId}/{sessionId}`: Session-specific summaries
+- `/preferences/{actorId}/`: User-specific preferences
+- `/facts/{actorId}/`: User-specific facts
+- `/summaries/{actorId}/{sessionId}/`: Session-specific summaries
 
 
 ---

@@ -60,16 +60,16 @@ class TestAgentCoreMemorySessionManager:
                 {
                     "summaryMemoryStrategy": {
                         "name": "SessionSummarizer",
-                        "namespaces": ["/summaries/{actorId}/{sessionId}"],
+                        "namespaces": ["/summaries/{actorId}/{sessionId}/"],
                     }
                 },
                 {
                     "userPreferenceMemoryStrategy": {
                         "name": "PreferenceLearner",
-                        "namespaces": ["/preferences/{actorId}"],
+                        "namespaces": ["/preferences/{actorId}/"],
                     }
                 },
-                {"semanticMemoryStrategy": {"name": "FactExtractor", "namespaces": ["/facts/{actorId}"]}},
+                {"semanticMemoryStrategy": {"name": "FactExtractor", "namespaces": ["/facts/{actorId}/"]}},
             ],
         )
         yield memory
@@ -129,7 +129,7 @@ class TestAgentCoreMemorySessionManager:
             memory_id=test_memory_ltm["id"],
             session_id=f"test-session-{int(time.time())}",
             actor_id=f"test-actor-{int(time.time())}",
-            retrieval_config={"/preferences/{actorId}": RetrievalConfig(top_k=5, relevance_score=0.7)},
+            retrieval_config={"/preferences/{actorId}/": RetrievalConfig(top_k=5, relevance_score=0.7)},
         )
 
         session_manager = AgentCoreMemorySessionManager(agentcore_memory_config=config, region_name=REGION)
@@ -153,9 +153,9 @@ class TestAgentCoreMemorySessionManager:
             session_id=f"test-session-{int(time.time())}",
             actor_id=f"test-actor-{int(time.time())}",
             retrieval_config={
-                "/preferences/{actorId}": RetrievalConfig(top_k=5, relevance_score=0.7),
-                "/facts/{actorId}": RetrievalConfig(top_k=10, relevance_score=0.3),
-                "/summaries/{actorId}/{sessionId}": RetrievalConfig(top_k=5, relevance_score=0.5),
+                "/preferences/{actorId}/": RetrievalConfig(top_k=5, relevance_score=0.7),
+                "/facts/{actorId}/": RetrievalConfig(top_k=10, relevance_score=0.3),
+                "/summaries/{actorId}/{sessionId}/": RetrievalConfig(top_k=5, relevance_score=0.5),
             },
         )
 

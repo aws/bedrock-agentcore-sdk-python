@@ -25,8 +25,8 @@ def agentcore_config():
 def agentcore_config_with_retrieval():
     """Create a test AgentCore Memory configuration with retrieval config."""
     retrieval_config = {
-        "user_preferences/{actorId}": RetrievalConfig(top_k=5, relevance_score=0.3),
-        "session_context/{sessionId}": RetrievalConfig(top_k=3, relevance_score=0.5),
+        "user_preferences/{actorId}/": RetrievalConfig(top_k=5, relevance_score=0.3),
+        "session_context/{sessionId}/": RetrievalConfig(top_k=3, relevance_score=0.5),
     }
     return AgentCoreMemoryConfig(
         memory_id="test-memory-123",
@@ -471,17 +471,17 @@ class TestAgentCoreMemorySessionManager:
 
         # Valid resolution
         assert session_manager._validate_namespace_resolution(
-            "user_preferences/{actorId}", "user_preferences/test-actor"
+            "user_preferences/{actorId}/", "user_preferences/test-actor/"
         )
 
         # Mock invalid resolution
         session_manager._validate_namespace_resolution.return_value = False
         assert not session_manager._validate_namespace_resolution(
-            "user_preferences/{actorId}", "user_preferences/{actorId}"
+            "user_preferences/{actorId}/", "user_preferences/{actorId}/"
         )
 
         # Invalid - empty result
-        assert not session_manager._validate_namespace_resolution("test_namespace", "")
+        assert not session_manager._validate_namespace_resolution("test_namespace/", "")
 
     def test_load_long_term_memories_with_validation_failure(self, mock_memory_client, test_agent):
         """Test LTM loading with namespace validation failure."""
@@ -490,7 +490,7 @@ class TestAgentCoreMemorySessionManager:
             memory_id="test-memory-123",
             session_id="test-session-456",
             actor_id="test-actor",
-            retrieval_config={"user_preferences/{invalidVar}": RetrievalConfig(top_k=5, relevance_score=0.3)},
+            retrieval_config={"user_preferences/{invalidVar}/": RetrievalConfig(top_k=5, relevance_score=0.3)},
         )
 
         with patch(
@@ -563,23 +563,23 @@ class TestAgentCoreMemorySessionManager:
 
         # Test preferences namespace
         config = RetrievalConfig(top_k=5, relevance_score=0.3)
-        query = session_manager._generate_initialization_query("user_preferences/{actorId}", config, test_agent)
+        query = session_manager._generate_initialization_query("user_preferences/{actorId}/", config, test_agent)
         assert query == "user preferences settings"
 
         # Test context namespace
-        query = session_manager._generate_initialization_query("session_context/{sessionId}", config, test_agent)
+        query = session_manager._generate_initialization_query("session_context/{sessionId}/", config, test_agent)
         assert query == "conversation context history"
 
         # Test semantic namespace
-        query = session_manager._generate_initialization_query("semantic_knowledge", config, test_agent)
+        query = session_manager._generate_initialization_query("semantic_knowledge/", config, test_agent)
         assert query == "facts knowledge information"
 
         # Test facts namespace
-        query = session_manager._generate_initialization_query("facts_database", config, test_agent)
+        query = session_manager._generate_initialization_query("facts_database/", config, test_agent)
         assert query == "facts knowledge information"
 
         # Test fallback
-        query = session_manager._generate_initialization_query("unknown_namespace", config, test_agent)
+        query = session_manager._generate_initialization_query("unknown_namespace/", config, test_agent)
         assert query == "context preferences facts"
 
     def test_generate_initialization_query_custom(self, session_manager, test_agent):
@@ -589,7 +589,7 @@ class TestAgentCoreMemorySessionManager:
         # Mock the method since it doesn't exist yet
         session_manager._generate_initialization_query = Mock(return_value="custom query for testing")
 
-        query = session_manager._generate_initialization_query("user_preferences/{actorId}", config, test_agent)
+        query = session_manager._generate_initialization_query("user_preferences/{actorId}/", config, test_agent)
         assert query == "custom query for testing"
 
     def test_retrieve_contextual_memories_all_namespaces(self, agentcore_config_with_retrieval, mock_memory_client):
@@ -617,11 +617,11 @@ class TestAgentCoreMemorySessionManager:
                     manager.retrieve_contextual_memories = Mock(
                         return_value=[
                             {
-                                "namespace": "user_preferences/test-actor-789",
+                                "namespace": "user_preferences/test-actor-789/",
                                 "memories": [{"content": "Relevant memory", "relevanceScore": 0.8}],
                             },
                             {
-                                "namespace": "session_context/test-session-456",
+                                "namespace": "session_context/test-session-456/",
                                 "memories": [{"content": "Less relevant memory", "relevanceScore": 0.2}],
                             },
                         ]
@@ -657,13 +657,13 @@ class TestAgentCoreMemorySessionManager:
                     manager.retrieve_contextual_memories = Mock(
                         return_value=[
                             {
-                                "namespace": "user_preferences/test-actor-789",
+                                "namespace": "user_preferences/test-actor-789/",
                                 "memories": [{"content": "User preference memory", "relevanceScore": 0.9}],
                             }
                         ]
                     )
                     results = manager.retrieve_contextual_memories(
-                        "What are my preferences?", namespaces=["user_preferences/{actorId}"]
+                        "What are my preferences?", namespaces=["user_preferences/{actorId}/"]
                     )
 
         # Should return results for specified namespace only
@@ -695,7 +695,7 @@ class TestAgentCoreMemorySessionManager:
                 ):
                     manager = AgentCoreMemorySessionManager(agentcore_config_with_retrieval)
                     manager.retrieve_contextual_memories = Mock(return_value={})
-                    results = manager.retrieve_contextual_memories("test query", namespaces=["nonexistent_namespace"])
+                    results = manager.retrieve_contextual_memories("test query", namespaces=["nonexistent_namespace/"])
 
         # Should return empty results
         assert results == {}
@@ -755,27 +755,27 @@ class TestAgentCoreMemorySessionManager:
     def test_namespace_variable_resolution(self, session_manager):
         """Test namespace variable resolution with various combinations."""
         # Test basic variable resolution
-        namespace = "user_preferences/{actorId}"
+        namespace = "user_preferences/{actorId}/"
         resolved = namespace.format(
             actorId=session_manager.config.actor_id, sessionId=session_manager.config.session_id, memoryStrategyId=""
         )
-        assert resolved == "user_preferences/test-actor-789"
+        assert resolved == "user_preferences/test-actor-789/"
 
         # Test multiple variables
-        namespace = "context/{sessionId}/actor/{actorId}"
+        namespace = "context/{sessionId}/actor/{actorId}/"
         resolved = namespace.format(
             actorId=session_manager.config.actor_id, sessionId=session_manager.config.session_id, memoryStrategyId=""
         )
-        assert resolved == "context/test-session-456/actor/test-actor-789"
+        assert resolved == "context/test-session-456/actor/test-actor-789/"
 
         # Test with strategy ID
-        namespace = "strategy/{memoryStrategyId}/user/{actorId}"
+        namespace = "strategy/{memoryStrategyId}/user/{actorId}/"
         resolved = namespace.format(
             actorId=session_manager.config.actor_id,
             sessionId=session_manager.config.session_id,
             memoryStrategyId="test_strategy",
         )
-        assert resolved == "strategy/test_strategy/user/test-actor-789"
+        assert resolved == "strategy/test_strategy/user/test-actor-789/"
 
     def test_generate_initialization_query_patterns(self, session_manager, test_agent):
         """Test initialization query generation with various namespace patterns."""
@@ -796,17 +796,17 @@ class TestAgentCoreMemorySessionManager:
 
         # Test various preference patterns
         patterns_and_expected = [
-            ("user_preferences/{actorId}", "user preferences settings"),
-            ("preferences/global", "user preferences settings"),
-            ("my_preferences", "user preferences settings"),
-            ("session_context/{sessionId}", "conversation context history"),
-            ("context/history", "conversation context history"),
-            ("conversation_context", "conversation context history"),
-            ("semantic_memory", "facts knowledge information"),
-            ("facts_database", "facts knowledge information"),
-            ("knowledge_semantic", "facts knowledge information"),
-            ("random_namespace", "context preferences facts"),
-            ("unknown", "context preferences facts"),
+            ("user_preferences/{actorId}/", "user preferences settings"),
+            ("preferences/global/", "user preferences settings"),
+            ("my_preferences/", "user preferences settings"),
+            ("session_context/{sessionId}/", "conversation context history"),
+            ("context/history/", "conversation context history"),
+            ("conversation_context/", "conversation context history"),
+            ("semantic_memory/", "facts knowledge information"),
+            ("facts_database/", "facts knowledge information"),
+            ("knowledge_semantic/", "facts knowledge information"),
+            ("random_namespace/", "context preferences facts"),
+            ("unknown/", "context preferences facts"),
         ]
 
         for namespace, expected_query in patterns_and_expected:
@@ -1063,7 +1063,7 @@ class TestAgentCoreMemorySessionManager:
             memory_id="test-memory-123",
             session_id="test-session-456",
             actor_id="test-actor-789",
-            retrieval_config={"test_namespace": RetrievalConfig(top_k=10, relevance_score=0.5)},
+            retrieval_config={"test_namespace/": RetrievalConfig(top_k=10, relevance_score=0.5)},
         )
 
         with patch(
