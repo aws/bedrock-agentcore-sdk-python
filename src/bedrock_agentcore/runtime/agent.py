@@ -163,7 +163,7 @@ class Agent:
             FileNotFoundError: If config file doesn't exist
             ValueError: If config file is invalid
         """
-        from .build import CodeBuild, DirectCodeDeploy, LocalBuild, PrebuiltImage
+        from .build import DirectCodeDeploy, ECR
 
         path = Path(file_path)
         if not path.exists():
@@ -192,25 +192,17 @@ class Agent:
             build_config = config.build
             strategy_type = build_config.strategy
 
-            if strategy_type == BuildStrategyType.PREBUILT:
-                if not build_config.image_uri:
-                    raise ValueError("prebuilt strategy requires imageUri")
-                build_strategy = PrebuiltImage(image_uri=build_config.image_uri)
-            elif strategy_type == BuildStrategyType.CODEBUILD:
-                if not build_config.source_path or not build_config.entrypoint:
-                    raise ValueError("codebuild strategy requires sourcePath and entrypoint")
-                build_strategy = CodeBuild(
-                    source_path=build_config.source_path,
-                    entrypoint=build_config.entrypoint,
-                )
-            elif strategy_type == BuildStrategyType.LOCAL:
-                if not build_config.source_path or not build_config.entrypoint:
-                    raise ValueError("local strategy requires sourcePath and entrypoint")
-                build_strategy = LocalBuild(
-                    source_path=build_config.source_path,
-                    entrypoint=build_config.entrypoint,
-                    runtime=build_config.runtime,
-                )
+            if strategy_type == BuildStrategyType.ECR:
+                # ECR can be either pre-built (image_uri) or CodeBuild (source_path + entrypoint)
+                if build_config.image_uri:
+                    build_strategy = ECR(image_uri=build_config.image_uri)
+                elif build_config.source_path and build_config.entrypoint:
+                    build_strategy = ECR(
+                        source_path=build_config.source_path,
+                        entrypoint=build_config.entrypoint,
+                    )
+                else:
+                    raise ValueError("ECR strategy requires either imageUri or (sourcePath + entrypoint)")
             elif strategy_type == BuildStrategyType.DIRECT_CODE_DEPLOY:
                 if not build_config.source_path or not build_config.entrypoint:
                     raise ValueError("direct_code_deploy strategy requires sourcePath and entrypoint")
@@ -222,8 +214,8 @@ class Agent:
             else:
                 raise ValueError(f"Unknown build strategy: {strategy_type}")
         elif config.artifact and config.artifact.image_uri:
-            # Backwards compatibility: if only artifact.imageUri is provided, use PrebuiltImage
-            build_strategy = PrebuiltImage(image_uri=config.artifact.image_uri)
+            # Backwards compatibility: if only artifact.imageUri is provided, use ECR with pre-built
+            build_strategy = ECR(image_uri=config.artifact.image_uri)
         else:
             raise ValueError("Config must have either 'build' or 'artifact.imageUri'")
 
@@ -303,64 +295,22 @@ class Agent:
         logger.info("Saved Agent config to %s", file_path)
         return str(path)
 
-    def build(
-        self,
-        tag: str = "latest",
-        max_wait: int = 600,
-    ) -> Dict[str, Any]:
-        """Build the agent using the configured build strategy.
-
-        The build behavior depends on the build strategy:
-        - PrebuiltImage: No-op, returns the existing image URI
-        - CodeBuild: Builds ARM64 container images via AWS CodeBuild
-        - LocalBuild: Builds locally using Docker/Finch/Podman
-        - DirectCodeDeploy: Packages Python code as zip (no container)
-
-        Args:
-            tag: Image/version tag (default: "latest")
-            max_wait: Maximum seconds to wait for build
-
-        Returns:
-            Build result including imageUri (container) or packageUri (direct code)
-
-        Raises:
-            FileNotFoundError: If source_path doesn't exist
-            RuntimeError: If build fails
-        """
-        # Validate prerequisites for the build strategy
-        self._build_strategy.validate_prerequisites()
-
-        logger.info(
-            "Building agent '%s' using %s strategy...",
-            self._name,
-            self._build_strategy.strategy_name,
-        )
-
-        result = self._build_strategy.build(
-            agent_name=self._name,
-            region_name=self._region,
-            tag=tag,
-            max_wait=max_wait,
-        )
-
-        # Update the config artifact with the built image
-        if result.get("imageUri"):
-            self._config.artifact = RuntimeArtifactModel(imageUri=result["imageUri"])
-
-        logger.info("Build complete. Image URI: %s", result.get("imageUri"))
-        return result
-
-    def deploy(
+    def build_and_launch(
         self,
         tag: str = "latest",
         max_wait_build: int = 600,
         max_wait_launch: int = 600,
         poll_interval: int = 10,
     ) -> Dict[str, Any]:
-        """Build and launch the agent in one step.
+        """Build, push, and launch the agent in one step.
 
-        This is a convenience method that combines build() and launch().
-        Will run build() first if image_uri is not yet available.
+        This is the primary method for deploying an agent. It handles:
+        1. Building and pushing the artifact (via build strategy's deploy())
+        2. Creating the runtime in AWS (via launch())
+
+        For ECR strategy: builds container and pushes to ECR, then launches runtime
+        For DirectCodeDeploy: packages code and uploads to S3, then launches runtime
+        For pre-built images: skips build, just launches runtime
 
         Args:
             tag: Image tag for build (default: "latest")
@@ -374,12 +324,24 @@ class Agent:
         Raises:
             RuntimeError: If build or launch fails
         """
-        # Build if image not yet available
+        # Deploy artifact (build + push) if image not yet available
         if not self._build_strategy.image_uri:
-            logger.info("Building agent before deploy...")
-            self.build(tag=tag, max_wait=max_wait_build)
+            logger.info("Building agent artifact using %s strategy...", self._build_strategy.strategy_name)
+            self._build_strategy.validate_prerequisites()
 
-        # Launch the agent
+            result = self._build_strategy.deploy(
+                agent_name=self._name,
+                region_name=self._region,
+                tag=tag,
+                max_wait=max_wait_build,
+            )
+
+            # Update the config artifact with the deployed image
+            if result.get("imageUri"):
+                self._config.artifact = RuntimeArtifactModel(imageUri=result["imageUri"])
+                logger.info("Artifact deployed. Image URI: %s", result["imageUri"])
+
+        # Launch the agent runtime
         return self.launch(max_wait=max_wait_launch, poll_interval=poll_interval)
 
     def launch(
@@ -595,25 +557,14 @@ class Agent:
         Returns:
             BuildConfigModel for YAML serialization
         """
-        from .build import CodeBuild, DirectCodeDeploy, LocalBuild, PrebuiltImage
+        from .build import DirectCodeDeploy, ECR
 
-        if isinstance(build, PrebuiltImage):
+        if isinstance(build, ECR):
             return BuildConfigModel(
-                strategy=BuildStrategyType.PREBUILT,
+                strategy=BuildStrategyType.ECR,
                 imageUri=build.image_uri,
-            )
-        elif isinstance(build, CodeBuild):
-            return BuildConfigModel(
-                strategy=BuildStrategyType.CODEBUILD,
                 sourcePath=build.source_path,
                 entrypoint=build.entrypoint,
-            )
-        elif isinstance(build, LocalBuild):
-            return BuildConfigModel(
-                strategy=BuildStrategyType.LOCAL,
-                sourcePath=build.source_path,
-                entrypoint=build.entrypoint,
-                runtime=build._runtime,
             )
         elif isinstance(build, DirectCodeDeploy):
             return BuildConfigModel(
@@ -625,7 +576,7 @@ class Agent:
         else:
             # Unknown strategy - try to serialize with minimal info
             return BuildConfigModel(
-                strategy=BuildStrategyType.PREBUILT,
+                strategy=BuildStrategyType.ECR,
                 imageUri=build.image_uri,
             )
 

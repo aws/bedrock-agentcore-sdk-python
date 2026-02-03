@@ -57,31 +57,27 @@ class RuntimeArtifactModel(BaseModel):
 class BuildStrategyType(str, Enum):
     """Build strategy type options."""
 
-    PREBUILT = "prebuilt"
-    CODEBUILD = "codebuild"
-    LOCAL = "local"
+    ECR = "ecr"
     DIRECT_CODE_DEPLOY = "direct_code_deploy"
 
 
 class BuildConfigModel(BaseModel):
-    """Build configuration for container deployment.
+    """Build configuration for agent deployment.
 
     Attributes:
-        strategy: Build strategy type (prebuilt, codebuild, local, direct_code_deploy)
-        image_uri: Pre-built image URI (for prebuilt strategy)
-        source_path: Path to agent source code directory (for source-based strategies)
-        entrypoint: Entry point e.g. "agent.py:app" (for source-based strategies)
-        runtime: Container runtime for local builds (docker, finch, podman)
+        strategy: Build strategy type (ecr, direct_code_deploy)
+        image_uri: Pre-built image URI (for ECR with pre-built mode)
+        source_path: Path to agent source code directory (for CodeBuild or DirectCodeDeploy)
+        entrypoint: Entry point e.g. "agent.py:app" (for CodeBuild or DirectCodeDeploy)
         s3_bucket: S3 bucket for direct code deploy
     """
 
     model_config = ConfigDict(populate_by_name=True)
 
-    strategy: BuildStrategyType = Field(default=BuildStrategyType.CODEBUILD)
+    strategy: BuildStrategyType = Field(default=BuildStrategyType.ECR)
     image_uri: Optional[str] = Field(default=None, alias="imageUri")
     source_path: Optional[str] = Field(default=None, alias="sourcePath")
     entrypoint: Optional[str] = None
-    runtime: Optional[str] = None
     s3_bucket: Optional[str] = Field(default=None, alias="s3Bucket")
 
 

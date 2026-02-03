@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from bedrock_agentcore.runtime.agent import Agent
-from bedrock_agentcore.runtime.build import CodeBuild, DirectCodeDeploy, LocalBuild, PrebuiltImage
+from bedrock_agentcore.runtime.build import DirectCodeDeploy, ECR
 from bedrock_agentcore.runtime.config import NetworkMode
 
 
@@ -17,11 +17,11 @@ class TestAgentInit:
     """Tests for Agent initialization."""
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_minimal_init_with_prebuilt_image(self, mock_boto3: MagicMock) -> None:
-        """Test minimal agent initialization with prebuilt image."""
+    def test_minimal_init_with_ecr_prebuilt(self, mock_boto3: MagicMock) -> None:
+        """Test minimal agent initialization with ECR prebuilt image."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
-        build = PrebuiltImage(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
+        build = ECR(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
         agent = Agent(
             name="test-agent",
             build=build,
@@ -37,11 +37,11 @@ class TestAgentInit:
         assert agent.image_uri == "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_init_with_codebuild(self, mock_boto3: MagicMock) -> None:
-        """Test agent initialization with CodeBuild strategy."""
+    def test_init_with_ecr_codebuild(self, mock_boto3: MagicMock) -> None:
+        """Test agent initialization with ECR CodeBuild strategy."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
-        build = CodeBuild(source_path="./test-src", entrypoint="main.py:app")
+        build = ECR(source_path="./test-src", entrypoint="main.py:app")
         agent = Agent(
             name="test-agent",
             build=build,
@@ -49,7 +49,7 @@ class TestAgentInit:
 
         assert agent.name == "test-agent"
         assert agent.build_strategy is build
-        assert agent.build_strategy.strategy_name == "codebuild"
+        assert agent.build_strategy.strategy_name == "ecr"
         assert agent.image_uri is None  # Not yet built
         assert agent.config.artifact is None  # Not yet built
 
@@ -58,7 +58,7 @@ class TestAgentInit:
         """Test full agent initialization with all parameters."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
-        build = PrebuiltImage(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
+        build = ECR(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
         agent = Agent(
             name="test-agent",
             build=build,
@@ -81,7 +81,7 @@ class TestAgentInit:
         """Test agent initialization with VPC mode."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
-        build = PrebuiltImage(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
+        build = ECR(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
         agent = Agent(
             name="test-agent",
             build=build,
@@ -101,11 +101,11 @@ class TestAgentSaveLoad:
     """Tests for Agent save/load operations."""
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_save_to_yaml_prebuilt(self, mock_boto3: MagicMock) -> None:
-        """Test saving agent config with prebuilt image to YAML file."""
+    def test_save_to_yaml_ecr_prebuilt(self, mock_boto3: MagicMock) -> None:
+        """Test saving agent config with ECR prebuilt image to YAML file."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
-        build = PrebuiltImage(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
+        build = ECR(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
         agent = Agent(
             name="test-agent",
             build=build,
@@ -128,17 +128,17 @@ class TestAgentSaveLoad:
             assert data["description"] == "Test agent"
             assert data["artifact"]["imageUri"] == "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
             assert data["environmentVariables"]["LOG_LEVEL"] == "INFO"
-            assert data["build"]["strategy"] == "prebuilt"
+            assert data["build"]["strategy"] == "ecr"
             assert data["build"]["imageUri"] == "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
         finally:
             Path(file_path).unlink(missing_ok=True)
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_save_to_yaml_codebuild(self, mock_boto3: MagicMock) -> None:
-        """Test saving agent config with codebuild strategy to YAML file."""
+    def test_save_to_yaml_ecr_codebuild(self, mock_boto3: MagicMock) -> None:
+        """Test saving agent config with ECR codebuild strategy to YAML file."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
-        build = CodeBuild(source_path="./test-src", entrypoint="main.py:app")
+        build = ECR(source_path="./test-src", entrypoint="main.py:app")
         agent = Agent(
             name="test-agent",
             build=build,
@@ -158,15 +158,15 @@ class TestAgentSaveLoad:
 
             assert data["name"] == "test-agent"
             assert data["description"] == "Test agent"
-            assert data["build"]["strategy"] == "codebuild"
+            assert data["build"]["strategy"] == "ecr"
             assert data["build"]["sourcePath"] == "./test-src"
             assert data["build"]["entrypoint"] == "main.py:app"
         finally:
             Path(file_path).unlink(missing_ok=True)
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_from_yaml_prebuilt(self, mock_boto3: MagicMock) -> None:
-        """Test loading agent with prebuilt image from YAML file."""
+    def test_from_yaml_ecr_prebuilt(self, mock_boto3: MagicMock) -> None:
+        """Test loading agent with ECR prebuilt image from YAML file."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
         # Create mock paginator
@@ -180,7 +180,7 @@ class TestAgentSaveLoad:
 name: test-agent
 description: Test agent from YAML
 build:
-  strategy: prebuilt
+  strategy: ecr
   imageUri: 123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest
 networkConfiguration:
   networkMode: PUBLIC
@@ -201,13 +201,14 @@ tags:
             assert agent.image_uri == "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
             assert agent.config.environment_variables == {"LOG_LEVEL": "DEBUG"}
             assert agent.config.tags == {"Environment": "staging"}
-            assert isinstance(agent.build_strategy, PrebuiltImage)
+            assert isinstance(agent.build_strategy, ECR)
+            assert agent.build_strategy.mode == "prebuilt"
         finally:
             Path(file_path).unlink(missing_ok=True)
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_from_yaml_codebuild(self, mock_boto3: MagicMock) -> None:
-        """Test loading agent with codebuild strategy from YAML file."""
+    def test_from_yaml_ecr_codebuild(self, mock_boto3: MagicMock) -> None:
+        """Test loading agent with ECR codebuild strategy from YAML file."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
         # Create mock paginator
@@ -221,7 +222,7 @@ tags:
 name: test-agent
 description: Test agent from YAML
 build:
-  strategy: codebuild
+  strategy: ecr
   sourcePath: ./my-agent
   entrypoint: agent.py:app
 """
@@ -233,7 +234,8 @@ build:
             agent = Agent.from_yaml(file_path)
 
             assert agent.name == "test-agent"
-            assert isinstance(agent.build_strategy, CodeBuild)
+            assert isinstance(agent.build_strategy, ECR)
+            assert agent.build_strategy.mode == "codebuild"
             assert agent.build_strategy.source_path == "./my-agent"
             assert agent.build_strategy.entrypoint == "agent.py:app"
         finally:
@@ -265,7 +267,7 @@ artifact:
             agent = Agent.from_yaml(file_path)
 
             assert agent.name == "test-agent"
-            assert isinstance(agent.build_strategy, PrebuiltImage)
+            assert isinstance(agent.build_strategy, ECR)
             assert agent.image_uri == "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
         finally:
             Path(file_path).unlink(missing_ok=True)
@@ -287,7 +289,7 @@ class TestAgentLaunch:
         """Test that launch raises ValueError when source-based agent not built."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
-        build = CodeBuild(source_path="./test-source", entrypoint="agent.py:app")
+        build = ECR(source_path="./test-source", entrypoint="agent.py:app")
         agent = Agent(
             name="test-agent",
             build=build,
@@ -305,7 +307,7 @@ class TestAgentInvoke:
         """Test that invoke raises ValueError when not deployed."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
-        build = PrebuiltImage(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
+        build = ECR(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
         agent = Agent(
             name="test-agent",
             build=build,
@@ -328,7 +330,7 @@ class TestAgentInvoke:
         }
         mock_boto3.client.return_value = mock_data_plane
 
-        build = PrebuiltImage(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
+        build = ECR(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
         agent = Agent(
             name="test-agent",
             build=build,
@@ -350,7 +352,7 @@ class TestAgentDestroy:
         """Test destroy when not deployed returns NOT_DEPLOYED status."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
-        build = PrebuiltImage(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
+        build = ECR(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
         agent = Agent(
             name="test-agent",
             build=build,
@@ -365,43 +367,29 @@ class TestAgentBuildStrategies:
     """Tests for Agent build strategy serialization."""
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_build_config_prebuilt(self, mock_boto3: MagicMock) -> None:
-        """Test that PrebuiltImage is serialized correctly."""
+    def test_build_config_ecr_prebuilt(self, mock_boto3: MagicMock) -> None:
+        """Test that ECR prebuilt is serialized correctly."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
-        build = PrebuiltImage(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
+        build = ECR(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
         agent = Agent(name="test-agent", build=build)
 
         assert agent.config.build is not None
-        assert agent.config.build.strategy.value == "prebuilt"
+        assert agent.config.build.strategy.value == "ecr"
         assert agent.config.build.image_uri == "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_build_config_codebuild(self, mock_boto3: MagicMock) -> None:
-        """Test that CodeBuild is serialized correctly."""
+    def test_build_config_ecr_codebuild(self, mock_boto3: MagicMock) -> None:
+        """Test that ECR codebuild is serialized correctly."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
-        build = CodeBuild(source_path="./src", entrypoint="main.py:app")
+        build = ECR(source_path="./src", entrypoint="main.py:app")
         agent = Agent(name="test-agent", build=build)
 
         assert agent.config.build is not None
-        assert agent.config.build.strategy.value == "codebuild"
+        assert agent.config.build.strategy.value == "ecr"
         assert agent.config.build.source_path == "./src"
         assert agent.config.build.entrypoint == "main.py:app"
-
-    @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_build_config_local(self, mock_boto3: MagicMock) -> None:
-        """Test that LocalBuild is serialized correctly."""
-        mock_boto3.Session.return_value.region_name = "us-west-2"
-
-        build = LocalBuild(source_path="./src", entrypoint="main.py:app", runtime="docker")
-        agent = Agent(name="test-agent", build=build)
-
-        assert agent.config.build is not None
-        assert agent.config.build.strategy.value == "local"
-        assert agent.config.build.source_path == "./src"
-        assert agent.config.build.entrypoint == "main.py:app"
-        assert agent.config.build.runtime == "docker"
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
     def test_build_config_direct_code_deploy(self, mock_boto3: MagicMock) -> None:
