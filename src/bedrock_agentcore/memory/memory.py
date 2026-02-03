@@ -283,45 +283,6 @@ class Memory:
                 return {"status": "NOT_FOUND"}
             raise
 
-    def status(self) -> Dict[str, Any]:
-        """Get current memory status from AWS.
-
-        Returns:
-            Memory details including status, ID
-        """
-        if not self._memory_id:
-            # Try to find memory by name
-            self._refresh_memory_state()
-
-        if not self._memory_id:
-            return {
-                "status": "NOT_FOUND",
-                "name": self._name,
-                "memoryId": None,
-            }
-
-        try:
-            response = self._client.gmcp_client.get_memory(memoryId=self._memory_id)
-            memory = response.get("memory", {})
-
-            return {
-                "status": memory.get("status"),
-                "name": self._name,
-                "memoryId": memory.get("memoryId", memory.get("id")),
-                "description": memory.get("description"),
-                "createdAt": memory.get("createdAt"),
-                "lastUpdatedAt": memory.get("lastUpdatedAt"),
-            }
-
-        except ClientError as e:
-            if e.response["Error"]["Code"] == "ResourceNotFoundException":
-                return {
-                    "status": "NOT_FOUND",
-                    "name": self._name,
-                    "memoryId": None,
-                }
-            raise
-
     def add_strategy(
         self,
         strategy_type: str,

@@ -523,50 +523,6 @@ class Agent:
             "contentType": response.get("contentType"),
         }
 
-    def status(self) -> Dict[str, Any]:
-        """Get current runtime status from AWS.
-
-        Returns:
-            Runtime details including status, ARN, endpoints
-        """
-        if not self._runtime_id:
-            # Try to find runtime by name
-            self._refresh_runtime_state()
-
-        if not self._runtime_id:
-            return {
-                "status": RuntimeStatus.NOT_FOUND.value,
-                "name": self._name,
-                "runtimeArn": None,
-                "runtimeId": None,
-            }
-
-        try:
-            response = self._control_plane.get_agent_runtime(
-                agentRuntimeId=self._runtime_id,
-            )
-
-            return {
-                "status": response.get("status"),
-                "name": self._name,
-                "runtimeArn": response.get("agentRuntimeArn"),
-                "runtimeId": response.get("agentRuntimeId"),
-                "description": response.get("description"),
-                "endpoints": response.get("agentRuntimeEndpoints", []),
-                "createdAt": response.get("createdAt"),
-                "lastUpdatedAt": response.get("lastUpdatedAt"),
-            }
-
-        except ClientError as e:
-            if e.response["Error"]["Code"] == "ResourceNotFoundException":
-                return {
-                    "status": RuntimeStatus.NOT_FOUND.value,
-                    "name": self._name,
-                    "runtimeArn": None,
-                    "runtimeId": None,
-                }
-            raise
-
     def stop_session(self, session_id: str) -> Dict[str, Any]:
         """Stop a specific runtime session.
 

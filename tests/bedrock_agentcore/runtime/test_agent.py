@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from bedrock_agentcore.runtime.agent import Agent
-from bedrock_agentcore.runtime.config import NetworkMode, RuntimeStatus
+from bedrock_agentcore.runtime.config import NetworkMode
 
 
 class TestAgentInit:
@@ -155,62 +155,6 @@ tags:
 
         with pytest.raises(FileNotFoundError, match="Config file not found"):
             Agent.from_yaml("/nonexistent/path/config.yaml")
-
-
-class TestAgentStatus:
-    """Tests for Agent status operations."""
-
-    @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_status_not_deployed(self, mock_boto3: MagicMock) -> None:
-        """Test status when agent is not deployed."""
-        mock_boto3.Session.return_value.region_name = "us-west-2"
-
-        # Mock paginator that returns no runtimes
-        mock_control_plane = MagicMock()
-        mock_paginator = MagicMock()
-        mock_paginator.paginate.return_value = [{"agentRuntimeSummaries": []}]
-        mock_control_plane.get_paginator.return_value = mock_paginator
-        mock_boto3.client.return_value = mock_control_plane
-
-        agent = Agent(
-            name="test-agent",
-            image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest",
-        )
-
-        status = agent.status()
-
-        assert status["status"] == RuntimeStatus.NOT_FOUND.value
-        assert status["name"] == "test-agent"
-        assert status["runtimeArn"] is None
-
-    @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_status_deployed(self, mock_boto3: MagicMock) -> None:
-        """Test status when agent is deployed."""
-        mock_boto3.Session.return_value.region_name = "us-west-2"
-
-        mock_control_plane = MagicMock()
-        mock_control_plane.get_agent_runtime.return_value = {
-            "status": "ACTIVE",
-            "agentRuntimeArn": "arn:aws:bedrock-agentcore:us-west-2:123456789012:agent-runtime/test-id",
-            "agentRuntimeId": "test-id",
-            "description": "Test agent",
-            "agentRuntimeEndpoints": [],
-        }
-        mock_boto3.client.return_value = mock_control_plane
-
-        agent = Agent(
-            name="test-agent",
-            image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest",
-        )
-        # Simulate deployed state
-        agent._runtime_id = "test-id"
-        agent._runtime_arn = "arn:aws:bedrock-agentcore:us-west-2:123456789012:agent-runtime/test-id"
-
-        status = agent.status()
-
-        assert status["status"] == "ACTIVE"
-        assert status["name"] == "test-agent"
-        assert status["runtimeId"] == "test-id"
 
 
 class TestAgentLaunch:

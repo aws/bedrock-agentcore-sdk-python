@@ -166,52 +166,6 @@ tags:
             Memory.from_yaml("/nonexistent/path/config.yaml")
 
 
-class TestMemoryStatus:
-    """Tests for Memory status operations."""
-
-    @patch("bedrock_agentcore.memory.memory.MemoryClient")
-    def test_status_not_created(self, mock_client_class: MagicMock) -> None:
-        """Test status when memory is not created."""
-        mock_client = MagicMock()
-        mock_client.region_name = "us-west-2"
-        mock_client.list_memories.return_value = []
-        mock_client_class.return_value = mock_client
-
-        memory = Memory(name="test-memory")
-
-        status = memory.status()
-
-        assert status["status"] == "NOT_FOUND"
-        assert status["name"] == "test-memory"
-        assert status["memoryId"] is None
-
-    @patch("bedrock_agentcore.memory.memory.MemoryClient")
-    def test_status_created(self, mock_client_class: MagicMock) -> None:
-        """Test status when memory is created."""
-        mock_client = MagicMock()
-        mock_client.region_name = "us-west-2"
-        mock_client.gmcp_client.get_memory.return_value = {
-            "memory": {
-                "status": "ACTIVE",
-                "memoryId": "memory-123",
-                "description": "Test memory",
-                "createdAt": "2024-01-01T00:00:00Z",
-                "lastUpdatedAt": "2024-01-01T00:00:00Z",
-            }
-        }
-        mock_client_class.return_value = mock_client
-
-        memory = Memory(name="test-memory")
-        # Simulate created state
-        memory._memory_id = "memory-123"
-
-        status = memory.status()
-
-        assert status["status"] == "ACTIVE"
-        assert status["name"] == "test-memory"
-        assert status["memoryId"] == "memory-123"
-
-
 class TestMemoryIsActive:
     """Tests for Memory is_active property."""
 
