@@ -244,8 +244,11 @@ class ECR(Build):
     ) -> Dict[str, Any]:
         """Build and push the container image to ECR.
 
-        For pre-built images, this validates the image exists.
-        For CodeBuild mode, this builds and pushes to ECR.
+        This method is idempotent - if the image has already been built,
+        it returns the existing image URI without rebuilding.
+
+        For pre-built images, this returns the provided image URI.
+        For CodeBuild mode, this builds and pushes to ECR (once).
 
         Args:
             agent_name: Name of the agent
@@ -256,13 +259,14 @@ class ECR(Build):
         Returns:
             Dictionary with:
                 - imageUri: ECR image URI
-                - status: "SUCCEEDED" or "READY"
+                - status: "SUCCEEDED", "READY", or "ALREADY_BUILT"
         """
-        if self._mode == "prebuilt":
-            logger.info("Using pre-built image: %s", self._image_uri)
+        # Idempotent: if already built, return existing
+        if self._image_uri:
+            logger.info("Image already built: %s", self._image_uri)
             return {
                 "imageUri": self._image_uri,
-                "status": "READY",
+                "status": "ALREADY_BUILT" if self._mode == "codebuild" else "READY",
             }
 
         # CodeBuild mode - build and push
@@ -393,6 +397,9 @@ class DirectCodeDeploy(Build):
     ) -> Dict[str, Any]:
         """Package Python code and upload to S3.
 
+        This method is idempotent - if the package has already been uploaded,
+        it returns the existing package URI without re-uploading.
+
         Args:
             agent_name: Name of the agent
             region_name: AWS region name
@@ -404,8 +411,17 @@ class DirectCodeDeploy(Build):
                 - packageUri: S3 URI of the code package
                 - s3Bucket: Bucket name
                 - s3Key: Object key
-                - status: "SUCCEEDED"
+                - status: "SUCCEEDED" or "ALREADY_UPLOADED"
         """
+        # Idempotent: if already uploaded, return existing
+        if self._package_uri:
+            logger.info("Package already uploaded: %s", self._package_uri)
+            return {
+                "packageUri": self._package_uri,
+                "status": "ALREADY_UPLOADED",
+                "entrypoint": self._entrypoint,
+            }
+
         import boto3
         from botocore.exceptions import ClientError
 
