@@ -8,7 +8,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import boto3
 import yaml
@@ -27,6 +27,9 @@ from .config import (
     VpcConfigModel,
 )
 
+if TYPE_CHECKING:
+    from .build import Build
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,21 +41,32 @@ class Agent:
 
     Supports two deployment modes:
     1. Pre-built image: Provide image_uri directly
-    2. Build from source: Provide source_path and entrypoint
+    2. Build from source: Provide source_path, entrypoint, and build strategy
 
     Example:
         # Mode 1: Pre-built image
         agent = Agent(name="my-agent", image_uri="123456789.dkr.ecr.us-west-2.amazonaws.com/my-agent:latest")
         agent.launch()
 
-        # Mode 2: Build from source
+        # Mode 2: Build from source with CodeBuild (default)
+        from bedrock_agentcore.runtime.build import CodeBuildStrategy
         agent = Agent(
             name="my-agent",
             source_path="./my-agent-code",
             entrypoint="agent.py:app",
-            use_codebuild=True,
+            build=CodeBuildStrategy(),
         )
         agent.deploy()  # Builds image, pushes to ECR, and launches
+
+        # Mode 2: Build from source with local Docker
+        from bedrock_agentcore.runtime.build import LocalBuildStrategy
+        agent = Agent(
+            name="my-agent",
+            source_path="./my-agent-code",
+            entrypoint="agent.py:app",
+            build=LocalBuildStrategy(),
+        )
+        agent.deploy()
 
         # Or load from file
         agent = Agent.from_yaml("my-agent.agentcore.yaml")
@@ -73,6 +87,7 @@ class Agent:
         image_uri: Optional[str] = None,
         source_path: Optional[str] = None,
         entrypoint: Optional[str] = None,
+        build: Optional["Build"] = None,
         description: Optional[str] = None,
         network_mode: str = "PUBLIC",
         security_groups: Optional[List[str]] = None,
@@ -85,13 +100,15 @@ class Agent:
 
         Supports two modes:
         1. Pre-built image: Provide image_uri
-        2. Build from source: Provide source_path and entrypoint
+        2. Build from source: Provide source_path, entrypoint, and build strategy
 
         Args:
             name: Unique agent name (used for runtime name)
             image_uri: ECR image URI for pre-built container (Mode 1)
             source_path: Path to agent source code (Mode 2)
             entrypoint: Entry point e.g. "agent.py:app" (Mode 2)
+            build: Build strategy (CodeBuildStrategy, LocalBuildStrategy, or DirectCodeDeployStrategy).
+                   If source_path is provided and build is None, defaults to CodeBuildStrategy.
             description: Optional description of the agent
             network_mode: "PUBLIC" or "VPC"
             security_groups: Security group IDs (required if network_mode="VPC")
@@ -105,10 +122,16 @@ class Agent:
         self._runtime_id: Optional[str] = None
         self._runtime_arn: Optional[str] = None
         self._built_image_uri: Optional[str] = None
+        self._build_strategy: Optional["Build"] = build
 
         # Validate: must provide either image_uri OR source_path
         if not image_uri and not source_path:
             raise ValueError("Must provide either image_uri or source_path")
+
+        # Default to CodeBuildStrategy if source_path provided but no build strategy
+        if source_path and not build:
+            from .build import CodeBuildStrategy
+            self._build_strategy = CodeBuildStrategy()
 
         # Build config model
         vpc_config = None
@@ -269,6 +292,11 @@ class Agent:
             return self._config.artifact.image_uri
         return None
 
+    @property
+    def build_strategy(self) -> Optional["Build"]:
+        """Build strategy used for source-based agents."""
+        return self._build_strategy
+
     # ==================== OPERATIONS ====================
 
     def save(self, file_path: str) -> str:
@@ -294,22 +322,21 @@ class Agent:
         tag: str = "latest",
         max_wait: int = 600,
     ) -> Dict[str, Any]:
-        """Build the agent container image and push to ECR.
+        """Build the agent using the configured build strategy.
 
         This method is only applicable for source-based agents (those created
-        with source_path). It will:
-        1. Generate a Dockerfile automatically
-        2. Create ECR repository automatically
-        3. Create IAM execution role automatically
-        4. Build the Docker image via CodeBuild (ARM64)
-        5. Push the image to ECR
+        with source_path). The build behavior depends on the build strategy:
+
+        - CodeBuildStrategy: Builds ARM64 container images via AWS CodeBuild
+        - LocalBuildStrategy: Builds locally using Docker/Finch/Podman
+        - DirectCodeDeployStrategy: Packages Python code as zip (no container)
 
         Args:
-            tag: Image tag (default: "latest")
+            tag: Image/version tag (default: "latest")
             max_wait: Maximum seconds to wait for build
 
         Returns:
-            Build result including imageUri
+            Build result including imageUri (container) or packageUri (direct code)
 
         Raises:
             ValueError: If agent was created with image_uri (not source_path)
@@ -328,18 +355,24 @@ class Agent:
         if not self._config.build.entrypoint:
             raise ValueError("entrypoint is required for building")
 
-        # Import builder module (lazy import to avoid circular dependencies)
-        from .builder import build_and_push
+        if not self._build_strategy:
+            raise ValueError("No build strategy configured")
 
-        logger.info("Building agent '%s'...", self._name)
+        # Validate prerequisites for the build strategy
+        self._build_strategy.validate_prerequisites()
 
-        result = build_and_push(
+        logger.info(
+            "Building agent '%s' using %s strategy...",
+            self._name,
+            self._build_strategy.strategy_name,
+        )
+
+        result = self._build_strategy.build(
             source_path=self._config.build.source_path,
             agent_name=self._name,
             entrypoint=self._config.build.entrypoint,
             region_name=self._region,
             tag=tag,
-            wait=True,
             max_wait=max_wait,
         )
 
