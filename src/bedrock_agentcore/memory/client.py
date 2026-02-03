@@ -53,6 +53,8 @@ class MemoryClient:
         "get_event",
         "delete_event",
         "list_events",
+        "list_actors",
+        "list_sessions",
     }
 
     # AgentCore Memory control plane methods
@@ -778,6 +780,87 @@ class MemoryClient:
 
         logger.info("Completed full conversation turn with LLM")
         return retrieved_memories, agent_response, event
+
+    def list_actors(self, memory_id: str, max_results: int = 100) -> List[Dict[str, Any]]:
+        """List all actors who have events in a memory.
+
+        Args:
+            memory_id: The memory resource ID
+            max_results: Maximum number of actors to return (default: 100)
+
+        Returns:
+            List of actor summary dictionaries
+
+        Example:
+            actors = client.list_actors(memory_id="mem-123")
+            for actor in actors:
+                print(f"Actor: {actor['actorId']}")
+        """
+        logger.debug("Listing actors for memory: %s", memory_id)
+        try:
+            actors: List[Dict[str, Any]] = []
+            next_token = None
+
+            while len(actors) < max_results:
+                params: Dict[str, Any] = {"memoryId": memory_id}
+                if next_token:
+                    params["nextToken"] = next_token
+
+                response = self.gmdp_client.list_actors(**params)
+                batch = response.get("actorSummaries", [])
+                actors.extend(batch)
+
+                next_token = response.get("nextToken")
+                if not next_token or len(actors) >= max_results:
+                    break
+
+            logger.debug("Found %d actors", len(actors))
+            return actors[:max_results]
+
+        except ClientError as e:
+            logger.error("Failed to list actors: %s", e)
+            raise
+
+    def list_sessions(self, memory_id: str, actor_id: str, max_results: int = 100) -> List[Dict[str, Any]]:
+        """List all sessions for an actor.
+
+        Args:
+            memory_id: The memory resource ID
+            actor_id: The actor ID
+            max_results: Maximum number of sessions to return (default: 100)
+
+        Returns:
+            List of session summary dictionaries
+
+        Example:
+            sessions = client.list_sessions(memory_id="mem-123", actor_id="user-456")
+            for session in sessions:
+                print(f"Session: {session['sessionId']}")
+        """
+        logger.debug("Listing sessions for actor: %s in memory: %s", actor_id, memory_id)
+        try:
+            sessions: List[Dict[str, Any]] = []
+            next_token = None
+
+            while len(sessions) < max_results:
+                params: Dict[str, Any] = {"memoryId": memory_id, "actorId": actor_id}
+                if next_token:
+                    params["nextToken"] = next_token
+
+                response = self.gmdp_client.list_sessions(**params)
+                batch = response.get("sessionSummaries", [])
+                sessions.extend(batch)
+
+                next_token = response.get("nextToken")
+                if not next_token or len(sessions) >= max_results:
+                    break
+
+            logger.debug("Found %d sessions", len(sessions))
+            return sessions[:max_results]
+
+        except ClientError as e:
+            logger.error("Failed to list sessions: %s", e)
+            raise
 
     def list_events(
         self,
@@ -1852,6 +1935,104 @@ class MemoryClient:
             logger.info("Note: Encountered %d service errors during polling", service_errors)
         return False
 
+    def enable_observability(
+        self,
+        memory_id: str,
+        memory_arn: Optional[str] = None,
+        enable_logs: bool = True,
+        enable_traces: bool = True,
+    ) -> Dict[str, Any]:
+        """Enable CloudWatch observability for a memory resource.
+
+        This method sets up CloudWatch Logs delivery for memory APPLICATION_LOGS
+        and optionally X-Ray delivery for TRACES.
+
+        Args:
+            memory_id: The memory resource ID
+            memory_arn: Optional memory ARN (constructed from memory_id if not provided)
+            enable_logs: Whether to enable APPLICATION_LOGS delivery (default: True)
+            enable_traces: Whether to enable TRACES delivery to X-Ray (default: True)
+
+        Returns:
+            Dictionary with status and configuration details:
+            {
+                "status": "success" | "failed",
+                "log_group": str,  # CloudWatch log group name
+                "error": str       # Only present if status is "failed"
+            }
+
+        Example:
+            result = client.enable_observability(
+                memory_id="mem-123",
+                enable_logs=True,
+                enable_traces=True
+            )
+            if result["status"] == "success":
+                print(f"Logs available at: {result['log_group']}")
+
+        Note:
+            This method requires CloudWatch Logs permissions:
+            - logs:CreateLogGroup
+            - logs:PutDeliverySource
+            - logs:PutDeliveryDestination
+            - logs:CreateDelivery
+        """
+        # TODO: Implement ObservabilityDeliveryManager
+        # Reference implementation:
+        # https://github.com/aws/bedrock-agentcore-starter-toolkit/blob/main/src/bedrock_agentcore_starter_toolkit/operations/observability/delivery.py
+        raise NotImplementedError(
+            "enable_observability() is not yet implemented. "
+            "See starter-toolkit for reference: "
+            "https://github.com/aws/bedrock-agentcore-starter-toolkit/blob/main/src/bedrock_agentcore_starter_toolkit/operations/observability/delivery.py"
+        )
+
+    def disable_observability(
+        self,
+        memory_id: str,
+        delete_log_group: bool = False,
+    ) -> Dict[str, Any]:
+        """Disable CloudWatch observability for a memory resource.
+
+        This method removes the CloudWatch Logs delivery infrastructure
+        for the specified memory.
+
+        Args:
+            memory_id: The memory resource ID
+            delete_log_group: Whether to also delete the CloudWatch log group (default: False)
+
+        Returns:
+            Dictionary with status and any errors:
+            {
+                "status": "success" | "partial",
+                "errors": List[str]  # Only present if status is "partial"
+            }
+
+        Example:
+            # Disable delivery but keep logs
+            result = client.disable_observability(memory_id="mem-123")
+
+            # Disable delivery and delete log group
+            result = client.disable_observability(
+                memory_id="mem-123",
+                delete_log_group=True
+            )
+
+        Note:
+            This method requires CloudWatch Logs permissions:
+            - logs:DeleteDeliverySource
+            - logs:DeleteDeliveryDestination
+            - logs:DeleteDelivery
+            - logs:DeleteLogGroup (if delete_log_group=True)
+        """
+        # TODO: Implement ObservabilityDeliveryManager
+        # Reference implementation:
+        # https://github.com/aws/bedrock-agentcore-starter-toolkit/blob/main/src/bedrock_agentcore_starter_toolkit/operations/observability/delivery.py
+        raise NotImplementedError(
+            "disable_observability() is not yet implemented. "
+            "See starter-toolkit for reference: "
+            "https://github.com/aws/bedrock-agentcore-starter-toolkit/blob/main/src/bedrock_agentcore_starter_toolkit/operations/observability/delivery.py"
+        )
+
     def add_strategy(self, memory_id: str, strategy: Dict[str, Any]) -> Dict[str, Any]:
         """Add a strategy to a memory (without waiting).
 
@@ -1872,6 +2053,59 @@ class MemoryClient:
             stacklevel=2,
         )
         return self._add_strategy(memory_id, strategy)
+
+    def add_strategy_and_wait(
+        self,
+        memory_id: str,
+        strategy: Dict[str, Any],
+        max_wait: int = 300,
+        poll_interval: int = 10,
+    ) -> Dict[str, Any]:
+        """Add a strategy to a memory and wait for it to return to ACTIVE state.
+
+        This is a generic method that accepts any strategy type as a dictionary.
+        For typed convenience methods, use add_semantic_strategy_and_wait(),
+        add_summary_strategy_and_wait(), etc.
+
+        Args:
+            memory_id: Memory resource ID
+            strategy: Strategy configuration dictionary (e.g., {"semanticMemoryStrategy": {...}})
+            max_wait: Maximum seconds to wait (default: 300)
+            poll_interval: Seconds between status checks (default: 10)
+
+        Returns:
+            Updated memory object in ACTIVE state
+
+        Example:
+            # Add a semantic strategy
+            memory = client.add_strategy_and_wait(
+                memory_id="mem-123",
+                strategy={
+                    "semanticMemoryStrategy": {
+                        "name": "my-strategy",
+                        "description": "Extract key facts",
+                        "namespaces": ["facts/{actorId}/{sessionId}/"]
+                    }
+                }
+            )
+
+            # Add a custom strategy
+            memory = client.add_strategy_and_wait(
+                memory_id="mem-123",
+                strategy={
+                    "customMemoryStrategy": {
+                        "name": "custom-strategy",
+                        "configuration": {...}
+                    }
+                }
+            )
+        """
+        return self.update_memory_strategies_and_wait(
+            memory_id=memory_id,
+            add_strategies=[strategy],
+            max_wait=max_wait,
+            poll_interval=poll_interval,
+        )
 
     # Private methods
 
