@@ -75,14 +75,8 @@ class Build(ABC):
 
     @property
     @abstractmethod
-    def strategy_name(self) -> str:
-        """Return the name of this build strategy."""
-        pass
-
-    @property
-    @abstractmethod
     def image_uri(self) -> Optional[str]:
-        """Return the image URI if available (after deploy or for pre-built)."""
+        """Return the image URI if available (after launch or for pre-built)."""
         pass
 
     def validate_prerequisites(self) -> None:  # noqa: B027
@@ -144,11 +138,6 @@ class ECR(Build):
             raise ValueError(
                 "Must provide either image_uri (pre-built) or both source_path and entrypoint (CodeBuild)"
             )
-
-    @property
-    def strategy_name(self) -> str:
-        """Return the strategy name."""
-        return "ecr"
 
     @property
     def mode(self) -> str:
@@ -252,11 +241,6 @@ class DirectCodeDeploy(Build):
         self._s3_bucket = s3_bucket
         self._auto_create_bucket = auto_create_bucket
         self._package_uri: Optional[str] = None
-
-    @property
-    def strategy_name(self) -> str:
-        """Return the strategy name."""
-        return "direct_code_deploy"
 
     @property
     def source_path(self) -> str:

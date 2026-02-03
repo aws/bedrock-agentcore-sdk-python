@@ -49,7 +49,6 @@ class TestAgentInit:
 
         assert agent.name == "test-agent"
         assert agent.build_strategy is build
-        assert agent.build_strategy.strategy_name == "ecr"
         assert agent.image_uri is None  # Not yet built
         assert agent.config.artifact is None  # Not yet built
 

@@ -329,7 +329,7 @@ class Agent:
         """
         # Launch artifact (build + push) if image not yet available
         if not self._build_strategy.image_uri:
-            logger.info("Launching build artifact using %s strategy...", self._build_strategy.strategy_name)
+            logger.info("Launching build artifact...")
             self._build_strategy.validate_prerequisites()
 
             result = self._build_strategy.launch(

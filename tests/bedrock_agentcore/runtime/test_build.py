@@ -16,11 +16,6 @@ from bedrock_agentcore.runtime.build import (
 class TestECRPrebuilt:
     """Tests for ECR with pre-built image."""
 
-    def test_strategy_name(self) -> None:
-        """Test that strategy name is correct."""
-        strategy = ECR(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
-        assert strategy.strategy_name == "ecr"
-
     def test_mode_is_prebuilt(self) -> None:
         """Test that mode is 'prebuilt' when image_uri is provided."""
         strategy = ECR(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
@@ -53,11 +48,6 @@ class TestECRPrebuilt:
 
 class TestECRCodeBuild:
     """Tests for ECR with CodeBuild (source-based)."""
-
-    def test_strategy_name(self) -> None:
-        """Test that strategy name is correct."""
-        strategy = ECR(source_path="./test-src", entrypoint="main.py:app")
-        assert strategy.strategy_name == "ecr"
 
     def test_mode_is_codebuild(self) -> None:
         """Test that mode is 'codebuild' when source_path is provided."""
@@ -117,11 +107,6 @@ class TestECRValidation:
 
 class TestDirectCodeDeploy:
     """Tests for DirectCodeDeploy."""
-
-    def test_strategy_name(self) -> None:
-        """Test that strategy name is correct."""
-        strategy = DirectCodeDeploy(source_path="./test-src", entrypoint="main.py:app")
-        assert strategy.strategy_name == "direct_code_deploy"
 
     def test_custom_bucket(self) -> None:
         """Test custom S3 bucket specification."""
@@ -214,7 +199,6 @@ class TestAgentWithBuildStrategy:
         )
 
         assert agent.build_strategy is build
-        assert agent.build_strategy.strategy_name == "ecr"
         assert agent.image_uri == "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
@@ -231,7 +215,6 @@ class TestAgentWithBuildStrategy:
         )
 
         assert agent.build_strategy is build
-        assert agent.build_strategy.strategy_name == "ecr"
         assert agent.image_uri is None  # Not yet built
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
@@ -248,4 +231,3 @@ class TestAgentWithBuildStrategy:
         )
 
         assert agent.build_strategy is build
-        assert agent.build_strategy.strategy_name == "direct_code_deploy"
