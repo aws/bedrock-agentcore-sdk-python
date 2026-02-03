@@ -257,49 +257,49 @@ class TestMemoryOperations:
         assert result["status"] == "NOT_CREATED"
 
     @patch("bedrock_agentcore.memory.memory.MemoryClient")
-    def test_session_without_memory_id_raises(self, mock_client_class: MagicMock) -> None:
-        """Test that session raises ValueError when memory is not created."""
+    def test_get_session_without_memory_id_raises(self, mock_client_class: MagicMock) -> None:
+        """Test that get_session raises ValueError when memory is not launched."""
         mock_client = MagicMock()
         mock_client.region_name = "us-west-2"
         mock_client_class.return_value = mock_client
 
         memory = Memory(name="test-memory")
 
-        with pytest.raises(ValueError, match="Memory is not created"):
-            memory.session(actor_id="user-123", session_id="session-456")
+        with pytest.raises(ValueError, match="Memory is not launched"):
+            memory.get_session(actor_id="user-123", session_id="session-456")
 
     @patch("bedrock_agentcore.memory.memory.MemoryClient")
     def test_list_events_without_memory_id_raises(self, mock_client_class: MagicMock) -> None:
-        """Test that list_events raises ValueError when memory is not created."""
+        """Test that list_events raises ValueError when memory is not launched."""
         mock_client = MagicMock()
         mock_client.region_name = "us-west-2"
         mock_client_class.return_value = mock_client
 
         memory = Memory(name="test-memory")
 
-        with pytest.raises(ValueError, match="Memory is not created"):
+        with pytest.raises(ValueError, match="Memory is not launched"):
             memory.list_events(actor_id="user-123", session_id="session-456")
 
     @patch("bedrock_agentcore.memory.memory.MemoryClient")
     def test_search_records_without_memory_id_raises(self, mock_client_class: MagicMock) -> None:
-        """Test that search_records raises ValueError when memory is not created."""
+        """Test that search_records raises ValueError when memory is not launched."""
         mock_client = MagicMock()
         mock_client.region_name = "us-west-2"
         mock_client_class.return_value = mock_client
 
         memory = Memory(name="test-memory")
 
-        with pytest.raises(ValueError, match="Memory is not created"):
+        with pytest.raises(ValueError, match="Memory is not launched"):
             memory.search_records(query="test", namespace="facts/")
 
     @patch("bedrock_agentcore.memory.memory.MemoryClient")
     def test_add_strategy_without_memory_id_raises(self, mock_client_class: MagicMock) -> None:
-        """Test that add_strategy raises ValueError when memory is not created."""
+        """Test that add_strategy raises ValueError when memory is not launched."""
         mock_client = MagicMock()
         mock_client.region_name = "us-west-2"
         mock_client_class.return_value = mock_client
 
         memory = Memory(name="test-memory")
 
-        with pytest.raises(ValueError, match="Memory is not created"):
+        with pytest.raises(ValueError, match="Memory is not launched"):
             memory.add_strategy(strategy_type="SEMANTIC", namespace="facts/")

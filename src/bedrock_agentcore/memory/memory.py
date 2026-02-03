@@ -31,11 +31,11 @@ class Memory:
         # Create with config
         memory = Memory(name="my-memory", strategies=[...])
         memory.save("my-memory.agentcore.yaml")
-        memory.create()
+        memory.launch()
 
         # Or load from file
         memory = Memory.from_yaml("my-memory.agentcore.yaml")
-        session = memory.session(actor_id="user-123", session_id="sess-456")
+        session = memory.get_session(actor_id="user-123", session_id="sess-456")
 
     Attributes:
         name: Memory name
@@ -190,13 +190,13 @@ class Memory:
         logger.info("Saved Memory config to %s", file_path)
         return str(path)
 
-    def create(
+    def launch(
         self,
         wait: bool = True,
         max_wait: int = 600,
         poll_interval: int = 10,
     ) -> Dict[str, Any]:
-        """Create the memory resource in AWS.
+        """Launch the memory resource in AWS.
 
         Args:
             wait: Wait for ACTIVE status
@@ -349,7 +349,7 @@ class Memory:
             ClientError: If AWS API call fails
         """
         if not self._memory_id:
-            raise ValueError("Memory is not created. Call create() first.")
+            raise ValueError("Memory is not launched. Call launch() first.")
 
         strategy = {
             "memoryStrategyType": strategy_type,
@@ -374,21 +374,45 @@ class Memory:
             )
             return dict(result)
 
-    def session(self, actor_id: str, session_id: str) -> "MemorySession":
-        """Get a session manager for conversational operations.
+    def get_session(self, actor_id: str, session_id: str) -> "MemorySession":
+        """Get a session for conversational operations.
 
         Args:
-            actor_id: Actor identifier
-            session_id: Session identifier
+            actor_id: Actor identifier (e.g., user ID)
+            session_id: Session identifier (e.g., conversation ID)
 
         Returns:
-            MemorySession instance for adding turns, listing events, etc.
+            MemorySession instance with methods:
+                - add_turns(messages): Add conversation messages
+                - get_last_k_turns(k): Get recent conversation history
+                - process_turn_with_llm(user_input, llm_callback, retrieval_config): Process with LLM
+                - fork_conversation(messages, root_event_id, branch_name): Create conversation branch
+                - get_event(event_id): Get a specific event
 
         Raises:
-            ValueError: If memory is not created
+            ValueError: If memory is not launched
+
+        Example:
+            session = memory.get_session(actor_id="user-123", session_id="conv-456")
+
+            # Add conversation turns
+            session.add_turns([
+                ConversationalMessage("Hello!", MessageRole.USER),
+                ConversationalMessage("Hi there!", MessageRole.ASSISTANT)
+            ])
+
+            # Get recent history
+            turns = session.get_last_k_turns(k=5)
+
+            # Process with LLM and memory context
+            memories, response, event = session.process_turn_with_llm(
+                user_input="What did we discuss?",
+                llm_callback=my_llm,
+                retrieval_config={"facts": RetrievalConfig(namespace="facts/{sessionId}/")}
+            )
         """
         if not self._memory_id:
-            raise ValueError("Memory is not created. Call create() first.")
+            raise ValueError("Memory is not launched. Call launch() first.")
 
         from .session import MemorySessionManager
 
@@ -417,7 +441,7 @@ class Memory:
             ValueError: If memory is not created
         """
         if not self._memory_id:
-            raise ValueError("Memory is not created. Call create() first.")
+            raise ValueError("Memory is not launched. Call launch() first.")
 
         params: Dict[str, Any] = {
             "memoryId": self._memory_id,
@@ -453,7 +477,7 @@ class Memory:
             ValueError: If memory is not created
         """
         if not self._memory_id:
-            raise ValueError("Memory is not created. Call create() first.")
+            raise ValueError("Memory is not launched. Call launch() first.")
 
         return self._client.retrieve_memories(
             memory_id=self._memory_id,
