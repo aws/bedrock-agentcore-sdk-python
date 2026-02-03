@@ -23,8 +23,9 @@ def test_all_exports():
     # Test __all__ contains expected items
     expected_all = [
         "BedrockAgentCoreApp",
+        "PingStatus",
+        "Project",
         "RequestContext",
         "BedrockAgentCoreContext",
-        "PingStatus",
     ]
     assert sorted(bedrock_agentcore.__all__) == sorted(expected_all)

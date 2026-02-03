@@ -1,0 +1,519 @@
+"""Memory class for managing Bedrock AgentCore Memory resources.
+
+This module provides a high-level Memory class that wraps memory operations
+with YAML-based configuration persistence.
+"""
+
+import logging
+import time
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+import yaml
+from botocore.exceptions import ClientError
+
+from .client import MemoryClient
+from .config import MemoryConfigModel, StrategyConfigModel, StrategyType
+
+if TYPE_CHECKING:
+    from .session import MemorySession
+
+logger = logging.getLogger(__name__)
+
+
+class Memory:
+    """Represents a Bedrock AgentCore Memory with YAML-based configuration.
+
+    Each Memory instance manages a single memory resource. Configuration is provided
+    at construction time and can be saved to/loaded from YAML files.
+
+    Example:
+        # Create with config
+        memory = Memory(name="my-memory", strategies=[...])
+        memory.save("my-memory.agentcore.yaml")
+        memory.create()
+
+        # Or load from file
+        memory = Memory.from_yaml("my-memory.agentcore.yaml")
+        session = memory.session(actor_id="user-123", session_id="sess-456")
+
+    Attributes:
+        name: Memory name
+        config: Memory configuration model
+        memory_id: ID of created memory resource (if created)
+        is_active: Whether the memory is active
+    """
+
+    def __init__(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        strategies: Optional[List[Dict[str, Any]]] = None,
+        encryption_key_arn: Optional[str] = None,
+        tags: Optional[Dict[str, str]] = None,
+        region: Optional[str] = None,
+    ):
+        """Create a Memory instance with full configuration.
+
+        Args:
+            name: Unique memory name
+            description: Optional description
+            strategies: List of strategy configs [{"type": "SEMANTIC", "namespace": "..."}]
+            encryption_key_arn: Optional KMS key ARN for encryption
+            tags: Resource tags
+            region: AWS region (defaults to boto3 default or us-west-2)
+        """
+        self._name = name
+        self._region = region
+        self._memory_id: Optional[str] = None
+
+        # Build config model
+        strategy_models = None
+        if strategies:
+            strategy_models = [
+                StrategyConfigModel(
+                    type=StrategyType(s["type"]),
+                    namespace=s["namespace"],
+                    customPrompt=s.get("customPrompt"),
+                )
+                for s in strategies
+            ]
+
+        self._config = MemoryConfigModel(
+            name=name,
+            description=description,
+            strategies=strategy_models,
+            encryptionKeyArn=encryption_key_arn,
+            tags=tags,
+        )
+
+        # Initialize client
+        self._client = MemoryClient(region_name=region)
+
+        logger.info("Initialized Memory '%s' in region %s", name, self._client.region_name)
+
+    @classmethod
+    def from_yaml(cls, file_path: str, region: Optional[str] = None) -> "Memory":
+        """Load a memory from a YAML configuration file.
+
+        Args:
+            file_path: Path to the YAML config file
+            region: AWS region (overrides any region in config)
+
+        Returns:
+            Memory instance with loaded configuration
+
+        Raises:
+            FileNotFoundError: If config file doesn't exist
+        """
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Config file not found: {file_path}")
+
+        with open(path, "r") as f:
+            data = yaml.safe_load(f)
+
+        config = MemoryConfigModel.model_validate(data)
+
+        # Convert strategy models to dicts
+        strategies = None
+        if config.strategies:
+            strategies = [
+                {
+                    "type": s.strategy_type.value,
+                    "namespace": s.namespace,
+                    "customPrompt": s.custom_prompt,
+                }
+                for s in config.strategies
+            ]
+
+        memory = cls(
+            name=config.name,
+            description=config.description,
+            strategies=strategies,
+            encryption_key_arn=config.encryption_key_arn,
+            tags=config.tags,
+            region=region,
+        )
+
+        # Try to find existing memory
+        memory._refresh_memory_state()
+
+        logger.info("Loaded Memory '%s' from %s", config.name, file_path)
+        return memory
+
+    # ==================== PROPERTIES ====================
+
+    @property
+    def name(self) -> str:
+        """Memory name."""
+        return self._name
+
+    @property
+    def config(self) -> MemoryConfigModel:
+        """Current configuration."""
+        return self._config
+
+    @property
+    def memory_id(self) -> Optional[str]:
+        """Memory ID if created."""
+        return self._memory_id
+
+    @property
+    def is_active(self) -> bool:
+        """Whether memory is active."""
+        if not self._memory_id:
+            return False
+        try:
+            status = self._client.get_memory_status(self._memory_id)
+            return status == "ACTIVE"
+        except ClientError:
+            return False
+
+    # ==================== OPERATIONS ====================
+
+    def save(self, file_path: str) -> str:
+        """Save the memory configuration to a YAML file.
+
+        Args:
+            file_path: Path to save the YAML config file
+
+        Returns:
+            The file path where config was saved
+        """
+        path = Path(file_path)
+        data = self._config.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+        with open(path, "w") as f:
+            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+
+        logger.info("Saved Memory config to %s", file_path)
+        return str(path)
+
+    def create(
+        self,
+        wait: bool = True,
+        max_wait: int = 600,
+        poll_interval: int = 10,
+    ) -> Dict[str, Any]:
+        """Create the memory resource in AWS.
+
+        Args:
+            wait: Wait for ACTIVE status
+            max_wait: Max seconds to wait
+            poll_interval: Seconds between status checks
+
+        Returns:
+            Created memory details
+
+        Raises:
+            ClientError: If AWS API call fails
+            TimeoutError: If wait times out
+        """
+        # Convert strategies to API format
+        strategies = []
+        if self._config.strategies:
+            for s in self._config.strategies:
+                strategy = {
+                    "memoryStrategyType": s.strategy_type.value,
+                    "namespace": s.namespace,
+                }
+                if s.custom_prompt:
+                    strategy["customPrompt"] = s.custom_prompt
+                strategies.append(strategy)
+
+        logger.info("Creating memory '%s'...", self._name)
+
+        if wait:
+            memory = self._client.create_memory_and_wait(
+                name=self._name,
+                strategies=strategies,
+                description=self._config.description,
+                max_wait=max_wait,
+                poll_interval=poll_interval,
+            )
+        else:
+            memory = self._client.create_memory(
+                name=self._name,
+                strategies=strategies,
+                description=self._config.description,
+            )
+
+        self._memory_id = memory.get("memoryId", memory.get("id"))
+        logger.info("Created memory with ID: %s", self._memory_id)
+
+        return memory
+
+    def delete(self, wait: bool = True, max_wait: int = 300, poll_interval: int = 10) -> Dict[str, Any]:
+        """Delete the memory resource from AWS.
+
+        Args:
+            wait: Wait for deletion to complete
+            max_wait: Max seconds to wait
+            poll_interval: Seconds between status checks
+
+        Returns:
+            Deletion result
+
+        Raises:
+            ClientError: If AWS API call fails
+        """
+        if not self._memory_id:
+            logger.warning("Memory '%s' is not created, nothing to delete", self._name)
+            return {"status": "NOT_CREATED"}
+
+        logger.info("Deleting memory '%s'...", self._name)
+
+        try:
+            response = self._client.delete_memory(memory_id=self._memory_id)
+
+            if wait:
+                self._wait_for_deleted(max_wait, poll_interval)
+
+            # Clear state
+            self._memory_id = None
+
+            logger.info("Memory '%s' deleted", self._name)
+            return response
+
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ResourceNotFoundException":
+                logger.warning("Memory '%s' not found, may already be deleted", self._name)
+                self._memory_id = None
+                return {"status": "NOT_FOUND"}
+            raise
+
+    def status(self) -> Dict[str, Any]:
+        """Get current memory status from AWS.
+
+        Returns:
+            Memory details including status, ID
+        """
+        if not self._memory_id:
+            # Try to find memory by name
+            self._refresh_memory_state()
+
+        if not self._memory_id:
+            return {
+                "status": "NOT_FOUND",
+                "name": self._name,
+                "memoryId": None,
+            }
+
+        try:
+            response = self._client.gmcp_client.get_memory(memoryId=self._memory_id)
+            memory = response.get("memory", {})
+
+            return {
+                "status": memory.get("status"),
+                "name": self._name,
+                "memoryId": memory.get("memoryId", memory.get("id")),
+                "description": memory.get("description"),
+                "createdAt": memory.get("createdAt"),
+                "lastUpdatedAt": memory.get("lastUpdatedAt"),
+            }
+
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ResourceNotFoundException":
+                return {
+                    "status": "NOT_FOUND",
+                    "name": self._name,
+                    "memoryId": None,
+                }
+            raise
+
+    def add_strategy(
+        self,
+        strategy_type: str,
+        namespace: str,
+        custom_prompt: Optional[str] = None,
+        wait: bool = True,
+        max_wait: int = 300,
+        poll_interval: int = 10,
+    ) -> Dict[str, Any]:
+        """Add a strategy to the memory.
+
+        Args:
+            strategy_type: Strategy type (SEMANTIC, SUMMARY, USER_PREFERENCE, CUSTOM_SEMANTIC)
+            namespace: Namespace for the strategy
+            custom_prompt: Custom extraction prompt (for CUSTOM_SEMANTIC)
+            wait: Wait for update to complete
+            max_wait: Max seconds to wait
+            poll_interval: Seconds between status checks
+
+        Returns:
+            Updated memory details
+
+        Raises:
+            ValueError: If memory is not created
+            ClientError: If AWS API call fails
+        """
+        if not self._memory_id:
+            raise ValueError("Memory is not created. Call create() first.")
+
+        strategy = {
+            "memoryStrategyType": strategy_type,
+            "namespace": namespace,
+        }
+        if custom_prompt:
+            strategy["customPrompt"] = custom_prompt
+
+        logger.info("Adding strategy '%s' to memory '%s'...", strategy_type, self._name)
+
+        if wait:
+            return self._client.add_strategy_and_wait(
+                memory_id=self._memory_id,
+                strategy=strategy,
+                max_wait=max_wait,
+                poll_interval=poll_interval,
+            )
+        else:
+            result = self._client.gmcp_client.update_memory(
+                memoryId=self._memory_id,
+                memoryStrategies={"add": [strategy]},
+            )
+            return dict(result)
+
+    def session(self, actor_id: str, session_id: str) -> "MemorySession":
+        """Get a session manager for conversational operations.
+
+        Args:
+            actor_id: Actor identifier
+            session_id: Session identifier
+
+        Returns:
+            MemorySession instance for adding turns, listing events, etc.
+
+        Raises:
+            ValueError: If memory is not created
+        """
+        if not self._memory_id:
+            raise ValueError("Memory is not created. Call create() first.")
+
+        from .session import MemorySessionManager
+
+        manager = MemorySessionManager(memory_id=self._memory_id, region_name=self._client.region_name)
+        return manager.create_memory_session(actor_id=actor_id, session_id=session_id)
+
+    def list_events(
+        self,
+        actor_id: str,
+        session_id: str,
+        branch_name: Optional[str] = None,
+        max_results: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """List events in a session.
+
+        Args:
+            actor_id: Actor identifier
+            session_id: Session identifier
+            branch_name: Optional branch name to filter
+            max_results: Maximum results to return
+
+        Returns:
+            List of events
+
+        Raises:
+            ValueError: If memory is not created
+        """
+        if not self._memory_id:
+            raise ValueError("Memory is not created. Call create() first.")
+
+        params: Dict[str, Any] = {
+            "memoryId": self._memory_id,
+            "actorId": actor_id,
+            "sessionId": session_id,
+            "maxResults": max_results,
+        }
+
+        if branch_name:
+            params["branchName"] = branch_name
+
+        response = self._client.gmdp_client.list_events(**params)
+        events = response.get("events", [])
+        return list(events) if events else []
+
+    def search_records(
+        self,
+        query: str,
+        namespace: str,
+        top_k: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Search memory records.
+
+        Args:
+            query: Search query
+            namespace: Namespace to search in
+            top_k: Maximum results to return
+
+        Returns:
+            List of matching memory records
+
+        Raises:
+            ValueError: If memory is not created
+        """
+        if not self._memory_id:
+            raise ValueError("Memory is not created. Call create() first.")
+
+        return self._client.retrieve_memories(
+            memory_id=self._memory_id,
+            namespace=namespace,
+            query=query,
+            top_k=top_k,
+        )
+
+    # ==================== HELPERS ====================
+
+    def _refresh_memory_state(self) -> None:
+        """Fetch current memory state from AWS by name."""
+        try:
+            memories = self._client.list_memories()
+
+            for memory in memories:
+                # Handle both old and new field names
+                memory_name = memory.get("name") or memory.get("id", "").split("-")[0]
+                if memory_name == self._name or memory.get("id", "").startswith(self._name):
+                    self._memory_id = memory.get("memoryId", memory.get("id"))
+                    logger.debug("Found existing memory: %s", self._memory_id)
+                    return
+
+            logger.debug("No existing memory found for '%s'", self._name)
+
+        except ClientError as e:
+            logger.warning("Failed to refresh memory state: %s", e)
+
+    def _wait_for_deleted(self, max_wait: int, poll_interval: int) -> None:
+        """Poll until memory is deleted.
+
+        Args:
+            max_wait: Maximum seconds to wait
+            poll_interval: Seconds between polls
+
+        Raises:
+            TimeoutError: If max_wait exceeded
+        """
+        if not self._memory_id:
+            return
+
+        start_time = time.time()
+        logger.info("Waiting for memory deletion...")
+
+        while time.time() - start_time < max_wait:
+            try:
+                response = self._client.gmcp_client.get_memory(memoryId=self._memory_id)
+                status = response.get("memory", {}).get("status")
+                logger.debug("Memory status: %s", status)
+
+                if status == "DELETING":
+                    time.sleep(poll_interval)
+                    continue
+
+            except ClientError as e:
+                if e.response["Error"]["Code"] == "ResourceNotFoundException":
+                    logger.info("Memory deleted")
+                    return
+                raise
+
+            time.sleep(poll_interval)
+
+        raise TimeoutError(f"Timeout waiting for memory deletion after {max_wait}s")
