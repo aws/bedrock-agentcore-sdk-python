@@ -69,7 +69,7 @@ class Build(ABC):
         pass
 
     @abstractmethod
-    def deploy(
+    def launch(
         self,
         agent_name: str,
         region_name: Optional[str] = None,
@@ -85,12 +85,12 @@ class Build(ABC):
             agent_name: Name of the agent
             region_name: AWS region name
             tag: Image/version tag
-            max_wait: Maximum seconds to wait for deployment
+            max_wait: Maximum seconds to wait for launch
 
         Returns:
-            Dictionary with deployment results including:
+            Dictionary with launch results including:
                 - imageUri or packageUri depending on strategy
-                - status: Deployment status
+                - status: Launch status
         """
         pass
 
@@ -235,7 +235,7 @@ class ECR(Build):
         self._image_uri = result.get("imageUri")
         return result
 
-    def deploy(
+    def launch(
         self,
         agent_name: str,
         region_name: Optional[str] = None,
@@ -251,7 +251,7 @@ class ECR(Build):
             agent_name: Name of the agent
             region_name: AWS region name
             tag: Image tag
-            max_wait: Maximum seconds to wait for deployment
+            max_wait: Maximum seconds to wait for launch
 
         Returns:
             Dictionary with:
@@ -280,7 +280,7 @@ class ECR(Build):
         )
 
         self._image_uri = result.get("imageUri")
-        logger.info("Deploy complete. Image URI: %s", self._image_uri)
+        logger.info("Launch complete. Image URI: %s", self._image_uri)
         return result
 
 
@@ -384,7 +384,7 @@ class DirectCodeDeploy(Build):
             "entrypoint": self._entrypoint,
         }
 
-    def deploy(
+    def launch(
         self,
         agent_name: str,
         region_name: Optional[str] = None,
@@ -451,7 +451,7 @@ class DirectCodeDeploy(Build):
             s3_client.upload_file(zip_path, bucket_name, s3_key)
 
         self._package_uri = f"s3://{bucket_name}/{s3_key}"
-        logger.info("Deploy complete. Package URI: %s", self._package_uri)
+        logger.info("Launch complete. Package URI: %s", self._package_uri)
 
         return {
             "packageUri": self._package_uri,

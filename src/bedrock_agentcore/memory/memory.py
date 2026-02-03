@@ -195,7 +195,12 @@ class Memory:
         max_wait: int = 600,
         poll_interval: int = 10,
     ) -> Dict[str, Any]:
-        """Launch the memory resource in AWS.
+        """Launch the memory resource in AWS (create if not exists).
+
+        This method is idempotent - it will create the memory if it doesn't exist,
+        or return the existing memory if it already exists.
+
+        To update strategies on an existing memory, use add_strategy().
 
         Waits for the memory to become ACTIVE before returning.
 
@@ -204,12 +209,20 @@ class Memory:
             poll_interval: Seconds between status checks
 
         Returns:
-            Created memory details
+            Memory details
 
         Raises:
             ClientError: If AWS API call fails
             TimeoutError: If wait times out
         """
+        # Check if memory already exists
+        self._refresh_memory_state()
+
+        if self._memory_id:
+            # Memory exists - return current state
+            logger.info("Memory '%s' already exists with ID: %s", self._name, self._memory_id)
+            return self._client.get_memory(self._memory_id)
+
         # Convert strategies to API format
         strategies = []
         if self._config.strategies:
@@ -222,8 +235,8 @@ class Memory:
                     strategy["customPrompt"] = s.custom_prompt
                 strategies.append(strategy)
 
+        # Memory doesn't exist - create it
         logger.info("Creating memory '%s'...", self._name)
-
         memory = self._client.create_memory_and_wait(
             name=self._name,
             strategies=strategies,
@@ -231,7 +244,6 @@ class Memory:
             max_wait=max_wait,
             poll_interval=poll_interval,
         )
-
         self._memory_id = memory.get("memoryId", memory.get("id"))
         logger.info("Created memory with ID: %s", self._memory_id)
 

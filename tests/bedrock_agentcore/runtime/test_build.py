@@ -50,11 +50,11 @@ class TestECRPrebuilt:
         assert result["imageUri"] == image_uri
         assert result["status"] == "READY"
 
-    def test_deploy_returns_image_uri(self) -> None:
-        """Test that deploy() returns the image URI for pre-built."""
+    def test_launch_returns_image_uri(self) -> None:
+        """Test that launch() returns the image URI for pre-built."""
         image_uri = "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
         strategy = ECR(image_uri=image_uri)
-        result = strategy.deploy(agent_name="test-agent")
+        result = strategy.launch(agent_name="test-agent")
         assert result["imageUri"] == image_uri
         assert result["status"] == "READY"
 
@@ -104,8 +104,8 @@ class TestECRCodeBuild:
         assert strategy.image_uri == "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
 
     @patch("bedrock_agentcore.runtime.builder.build_and_push")
-    def test_deploy_calls_builder(self, mock_build_and_push: MagicMock) -> None:
-        """Test that deploy() delegates to builder module."""
+    def test_launch_calls_builder(self, mock_build_and_push: MagicMock) -> None:
+        """Test that launch() delegates to builder module."""
         mock_build_and_push.return_value = {
             "imageUri": "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest",
             "buildId": "build-123",
@@ -113,7 +113,7 @@ class TestECRCodeBuild:
         }
 
         strategy = ECR(source_path="/tmp/test-agent", entrypoint="main.py:app")
-        result = strategy.deploy(
+        result = strategy.launch(
             agent_name="test-agent",
             region_name="us-west-2",
         )
@@ -167,8 +167,8 @@ class TestDirectCodeDeploy:
         strategy = DirectCodeDeploy(source_path="./test-src", entrypoint="main.py:app")
         assert strategy.image_uri is None
 
-    def test_package_uri_is_none_before_deploy(self) -> None:
-        """Test that package_uri is None before deploy."""
+    def test_package_uri_is_none_before_launch(self) -> None:
+        """Test that package_uri is None before launch."""
         strategy = DirectCodeDeploy(source_path="./test-src", entrypoint="main.py:app")
         assert strategy.package_uri is None
 

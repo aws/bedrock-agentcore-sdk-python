@@ -305,12 +305,15 @@ class Agent:
         """Build, push, and launch the agent in one step.
 
         This is the primary method for deploying an agent. It handles:
-        1. Building and pushing the artifact (via build strategy's deploy())
-        2. Creating the runtime in AWS (via launch())
+        1. Building and pushing the artifact (via build strategy's launch())
+        2. Creating or updating the runtime in AWS (via launch())
 
         For ECR strategy: builds container and pushes to ECR, then launches runtime
         For DirectCodeDeploy: packages code and uploads to S3, then launches runtime
         For pre-built images: skips build, just launches runtime
+
+        This method is idempotent - it will create the runtime if it doesn't exist,
+        or update it if it does.
 
         Args:
             tag: Image tag for build (default: "latest")
@@ -324,24 +327,24 @@ class Agent:
         Raises:
             RuntimeError: If build or launch fails
         """
-        # Deploy artifact (build + push) if image not yet available
+        # Launch artifact (build + push) if image not yet available
         if not self._build_strategy.image_uri:
-            logger.info("Building agent artifact using %s strategy...", self._build_strategy.strategy_name)
+            logger.info("Launching build artifact using %s strategy...", self._build_strategy.strategy_name)
             self._build_strategy.validate_prerequisites()
 
-            result = self._build_strategy.deploy(
+            result = self._build_strategy.launch(
                 agent_name=self._name,
                 region_name=self._region,
                 tag=tag,
                 max_wait=max_wait_build,
             )
 
-            # Update the config artifact with the deployed image
+            # Update the config artifact with the built image
             if result.get("imageUri"):
                 self._config.artifact = RuntimeArtifactModel(imageUri=result["imageUri"])
-                logger.info("Artifact deployed. Image URI: %s", result["imageUri"])
+                logger.info("Artifact ready. Image URI: %s", result["imageUri"])
 
-        # Launch the agent runtime
+        # Launch the agent runtime (create or update)
         return self.launch(max_wait=max_wait_launch, poll_interval=poll_interval)
 
     def launch(
@@ -349,9 +352,11 @@ class Agent:
         max_wait: int = 600,
         poll_interval: int = 10,
     ) -> Dict[str, Any]:
-        """Deploy the agent to AWS.
+        """Deploy the agent to AWS (create or update).
 
-        Calls create_agent_runtime API using the saved configuration.
+        This method is idempotent - it will create the runtime if it doesn't exist,
+        or update it if it already exists.
+
         Waits for the runtime to become ACTIVE before returning.
 
         Args:
@@ -370,15 +375,31 @@ class Agent:
         if not current_image_uri:
             raise ValueError(
                 "Cannot launch agent without image_uri. "
-                "Either provide image_uri or call build() first for source-based agents."
+                "Either provide image_uri or call build_and_launch() for source-based agents."
             )
 
-        # Build request params
+        # Check if runtime already exists
+        self._refresh_runtime_state()
+
+        if self._runtime_id:
+            # Runtime exists - update it
+            return self._update_runtime(current_image_uri, max_wait, poll_interval)
+        else:
+            # Runtime doesn't exist - create it
+            return self._create_runtime(current_image_uri, max_wait, poll_interval)
+
+    def _create_runtime(
+        self,
+        image_uri: str,
+        max_wait: int,
+        poll_interval: int,
+    ) -> Dict[str, Any]:
+        """Create a new agent runtime."""
         params: Dict[str, Any] = {
             "agentRuntimeName": self._name,
             "agentRuntimeArtifact": {
                 "containerConfiguration": {
-                    "containerUri": current_image_uri,
+                    "containerUri": image_uri,
                 },
             },
         }
@@ -400,7 +421,7 @@ class Agent:
         if self._config.environment_variables:
             params["environmentVariables"] = self._config.environment_variables
 
-        logger.info("Launching agent '%s'...", self._name)
+        logger.info("Creating agent runtime '%s'...", self._name)
 
         try:
             response = self._control_plane.create_agent_runtime(**params)
@@ -412,7 +433,54 @@ class Agent:
             return self._wait_for_active(max_wait, poll_interval)
 
         except ClientError as e:
-            logger.error("Failed to launch agent: %s", e)
+            logger.error("Failed to create agent runtime: %s", e)
+            raise
+
+    def _update_runtime(
+        self,
+        image_uri: str,
+        max_wait: int,
+        poll_interval: int,
+    ) -> Dict[str, Any]:
+        """Update an existing agent runtime."""
+        params: Dict[str, Any] = {
+            "agentRuntimeId": self._runtime_id,
+            "agentRuntimeArtifact": {
+                "containerConfiguration": {
+                    "containerUri": image_uri,
+                },
+            },
+        }
+
+        if self._config.description:
+            params["description"] = self._config.description
+
+        if self._config.network_configuration:
+            network_config: Dict[str, Any] = {
+                "networkMode": self._config.network_configuration.network_mode.value,
+            }
+            if self._config.network_configuration.vpc_config:
+                network_config["vpcConfiguration"] = {
+                    "securityGroupIds": self._config.network_configuration.vpc_config.security_groups,
+                    "subnetIds": self._config.network_configuration.vpc_config.subnets,
+                }
+            params["networkConfiguration"] = network_config
+
+        if self._config.environment_variables:
+            params["environmentVariables"] = self._config.environment_variables
+
+        logger.info("Updating agent runtime '%s'...", self._name)
+
+        try:
+            response = self._control_plane.update_agent_runtime(**params)
+            self._runtime_arn = response.get("agentRuntimeArn")
+
+            logger.info("Updated runtime with ARN: %s", self._runtime_arn)
+
+            return self._wait_for_active(max_wait, poll_interval)
+
+        except ClientError as e:
+            logger.error("Failed to update agent runtime: %s", e)
             raise
 
     def invoke(
