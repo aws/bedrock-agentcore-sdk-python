@@ -1,15 +1,13 @@
 """Memory class for managing Bedrock AgentCore Memory resources.
 
 This module provides a high-level Memory class that wraps memory operations
-with YAML-based configuration persistence.
+for Bedrock AgentCore Memory resources.
 """
 
 import logging
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-import yaml
 from botocore.exceptions import ClientError
 
 from .client import MemoryClient
@@ -22,19 +20,20 @@ logger = logging.getLogger(__name__)
 
 
 class Memory:
-    """Represents a Bedrock AgentCore Memory with YAML-based configuration.
+    """Represents a Bedrock AgentCore Memory resource.
 
-    Each Memory instance manages a single memory resource. Configuration is provided
-    at construction time and can be saved to/loaded from YAML files.
+    Each Memory instance manages a single memory resource. Use Project.from_json()
+    to load memories from configuration files.
 
     Example:
         # Create with config
-        memory = Memory(name="my-memory", strategies=[...])
-        memory.save("my-memory.agentcore.yaml")
+        memory = Memory(
+            name="my-memory",
+            strategies=[{"type": "SEMANTIC", "namespace": "facts/{sessionId}/"}]
+        )
         memory.launch()
 
-        # Or load from file
-        memory = Memory.from_yaml("my-memory.agentcore.yaml")
+        # Get a session for conversational operations
         session = memory.get_session(actor_id="user-123", session_id="sess-456")
 
     Attributes:
@@ -92,56 +91,6 @@ class Memory:
 
         logger.info("Initialized Memory '%s' in region %s", name, self._client.region_name)
 
-    @classmethod
-    def from_yaml(cls, file_path: str, region: Optional[str] = None) -> "Memory":
-        """Load a memory from a YAML configuration file.
-
-        Args:
-            file_path: Path to the YAML config file
-            region: AWS region (overrides any region in config)
-
-        Returns:
-            Memory instance with loaded configuration
-
-        Raises:
-            FileNotFoundError: If config file doesn't exist
-        """
-        path = Path(file_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Config file not found: {file_path}")
-
-        with open(path, "r") as f:
-            data = yaml.safe_load(f)
-
-        config = MemoryConfigModel.model_validate(data)
-
-        # Convert strategy models to dicts
-        strategies = None
-        if config.strategies:
-            strategies = [
-                {
-                    "type": s.strategy_type.value,
-                    "namespace": s.namespace,
-                    "customPrompt": s.custom_prompt,
-                }
-                for s in config.strategies
-            ]
-
-        memory = cls(
-            name=config.name,
-            description=config.description,
-            strategies=strategies,
-            encryption_key_arn=config.encryption_key_arn,
-            tags=config.tags,
-            region=region,
-        )
-
-        # Try to find existing memory
-        memory._refresh_memory_state()
-
-        logger.info("Loaded Memory '%s' from %s", config.name, file_path)
-        return memory
-
     # ==================== PROPERTIES ====================
 
     @property
@@ -171,24 +120,6 @@ class Memory:
             return False
 
     # ==================== OPERATIONS ====================
-
-    def save(self, file_path: str) -> str:
-        """Save the memory configuration to a YAML file.
-
-        Args:
-            file_path: Path to save the YAML config file
-
-        Returns:
-            The file path where config was saved
-        """
-        path = Path(file_path)
-        data = self._config.model_dump(mode="json", by_alias=True, exclude_none=True)
-
-        with open(path, "w") as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-
-        logger.info("Saved Memory config to %s", file_path)
-        return str(path)
 
     def launch(
         self,

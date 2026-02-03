@@ -24,6 +24,7 @@ def test_all_exports():
     expected_all = [
         "BedrockAgentCoreApp",
         "PingStatus",
+        "Project",
         "RequestContext",
         "BedrockAgentCoreContext",
     ]

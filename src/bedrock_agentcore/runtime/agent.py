@@ -1,17 +1,15 @@
 """Agent class for managing Bedrock AgentCore Runtimes.
 
 This module provides a high-level Agent class that wraps runtime operations
-with YAML-based configuration persistence and container build support.
+with Build strategy support for container and code deployment.
 """
 
 import json
 import logging
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import boto3
-import yaml
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
@@ -34,35 +32,35 @@ logger = logging.getLogger(__name__)
 
 
 class Agent:
-    """Represents a Bedrock AgentCore Runtime with YAML-based configuration.
+    """Represents a Bedrock AgentCore Runtime with Build strategy support.
 
-    Each Agent instance manages a single runtime. Configuration is provided
-    at construction time and can be saved to/loaded from YAML files.
+    Each Agent instance manages a single runtime. Use Project.from_json()
+    to load agents from configuration files.
 
     Example:
         from bedrock_agentcore.runtime import Agent
-        from bedrock_agentcore.runtime.build import PrebuiltImage, CodeBuild, LocalBuild
+        from bedrock_agentcore.runtime.build import ECR, DirectCodeDeploy
 
-        # Pre-built image
+        # Pre-built ECR image
         agent = Agent(
             name="my-agent",
-            build=PrebuiltImage(image_uri="123456789.dkr.ecr.us-west-2.amazonaws.com/my-agent:latest"),
+            build=ECR(image_uri="123456789.dkr.ecr.us-west-2.amazonaws.com/my-agent:latest"),
         )
         agent.launch()
 
-        # Build from source with CodeBuild
+        # Build from source with CodeBuild + ECR
         agent = Agent(
             name="my-agent",
-            build=CodeBuild(source_path="./agent-src", entrypoint="main.py:app"),
+            build=ECR(source_path="./agent-src", entrypoint="main.py:app"),
         )
-        agent.deploy()  # Builds and launches
+        agent.launch()  # Builds and launches
 
-        # Build from source with local Docker
+        # Direct code deploy (zip to S3)
         agent = Agent(
             name="my-agent",
-            build=LocalBuild(source_path="./agent-src", entrypoint="main.py:app"),
+            build=DirectCodeDeploy(source_path="./agent-src", entrypoint="main.py:app"),
         )
-        agent.deploy()
+        agent.launch()
 
     Attributes:
         name: Agent name
@@ -148,96 +146,6 @@ class Agent:
 
         logger.info("Initialized Agent '%s' in region %s", name, self._region)
 
-    @classmethod
-    def from_yaml(cls, file_path: str, region: Optional[str] = None) -> "Agent":
-        """Load an agent from a YAML configuration file.
-
-        Args:
-            file_path: Path to the YAML config file
-            region: AWS region (overrides any region in config)
-
-        Returns:
-            Agent instance with loaded configuration
-
-        Raises:
-            FileNotFoundError: If config file doesn't exist
-            ValueError: If config file is invalid
-        """
-        from .build import DirectCodeDeploy, ECR
-
-        path = Path(file_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Config file not found: {file_path}")
-
-        with open(path, "r") as f:
-            data = yaml.safe_load(f)
-
-        config = RuntimeConfigModel.model_validate(data)
-
-        # Extract network config
-        network_mode = "PUBLIC"
-        security_groups = None
-        subnets = None
-
-        if config.network_configuration:
-            network_mode = config.network_configuration.network_mode.value
-            if config.network_configuration.vpc_config:
-                security_groups = config.network_configuration.vpc_config.security_groups
-                subnets = config.network_configuration.vpc_config.subnets
-
-        # Create Build strategy from config
-        build_strategy: "Build"
-
-        if config.build:
-            build_config = config.build
-            strategy_type = build_config.strategy
-
-            if strategy_type == BuildStrategyType.ECR:
-                # ECR can be either pre-built (image_uri) or CodeBuild (source_path + entrypoint)
-                if build_config.image_uri:
-                    build_strategy = ECR(image_uri=build_config.image_uri)
-                elif build_config.source_path and build_config.entrypoint:
-                    build_strategy = ECR(
-                        source_path=build_config.source_path,
-                        entrypoint=build_config.entrypoint,
-                    )
-                else:
-                    raise ValueError("ECR strategy requires either imageUri or (sourcePath + entrypoint)")
-            elif strategy_type == BuildStrategyType.DIRECT_CODE_DEPLOY:
-                if not build_config.source_path or not build_config.entrypoint:
-                    raise ValueError("direct_code_deploy strategy requires sourcePath and entrypoint")
-                build_strategy = DirectCodeDeploy(
-                    source_path=build_config.source_path,
-                    entrypoint=build_config.entrypoint,
-                    s3_bucket=build_config.s3_bucket,
-                )
-            else:
-                raise ValueError(f"Unknown build strategy: {strategy_type}")
-        elif config.artifact and config.artifact.image_uri:
-            # Backwards compatibility: if only artifact.imageUri is provided, use ECR with pre-built
-            build_strategy = ECR(image_uri=config.artifact.image_uri)
-        else:
-            raise ValueError("Config must have either 'build' or 'artifact.imageUri'")
-
-        # Create agent instance
-        agent = cls(
-            name=config.name,
-            build=build_strategy,
-            description=config.description,
-            network_mode=network_mode,
-            security_groups=security_groups,
-            subnets=subnets,
-            environment_variables=config.environment_variables,
-            tags=config.tags,
-            region=region,
-        )
-
-        # Try to find existing runtime
-        agent._refresh_runtime_state()
-
-        logger.info("Loaded Agent '%s' from %s", config.name, file_path)
-        return agent
-
     # ==================== PROPERTIES ====================
 
     @property
@@ -276,24 +184,6 @@ class Agent:
         return self._build_strategy
 
     # ==================== OPERATIONS ====================
-
-    def save(self, file_path: str) -> str:
-        """Save the agent configuration to a YAML file.
-
-        Args:
-            file_path: Path to save the YAML config file
-
-        Returns:
-            The file path where config was saved
-        """
-        path = Path(file_path)
-        data = self._config.model_dump(mode="json", by_alias=True, exclude_none=True)
-
-        with open(path, "w") as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-
-        logger.info("Saved Agent config to %s", file_path)
-        return str(path)
 
     def build_and_launch(
         self,

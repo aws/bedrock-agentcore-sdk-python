@@ -1,11 +1,8 @@
 """Tests for Memory class."""
 
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import yaml
 
 from bedrock_agentcore.memory.config import StrategyType
 from bedrock_agentcore.memory.memory import Memory
@@ -80,90 +77,6 @@ class TestMemoryInit:
         assert len(memory.config.strategies) == 1
         assert memory.config.strategies[0].strategy_type == StrategyType.CUSTOM_SEMANTIC
         assert memory.config.strategies[0].custom_prompt == "Extract key facts from conversation."
-
-
-class TestMemorySaveLoad:
-    """Tests for Memory save/load operations."""
-
-    @patch("bedrock_agentcore.memory.memory.MemoryClient")
-    def test_save_to_yaml(self, mock_client_class: MagicMock) -> None:
-        """Test saving memory config to YAML file."""
-        mock_client = MagicMock()
-        mock_client.region_name = "us-west-2"
-        mock_client_class.return_value = mock_client
-
-        memory = Memory(
-            name="test-memory",
-            description="Test memory",
-            strategies=[
-                {"type": "SEMANTIC", "namespace": "facts/"},
-            ],
-            tags={"Environment": "test"},
-        )
-
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            file_path = f.name
-
-        try:
-            result = memory.save(file_path)
-            assert result == file_path
-
-            # Verify file contents
-            with open(file_path, "r") as f:
-                data = yaml.safe_load(f)
-
-            assert data["name"] == "test-memory"
-            assert data["description"] == "Test memory"
-            assert len(data["strategies"]) == 1
-            assert data["strategies"][0]["type"] == "SEMANTIC"
-            assert data["strategies"][0]["namespace"] == "facts/"
-            assert data["tags"]["Environment"] == "test"
-        finally:
-            Path(file_path).unlink(missing_ok=True)
-
-    @patch("bedrock_agentcore.memory.memory.MemoryClient")
-    def test_from_yaml(self, mock_client_class: MagicMock) -> None:
-        """Test loading memory from YAML file."""
-        mock_client = MagicMock()
-        mock_client.region_name = "us-west-2"
-        mock_client.list_memories.return_value = []
-        mock_client_class.return_value = mock_client
-
-        yaml_content = """
-name: test-memory
-description: Test memory from YAML
-strategies:
-  - type: SEMANTIC
-    namespace: facts/{sessionId}/
-  - type: SUMMARY
-    namespace: summaries/{sessionId}/
-encryptionKeyArn: arn:aws:kms:us-west-2:123456789012:key/abc123
-tags:
-  Environment: staging
-"""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write(yaml_content)
-            file_path = f.name
-
-        try:
-            memory = Memory.from_yaml(file_path)
-
-            assert memory.name == "test-memory"
-            assert memory.config.description == "Test memory from YAML"
-            assert memory.config.strategies is not None
-            assert len(memory.config.strategies) == 2
-            assert memory.config.strategies[0].strategy_type == StrategyType.SEMANTIC
-            assert memory.config.strategies[1].strategy_type == StrategyType.SUMMARY
-            assert memory.config.encryption_key_arn == "arn:aws:kms:us-west-2:123456789012:key/abc123"
-            assert memory.config.tags == {"Environment": "staging"}
-        finally:
-            Path(file_path).unlink(missing_ok=True)
-
-    @patch("bedrock_agentcore.memory.memory.MemoryClient")
-    def test_from_yaml_file_not_found(self, mock_client_class: MagicMock) -> None:
-        """Test that from_yaml raises FileNotFoundError for missing file."""
-        with pytest.raises(FileNotFoundError, match="Config file not found"):
-            Memory.from_yaml("/nonexistent/path/config.yaml")
 
 
 class TestMemoryIsActive:
