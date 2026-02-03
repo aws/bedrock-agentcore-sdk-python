@@ -8,22 +8,68 @@ import pytest
 
 from bedrock_agentcore.runtime.build import (
     Build,
+    CodeBuild,
     CodeBuildStrategy,
+    DirectCodeDeploy,
     DirectCodeDeployStrategy,
+    LocalBuild,
     LocalBuildStrategy,
+    PrebuiltImage,
     codebuild,
     direct_code_deploy,
     local,
+    prebuilt,
 )
 
 
-class TestCodeBuildStrategy:
-    """Tests for CodeBuildStrategy."""
+class TestPrebuiltImage:
+    """Tests for PrebuiltImage."""
 
     def test_strategy_name(self) -> None:
         """Test that strategy name is correct."""
-        strategy = CodeBuildStrategy()
+        strategy = PrebuiltImage(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
+        assert strategy.strategy_name == "prebuilt"
+
+    def test_image_uri(self) -> None:
+        """Test that image_uri is returned correctly."""
+        image_uri = "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
+        strategy = PrebuiltImage(image_uri=image_uri)
+        assert strategy.image_uri == image_uri
+
+    def test_build_returns_image_uri(self) -> None:
+        """Test that build() returns the image URI."""
+        image_uri = "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
+        strategy = PrebuiltImage(image_uri=image_uri)
+        result = strategy.build(agent_name="test-agent")
+        assert result["imageUri"] == image_uri
+        assert result["status"] == "READY"
+
+    def test_factory_function(self) -> None:
+        """Test prebuilt() factory function."""
+        image_uri = "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
+        strategy = prebuilt(image_uri=image_uri)
+        assert isinstance(strategy, PrebuiltImage)
+        assert strategy.image_uri == image_uri
+
+
+class TestCodeBuild:
+    """Tests for CodeBuild (CodeBuildStrategy)."""
+
+    def test_strategy_name(self) -> None:
+        """Test that strategy name is correct."""
+        strategy = CodeBuild(source_path="./test-src", entrypoint="main.py:app")
         assert strategy.strategy_name == "codebuild"
+
+    def test_source_path_and_entrypoint(self) -> None:
+        """Test source_path and entrypoint are stored."""
+        strategy = CodeBuild(source_path="./test-src", entrypoint="main.py:app")
+        assert strategy.source_path == "./test-src"
+        assert strategy.entrypoint == "main.py:app"
+
+    def test_image_uri_is_none_before_build(self) -> None:
+        """Test image_uri is None before build."""
+        strategy = CodeBuild(source_path="./test-src", entrypoint="main.py:app")
+        assert strategy.image_uri is None
 
     @patch("bedrock_agentcore.runtime.builder.build_and_push")
     def test_build_calls_builder(self, mock_build_and_push: MagicMock) -> None:
@@ -34,43 +80,55 @@ class TestCodeBuildStrategy:
             "status": "SUCCEEDED",
         }
 
-        strategy = CodeBuildStrategy()
+        strategy = CodeBuild(source_path="/tmp/test-agent", entrypoint="main.py:app")
         result = strategy.build(
-            source_path="/tmp/test-agent",
             agent_name="test-agent",
-            entrypoint="main.py:app",
             region_name="us-west-2",
         )
 
         mock_build_and_push.assert_called_once()
         assert result["status"] == "SUCCEEDED"
         assert "imageUri" in result
+        assert strategy.image_uri == "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
 
     def test_factory_function(self) -> None:
         """Test codebuild() factory function."""
-        strategy = codebuild()
-        assert isinstance(strategy, CodeBuildStrategy)
+        strategy = codebuild(source_path="./test-src", entrypoint="main.py:app")
+        assert isinstance(strategy, CodeBuild)
+        assert strategy.source_path == "./test-src"
+        assert strategy.entrypoint == "main.py:app"
+
+    def test_backwards_compatibility_alias(self) -> None:
+        """Test CodeBuildStrategy alias works."""
+        strategy = CodeBuildStrategy(source_path="./test-src", entrypoint="main.py:app")
+        assert isinstance(strategy, CodeBuild)
 
 
-class TestLocalBuildStrategy:
-    """Tests for LocalBuildStrategy."""
+class TestLocalBuild:
+    """Tests for LocalBuild (LocalBuildStrategy)."""
 
     def test_strategy_name(self) -> None:
         """Test that strategy name is correct."""
-        strategy = LocalBuildStrategy()
+        strategy = LocalBuild(source_path="./test-src", entrypoint="main.py:app")
         assert strategy.strategy_name == "local"
 
     def test_explicit_runtime(self) -> None:
         """Test explicit runtime specification."""
-        strategy = LocalBuildStrategy(runtime="docker")
+        strategy = LocalBuild(source_path="./test-src", entrypoint="main.py:app", runtime="docker")
         assert strategy._runtime == "docker"
+
+    def test_source_path_and_entrypoint(self) -> None:
+        """Test source_path and entrypoint are stored."""
+        strategy = LocalBuild(source_path="./test-src", entrypoint="main.py:app")
+        assert strategy.source_path == "./test-src"
+        assert strategy.entrypoint == "main.py:app"
 
     @patch("shutil.which")
     def test_auto_detect_docker(self, mock_which: MagicMock) -> None:
         """Test auto-detection of Docker runtime."""
         mock_which.side_effect = lambda x: "/usr/bin/docker" if x == "docker" else None
 
-        strategy = LocalBuildStrategy()
+        strategy = LocalBuild(source_path="./test-src", entrypoint="main.py:app")
         assert strategy.runtime == "docker"
 
     @patch("shutil.which")
@@ -78,7 +136,7 @@ class TestLocalBuildStrategy:
         """Test auto-detection of Finch runtime."""
         mock_which.side_effect = lambda x: "/usr/local/bin/finch" if x == "finch" else None
 
-        strategy = LocalBuildStrategy()
+        strategy = LocalBuild(source_path="./test-src", entrypoint="main.py:app")
         assert strategy.runtime == "finch"
 
     @patch("shutil.which")
@@ -86,7 +144,7 @@ class TestLocalBuildStrategy:
         """Test that missing runtime raises error."""
         mock_which.return_value = None
 
-        strategy = LocalBuildStrategy()
+        strategy = LocalBuild(source_path="./test-src", entrypoint="main.py:app")
         with pytest.raises(RuntimeError, match="No container runtime found"):
             _ = strategy.runtime
 
@@ -95,36 +153,54 @@ class TestLocalBuildStrategy:
         """Test validate_prerequisites checks for runtime."""
         mock_which.return_value = None
 
-        strategy = LocalBuildStrategy()
+        strategy = LocalBuild(source_path="./test-src", entrypoint="main.py:app")
         with pytest.raises(RuntimeError, match="No container runtime found"):
             strategy.validate_prerequisites()
 
     def test_factory_function(self) -> None:
         """Test local() factory function."""
-        strategy = local(runtime="docker")
-        assert isinstance(strategy, LocalBuildStrategy)
+        strategy = local(source_path="./test-src", entrypoint="main.py:app", runtime="docker")
+        assert isinstance(strategy, LocalBuild)
         assert strategy._runtime == "docker"
+        assert strategy.source_path == "./test-src"
+        assert strategy.entrypoint == "main.py:app"
+
+    def test_backwards_compatibility_alias(self) -> None:
+        """Test LocalBuildStrategy alias works."""
+        strategy = LocalBuildStrategy(source_path="./test-src", entrypoint="main.py:app")
+        assert isinstance(strategy, LocalBuild)
 
 
-class TestDirectCodeDeployStrategy:
-    """Tests for DirectCodeDeployStrategy."""
+class TestDirectCodeDeploy:
+    """Tests for DirectCodeDeploy (DirectCodeDeployStrategy)."""
 
     def test_strategy_name(self) -> None:
         """Test that strategy name is correct."""
-        strategy = DirectCodeDeployStrategy()
+        strategy = DirectCodeDeploy(source_path="./test-src", entrypoint="main.py:app")
         assert strategy.strategy_name == "direct_code_deploy"
 
     def test_custom_bucket(self) -> None:
         """Test custom S3 bucket specification."""
-        strategy = DirectCodeDeployStrategy(s3_bucket="my-bucket")
+        strategy = DirectCodeDeploy(source_path="./test-src", entrypoint="main.py:app", s3_bucket="my-bucket")
         assert strategy._s3_bucket == "my-bucket"
+
+    def test_source_path_and_entrypoint(self) -> None:
+        """Test source_path and entrypoint are stored."""
+        strategy = DirectCodeDeploy(source_path="./test-src", entrypoint="main.py:app")
+        assert strategy.source_path == "./test-src"
+        assert strategy.entrypoint == "main.py:app"
+
+    def test_image_uri_is_none(self) -> None:
+        """Test that image_uri is None (direct code deploy doesn't produce images)."""
+        strategy = DirectCodeDeploy(source_path="./test-src", entrypoint="main.py:app")
+        assert strategy.image_uri is None
 
     @patch("shutil.which")
     def test_validate_prerequisites_with_zip(self, mock_which: MagicMock) -> None:
         """Test validate_prerequisites passes with zip available."""
         mock_which.return_value = "/usr/bin/zip"
 
-        strategy = DirectCodeDeployStrategy()
+        strategy = DirectCodeDeploy(source_path="./test-src", entrypoint="main.py:app")
         strategy.validate_prerequisites()  # Should not raise
 
     @patch("shutil.which")
@@ -132,19 +208,21 @@ class TestDirectCodeDeployStrategy:
         """Test validate_prerequisites fails without zip."""
         mock_which.return_value = None
 
-        strategy = DirectCodeDeployStrategy()
+        strategy = DirectCodeDeploy(source_path="./test-src", entrypoint="main.py:app")
         with pytest.raises(RuntimeError, match="zip utility not found"):
             strategy.validate_prerequisites()
 
     def test_factory_function(self) -> None:
         """Test direct_code_deploy() factory function."""
-        strategy = direct_code_deploy(s3_bucket="my-bucket")
-        assert isinstance(strategy, DirectCodeDeployStrategy)
+        strategy = direct_code_deploy(source_path="./test-src", entrypoint="main.py:app", s3_bucket="my-bucket")
+        assert isinstance(strategy, DirectCodeDeploy)
         assert strategy._s3_bucket == "my-bucket"
+        assert strategy.source_path == "./test-src"
+        assert strategy.entrypoint == "main.py:app"
 
     def test_create_code_package(self) -> None:
         """Test _create_code_package creates proper zip."""
-        strategy = DirectCodeDeployStrategy()
+        strategy = DirectCodeDeploy(source_path="./test-src", entrypoint="main.py:app")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create test source files
@@ -158,6 +236,11 @@ class TestDirectCodeDeployStrategy:
             strategy._create_code_package(str(source_dir), str(output_path))
 
             assert output_path.exists()
+
+    def test_backwards_compatibility_alias(self) -> None:
+        """Test DirectCodeDeployStrategy alias works."""
+        strategy = DirectCodeDeployStrategy(source_path="./test-src", entrypoint="main.py:app")
+        assert isinstance(strategy, DirectCodeDeploy)
 
 
 class TestBuildAbstractClass:
@@ -182,67 +265,67 @@ class TestAgentWithBuildStrategy:
     """Tests for Agent integration with Build strategies."""
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_agent_with_codebuild_strategy(self, mock_boto3: MagicMock) -> None:
-        """Test Agent accepts CodeBuildStrategy."""
+    def test_agent_with_prebuilt_image(self, mock_boto3: MagicMock) -> None:
+        """Test Agent with PrebuiltImage."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
         from bedrock_agentcore.runtime import Agent
 
-        strategy = CodeBuildStrategy()
+        build = PrebuiltImage(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
         agent = Agent(
             name="test-agent",
-            source_path="./test-src",
-            entrypoint="main.py:app",
-            build=strategy,
+            build=build,
         )
 
-        assert agent.build_strategy is strategy
+        assert agent.build_strategy is build
+        assert agent.build_strategy.strategy_name == "prebuilt"
+        assert agent.image_uri == "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
+
+    @patch("bedrock_agentcore.runtime.agent.boto3")
+    def test_agent_with_codebuild_strategy(self, mock_boto3: MagicMock) -> None:
+        """Test Agent accepts CodeBuild."""
+        mock_boto3.Session.return_value.region_name = "us-west-2"
+
+        from bedrock_agentcore.runtime import Agent
+
+        build = CodeBuild(source_path="./test-src", entrypoint="main.py:app")
+        agent = Agent(
+            name="test-agent",
+            build=build,
+        )
+
+        assert agent.build_strategy is build
         assert agent.build_strategy.strategy_name == "codebuild"
+        assert agent.image_uri is None  # Not yet built
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
     def test_agent_with_local_strategy(self, mock_boto3: MagicMock) -> None:
-        """Test Agent accepts LocalBuildStrategy."""
+        """Test Agent accepts LocalBuild."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
         from bedrock_agentcore.runtime import Agent
 
-        strategy = LocalBuildStrategy(runtime="docker")
+        build = LocalBuild(source_path="./test-src", entrypoint="main.py:app", runtime="docker")
         agent = Agent(
             name="test-agent",
-            source_path="./test-src",
-            entrypoint="main.py:app",
-            build=strategy,
+            build=build,
         )
 
-        assert agent.build_strategy is strategy
+        assert agent.build_strategy is build
         assert agent.build_strategy.strategy_name == "local"
 
     @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_agent_defaults_to_codebuild(self, mock_boto3: MagicMock) -> None:
-        """Test Agent defaults to CodeBuildStrategy when source_path provided."""
+    def test_agent_with_direct_code_deploy(self, mock_boto3: MagicMock) -> None:
+        """Test Agent accepts DirectCodeDeploy."""
         mock_boto3.Session.return_value.region_name = "us-west-2"
 
         from bedrock_agentcore.runtime import Agent
 
+        build = DirectCodeDeploy(source_path="./test-src", entrypoint="main.py:app")
         agent = Agent(
             name="test-agent",
-            source_path="./test-src",
-            entrypoint="main.py:app",
+            build=build,
         )
 
-        assert agent.build_strategy is not None
-        assert isinstance(agent.build_strategy, CodeBuildStrategy)
-
-    @patch("bedrock_agentcore.runtime.agent.boto3")
-    def test_agent_with_image_uri_no_build_strategy(self, mock_boto3: MagicMock) -> None:
-        """Test Agent with image_uri has no build strategy."""
-        mock_boto3.Session.return_value.region_name = "us-west-2"
-
-        from bedrock_agentcore.runtime import Agent
-
-        agent = Agent(
-            name="test-agent",
-            image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest",
-        )
-
-        assert agent.build_strategy is None
+        assert agent.build_strategy is build
+        assert agent.build_strategy.strategy_name == "direct_code_deploy"

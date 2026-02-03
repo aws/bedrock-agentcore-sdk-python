@@ -3,28 +3,31 @@
 This module provides an abstract Build class and concrete implementations
 for different build/deployment strategies:
 
-- CodeBuildStrategy: Builds ARM64 container images using AWS CodeBuild
-- LocalBuildStrategy: Builds container images locally using Docker/Finch/Podman
-- DirectCodeDeployStrategy: Packages Python code as zip for direct deployment
+- PrebuiltImage: Use a pre-built container image from ECR
+- CodeBuild: Build ARM64 container images using AWS CodeBuild
+- LocalBuild: Build container images locally using Docker/Finch/Podman
+- DirectCodeDeploy: Package Python code as zip for direct deployment
 
 Example:
     from bedrock_agentcore.runtime import Agent
-    from bedrock_agentcore.runtime.build import CodeBuildStrategy, LocalBuildStrategy
+    from bedrock_agentcore.runtime.build import PrebuiltImage, CodeBuild, LocalBuild
 
-    # Use CodeBuild (default for cloud deployments)
+    # Pre-built image
     agent = Agent(
         name="my-agent",
-        source_path="./agent-src",
-        entrypoint="main.py:app",
-        build=CodeBuildStrategy(),
+        build=PrebuiltImage(image_uri="123456789.dkr.ecr.us-west-2.amazonaws.com/my-agent:latest"),
     )
 
-    # Use local Docker build
+    # Build from source with CodeBuild
     agent = Agent(
         name="my-agent",
-        source_path="./agent-src",
-        entrypoint="main.py:app",
-        build=LocalBuildStrategy(),
+        build=CodeBuild(source_path="./agent-src", entrypoint="main.py:app"),
+    )
+
+    # Build from source with local Docker
+    agent = Agent(
+        name="my-agent",
+        build=LocalBuild(source_path="./agent-src", entrypoint="main.py:app"),
     )
 """
 
@@ -35,7 +38,7 @@ import subprocess
 import tempfile
 import zipfile
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +53,7 @@ class Build(ABC):
     @abstractmethod
     def build(
         self,
-        source_path: str,
         agent_name: str,
-        entrypoint: str,
         region_name: Optional[str] = None,
         tag: str = "latest",
         max_wait: int = 600,
@@ -60,9 +61,7 @@ class Build(ABC):
         """Build and package the agent code.
 
         Args:
-            source_path: Path to agent source code
             agent_name: Name of the agent
-            entrypoint: Entry point (e.g., "main.py:app")
             region_name: AWS region name
             tag: Image/version tag
             max_wait: Maximum seconds to wait for build
@@ -81,8 +80,17 @@ class Build(ABC):
         """Return the name of this build strategy."""
         pass
 
-    def validate_prerequisites(self) -> None:
+    @property
+    @abstractmethod
+    def image_uri(self) -> Optional[str]:
+        """Return the image URI if available (after build or for pre-built)."""
+        pass
+
+    def validate_prerequisites(self) -> None:  # noqa: B027
         """Validate that prerequisites for this build strategy are met.
+
+        This is a hook that subclasses can optionally override. The default
+        implementation does nothing (no prerequisites required).
 
         Raises:
             RuntimeError: If prerequisites are not met
@@ -90,8 +98,56 @@ class Build(ABC):
         pass
 
 
-class CodeBuildStrategy(Build):
-    """Build strategy using AWS CodeBuild for ARM64 container images.
+class PrebuiltImage(Build):
+    """Use a pre-built container image from ECR.
+
+    This is the simplest strategy - just reference an existing image.
+
+    Example:
+        build = PrebuiltImage(
+            image_uri="123456789.dkr.ecr.us-west-2.amazonaws.com/my-agent:latest"
+        )
+    """
+
+    def __init__(self, image_uri: str):
+        """Initialize with a pre-built image URI.
+
+        Args:
+            image_uri: ECR image URI
+        """
+        self._image_uri = image_uri
+
+    @property
+    def strategy_name(self) -> str:
+        """Return the strategy name."""
+        return "prebuilt"
+
+    @property
+    def image_uri(self) -> Optional[str]:
+        """Return the image URI."""
+        return self._image_uri
+
+    def build(
+        self,
+        agent_name: str,
+        region_name: Optional[str] = None,
+        tag: str = "latest",
+        max_wait: int = 600,
+    ) -> Dict[str, Any]:
+        """No-op for pre-built images - just return the image URI.
+
+        Returns:
+            Dictionary with imageUri and status
+        """
+        logger.info("Using pre-built image: %s", self._image_uri)
+        return {
+            "imageUri": self._image_uri,
+            "status": "READY",
+        }
+
+
+class CodeBuild(Build):
+    """Build ARM64 container images using AWS CodeBuild.
 
     This is the recommended strategy for cloud deployments as it:
     - Builds ARM64 images optimized for Bedrock AgentCore
@@ -100,24 +156,46 @@ class CodeBuildStrategy(Build):
     - Creates IAM roles automatically
 
     Example:
-        build = CodeBuildStrategy()
-        result = build.build(
+        build = CodeBuild(
             source_path="./my-agent",
-            agent_name="my-agent",
             entrypoint="agent.py:app",
         )
-        print(result["imageUri"])
     """
+
+    def __init__(self, source_path: str, entrypoint: str):
+        """Initialize CodeBuild strategy.
+
+        Args:
+            source_path: Path to agent source code
+            entrypoint: Entry point (e.g., "main.py:app")
+        """
+        self._source_path = source_path
+        self._entrypoint = entrypoint
+        self._built_image_uri: Optional[str] = None
 
     @property
     def strategy_name(self) -> str:
+        """Return the strategy name."""
         return "codebuild"
+
+    @property
+    def source_path(self) -> str:
+        """Return the source path."""
+        return self._source_path
+
+    @property
+    def entrypoint(self) -> str:
+        """Return the entrypoint."""
+        return self._entrypoint
+
+    @property
+    def image_uri(self) -> Optional[str]:
+        """Return the image URI (None until build completes)."""
+        return self._built_image_uri
 
     def build(
         self,
-        source_path: str,
         agent_name: str,
-        entrypoint: str,
         region_name: Optional[str] = None,
         tag: str = "latest",
         max_wait: int = 600,
@@ -125,9 +203,7 @@ class CodeBuildStrategy(Build):
         """Build ARM64 container image using AWS CodeBuild.
 
         Args:
-            source_path: Path to agent source code
             agent_name: Name of the agent
-            entrypoint: Entry point (e.g., "main.py:app")
             region_name: AWS region name
             tag: Image tag
             max_wait: Maximum seconds to wait for build
@@ -140,46 +216,72 @@ class CodeBuildStrategy(Build):
         """
         from .builder import build_and_push
 
-        return build_and_push(
-            source_path=source_path,
+        result = build_and_push(
+            source_path=self._source_path,
             agent_name=agent_name,
-            entrypoint=entrypoint,
+            entrypoint=self._entrypoint,
             region_name=region_name,
             tag=tag,
             wait=True,
             max_wait=max_wait,
         )
 
+        self._built_image_uri = result.get("imageUri")
+        return result
 
-class LocalBuildStrategy(Build):
-    """Build strategy using local container runtime (Docker/Finch/Podman).
+
+class LocalBuild(Build):
+    """Build container images locally using Docker/Finch/Podman.
 
     This strategy builds container images locally and pushes to ECR.
     Useful for development and testing when you have Docker installed.
 
     Example:
-        build = LocalBuildStrategy()
-        result = build.build(
+        build = LocalBuild(
             source_path="./my-agent",
-            agent_name="my-agent",
             entrypoint="agent.py:app",
         )
-        print(result["imageUri"])
     """
 
-    def __init__(self, runtime: Optional[str] = None):
+    def __init__(
+        self,
+        source_path: str,
+        entrypoint: str,
+        runtime: Optional[str] = None,
+    ):
         """Initialize local build strategy.
 
         Args:
-            runtime: Container runtime to use ("docker", "finch", "podman").
+            source_path: Path to agent source code
+            entrypoint: Entry point (e.g., "main.py:app")
+            runtime: Container runtime ("docker", "finch", "podman").
                     If None, auto-detects available runtime.
         """
+        self._source_path = source_path
+        self._entrypoint = entrypoint
         self._runtime = runtime
         self._detected_runtime: Optional[str] = None
+        self._built_image_uri: Optional[str] = None
 
     @property
     def strategy_name(self) -> str:
+        """Return the strategy name."""
         return "local"
+
+    @property
+    def source_path(self) -> str:
+        """Return the source path."""
+        return self._source_path
+
+    @property
+    def entrypoint(self) -> str:
+        """Return the entrypoint."""
+        return self._entrypoint
+
+    @property
+    def image_uri(self) -> Optional[str]:
+        """Return the image URI (None until build completes)."""
+        return self._built_image_uri
 
     @property
     def runtime(self) -> str:
@@ -208,9 +310,7 @@ class LocalBuildStrategy(Build):
 
     def build(
         self,
-        source_path: str,
         agent_name: str,
-        entrypoint: str,
         region_name: Optional[str] = None,
         tag: str = "latest",
         max_wait: int = 600,
@@ -218,9 +318,7 @@ class LocalBuildStrategy(Build):
         """Build container image locally and push to ECR.
 
         Args:
-            source_path: Path to agent source code
             agent_name: Name of the agent
-            entrypoint: Entry point (e.g., "main.py:app")
             region_name: AWS region name
             tag: Image tag
             max_wait: Maximum seconds to wait (unused for local builds)
@@ -235,7 +333,7 @@ class LocalBuildStrategy(Build):
         from .builder import generate_dockerfile
         from .ecr import ensure_ecr_repository
 
-        source_path = os.path.abspath(source_path)
+        source_path = os.path.abspath(self._source_path)
         if not os.path.exists(source_path):
             raise FileNotFoundError(f"Source path not found: {source_path}")
 
@@ -253,7 +351,7 @@ class LocalBuildStrategy(Build):
         dockerfile_path = os.path.join(source_path, "Dockerfile")
         if not os.path.exists(dockerfile_path):
             logger.info("No Dockerfile found, generating one...")
-            generate_dockerfile(source_path, entrypoint)
+            generate_dockerfile(source_path, self._entrypoint)
 
         runtime = self.runtime
 
@@ -294,6 +392,7 @@ class LocalBuildStrategy(Build):
         if push_result.returncode != 0:
             raise RuntimeError(f"Push failed: {push_result.stderr}")
 
+        self._built_image_uri = full_image_uri
         logger.info("Local build complete. Image URI: %s", full_image_uri)
         return {
             "imageUri": full_image_uri,
@@ -302,43 +401,64 @@ class LocalBuildStrategy(Build):
         }
 
 
-class DirectCodeDeployStrategy(Build):
-    """Build strategy for direct Python code deployment without containerization.
+class DirectCodeDeploy(Build):
+    """Package Python code as zip for direct deployment without containerization.
 
     This strategy packages Python code as a zip file and uploads to S3
     for direct deployment to Bedrock AgentCore. No container build required.
 
-    Requires:
-    - Python source code with pyproject.toml or requirements.txt
-    - zip utility available
-
     Example:
-        build = DirectCodeDeployStrategy(s3_bucket="my-bucket")
-        result = build.build(
+        build = DirectCodeDeploy(
             source_path="./my-agent",
-            agent_name="my-agent",
             entrypoint="agent.py:app",
         )
-        print(result["packageUri"])
     """
 
     def __init__(
         self,
+        source_path: str,
+        entrypoint: str,
         s3_bucket: Optional[str] = None,
         auto_create_bucket: bool = True,
     ):
         """Initialize direct code deploy strategy.
 
         Args:
+            source_path: Path to agent source code
+            entrypoint: Entry point (e.g., "main.py:app")
             s3_bucket: S3 bucket for code packages. If None, auto-generates.
             auto_create_bucket: Create bucket if it doesn't exist
         """
+        self._source_path = source_path
+        self._entrypoint = entrypoint
         self._s3_bucket = s3_bucket
         self._auto_create_bucket = auto_create_bucket
+        self._package_uri: Optional[str] = None
 
     @property
     def strategy_name(self) -> str:
+        """Return the strategy name."""
         return "direct_code_deploy"
+
+    @property
+    def source_path(self) -> str:
+        """Return the source path."""
+        return self._source_path
+
+    @property
+    def entrypoint(self) -> str:
+        """Return the entrypoint."""
+        return self._entrypoint
+
+    @property
+    def image_uri(self) -> Optional[str]:
+        """Return the image URI (always None for direct code deploy)."""
+        return None
+
+    @property
+    def package_uri(self) -> Optional[str]:
+        """Return the S3 package URI after build."""
+        return self._package_uri
 
     def validate_prerequisites(self) -> None:
         """Validate that zip utility is available."""
@@ -347,9 +467,7 @@ class DirectCodeDeployStrategy(Build):
 
     def build(
         self,
-        source_path: str,
         agent_name: str,
-        entrypoint: str,
         region_name: Optional[str] = None,
         tag: str = "latest",
         max_wait: int = 600,
@@ -357,9 +475,7 @@ class DirectCodeDeployStrategy(Build):
         """Package Python code and upload to S3.
 
         Args:
-            source_path: Path to agent source code
             agent_name: Name of the agent
-            entrypoint: Entry point (e.g., "main.py:app")
             region_name: AWS region name
             tag: Version tag for the package
             max_wait: Maximum seconds to wait (unused)
@@ -374,7 +490,7 @@ class DirectCodeDeployStrategy(Build):
         import boto3
         from botocore.exceptions import ClientError
 
-        source_path = os.path.abspath(source_path)
+        source_path = os.path.abspath(self._source_path)
         if not os.path.exists(source_path):
             raise FileNotFoundError(f"Source path not found: {source_path}")
 
@@ -415,35 +531,25 @@ class DirectCodeDeployStrategy(Build):
             logger.info("Uploading code package to s3://%s/%s", bucket_name, s3_key)
             s3_client.upload_file(zip_path, bucket_name, s3_key)
 
-        package_uri = f"s3://{bucket_name}/{s3_key}"
-        logger.info("Direct code deploy complete. Package URI: %s", package_uri)
+        self._package_uri = f"s3://{bucket_name}/{s3_key}"
+        logger.info("Direct code deploy complete. Package URI: %s", self._package_uri)
 
         return {
-            "packageUri": package_uri,
+            "packageUri": self._package_uri,
             "s3Bucket": bucket_name,
             "s3Key": s3_key,
             "status": "SUCCEEDED",
-            "entrypoint": entrypoint,
+            "entrypoint": self._entrypoint,
         }
 
     def _create_code_package(self, source_path: str, output_path: str) -> str:
-        """Create a zip package of the source code.
-
-        Args:
-            source_path: Path to source code
-            output_path: Path for output zip file
-
-        Returns:
-            Path to created zip file
-        """
-        # Directories to exclude
+        """Create a zip package of the source code."""
         exclude_dirs = {
             ".git", "__pycache__", ".venv", "venv", "node_modules",
             ".pytest_cache", ".mypy_cache", ".ruff_cache", "dist", "build",
             "*.egg-info",
         }
 
-        # File patterns to exclude
         exclude_patterns = {
             "*.pyc", "*.pyo", "*.pyd", ".DS_Store", "*.so",
             ".env", ".env.*", "*.log",
@@ -451,11 +557,9 @@ class DirectCodeDeployStrategy(Build):
 
         with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zipf:
             for root, dirs, files in os.walk(source_path):
-                # Filter directories
                 dirs[:] = [d for d in dirs if d not in exclude_dirs]
 
                 for file in files:
-                    # Check exclude patterns
                     if any(self._matches_pattern(file, p) for p in exclude_patterns):
                         continue
 
@@ -472,42 +576,76 @@ class DirectCodeDeployStrategy(Build):
         return fnmatch.fnmatch(filename, pattern)
 
 
+# Backwards compatibility aliases
+CodeBuildStrategy = CodeBuild
+LocalBuildStrategy = LocalBuild
+DirectCodeDeployStrategy = DirectCodeDeploy
+
+
 # Convenience factory functions
-def codebuild() -> CodeBuildStrategy:
-    """Create a CodeBuild build strategy.
+def prebuilt(image_uri: str) -> PrebuiltImage:
+    """Create a pre-built image strategy.
+
+    Args:
+        image_uri: ECR image URI
 
     Returns:
-        CodeBuildStrategy instance
+        PrebuiltImage instance
     """
-    return CodeBuildStrategy()
+    return PrebuiltImage(image_uri=image_uri)
 
 
-def local(runtime: Optional[str] = None) -> LocalBuildStrategy:
+def codebuild(source_path: str, entrypoint: str) -> CodeBuild:
+    """Create a CodeBuild strategy.
+
+    Args:
+        source_path: Path to agent source code
+        entrypoint: Entry point (e.g., "main.py:app")
+
+    Returns:
+        CodeBuild instance
+    """
+    return CodeBuild(source_path=source_path, entrypoint=entrypoint)
+
+
+def local(
+    source_path: str,
+    entrypoint: str,
+    runtime: Optional[str] = None,
+) -> LocalBuild:
     """Create a local build strategy.
 
     Args:
+        source_path: Path to agent source code
+        entrypoint: Entry point (e.g., "main.py:app")
         runtime: Container runtime ("docker", "finch", "podman") or None to auto-detect
 
     Returns:
-        LocalBuildStrategy instance
+        LocalBuild instance
     """
-    return LocalBuildStrategy(runtime=runtime)
+    return LocalBuild(source_path=source_path, entrypoint=entrypoint, runtime=runtime)
 
 
 def direct_code_deploy(
+    source_path: str,
+    entrypoint: str,
     s3_bucket: Optional[str] = None,
     auto_create_bucket: bool = True,
-) -> DirectCodeDeployStrategy:
+) -> DirectCodeDeploy:
     """Create a direct code deploy strategy.
 
     Args:
+        source_path: Path to agent source code
+        entrypoint: Entry point (e.g., "main.py:app")
         s3_bucket: S3 bucket for code packages
         auto_create_bucket: Create bucket if it doesn't exist
 
     Returns:
-        DirectCodeDeployStrategy instance
+        DirectCodeDeploy instance
     """
-    return DirectCodeDeployStrategy(
+    return DirectCodeDeploy(
+        source_path=source_path,
+        entrypoint=entrypoint,
         s3_bucket=s3_bucket,
         auto_create_bucket=auto_create_bucket,
     )
