@@ -48,27 +48,6 @@ class Build(ABC):
     """
 
     @abstractmethod
-    def build(
-        self,
-        agent_name: str,
-        region_name: Optional[str] = None,
-        tag: str = "latest",
-        max_wait: int = 600,
-    ) -> Dict[str, Any]:
-        """Build the agent code locally (if applicable).
-
-        Args:
-            agent_name: Name of the agent
-            region_name: AWS region name
-            tag: Image/version tag
-            max_wait: Maximum seconds to wait for build
-
-        Returns:
-            Dictionary with build results
-        """
-        pass
-
-    @abstractmethod
     def launch(
         self,
         agent_name: str,
@@ -191,50 +170,6 @@ class ECR(Build):
         """Return the image URI."""
         return self._image_uri
 
-    def build(
-        self,
-        agent_name: str,
-        region_name: Optional[str] = None,
-        tag: str = "latest",
-        max_wait: int = 600,
-    ) -> Dict[str, Any]:
-        """Build the container image (CodeBuild mode only).
-
-        For pre-built images, this is a no-op.
-
-        Args:
-            agent_name: Name of the agent
-            region_name: AWS region name
-            tag: Image tag
-            max_wait: Maximum seconds to wait for build
-
-        Returns:
-            Dictionary with build results
-        """
-        if self._mode == "prebuilt":
-            logger.info("Using pre-built image: %s", self._image_uri)
-            return {
-                "imageUri": self._image_uri,
-                "status": "READY",
-            }
-
-        # CodeBuild mode - build but don't push yet
-        logger.info("Building image with CodeBuild...")
-        from .builder import build_and_push
-
-        result = build_and_push(
-            source_path=self._source_path,
-            agent_name=agent_name,
-            entrypoint=self._entrypoint,
-            region_name=region_name,
-            tag=tag,
-            wait=True,
-            max_wait=max_wait,
-        )
-
-        self._image_uri = result.get("imageUri")
-        return result
-
     def launch(
         self,
         agent_name: str,
@@ -244,11 +179,8 @@ class ECR(Build):
     ) -> Dict[str, Any]:
         """Build and push the container image to ECR.
 
-        This method is idempotent - if the image has already been built,
-        it returns the existing image URI without rebuilding.
-
         For pre-built images, this returns the provided image URI.
-        For CodeBuild mode, this builds and pushes to ECR (once).
+        For CodeBuild mode, this always builds and pushes to ECR.
 
         Args:
             agent_name: Name of the agent
@@ -259,17 +191,16 @@ class ECR(Build):
         Returns:
             Dictionary with:
                 - imageUri: ECR image URI
-                - status: "SUCCEEDED", "READY", or "ALREADY_BUILT"
+                - status: "SUCCEEDED" or "READY"
         """
-        # Idempotent: if already built, return existing
-        if self._image_uri:
-            logger.info("Image already built: %s", self._image_uri)
+        if self._mode == "prebuilt":
+            logger.info("Using pre-built image: %s", self._image_uri)
             return {
                 "imageUri": self._image_uri,
-                "status": "ALREADY_BUILT" if self._mode == "codebuild" else "READY",
+                "status": "READY",
             }
 
-        # CodeBuild mode - build and push
+        # CodeBuild mode - always build and push
         logger.info("Building and pushing image with CodeBuild...")
         from .builder import build_and_push
 
@@ -352,42 +283,6 @@ class DirectCodeDeploy(Build):
         if not shutil.which("zip"):
             raise RuntimeError("zip utility not found. Install zip to use direct code deploy.")
 
-    def build(
-        self,
-        agent_name: str,
-        region_name: Optional[str] = None,
-        tag: str = "latest",
-        max_wait: int = 600,
-    ) -> Dict[str, Any]:
-        """Create the zip package locally.
-
-        Args:
-            agent_name: Name of the agent
-            region_name: AWS region name (unused)
-            tag: Version tag
-            max_wait: Maximum seconds to wait (unused)
-
-        Returns:
-            Dictionary with:
-                - localPath: Path to the created zip file
-                - status: "BUILT"
-        """
-        source_path = os.path.abspath(self._source_path)
-        if not os.path.exists(source_path):
-            raise FileNotFoundError(f"Source path not found: {source_path}")
-
-        # Create zip package in temp directory
-        temp_dir = tempfile.mkdtemp()
-        zip_path = os.path.join(temp_dir, f"{agent_name}-{tag}.zip")
-        self._create_code_package(source_path, zip_path)
-
-        logger.info("Built code package: %s", zip_path)
-        return {
-            "localPath": zip_path,
-            "status": "BUILT",
-            "entrypoint": self._entrypoint,
-        }
-
     def launch(
         self,
         agent_name: str,
@@ -397,8 +292,8 @@ class DirectCodeDeploy(Build):
     ) -> Dict[str, Any]:
         """Package Python code and upload to S3.
 
-        This method is idempotent - if the package has already been uploaded,
-        it returns the existing package URI without re-uploading.
+        This always packages and uploads the code to ensure the latest
+        source changes are deployed.
 
         Args:
             agent_name: Name of the agent
@@ -411,17 +306,8 @@ class DirectCodeDeploy(Build):
                 - packageUri: S3 URI of the code package
                 - s3Bucket: Bucket name
                 - s3Key: Object key
-                - status: "SUCCEEDED" or "ALREADY_UPLOADED"
+                - status: "SUCCEEDED"
         """
-        # Idempotent: if already uploaded, return existing
-        if self._package_uri:
-            logger.info("Package already uploaded: %s", self._package_uri)
-            return {
-                "packageUri": self._package_uri,
-                "status": "ALREADY_UPLOADED",
-                "entrypoint": self._entrypoint,
-            }
-
         import boto3
         from botocore.exceptions import ClientError
 

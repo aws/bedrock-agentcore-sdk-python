@@ -42,14 +42,6 @@ class TestECRPrebuilt:
         strategy = ECR(image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest")
         assert strategy.entrypoint is None
 
-    def test_build_returns_image_uri(self) -> None:
-        """Test that build() returns the image URI for pre-built."""
-        image_uri = "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
-        strategy = ECR(image_uri=image_uri)
-        result = strategy.build(agent_name="test-agent")
-        assert result["imageUri"] == image_uri
-        assert result["status"] == "READY"
-
     def test_launch_returns_image_uri(self) -> None:
         """Test that launch() returns the image URI for pre-built."""
         image_uri = "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
@@ -78,30 +70,10 @@ class TestECRCodeBuild:
         assert strategy.source_path == "./test-src"
         assert strategy.entrypoint == "main.py:app"
 
-    def test_image_uri_is_none_before_build(self) -> None:
-        """Test image_uri is None before build."""
+    def test_image_uri_is_none_before_launch(self) -> None:
+        """Test image_uri is None before launch."""
         strategy = ECR(source_path="./test-src", entrypoint="main.py:app")
         assert strategy.image_uri is None
-
-    @patch("bedrock_agentcore.runtime.builder.build_and_push")
-    def test_build_calls_builder(self, mock_build_and_push: MagicMock) -> None:
-        """Test that build() delegates to builder module."""
-        mock_build_and_push.return_value = {
-            "imageUri": "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest",
-            "buildId": "build-123",
-            "status": "SUCCEEDED",
-        }
-
-        strategy = ECR(source_path="/tmp/test-agent", entrypoint="main.py:app")
-        result = strategy.build(
-            agent_name="test-agent",
-            region_name="us-west-2",
-        )
-
-        mock_build_and_push.assert_called_once()
-        assert result["status"] == "SUCCEEDED"
-        assert "imageUri" in result
-        assert strategy.image_uri == "123456789012.dkr.ecr.us-west-2.amazonaws.com/test:latest"
 
     @patch("bedrock_agentcore.runtime.builder.build_and_push")
     def test_launch_calls_builder(self, mock_build_and_push: MagicMock) -> None:
@@ -188,22 +160,6 @@ class TestDirectCodeDeploy:
         strategy = DirectCodeDeploy(source_path="./test-src", entrypoint="main.py:app")
         with pytest.raises(RuntimeError, match="zip utility not found"):
             strategy.validate_prerequisites()
-
-    def test_build_creates_local_zip(self) -> None:
-        """Test build() creates a local zip package."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Create test source files
-            source_dir = Path(temp_dir) / "source"
-            source_dir.mkdir()
-            (source_dir / "main.py").write_text("print('hello')")
-            (source_dir / "requirements.txt").write_text("boto3")
-
-            strategy = DirectCodeDeploy(source_path=str(source_dir), entrypoint="main.py:app")
-            result = strategy.build(agent_name="test-agent")
-
-            assert result["status"] == "BUILT"
-            assert "localPath" in result
-            assert Path(result["localPath"]).exists()
 
     def test_create_code_package(self) -> None:
         """Test _create_code_package creates proper zip."""
