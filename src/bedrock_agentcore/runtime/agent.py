@@ -292,7 +292,6 @@ class Agent:
     def build(
         self,
         tag: str = "latest",
-        wait: bool = True,
         max_wait: int = 600,
     ) -> Dict[str, Any]:
         """Build the agent container image and push to ECR.
@@ -307,7 +306,6 @@ class Agent:
 
         Args:
             tag: Image tag (default: "latest")
-            wait: Wait for build to complete
             max_wait: Maximum seconds to wait for build
 
         Returns:
@@ -341,7 +339,7 @@ class Agent:
             entrypoint=self._config.build.entrypoint,
             region_name=self._region,
             tag=tag,
-            wait=wait,
+            wait=True,
             max_wait=max_wait,
         )
 
@@ -358,7 +356,6 @@ class Agent:
     def deploy(
         self,
         tag: str = "latest",
-        wait: bool = True,
         max_wait_build: int = 600,
         max_wait_launch: int = 600,
         poll_interval: int = 10,
@@ -371,7 +368,6 @@ class Agent:
 
         Args:
             tag: Image tag for build (default: "latest")
-            wait: Wait for operations to complete
             max_wait_build: Maximum seconds to wait for build
             max_wait_launch: Maximum seconds to wait for launch
             poll_interval: Seconds between status checks
@@ -385,23 +381,22 @@ class Agent:
         # Build if this is a source-based agent and not already built
         if self._config.build and not self.is_built:
             logger.info("Building agent before deploy...")
-            self.build(tag=tag, wait=wait, max_wait=max_wait_build)
+            self.build(tag=tag, max_wait=max_wait_build)
 
         # Launch the agent
-        return self.launch(wait=wait, max_wait=max_wait_launch, poll_interval=poll_interval)
+        return self.launch(max_wait=max_wait_launch, poll_interval=poll_interval)
 
     def launch(
         self,
-        wait: bool = True,
         max_wait: int = 600,
         poll_interval: int = 10,
     ) -> Dict[str, Any]:
         """Deploy the agent to AWS.
 
         Calls create_agent_runtime API using the saved configuration.
+        Waits for the runtime to become ACTIVE before returning.
 
         Args:
-            wait: Wait for ACTIVE status
             max_wait: Max seconds to wait
             poll_interval: Seconds between status checks
 
@@ -456,10 +451,7 @@ class Agent:
 
             logger.info("Created runtime with ARN: %s", self._runtime_arn)
 
-            if wait:
-                return self._wait_for_active(max_wait, poll_interval)
-
-            return dict(response)
+            return self._wait_for_active(max_wait, poll_interval)
 
         except ClientError as e:
             logger.error("Failed to launch agent: %s", e)
@@ -550,14 +542,14 @@ class Agent:
 
     def destroy(
         self,
-        wait: bool = True,
         max_wait: int = 300,
         poll_interval: int = 10,
     ) -> Dict[str, Any]:
         """Delete the runtime from AWS.
 
+        Waits for deletion to complete before returning.
+
         Args:
-            wait: Wait for deletion to complete
             max_wait: Max seconds to wait
             poll_interval: Seconds between status checks
 
@@ -579,8 +571,7 @@ class Agent:
                 agentRuntimeId=self._runtime_id,
             )
 
-            if wait:
-                self._wait_for_deleted(max_wait, poll_interval)
+            self._wait_for_deleted(max_wait, poll_interval)
 
             # Clear state
             self._runtime_arn = None

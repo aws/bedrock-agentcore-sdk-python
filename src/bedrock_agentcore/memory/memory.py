@@ -192,14 +192,14 @@ class Memory:
 
     def launch(
         self,
-        wait: bool = True,
         max_wait: int = 600,
         poll_interval: int = 10,
     ) -> Dict[str, Any]:
         """Launch the memory resource in AWS.
 
+        Waits for the memory to become ACTIVE before returning.
+
         Args:
-            wait: Wait for ACTIVE status
             max_wait: Max seconds to wait
             poll_interval: Seconds between status checks
 
@@ -224,31 +224,25 @@ class Memory:
 
         logger.info("Creating memory '%s'...", self._name)
 
-        if wait:
-            memory = self._client.create_memory_and_wait(
-                name=self._name,
-                strategies=strategies,
-                description=self._config.description,
-                max_wait=max_wait,
-                poll_interval=poll_interval,
-            )
-        else:
-            memory = self._client.create_memory(
-                name=self._name,
-                strategies=strategies,
-                description=self._config.description,
-            )
+        memory = self._client.create_memory_and_wait(
+            name=self._name,
+            strategies=strategies,
+            description=self._config.description,
+            max_wait=max_wait,
+            poll_interval=poll_interval,
+        )
 
         self._memory_id = memory.get("memoryId", memory.get("id"))
         logger.info("Created memory with ID: %s", self._memory_id)
 
         return memory
 
-    def delete(self, wait: bool = True, max_wait: int = 300, poll_interval: int = 10) -> Dict[str, Any]:
+    def delete(self, max_wait: int = 300, poll_interval: int = 10) -> Dict[str, Any]:
         """Delete the memory resource from AWS.
 
+        Waits for deletion to complete before returning.
+
         Args:
-            wait: Wait for deletion to complete
             max_wait: Max seconds to wait
             poll_interval: Seconds between status checks
 
@@ -267,8 +261,7 @@ class Memory:
         try:
             response = self._client.delete_memory(memory_id=self._memory_id)
 
-            if wait:
-                self._wait_for_deleted(max_wait, poll_interval)
+            self._wait_for_deleted(max_wait, poll_interval)
 
             # Clear state
             self._memory_id = None
@@ -288,17 +281,17 @@ class Memory:
         strategy_type: str,
         namespace: str,
         custom_prompt: Optional[str] = None,
-        wait: bool = True,
         max_wait: int = 300,
         poll_interval: int = 10,
     ) -> Dict[str, Any]:
         """Add a strategy to the memory.
 
+        Waits for the update to complete before returning.
+
         Args:
             strategy_type: Strategy type (SEMANTIC, SUMMARY, USER_PREFERENCE, CUSTOM_SEMANTIC)
             namespace: Namespace for the strategy
             custom_prompt: Custom extraction prompt (for CUSTOM_SEMANTIC)
-            wait: Wait for update to complete
             max_wait: Max seconds to wait
             poll_interval: Seconds between status checks
 
@@ -321,19 +314,12 @@ class Memory:
 
         logger.info("Adding strategy '%s' to memory '%s'...", strategy_type, self._name)
 
-        if wait:
-            return self._client.add_strategy_and_wait(
-                memory_id=self._memory_id,
-                strategy=strategy,
-                max_wait=max_wait,
-                poll_interval=poll_interval,
-            )
-        else:
-            result = self._client.gmcp_client.update_memory(
-                memoryId=self._memory_id,
-                memoryStrategies={"add": [strategy]},
-            )
-            return dict(result)
+        return self._client.add_strategy_and_wait(
+            memory_id=self._memory_id,
+            strategy=strategy,
+            max_wait=max_wait,
+            poll_interval=poll_interval,
+        )
 
     def get_session(self, actor_id: str, session_id: str) -> "MemorySession":
         """Get a session for conversational operations.
