@@ -141,7 +141,9 @@ def test_save_conversation_and_retrieve_memories():
         # Test UUID patch for deterministic testing
         with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
             # Test retrieve_memories
-            memories = client.retrieve_memories(memory_id="mem-123", namespace="test/namespace/", query="Hello", top_k=3)
+            memories = client.retrieve_memories(
+                memory_id="mem-123", namespace="test/namespace/", query="Hello", top_k=3
+            )
 
             assert len(memories) == 1
             assert memories[0]["memoryRecordId"] == "rec-123"
