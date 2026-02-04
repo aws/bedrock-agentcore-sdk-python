@@ -73,10 +73,10 @@ class MessageRole(Enum):
 
 # Default namespaces for each strategy type
 DEFAULT_NAMESPACES: Dict[StrategyType, List[str]] = {
-    StrategyType.SEMANTIC: ["/strategies/{memoryStrategyId}/actors/{actorId}"],
-    StrategyType.SUMMARY: ["/strategies/{memoryStrategyId}/actors/{actorId}/sessions/{sessionId}"],
-    StrategyType.USER_PREFERENCE: ["/strategies/{memoryStrategyId}/actors/{actorId}"],
-    StrategyType.EPISODIC: ["/strategies/{memoryStrategyId}/actors/{actorId}/sessions/{sessionId}"],
+    StrategyType.SEMANTIC: ["/strategies/{memoryStrategyId}/actors/{actorId}/"],
+    StrategyType.SUMMARY: ["/strategies/{memoryStrategyId}/actors/{actorId}/sessions/{sessionId}/"],
+    StrategyType.USER_PREFERENCE: ["/strategies/{memoryStrategyId}/actors/{actorId}/"],
+    StrategyType.EPISODIC: ["/strategies/{memoryStrategyId}/actors/{actorId}/sessions/{sessionId}/"],
 }
 
 

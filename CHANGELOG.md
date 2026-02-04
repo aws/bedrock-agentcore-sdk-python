@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.1] - 2026-02-03
+
+### Fixed
+- fix: escape special characters in Slack notification payload (#239) (bcd312f)
+
+### Other Changes
+- Add trailing slash to namespace strings (#238) (1de940d)
+- feat(memory): add metadata support to MemoryClient events (#236) (53a1baa)
+- temp: add Slack notification workflow for new issues (#226) (a48944a)
+- chore: bump version to 1.2.0 (#213) (52bc194)
+
 ## [1.2.0] - 2026-01-13
 
 ### Fixed

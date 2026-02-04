@@ -186,7 +186,7 @@ session.add_turns([
 # Search long-term memories (after memory extraction has occurred)
 memories = session.search_long_term_memories(
     query="what food does the user like",
-    namespace_prefix="/food/user-123",
+    namespace_prefix="/food/user-123/",
     top_k=5
 )
 
@@ -219,8 +219,8 @@ def my_llm(user_input: str, memories: List[Dict]) -> str:
 
 # Configure memory retrieval with multiple namespaces
 retrieval_config = {
-    "support/facts/{sessionId}": RetrievalConfig(top_k=5, relevance_score=0.3),
-    "user/preferences/{actorId}": RetrievalConfig(top_k=3, relevance_score=0.5)
+    "support/facts/{sessionId}/": RetrievalConfig(top_k=5, relevance_score=0.3),
+    "user/preferences/{actorId}/": RetrievalConfig(top_k=3, relevance_score=0.5)
 }
 
 # Process complete conversation turn with automatic memory integration
@@ -301,7 +301,7 @@ session2 = manager.create_memory_session(
 ```python
 # List all memory records in a namespace
 records = session.list_long_term_memory_records(
-    namespace_prefix="/user/preferences/user-123",
+    namespace_prefix="/user/preferences/user-123/",
     max_results=20
 )
 
@@ -327,7 +327,7 @@ Learn more here!: [Working example](metadata-workflow.ipynb)
 # Step 1: Retrieve relevant memories
 memories = session.search_long_term_memories(
     query="previous discussion",
-    namespace_prefix="support/facts/session-456",
+    namespace_prefix="support/facts/session-456/",
     top_k=5
 )
 
