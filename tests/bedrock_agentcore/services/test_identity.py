@@ -376,9 +376,8 @@ class TestIdentityClient:
 
         with patch("boto3.client") as mock_boto_client:
             mock_cp_client = Mock()
-            mock_identity_client = Mock()
             mock_dp_client = Mock()
-            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
 
             identity_client = IdentityClient(region)
 
@@ -406,9 +405,8 @@ class TestIdentityClient:
 
         with patch("boto3.client") as mock_boto_client:
             mock_cp_client = Mock()
-            mock_identity_client = Mock()
             mock_dp_client = Mock()
-            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
 
             identity_client = IdentityClient(region)
 
@@ -435,9 +433,8 @@ class TestIdentityClient:
 
         with patch("boto3.client") as mock_boto_client:
             mock_cp_client = Mock()
-            mock_identity_client = Mock()
             mock_dp_client = Mock()
-            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
 
             identity_client = IdentityClient(region)
 
@@ -461,28 +458,27 @@ class TestIdentityClient:
 
         with patch("boto3.client") as mock_boto_client:
             mock_cp_client = Mock()
-            mock_identity_client = Mock()
             mock_dp_client = Mock()
-            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
 
             identity_client = IdentityClient(region)
 
             # Test with provided name
             custom_name = "my-custom-workload"
             expected_response = {"name": custom_name, "workloadIdentityId": "workload-123"}
-            mock_identity_client.create_workload_identity.return_value = expected_response
+            mock_cp_client.create_workload_identity.return_value = expected_response
 
             result = identity_client.create_workload_identity(name=custom_name)
 
             assert result == expected_response
-            mock_identity_client.create_workload_identity.assert_called_with(
+            mock_cp_client.create_workload_identity.assert_called_with(
                 name=custom_name, allowedResourceOauth2ReturnUrls=[]
             )
 
             # Test without provided name (auto-generated)
-            mock_identity_client.reset_mock()
+            mock_cp_client.reset_mock()
             expected_response_auto = {"name": "workload-abcd1234", "workloadIdentityId": "workload-456"}
-            mock_identity_client.create_workload_identity.return_value = expected_response_auto
+            mock_cp_client.create_workload_identity.return_value = expected_response_auto
 
             with patch("uuid.uuid4") as mock_uuid:
                 mock_uuid.return_value.hex = "abcd1234efgh5678"
@@ -490,7 +486,7 @@ class TestIdentityClient:
                 result = identity_client.create_workload_identity()
 
                 assert result == expected_response_auto
-                mock_identity_client.create_workload_identity.assert_called_with(
+                mock_cp_client.create_workload_identity.assert_called_with(
                     name="workload-abcd1234", allowedResourceOauth2ReturnUrls=[]
                 )
 
@@ -499,9 +495,8 @@ class TestIdentityClient:
 
         with patch("boto3.client") as mock_boto_client:
             mock_cp_client = Mock()
-            mock_identity_client = Mock()
             mock_dp_client = Mock()
-            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
 
             identity_client = IdentityClient(region)
 
@@ -509,12 +504,12 @@ class TestIdentityClient:
             allowed_urls = ["https://unit-test.com/callback", "https://test.com/oauth"]
             expected_response = {"name": workload_name, "allowedResourceOauth2ReturnUrls": allowed_urls}
 
-            mock_identity_client.update_workload_identity.return_value = expected_response
+            mock_cp_client.update_workload_identity.return_value = expected_response
 
             result = identity_client.update_workload_identity(workload_name, allowed_urls)
 
             assert result == expected_response
-            mock_identity_client.update_workload_identity.assert_called_once_with(
+            mock_cp_client.update_workload_identity.assert_called_once_with(
                 name=workload_name, allowedResourceOauth2ReturnUrls=allowed_urls
             )
 
@@ -523,9 +518,8 @@ class TestIdentityClient:
 
         with patch("boto3.client") as mock_boto_client:
             mock_cp_client = Mock()
-            mock_identity_client = Mock()
             mock_dp_client = Mock()
-            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
 
             identity_client = IdentityClient(region)
 
@@ -545,9 +539,8 @@ class TestIdentityClient:
 
         with patch("boto3.client") as mock_boto_client:
             mock_cp_client = Mock()
-            mock_identity_client = Mock()
             mock_dp_client = Mock()
-            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
 
             identity_client = IdentityClient(region)
 
@@ -570,9 +563,8 @@ class TestIdentityClient:
 
         with patch("boto3.client") as mock_boto_client:
             mock_cp_client = Mock()
-            mock_identity_client = Mock()
             mock_dp_client = Mock()
-            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
 
             identity_client = IdentityClient(region)
 
@@ -595,9 +587,8 @@ class TestIdentityClient:
 
         with patch("boto3.client") as mock_boto_client:
             mock_cp_client = Mock()
-            mock_identity_client = Mock()
             mock_dp_client = Mock()
-            mock_boto_client.side_effect = [mock_cp_client, mock_identity_client, mock_dp_client]
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
 
             identity_client = IdentityClient(region)
 
