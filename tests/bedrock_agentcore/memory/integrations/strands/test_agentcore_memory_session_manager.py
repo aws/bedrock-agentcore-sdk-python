@@ -1116,3 +1116,406 @@ class TestAgentCoreMemorySessionManager:
         mock_memory_client.list_events.assert_called_once()
         call_kwargs = mock_memory_client.list_events.call_args[1]
         assert call_kwargs["max_results"] == 550  # limit + offset
+
+
+class TestOptimizedStorage:
+    """Tests for optimized storage functionality."""
+
+    @pytest.fixture
+    def agentcore_config(self):
+        """Create a test AgentCore Memory configuration."""
+        return AgentCoreMemoryConfig(
+            memory_id="test-memory-123", session_id="test-session-456", actor_id="test-actor-789"
+        )
+
+    @pytest.fixture
+    def mock_memory_client(self):
+        """Create a mock MemoryClient."""
+        client = Mock()
+        client.create_event.return_value = {"eventId": "event_123456"}
+        client.list_events.return_value = []
+        client.retrieve_memories.return_value = []
+        client.gmcp_client = Mock()
+        client.gmdp_client = Mock()
+        client.gmdp_client.create_event.return_value = {"event": {"eventId": "event_123456"}}
+        return client
+
+    @pytest.fixture
+    def session_manager(self, agentcore_config, mock_memory_client):
+        """Create AgentCoreMemorySessionManager."""
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            return_value=mock_memory_client,
+        ):
+            with patch("boto3.Session") as mock_boto_session:
+                mock_session = Mock()
+                mock_session.region_name = "us-west-2"
+                mock_session.client.return_value = Mock()
+                mock_boto_session.return_value = mock_session
+
+                with patch(
+                    "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
+                ):
+                    manager = AgentCoreMemorySessionManager(agentcore_config)
+                    manager.session_id = agentcore_config.session_id
+                    manager.session = Session(session_id=agentcore_config.session_id, session_type=SessionType.AGENT)
+                    manager.memory_client = mock_memory_client
+                    manager._latest_agent_message = {}
+                    return manager
+
+    def test_append_message_batches_with_state(self, session_manager, mock_memory_client):
+        """Test append_message saves message and agent state in single API call."""
+        import json
+
+        mock_agent = Mock()
+        mock_agent.agent_id = "test-agent"
+
+        mock_session_agent = SessionAgent(
+            agent_id="test-agent", state={"key": "value"}, conversation_manager_state={"cm_key": "cm_value"}
+        )
+
+        message = {"role": "user", "content": [{"text": "Hello"}]}
+
+        with patch.object(SessionAgent, "from_agent", return_value=mock_session_agent):
+            session_manager.append_message(message, mock_agent)
+
+        mock_memory_client.gmdp_client.create_event.assert_called_once()
+        call_kwargs = mock_memory_client.gmdp_client.create_event.call_args[1]
+
+        # Should have 2 payloads: message + agent_state
+        assert len(call_kwargs["payload"]) == 2
+
+        # Verify payload formats
+        msg_payload = json.loads(call_kwargs["payload"][0]["blob"])
+        assert msg_payload["_type"] == "message"
+
+        agent_payload = json.loads(call_kwargs["payload"][1]["blob"])
+        assert agent_payload["_type"] == "agent_state"
+
+    def test_sync_agent_skips_unchanged_state(self, session_manager, mock_memory_client):
+        """Test sync_agent skips API call when state is unchanged."""
+        mock_agent = Mock()
+        mock_agent.agent_id = "test-agent"
+
+        mock_session_agent = SessionAgent(agent_id="test-agent", state={"key": "value"}, conversation_manager_state={})
+
+        with patch.object(SessionAgent, "from_agent", return_value=mock_session_agent):
+            # Set initial state hash
+            session_manager._last_synced_state_hash = session_manager._compute_state_hash(mock_agent)
+
+            # Reset mock to track new calls
+            mock_memory_client.gmdp_client.create_event.reset_mock()
+
+            # Sync should skip since state unchanged
+            session_manager.sync_agent(mock_agent)
+
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+
+    def test_compute_state_hash_excludes_timestamps(self, session_manager, mock_memory_client):
+        """Test that _compute_state_hash excludes timestamps from hash computation."""
+        mock_agent = Mock()
+        mock_agent.agent_id = "test-agent"
+
+        # Create two SessionAgents with different timestamps but same state
+        session_agent_1 = SessionAgent(
+            agent_id="test-agent",
+            state={"key": "value"},
+            conversation_manager_state={"cm_key": "cm_value"},
+            created_at="2023-01-01T00:00:00Z",
+            updated_at="2023-01-01T00:00:00Z",
+        )
+        session_agent_2 = SessionAgent(
+            agent_id="test-agent",
+            state={"key": "value"},
+            conversation_manager_state={"cm_key": "cm_value"},
+            created_at="2023-06-15T12:00:00Z",  # Different timestamp
+            updated_at="2023-12-31T23:59:59Z",  # Different timestamp
+        )
+
+        with patch.object(SessionAgent, "from_agent", return_value=session_agent_1):
+            hash1 = session_manager._compute_state_hash(mock_agent)
+
+        with patch.object(SessionAgent, "from_agent", return_value=session_agent_2):
+            hash2 = session_manager._compute_state_hash(mock_agent)
+
+        # Hashes should be equal since timestamps are excluded
+        assert hash1 == hash2, "Hash should be same when only timestamps differ"
+
+    def test_compute_state_hash_changes_with_state(self, session_manager, mock_memory_client):
+        """Test that _compute_state_hash changes when actual state changes."""
+        mock_agent = Mock()
+        mock_agent.agent_id = "test-agent"
+
+        session_agent_1 = SessionAgent(
+            agent_id="test-agent", state={"key": "value1"}, conversation_manager_state={"cm_key": "cm_value"}
+        )
+        session_agent_2 = SessionAgent(
+            agent_id="test-agent",
+            state={"key": "value2"},  # Different state
+            conversation_manager_state={"cm_key": "cm_value"},
+        )
+
+        with patch.object(SessionAgent, "from_agent", return_value=session_agent_1):
+            hash1 = session_manager._compute_state_hash(mock_agent)
+
+        with patch.object(SessionAgent, "from_agent", return_value=session_agent_2):
+            hash2 = session_manager._compute_state_hash(mock_agent)
+
+        # Hashes should be different since state changed
+        assert hash1 != hash2, "Hash should differ when state changes"
+
+    def test_sync_agent_saves_changed_state(self, session_manager, mock_memory_client):
+        """Test sync_agent saves when state has changed."""
+        mock_agent = Mock()
+        mock_agent.agent_id = "test-agent"
+
+        mock_session_agent = SessionAgent(
+            agent_id="test-agent", state={"key": "new_value"}, conversation_manager_state={}
+        )
+
+        # Set different initial hash
+        session_manager._last_synced_state_hash = hash("different")
+
+        with patch.object(SessionAgent, "from_agent", return_value=mock_session_agent):
+            session_manager.sync_agent(mock_agent)
+
+        mock_memory_client.gmdp_client.create_event.assert_called_once()
+
+    def test_read_agent_new_format(self, session_manager, mock_memory_client):
+        """Test read_agent correctly parses new format with _type marker."""
+        import json
+
+        agent_state_payload = {
+            "_type": "agent_state",
+            "_agent_id": "test-agent",
+            "agent_id": "test-agent",
+            "state": {"key": "value"},
+            "conversation_manager_state": {"cm_key": "cm_value"},
+        }
+
+        mock_memory_client.list_events.return_value = [
+            {"eventId": "event-1", "payload": [{"blob": json.dumps(agent_state_payload)}]}
+        ]
+
+        result = session_manager.read_agent("test-session-456", "test-agent")
+
+        assert result is not None
+        assert result.agent_id == "test-agent"
+        assert result.state == {"key": "value"}
+
+    def test_read_agent_skips_message_payloads(self, session_manager, mock_memory_client):
+        """Test read_agent skips message payloads when looking for agent state."""
+        import json
+
+        from strands.types.session import SessionMessage
+
+        msg = SessionMessage(
+            message_id=1, message={"role": "user", "content": [{"text": "Hello"}]}, created_at="2023-01-01T00:00:00Z"
+        )
+        message_payload = {"_type": "message", "data": [json.dumps(msg.to_dict()), "user"]}
+        agent_state_payload = {
+            "_type": "agent_state",
+            "_agent_id": "test-agent",
+            "agent_id": "test-agent",
+            "state": {},
+            "conversation_manager_state": {},
+        }
+
+        mock_memory_client.list_events.return_value = [
+            {
+                "eventId": "event-1",
+                "payload": [{"blob": json.dumps(message_payload)}, {"blob": json.dumps(agent_state_payload)}],
+            }
+        ]
+
+        result = session_manager.read_agent("test-session-456", "test-agent")
+
+        assert result is not None
+        assert result.agent_id == "test-agent"
+
+    def test_read_agent_falls_back_to_legacy(self, session_manager, mock_memory_client):
+        """Test read_agent falls back to legacy format when new format not found.
+
+        This tests the v1→v2 migration scenario where existing data was stored
+        with actor_id='agent_{id}' (v1) but new code queries with unified actor_id.
+        """
+        import json
+
+        legacy_agent_data = {"agent_id": "test-agent", "state": {"legacy": "data"}, "conversation_manager_state": {}}
+
+        # First call (new format) returns empty, second call (legacy) returns data
+        mock_memory_client.list_events.side_effect = [
+            [],  # New format query with unified actor_id
+            [{"eventId": "event-1", "payload": [{"blob": json.dumps(legacy_agent_data)}]}],  # Legacy
+        ]
+
+        result = session_manager.read_agent("test-session-456", "test-agent")
+
+        assert result is not None
+        assert result.state == {"legacy": "data"}
+        assert mock_memory_client.list_events.call_count == 2
+
+        # Verify correct actor_ids were used in each call
+        calls = mock_memory_client.list_events.call_args_list
+        # First call: unified actor_id (config.actor_id)
+        assert calls[0][1]["actor_id"] == "test-actor-789"
+        # Second call: legacy actor_id (agent_{agent_id})
+        assert calls[1][1]["actor_id"] == "agent_test-agent"
+
+    def test_create_agent_uses_new_format(self, session_manager, mock_memory_client):
+        """Test create_agent saves in new format with _type marker."""
+        import json
+
+        session_agent = SessionAgent(agent_id="test-agent", state={"key": "value"}, conversation_manager_state={})
+
+        session_manager.create_agent("test-session-456", session_agent)
+
+        mock_memory_client.gmdp_client.create_event.assert_called_once()
+        call_kwargs = mock_memory_client.gmdp_client.create_event.call_args[1]
+
+        payload_data = json.loads(call_kwargs["payload"][0]["blob"])
+        assert payload_data["_type"] == "agent_state"
+        assert payload_data["_agent_id"] == "test-agent"
+
+    def test_list_messages_parses_new_format(self, session_manager, mock_memory_client):
+        """Test list_messages correctly parses new format messages."""
+        import json
+
+        from strands.types.session import SessionMessage
+
+        msg = SessionMessage(
+            message_id=1, message={"role": "user", "content": [{"text": "Hello"}]}, created_at="2023-01-01T00:00:00Z"
+        )
+        message_payload = {"_type": "message", "data": [json.dumps(msg.to_dict()), "user"]}
+
+        mock_memory_client.list_events.return_value = [
+            {"eventId": "event-1", "payload": [{"blob": json.dumps(message_payload)}]}
+        ]
+
+        result = session_manager.list_messages("test-session-456", "test-agent")
+
+        assert len(result) == 1
+        assert result[0].message["content"][0]["text"] == "Hello"
+
+    def test_read_agent_returns_latest_state_multi_turn(self, session_manager, mock_memory_client):
+        """Test read_agent returns the latest agent state when multiple states exist (multi-turn)."""
+        import json
+
+        # Simulate multiple agent states from different turns (oldest first, as API returns)
+        old_state = {
+            "_type": "agent_state",
+            "_agent_id": "test-agent",
+            "agent_id": "test-agent",
+            "state": {"turn": 1},
+            "conversation_manager_state": {"removed_message_count": 0},
+        }
+        latest_state = {
+            "_type": "agent_state",
+            "_agent_id": "test-agent",
+            "agent_id": "test-agent",
+            "state": {"turn": 2},
+            "conversation_manager_state": {"removed_message_count": 0},
+        }
+
+        # Events returned oldest-first by API
+        mock_memory_client.list_events.return_value = [
+            {"eventId": "event-1", "payload": [{"blob": json.dumps(old_state)}]},
+            {"eventId": "event-2", "payload": [{"blob": json.dumps(latest_state)}]},
+        ]
+
+        result = session_manager.read_agent("test-session-456", "test-agent")
+
+        assert result is not None
+        assert result.state == {"turn": 2}, "Should return latest state, not oldest"
+
+    def test_read_agent_multi_agent_returns_latest_per_agent(self, session_manager, mock_memory_client):
+        """Test read_agent returns latest state for each agent in multi-agent multi-turn scenario."""
+        import json
+
+        # Interleaved states: agent-1 turn 1, agent-2 turn 1, agent-1 turn 2 (oldest first)
+        events = [
+            {
+                "eventId": "event-1",
+                "payload": [
+                    {
+                        "blob": json.dumps(
+                            {
+                                "_type": "agent_state",
+                                "_agent_id": "agent-1",
+                                "agent_id": "agent-1",
+                                "state": {"turn": 1},
+                                "conversation_manager_state": {},
+                            }
+                        )
+                    }
+                ],
+            },
+            {
+                "eventId": "event-2",
+                "payload": [
+                    {
+                        "blob": json.dumps(
+                            {
+                                "_type": "agent_state",
+                                "_agent_id": "agent-2",
+                                "agent_id": "agent-2",
+                                "state": {"turn": 1},
+                                "conversation_manager_state": {},
+                            }
+                        )
+                    }
+                ],
+            },
+            {
+                "eventId": "event-3",
+                "payload": [
+                    {
+                        "blob": json.dumps(
+                            {
+                                "_type": "agent_state",
+                                "_agent_id": "agent-1",
+                                "agent_id": "agent-1",
+                                "state": {"turn": 2},
+                                "conversation_manager_state": {},
+                            }
+                        )
+                    }
+                ],
+            },
+        ]
+
+        mock_memory_client.list_events.return_value = events
+
+        # agent-1 should return turn 2 (latest), not turn 1
+        result = session_manager.read_agent("test-session-456", "agent-1")
+        assert result is not None
+        assert result.state == {"turn": 2}, "Should return agent-1's latest state"
+
+        # agent-2 should return turn 1 (only state)
+        result = session_manager.read_agent("test-session-456", "agent-2")
+        assert result is not None
+        assert result.state == {"turn": 1}
+
+    def test_read_agent_multi_agent_not_found(self, session_manager, mock_memory_client):
+        """Test read_agent returns None when agent_id not found in multi-agent scenario."""
+        import json
+
+        agent1_state = {
+            "_type": "agent_state",
+            "_agent_id": "agent-1",
+            "agent_id": "agent-1",
+            "state": {},
+            "conversation_manager_state": {},
+        }
+
+        mock_memory_client.list_events.return_value = [
+            {"eventId": "event-1", "payload": [{"blob": json.dumps(agent1_state)}]},
+        ]
+
+        # agent-3 doesn't exist, and no legacy fallback
+        mock_memory_client.list_events.side_effect = [
+            [{"eventId": "event-1", "payload": [{"blob": json.dumps(agent1_state)}]}],
+            [],  # Legacy fallback returns empty
+        ]
+        result = session_manager.read_agent("test-session-456", "agent-3")
+        assert result is None
