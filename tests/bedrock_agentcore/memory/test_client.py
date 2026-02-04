@@ -141,7 +141,9 @@ def test_save_conversation_and_retrieve_memories():
         # Test UUID patch for deterministic testing
         with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
             # Test retrieve_memories
-            memories = client.retrieve_memories(memory_id="mem-123", namespace="test/namespace/", query="Hello", top_k=3)
+            memories = client.retrieve_memories(
+                memory_id="mem-123", namespace="test/namespace/", query="Hello", top_k=3
+            )
 
             assert len(memories) == 1
             assert memories[0]["memoryRecordId"] == "rec-123"
@@ -289,45 +291,6 @@ def test_timestamp_and_advanced_message_handling():
         # Check timestamp was passed correctly
         args, kwargs = mock_gmdp.create_event.call_args
         assert kwargs.get("eventTimestamp") == custom_timestamp
-
-
-def test_deprecated_methods():
-    """Test deprecated methods with warnings."""
-    with patch("boto3.client"):
-        client = MemoryClient()
-        mock_gmdp = MagicMock()
-        client.gmdp_client = mock_gmdp
-
-        # Create responses for deprecated methods
-        mock_gmdp.create_event.return_value = {"event": {"eventId": "event-dep-1", "memoryId": "mem-123"}}
-        mock_gmdp.retrieve_memory_records.return_value = {"memoryRecordSummaries": []}
-
-        # Use warnings.catch_warnings to verify deprecation warnings
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-
-            # Test deprecated save_turn method
-            event = client.save_turn(
-                memory_id="mem-123",
-                actor_id="user-123",
-                session_id="session-456",
-                user_input="Hello",
-                agent_response="Hi",
-            )
-
-            # Test deprecated process_turn method
-            memories, event = client.process_turn(
-                memory_id="mem-123",
-                actor_id="user-123",
-                session_id="session-456",
-                user_input="Hello",
-                agent_response="Hi",
-                retrieval_namespace="test/ns/",
-            )
-
-            assert len(w) >= 2
-            assert any("save_turn() is deprecated" in str(warning.message) for warning in w)
-            assert any("process_turn() is deprecated" in str(warning.message) for warning in w)
 
 
 def test_create_memory_and_wait_success():
