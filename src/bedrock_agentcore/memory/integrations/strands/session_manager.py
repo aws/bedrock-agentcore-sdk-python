@@ -96,53 +96,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             cls._last_timestamp = new_timestamp
             return new_timestamp
 
-    def _retry_with_backoff(
-        self,
-        func: Callable[..., Any],
-        *args: Any,
-        max_retries: int = 3,
-        base_delay: float = 0.1,
-        **kwargs: Any,
-    ) -> Any:
-        """Execute a function with exponential backoff retry logic.
-
-        Handles eventual consistency by retrying operations that return empty results
-        or raise throttling exceptions.
-
-        Args:
-            func: The function to execute.
-            *args: Positional arguments to pass to the function.
-            max_retries: Maximum number of retry attempts (default: 3).
-            base_delay: Base delay in seconds between retries (default: 0.1).
-            **kwargs: Keyword arguments to pass to the function.
-
-        Returns:
-            The result of the function call.
-
-        Raises:
-            The last exception if all retries are exhausted.
-        """
-        last_exception = None
-        for attempt in range(max_retries):
-            try:
-                result = func(*args, **kwargs)
-                # For list operations, retry if empty (eventual consistency)
-                if isinstance(result, list) and len(result) == 0 and attempt < max_retries - 1:
-                    time.sleep(base_delay * (attempt + 1))
-                    continue
-                return result
-            except Exception as e:
-                last_exception = e
-                error_code = getattr(e, "response", {}).get("Error", {}).get("Code", "")
-                if error_code == "ThrottlingException" and attempt < max_retries - 1:
-                    time.sleep(base_delay * (attempt + 1))
-                    continue
-                raise
-        # Return empty list if we exhausted retries on empty results
-        if last_exception is None:
-            return []
-        raise last_exception
-
     def __init__(
         self,
         agentcore_memory_config: AgentCoreMemoryConfig,
@@ -165,10 +118,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
         self.has_existing_agent = False
-        # Track created agents to handle eventual consistency (agent may not be immediately queryable)
-        self._created_agent_ids: set[str] = set()
 
-        # Override the clients if custom boto session or config is provided
         # Add strands-agents to the request user agent
         if boto_client_config:
             existing_user_agent = getattr(boto_client_config, "user_agent_extra", None)
@@ -327,8 +277,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 AGENT_ID_KEY: {"stringValue": session_agent.agent_id},
             },
         )
-        # Track created agent for eventual consistency handling
-        self._created_agent_ids.add(session_agent.agent_id)
         logger.info(
             "Created agent: %s in session: %s with event %s",
             session_agent.agent_id,
@@ -366,9 +314,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 ),
             ]
 
-            # Use retry with backoff to handle eventual consistency
-            events = self._retry_with_backoff(
-                self.memory_client.list_events,
+            events = self.memory_client.list_events(
                 memory_id=self.config.memory_id,
                 actor_id=self.config.actor_id,
                 session_id=session_id,
@@ -422,11 +368,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         agent_id = session_agent.agent_id
         previous_agent = self.read_agent(session_id=session_id, agent_id=agent_id)
         if previous_agent is None:
-            # Handle eventual consistency: if we just created this agent but can't read it yet
-            if agent_id not in self._created_agent_ids:
-                raise SessionException(f"Agent {agent_id} in session {session_id} does not exist")
-            # Agent was created but not yet queryable - proceed without updating created_at
-            logger.debug("Agent %s not yet queryable due to eventual consistency, proceeding with update", agent_id)
+            raise SessionException(f"Agent {agent_id} in session {session_id} does not exist")
         else:
             session_agent.created_at = previous_agent.created_at
 
