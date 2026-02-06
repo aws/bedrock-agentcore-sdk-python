@@ -680,48 +680,79 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         This is automatically called when the buffer reaches batch_size, but should
         also be called explicitly when the session is complete (via close() or context manager).
 
+        Messages are batched by session_id - all conversational messages for the same
+        session are combined into a single create_event() call to reduce API calls.
+        Blob messages (>9KB) are sent individually as they require a different API path.
+
         Returns:
             list[dict[str, Any]]: List of created event responses from AgentCore Memory.
 
         Raises:
-            SessionException: If any message creation fails.
+            SessionException: If any message creation fails. On failure, all messages
+                remain in the buffer to prevent data loss.
         """
         with self._buffer_lock:
             messages_to_send = list(self._message_buffer)
-            self._message_buffer.clear()
 
         if not messages_to_send:
             return []
 
-        results = []
+        # Group conversational messages by session_id, preserve order
+        # Structure: {session_id: {"messages": [...], "timestamp": latest_timestamp}}
+        session_groups: dict[str, dict[str, Any]] = {}
+        blob_messages: list[tuple[str, list[tuple[str, str]], datetime]] = []
+
         for session_id, messages, is_blob, monotonic_timestamp in messages_to_send:
-            try:
-                if not is_blob:
-                    event = self.memory_client.create_event(
-                        memory_id=self.config.memory_id,
-                        actor_id=self.config.actor_id,
-                        session_id=session_id,
-                        messages=messages,
-                        event_timestamp=monotonic_timestamp,
-                    )
-                else:
-                    event = self.memory_client.gmdp_client.create_event(
-                        memoryId=self.config.memory_id,
-                        actorId=self.config.actor_id,
-                        sessionId=session_id,
-                        payload=[
-                            {"blob": json.dumps(messages[0])},
-                        ],
-                        eventTimestamp=monotonic_timestamp,
-                    )
+            if is_blob:
+                # Blobs cannot be combined - collect them separately
+                blob_messages.append((session_id, messages, monotonic_timestamp))
+            else:
+                # Group conversational messages by session_id
+                if session_id not in session_groups:
+                    session_groups[session_id] = {"messages": [], "timestamp": monotonic_timestamp}
+                # Extend messages list to preserve order (earlier messages first)
+                session_groups[session_id]["messages"].extend(messages)
+                # Use the latest timestamp for the combined event
+                if monotonic_timestamp > session_groups[session_id]["timestamp"]:
+                    session_groups[session_id]["timestamp"] = monotonic_timestamp
 
+        results = []
+        try:
+            # Send one create_event per session_id with combined messages
+            for session_id, group in session_groups.items():
+                event = self.memory_client.create_event(
+                    memory_id=self.config.memory_id,
+                    actor_id=self.config.actor_id,
+                    session_id=session_id,
+                    messages=group["messages"],
+                    event_timestamp=group["timestamp"],
+                )
                 results.append(event)
-                logger.debug("Flushed event: %s", event.get("eventId"))
-            except Exception as e:
-                logger.error("Failed to flush message to AgentCore Memory: %s", e)
-                raise SessionException(f"Failed to flush message: {e}") from e
+                logger.debug("Flushed batched event for session %s: %s", session_id, event.get("eventId"))
 
-        logger.info("Flushed %d messages to AgentCore Memory", len(results))
+            # Send blob messages individually (they use a different API path)
+            for session_id, messages, monotonic_timestamp in blob_messages:
+                event = self.memory_client.gmdp_client.create_event(
+                    memoryId=self.config.memory_id,
+                    actorId=self.config.actor_id,
+                    sessionId=session_id,
+                    payload=[
+                        {"blob": json.dumps(messages[0])},
+                    ],
+                    eventTimestamp=monotonic_timestamp,
+                )
+                results.append(event)
+                logger.debug("Flushed blob event for session %s: %s", session_id, event.get("eventId"))
+
+            # Clear buffer only after ALL messages succeed
+            with self._buffer_lock:
+                self._message_buffer.clear()
+
+        except Exception as e:
+            logger.error("Failed to flush messages to AgentCore Memory for session: %s", e)
+            raise SessionException(f"Failed to flush messages: {e}") from e
+
+        logger.info("Flushed %d events to AgentCore Memory", len(results))
         return results
 
     def pending_message_count(self) -> int:
