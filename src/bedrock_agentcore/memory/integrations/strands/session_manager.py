@@ -385,7 +385,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         """Create a new message in AgentCore Memory.
 
         If batch_size > 1, the message is buffered and sent when the buffer reaches batch_size.
-        Use flush_messages() or close() to send any remaining buffered messages.
+        Use _flush_messages() or close() to send any remaining buffered messages.
 
         Args:
             session_id (str): The session ID to create the message in.
@@ -437,7 +437,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
             # Flush outside the lock to prevent deadlock
             if should_flush:
-                self.flush_messages()
+                self._flush_messages()
 
             return {}  # No eventId yet
 
@@ -673,7 +673,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
     # region Batching support
 
-    def flush_messages(self) -> list[dict[str, Any]]:
+    def _flush_messages(self) -> list[dict[str, Any]]:
         """Flush all buffered messages to AgentCore Memory.
 
         Call this method to send any remaining buffered messages when batch_size > 1.
@@ -771,7 +771,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         messages are sent to AgentCore Memory. Alternatively, use the context
         manager protocol (with statement) for automatic cleanup.
         """
-        self.flush_messages()
+        self._flush_messages()
 
     def __enter__(self) -> "AgentCoreMemorySessionManager":
         """Enter the context manager.
@@ -789,6 +789,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             exc_val: Exception value if an exception occurred.
             exc_tb: Exception traceback if an exception occurred.
         """
-        self.flush_messages()
+        self._flush_messages()
 
     # endregion Batching support

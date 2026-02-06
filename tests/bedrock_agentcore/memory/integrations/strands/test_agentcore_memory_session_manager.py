@@ -1310,7 +1310,7 @@ class TestBatchingBufferManagement:
 
 
 class TestBatchingFlush:
-    """Test flush_messages behavior."""
+    """Test _flush_messages behavior."""
 
     @pytest.fixture
     def batching_config(self):
@@ -1342,13 +1342,13 @@ class TestBatchingFlush:
                     manager.session = Session(session_id=batching_config.session_id, session_type=SessionType.AGENT)
                     return manager
 
-    def test_flush_messages_empty_buffer(self, batching_session_manager):
-        """Test flush_messages with empty buffer returns empty list."""
-        results = batching_session_manager.flush_messages()
+    def test__flush_messages_empty_buffer(self, batching_session_manager):
+        """Test _flush_messages with empty buffer returns empty list."""
+        results = batching_session_manager._flush_messages()
         assert results == []
 
-    def test_flush_messages_sends_all_buffered(self, batching_session_manager, mock_memory_client):
-        """Test flush_messages sends all buffered messages in a single batched call."""
+    def test__flush_messages_sends_all_buffered(self, batching_session_manager, mock_memory_client):
+        """Test _flush_messages sends all buffered messages in a single batched call."""
         mock_memory_client.create_event.return_value = {"eventId": "event_123"}
 
         # Add 3 messages (below batch_size of 10)
@@ -1363,15 +1363,15 @@ class TestBatchingFlush:
         assert batching_session_manager.pending_message_count() == 3
 
         # Flush manually
-        results = batching_session_manager.flush_messages()
+        results = batching_session_manager._flush_messages()
 
         # One batched API call for all messages in the same session
         assert len(results) == 1
         assert batching_session_manager.pending_message_count() == 0
         assert mock_memory_client.create_event.call_count == 1
 
-    def test_flush_messages_maintains_order(self, batching_session_manager, mock_memory_client):
-        """Test flush_messages maintains message order within batched payload."""
+    def test__flush_messages_maintains_order(self, batching_session_manager, mock_memory_client):
+        """Test _flush_messages maintains message order within batched payload."""
         sent_payloads = []
 
         def track_create_event(**kwargs):
@@ -1389,7 +1389,7 @@ class TestBatchingFlush:
             )
             batching_session_manager.create_message("test-session-456", "test-agent", message)
 
-        batching_session_manager.flush_messages()
+        batching_session_manager._flush_messages()
 
         # Should be one batched call with messages in order
         assert len(sent_payloads) == 1
@@ -1398,8 +1398,8 @@ class TestBatchingFlush:
         for i, msg in enumerate(combined_messages):
             assert f"Message_{i}" in msg[0]
 
-    def test_flush_messages_clears_buffer(self, batching_session_manager, mock_memory_client):
-        """Test flush_messages clears the buffer after sending."""
+    def test__flush_messages_clears_buffer(self, batching_session_manager, mock_memory_client):
+        """Test _flush_messages clears the buffer after sending."""
         mock_memory_client.create_event.return_value = {"eventId": "event_123"}
 
         message = SessionMessage(
@@ -1410,15 +1410,15 @@ class TestBatchingFlush:
         batching_session_manager.create_message("test-session-456", "test-agent", message)
 
         # First flush
-        batching_session_manager.flush_messages()
+        batching_session_manager._flush_messages()
         assert batching_session_manager.pending_message_count() == 0
 
         # Second flush should be no-op
-        results = batching_session_manager.flush_messages()
+        results = batching_session_manager._flush_messages()
         assert results == []
 
-    def test_flush_messages_exception_handling(self, batching_session_manager, mock_memory_client):
-        """Test flush_messages raises SessionException on failure."""
+    def test__flush_messages_exception_handling(self, batching_session_manager, mock_memory_client):
+        """Test _flush_messages raises SessionException on failure."""
         mock_memory_client.create_event.side_effect = Exception("API Error")
 
         message = SessionMessage(
@@ -1429,7 +1429,7 @@ class TestBatchingFlush:
         batching_session_manager.create_message("test-session-456", "test-agent", message)
 
         with pytest.raises(SessionException, match="Failed to flush messages"):
-            batching_session_manager.flush_messages()
+            batching_session_manager._flush_messages()
 
     def test_partial_flush_failure_preserves_all_messages(self, batching_session_manager, mock_memory_client):
         """Test that on flush failure, all messages remain in buffer to prevent data loss."""
@@ -1448,7 +1448,7 @@ class TestBatchingFlush:
 
         # Flush should fail
         with pytest.raises(SessionException):
-            batching_session_manager.flush_messages()
+            batching_session_manager._flush_messages()
 
         # All messages should still be in buffer (not cleared on failure)
         assert batching_session_manager.pending_message_count() == 3
@@ -1457,7 +1457,7 @@ class TestBatchingFlush:
         mock_memory_client.create_event.side_effect = None
         mock_memory_client.create_event.return_value = {"eventId": "event_123"}
 
-        results = batching_session_manager.flush_messages()
+        results = batching_session_manager._flush_messages()
         assert len(results) == 1  # One batched call for all messages
         assert batching_session_manager.pending_message_count() == 0
 
@@ -1480,7 +1480,7 @@ class TestBatchingFlush:
             )
             batching_session_manager.create_message("test-session-456", "test-agent", message)
 
-        batching_session_manager.flush_messages()
+        batching_session_manager._flush_messages()
 
         # Should be ONE API call with all 5 messages combined
         assert mock_memory_client.create_event.call_count == 1
@@ -1522,7 +1522,7 @@ class TestBatchingFlush:
             ("session-A", [("SessionA_Message_2", "user")], False, base_time),  # Non-consecutive
         ]
 
-        batching_session_manager.flush_messages()
+        batching_session_manager._flush_messages()
 
         # Should be TWO API calls - one per session
         assert mock_memory_client.create_event.call_count == 2
@@ -1561,7 +1561,7 @@ class TestBatchingFlush:
             )
             batching_session_manager.create_message("test-session-456", "test-agent", message)
 
-        batching_session_manager.flush_messages()
+        batching_session_manager._flush_messages()
 
         # The combined event should use the latest timestamp (12:10:00)
         assert len(captured_timestamps) == 1
@@ -1600,7 +1600,7 @@ class TestBatchingFlush:
 
         # Flush should fail
         with pytest.raises(SessionException, match="Failed to flush messages"):
-            batching_session_manager.flush_messages()
+            batching_session_manager._flush_messages()
 
         # ALL messages should still be in buffer (even session A's which "succeeded")
         # This is because buffer is only cleared after ALL succeed
@@ -1627,7 +1627,7 @@ class TestBatchingFlush:
             )
             batching_session_manager.create_message("test-session-456", "test-agent", message)
 
-        batching_session_manager.flush_messages()
+        batching_session_manager._flush_messages()
 
         # Each blob should be sent individually (3 separate API calls)
         assert mock_memory_client.gmdp_client.create_event.call_count == 3
@@ -1675,7 +1675,7 @@ class TestBatchingFlush:
             ("session-B", [("SessionB_conv_0", "user")], False, base_time),
         ]
 
-        batching_session_manager.flush_messages()
+        batching_session_manager._flush_messages()
 
         # Should have:
         # - 2 conversational API calls (one per session)
@@ -1948,7 +1948,7 @@ class TestBatchingBlobMessages:
         batching_session_manager.create_message("test-session-456", "test-agent", message)
 
         # Flush and verify blob path was used
-        batching_session_manager.flush_messages()
+        batching_session_manager._flush_messages()
 
         mock_memory_client.gmdp_client.create_event.assert_called_once()
         call_kwargs = mock_memory_client.gmdp_client.create_event.call_args.kwargs
@@ -1978,7 +1978,7 @@ class TestBatchingBlobMessages:
         batching_session_manager.create_message("test-session-456", "test-agent", large_message)
 
         # Flush
-        batching_session_manager.flush_messages()
+        batching_session_manager._flush_messages()
 
         # Verify both paths were used
         assert mock_memory_client.create_event.call_count == 1  # Conversational
