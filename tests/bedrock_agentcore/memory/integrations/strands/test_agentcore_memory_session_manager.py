@@ -48,25 +48,45 @@ def mock_memory_client():
     return client
 
 
+def _create_session_manager(config, mock_memory_client):
+    """Helper to create a session manager with mocked dependencies."""
+    with patch(
+        "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient", return_value=mock_memory_client
+    ), patch("boto3.Session") as mock_boto_session, patch(
+        "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
+    ):
+        mock_session = Mock()
+        mock_session.region_name = "us-west-2"
+        mock_session.client.return_value = Mock()
+        mock_boto_session.return_value = mock_session
+
+        manager = AgentCoreMemorySessionManager(config)
+        manager.session_id = config.session_id
+        manager.session = Session(session_id=config.session_id, session_type=SessionType.AGENT)
+        return manager
+
+
 @pytest.fixture
 def session_manager(agentcore_config, mock_memory_client):
     """Create an AgentCoreMemorySessionManager with mocked dependencies."""
-    with patch(
-        "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient", return_value=mock_memory_client
-    ):
-        with patch("boto3.Session") as mock_boto_session:
-            mock_session = Mock()
-            mock_session.region_name = "us-west-2"
-            mock_session.client.return_value = Mock()
-            mock_boto_session.return_value = mock_session
+    return _create_session_manager(agentcore_config, mock_memory_client)
 
-            with patch(
-                "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
-            ):
-                manager = AgentCoreMemorySessionManager(agentcore_config)
-                manager.session_id = agentcore_config.session_id
-                manager.session = Session(session_id=agentcore_config.session_id, session_type=SessionType.AGENT)
-                return manager
+
+@pytest.fixture
+def batching_config():
+    """Create a config with batch_size > 1."""
+    return AgentCoreMemoryConfig(
+        memory_id="test-memory-123",
+        session_id="test-session-456",
+        actor_id="test-actor-789",
+        batch_size=10,
+    )
+
+
+@pytest.fixture
+def batching_session_manager(batching_config, mock_memory_client):
+    """Create a session manager with batching enabled."""
+    return _create_session_manager(batching_config, mock_memory_client)
 
 
 @pytest.fixture
@@ -1231,7 +1251,7 @@ class TestBatchingBufferManagement:
 
     @pytest.fixture
     def batching_config(self):
-        """Create a config with batch_size > 1."""
+        """Override with batch_size=5 for buffer management tests."""
         return AgentCoreMemoryConfig(
             memory_id="test-memory-123",
             session_id="test-session-456",
@@ -1241,23 +1261,8 @@ class TestBatchingBufferManagement:
 
     @pytest.fixture
     def batching_session_manager(self, batching_config, mock_memory_client):
-        """Create a session manager with batching enabled."""
-        with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient", return_value=mock_memory_client
-        ):
-            with patch("boto3.Session") as mock_boto_session:
-                mock_session = Mock()
-                mock_session.region_name = "us-west-2"
-                mock_session.client.return_value = Mock()
-                mock_boto_session.return_value = mock_session
-
-                with patch(
-                    "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
-                ):
-                    manager = AgentCoreMemorySessionManager(batching_config)
-                    manager.session_id = batching_config.session_id
-                    manager.session = Session(session_id=batching_config.session_id, session_type=SessionType.AGENT)
-                    return manager
+        """Create a session manager with batch_size=5."""
+        return _create_session_manager(batching_config, mock_memory_client)
 
     def test_pending_message_count_empty_buffer(self, batching_session_manager):
         """Test pending_message_count returns 0 for empty buffer."""
@@ -1311,36 +1316,6 @@ class TestBatchingBufferManagement:
 
 class TestBatchingFlush:
     """Test _flush_messages behavior."""
-
-    @pytest.fixture
-    def batching_config(self):
-        """Create a config with batch_size > 1."""
-        return AgentCoreMemoryConfig(
-            memory_id="test-memory-123",
-            session_id="test-session-456",
-            actor_id="test-actor-789",
-            batch_size=10,
-        )
-
-    @pytest.fixture
-    def batching_session_manager(self, batching_config, mock_memory_client):
-        """Create a session manager with batching enabled."""
-        with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient", return_value=mock_memory_client
-        ):
-            with patch("boto3.Session") as mock_boto_session:
-                mock_session = Mock()
-                mock_session.region_name = "us-west-2"
-                mock_session.client.return_value = Mock()
-                mock_boto_session.return_value = mock_session
-
-                with patch(
-                    "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
-                ):
-                    manager = AgentCoreMemorySessionManager(batching_config)
-                    manager.session_id = batching_config.session_id
-                    manager.session = Session(session_id=batching_config.session_id, session_type=SessionType.AGENT)
-                    return manager
 
     def test__flush_messages_empty_buffer(self, batching_session_manager):
         """Test _flush_messages with empty buffer returns empty list."""
@@ -1737,139 +1712,53 @@ class TestBatchingBackwardsCompatibility:
 class TestBatchingContextManager:
     """Test context manager (__enter__/__exit__) functionality."""
 
-    @pytest.fixture
-    def batching_config(self):
-        """Create a config with batch_size > 1."""
-        return AgentCoreMemoryConfig(
-            memory_id="test-memory-123",
-            session_id="test-session-456",
-            actor_id="test-actor-789",
-            batch_size=10,
-        )
-
-    def test_context_manager_returns_self(self, batching_config, mock_memory_client):
+    def test_context_manager_returns_self(self, batching_session_manager):
         """Test __enter__ returns the session manager instance."""
-        with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient", return_value=mock_memory_client
-        ):
-            with patch("boto3.Session") as mock_boto_session:
-                mock_session = Mock()
-                mock_session.region_name = "us-west-2"
-                mock_session.client.return_value = Mock()
-                mock_boto_session.return_value = mock_session
+        with batching_session_manager as ctx:
+            assert ctx is batching_session_manager
 
-                with patch(
-                    "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
-                ):
-                    manager = AgentCoreMemorySessionManager(batching_config)
-                    manager.session_id = batching_config.session_id
-
-                    with manager as ctx:
-                        assert ctx is manager
-
-    def test_context_manager_flushes_on_exit(self, batching_config, mock_memory_client):
+    def test_context_manager_flushes_on_exit(self, batching_session_manager, mock_memory_client):
         """Test __exit__ flushes pending messages."""
         mock_memory_client.create_event.return_value = {"eventId": "event_123"}
 
-        with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient", return_value=mock_memory_client
-        ):
-            with patch("boto3.Session") as mock_boto_session:
-                mock_session = Mock()
-                mock_session.region_name = "us-west-2"
-                mock_session.client.return_value = Mock()
-                mock_boto_session.return_value = mock_session
+        with batching_session_manager:
+            message = SessionMessage(
+                message={"role": "user", "content": [{"text": "Hello"}]},
+                message_id=1,
+                created_at="2024-01-01T12:00:00Z",
+            )
+            batching_session_manager.create_message("test-session-456", "test-agent", message)
 
-                with patch(
-                    "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
-                ):
-                    manager = AgentCoreMemorySessionManager(batching_config)
-                    manager.session_id = batching_config.session_id
+            # Should still be buffered
+            assert batching_session_manager.pending_message_count() == 1
 
-                    with manager:
-                        # Add message that won't auto-flush (batch_size=10)
-                        message = SessionMessage(
-                            message={"role": "user", "content": [{"text": "Hello"}]},
-                            message_id=1,
-                            created_at="2024-01-01T12:00:00Z",
-                        )
-                        manager.create_message("test-session-456", "test-agent", message)
+        # After exiting context, should have flushed
+        assert batching_session_manager.pending_message_count() == 0
+        mock_memory_client.create_event.assert_called_once()
 
-                        # Should still be buffered
-                        assert manager.pending_message_count() == 1
-
-                    # After exiting context, should have flushed
-                    assert manager.pending_message_count() == 0
-                    mock_memory_client.create_event.assert_called_once()
-
-    def test_context_manager_flushes_on_exception(self, batching_config, mock_memory_client):
+    def test_context_manager_flushes_on_exception(self, batching_session_manager, mock_memory_client):
         """Test __exit__ flushes even when exception occurs."""
         mock_memory_client.create_event.return_value = {"eventId": "event_123"}
 
-        with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient", return_value=mock_memory_client
-        ):
-            with patch("boto3.Session") as mock_boto_session:
-                mock_session = Mock()
-                mock_session.region_name = "us-west-2"
-                mock_session.client.return_value = Mock()
-                mock_boto_session.return_value = mock_session
+        try:
+            with batching_session_manager:
+                message = SessionMessage(
+                    message={"role": "user", "content": [{"text": "Hello"}]},
+                    message_id=1,
+                    created_at="2024-01-01T12:00:00Z",
+                )
+                batching_session_manager.create_message("test-session-456", "test-agent", message)
+                raise ValueError("Test exception")
+        except ValueError:
+            pass
 
-                with patch(
-                    "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
-                ):
-                    manager = AgentCoreMemorySessionManager(batching_config)
-                    manager.session_id = batching_config.session_id
-
-                    try:
-                        with manager:
-                            message = SessionMessage(
-                                message={"role": "user", "content": [{"text": "Hello"}]},
-                                message_id=1,
-                                created_at="2024-01-01T12:00:00Z",
-                            )
-                            manager.create_message("test-session-456", "test-agent", message)
-                            raise ValueError("Test exception")
-                    except ValueError:
-                        pass
-
-                    # Should have flushed despite exception
-                    assert manager.pending_message_count() == 0
-                    mock_memory_client.create_event.assert_called_once()
+        # Should have flushed despite exception
+        assert batching_session_manager.pending_message_count() == 0
+        mock_memory_client.create_event.assert_called_once()
 
 
 class TestBatchingClose:
     """Test close() method functionality."""
-
-    @pytest.fixture
-    def batching_config(self):
-        """Create a config with batch_size > 1."""
-        return AgentCoreMemoryConfig(
-            memory_id="test-memory-123",
-            session_id="test-session-456",
-            actor_id="test-actor-789",
-            batch_size=10,
-        )
-
-    @pytest.fixture
-    def batching_session_manager(self, batching_config, mock_memory_client):
-        """Create a session manager with batching enabled."""
-        with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient", return_value=mock_memory_client
-        ):
-            with patch("boto3.Session") as mock_boto_session:
-                mock_session = Mock()
-                mock_session.region_name = "us-west-2"
-                mock_session.client.return_value = Mock()
-                mock_boto_session.return_value = mock_session
-
-                with patch(
-                    "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
-                ):
-                    manager = AgentCoreMemorySessionManager(batching_config)
-                    manager.session_id = batching_config.session_id
-                    manager.session = Session(session_id=batching_config.session_id, session_type=SessionType.AGENT)
-                    return manager
 
     def test_close_flushes_pending_messages(self, batching_session_manager, mock_memory_client):
         """Test close() flushes all pending messages in a batched call."""
@@ -1903,36 +1792,6 @@ class TestBatchingClose:
 
 class TestBatchingBlobMessages:
     """Test batching handles blob messages (exceeding conversational limit) correctly."""
-
-    @pytest.fixture
-    def batching_config(self):
-        """Create a config with batch_size > 1."""
-        return AgentCoreMemoryConfig(
-            memory_id="test-memory-123",
-            session_id="test-session-456",
-            actor_id="test-actor-789",
-            batch_size=10,
-        )
-
-    @pytest.fixture
-    def batching_session_manager(self, batching_config, mock_memory_client):
-        """Create a session manager with batching enabled."""
-        with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient", return_value=mock_memory_client
-        ):
-            with patch("boto3.Session") as mock_boto_session:
-                mock_session = Mock()
-                mock_session.region_name = "us-west-2"
-                mock_session.client.return_value = Mock()
-                mock_boto_session.return_value = mock_session
-
-                with patch(
-                    "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
-                ):
-                    manager = AgentCoreMemorySessionManager(batching_config)
-                    manager.session_id = batching_config.session_id
-                    manager.session = Session(session_id=batching_config.session_id, session_type=SessionType.AGENT)
-                    return manager
 
     def test_blob_message_sent_via_gmdp_client(self, batching_session_manager, mock_memory_client):
         """Test large messages (blobs) are sent via gmdp_client."""
