@@ -29,9 +29,12 @@ class AgentCoreMemoryConfig(BaseModel):
         session_id: Required unique ID for the session
         actor_id: Required unique ID for the agent instance/user
         retrieval_config: Optional dictionary mapping namespaces to retrieval configurations
+        batch_size: Number of messages to batch before sending to AgentCore Memory.
+            Default of 1 means immediate sending (no batching). Max 100.
     """
 
     memory_id: str = Field(min_length=1)
     session_id: str = Field(min_length=1)
     actor_id: str = Field(min_length=1)
     retrieval_config: Optional[Dict[str, RetrievalConfig]] = None
+    batch_size: int = Field(default=1, ge=1, le=100)
