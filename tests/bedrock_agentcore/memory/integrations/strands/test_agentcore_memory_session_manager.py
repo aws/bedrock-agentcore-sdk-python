@@ -10,7 +10,7 @@ from strands.hooks import MessageAddedEvent
 from strands.types.exceptions import SessionException
 from strands.types.session import Session, SessionAgent, SessionMessage, SessionType
 
-from bedrock_agentcore.memory.integrations.strands.bedrock_converter import AgentCoreMemoryConverter
+from bedrock_agentcore.memory.integrations.strands.converters import BedrockConverseConverter
 from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
 from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
 
@@ -118,7 +118,7 @@ class TestAgentCoreMemorySessionManager:
             }
         ]
 
-        messages = AgentCoreMemoryConverter.events_to_messages(events)
+        messages = BedrockConverseConverter.events_to_messages(events)
         assert messages[0].message["role"] == "user"
         assert messages[0].message["content"][0]["text"] == "Hello"
 
@@ -298,7 +298,7 @@ class TestAgentCoreMemorySessionManager:
             }
         ]
 
-        messages = AgentCoreMemoryConverter.events_to_messages(events)
+        messages = BedrockConverseConverter.events_to_messages(events)
 
         assert len(messages) == 0
 
@@ -1116,3 +1116,143 @@ class TestAgentCoreMemorySessionManager:
         mock_memory_client.list_events.assert_called_once()
         call_kwargs = mock_memory_client.list_events.call_args[1]
         assert call_kwargs["max_results"] == 550  # limit + offset
+
+
+class TestInjectableConverter:
+    """Tests for injectable message converter support."""
+
+    def _make_manager(self, config, mock_memory_client, converter=None):
+        """Helper to create a session manager with optional custom converter."""
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            return_value=mock_memory_client,
+        ):
+            with patch("boto3.Session") as mock_boto_session:
+                mock_session = Mock()
+                mock_session.region_name = "us-west-2"
+                mock_session.client.return_value = Mock()
+                mock_boto_session.return_value = mock_session
+
+                with patch(
+                    "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
+                ):
+                    kwargs = {}
+                    if converter is not None:
+                        kwargs["converter"] = converter
+                    manager = AgentCoreMemorySessionManager(config, **kwargs)
+                    manager.session_id = config.session_id
+                    manager.session = Session(session_id=config.session_id, session_type=SessionType.AGENT)
+                    return manager
+
+    def test_default_converter_is_agentcore(self, agentcore_config, mock_memory_client):
+        """When no converter is provided, BedrockConverseConverter is used."""
+        manager = self._make_manager(agentcore_config, mock_memory_client)
+        assert manager.converter is BedrockConverseConverter
+
+    def test_custom_converter_is_stored(self, agentcore_config, mock_memory_client):
+        """When a custom converter is provided, it is stored on the manager."""
+
+        class CustomConverter:
+            @staticmethod
+            def message_to_payload(session_message):
+                return []
+
+            @staticmethod
+            def events_to_messages(events):
+                return []
+
+            @staticmethod
+            def exceeds_conversational_limit(message):
+                return False
+
+        manager = self._make_manager(agentcore_config, mock_memory_client, converter=CustomConverter)
+        assert manager.converter is CustomConverter
+
+    def test_create_message_uses_custom_converter(self, agentcore_config, mock_memory_client):
+        """create_message() should call the custom converter's message_to_payload and exceeds_conversational_limit."""
+        mock_memory_client.create_event.return_value = {"eventId": "event-123"}
+
+        custom_converter = Mock()
+        custom_converter.message_to_payload.return_value = [('{"message": {"role": "user"}}', "user")]
+        custom_converter.exceeds_conversational_limit.return_value = False
+
+        manager = self._make_manager(agentcore_config, mock_memory_client, converter=custom_converter)
+
+        message = SessionMessage(
+            message={"role": "user", "content": [{"text": "Hello"}]}, message_id=1, created_at="2024-01-01T12:00:00Z"
+        )
+
+        manager.create_message("test-session-456", "test-agent-123", message)
+
+        custom_converter.message_to_payload.assert_called_once_with(message)
+        custom_converter.exceeds_conversational_limit.assert_called_once()
+
+    def test_list_messages_uses_custom_converter(self, agentcore_config, mock_memory_client):
+        """list_messages() should call the custom converter's events_to_messages."""
+        events = [
+            {
+                "eventId": "event-1",
+                "payload": [
+                    {
+                        "conversational": {
+                            "content": {"text": '{"message": {"role": "user", "content": [{"text": "Hi"}]}}'},
+                            "role": "USER",
+                        }
+                    }
+                ],
+            }
+        ]
+        mock_memory_client.list_events.return_value = events
+
+        expected_messages = [
+            SessionMessage(message={"role": "user", "content": [{"text": "Hi"}]}, message_id=1)
+        ]
+        custom_converter = Mock()
+        custom_converter.events_to_messages.return_value = expected_messages
+
+        manager = self._make_manager(agentcore_config, mock_memory_client, converter=custom_converter)
+
+        result = manager.list_messages("test-session-456", "test-agent-123")
+
+        custom_converter.events_to_messages.assert_called_once_with(events)
+        assert result == expected_messages
+
+    def test_create_message_empty_payload_from_custom_converter(self, agentcore_config, mock_memory_client):
+        """When custom converter returns empty payload, create_message should return None."""
+        custom_converter = Mock()
+        custom_converter.message_to_payload.return_value = []
+
+        manager = self._make_manager(agentcore_config, mock_memory_client, converter=custom_converter)
+
+        message = SessionMessage(
+            message={"role": "user", "content": [{"text": "Hello"}]}, message_id=1, created_at="2024-01-01T12:00:00Z"
+        )
+
+        result = manager.create_message("test-session-456", "test-agent-123", message)
+
+        assert result is None
+        mock_memory_client.create_event.assert_not_called()
+
+    def test_create_message_oversized_uses_blob_fallback(self, agentcore_config, mock_memory_client):
+        """When custom converter says message exceeds limit, blob fallback is used."""
+        mock_memory_client.gmdp_client.create_event.return_value = {
+            "event": {"eventId": "event-blob-123"}
+        }
+
+        custom_converter = Mock()
+        custom_converter.message_to_payload.return_value = [('{"large": "payload"}', "user")]
+        custom_converter.exceeds_conversational_limit.return_value = True
+
+        manager = self._make_manager(agentcore_config, mock_memory_client, converter=custom_converter)
+
+        message = SessionMessage(
+            message={"role": "user", "content": [{"text": "x" * 10000}]},
+            message_id=1,
+            created_at="2024-01-01T12:00:00Z",
+        )
+
+        manager.create_message("test-session-456", "test-agent-123", message)
+
+        # Should use gmdp_client.create_event (blob path), not memory_client.create_event
+        mock_memory_client.create_event.assert_not_called()
+        mock_memory_client.gmdp_client.create_event.assert_called_once()
