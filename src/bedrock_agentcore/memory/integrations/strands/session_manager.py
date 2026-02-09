@@ -118,6 +118,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
         self.has_existing_agent = False
+        self._last_synced_state_hash: Optional[int] = None
 
         # Batching support - stores pre-processed messages: (session_id, messages, is_blob, timestamp)
         self._message_buffer: list[tuple[str, list[tuple[str, str]], bool, datetime]] = []
@@ -142,6 +143,24 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             "bedrock-agentcore", region_name=region_name or session.region_name, config=client_config
         )
         super().__init__(session_id=self.config.session_id, session_repository=self)
+
+    def _compute_state_hash(self, agent: "Agent") -> int:
+        """Compute hash of agent state for change detection.
+
+        Excludes timestamps (created_at, updated_at) as they change on every call
+        but don't represent meaningful state changes.
+
+        Args:
+            agent: The agent whose state to hash.
+
+        Returns:
+            int: Hash of the agent state.
+        """
+        session_agent = SessionAgent.from_agent(agent)
+        state_dict = session_agent.to_dict()
+        state_dict.pop("created_at", None)
+        state_dict.pop("updated_at", None)
+        return hash(json.dumps(state_dict, sort_keys=True))
 
     # region SessionRepository interface implementation
     def create_session(self, session: Session, **kwargs: Any) -> Session:
@@ -572,6 +591,26 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         session_message = SessionMessage.from_message(message, created_message.get("eventId"))
         self._latest_agent_message[agent.agent_id] = session_message
 
+    @override
+    def sync_agent(self, agent: "Agent", **kwargs: Any) -> None:
+        """Sync agent state only if it changed since last sync.
+
+        Computes a hash of the current agent state (excluding timestamps) and
+        compares it to the last synced hash. Skips the sync API calls entirely
+        when state is unchanged.
+
+        Args:
+            agent: Agent to sync to the session.
+            **kwargs: Additional keyword arguments for future extensibility.
+        """
+        current_hash = self._compute_state_hash(agent)
+        if current_hash == self._last_synced_state_hash:
+            logger.debug("Agent state unchanged, skipping sync for agent=%s", agent.agent_id)
+            return
+
+        super().sync_agent(agent, **kwargs)
+        self._last_synced_state_hash = current_hash
+
     def retrieve_customer_context(self, event: MessageAddedEvent) -> None:
         """Retrieve customer LTM context before processing support query.
 
@@ -668,6 +707,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         else:
             self.has_existing_agent = True
         RepositorySessionManager.initialize(self, agent, **kwargs)
+        self._last_synced_state_hash = self._compute_state_hash(agent)
 
     # endregion RepositorySessionManager overrides
 

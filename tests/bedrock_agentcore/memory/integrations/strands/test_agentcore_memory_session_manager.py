@@ -1881,3 +1881,250 @@ class TestBatchingBlobMessages:
         # Verify both paths were used
         assert mock_memory_client.create_event.call_count == 1  # Conversational
         assert mock_memory_client.gmdp_client.create_event.call_count == 1  # Blob
+
+
+class TestStateHashTracking:
+    """Test agent state hash tracking for skipping redundant sync calls."""
+
+    def test_compute_state_hash_excludes_timestamps(self, session_manager):
+        """Two agents with identical state but different timestamps produce equal hashes."""
+        agent1 = Mock()
+        agent1.agent_id = "agent-1"
+        agent1.state = {"key": "value"}
+        agent1.conversation_manager_state = {}
+
+        agent2 = Mock()
+        agent2.agent_id = "agent-1"
+        agent2.state = {"key": "value"}
+        agent2.conversation_manager_state = {}
+
+        # Mock SessionAgent.from_agent to return agents with different timestamps
+        agent_dict_1 = {
+            "agent_id": "agent-1",
+            "state": {"key": "value"},
+            "conversation_manager_state": {},
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z",
+        }
+        agent_dict_2 = {
+            "agent_id": "agent-1",
+            "state": {"key": "value"},
+            "conversation_manager_state": {},
+            "created_at": "2024-06-15T12:00:00Z",
+            "updated_at": "2024-06-15T12:00:00Z",
+        }
+
+        mock_session_agent_1 = Mock()
+        mock_session_agent_1.to_dict.return_value = dict(agent_dict_1)
+        mock_session_agent_2 = Mock()
+        mock_session_agent_2.to_dict.return_value = dict(agent_dict_2)
+
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.SessionAgent.from_agent",
+            side_effect=[mock_session_agent_1, mock_session_agent_2],
+        ):
+            hash1 = session_manager._compute_state_hash(agent1)
+            hash2 = session_manager._compute_state_hash(agent2)
+
+        assert hash1 == hash2
+
+    def test_compute_state_hash_detects_state_changes(self, session_manager):
+        """Two agents with different state dicts produce different hashes."""
+        agent1 = Mock()
+        agent2 = Mock()
+
+        agent_dict_1 = {
+            "agent_id": "agent-1",
+            "state": {"key": "value1"},
+            "conversation_manager_state": {},
+        }
+        agent_dict_2 = {
+            "agent_id": "agent-1",
+            "state": {"key": "value2"},
+            "conversation_manager_state": {},
+        }
+
+        mock_session_agent_1 = Mock()
+        mock_session_agent_1.to_dict.return_value = dict(agent_dict_1)
+        mock_session_agent_2 = Mock()
+        mock_session_agent_2.to_dict.return_value = dict(agent_dict_2)
+
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.SessionAgent.from_agent",
+            side_effect=[mock_session_agent_1, mock_session_agent_2],
+        ):
+            hash1 = session_manager._compute_state_hash(agent1)
+            hash2 = session_manager._compute_state_hash(agent2)
+
+        assert hash1 != hash2
+
+    def test_sync_agent_skips_when_state_unchanged(self, session_manager):
+        """sync_agent should skip parent call when state hash is unchanged."""
+        mock_agent = Mock()
+        mock_agent.agent_id = "test-agent"
+
+        agent_dict = {
+            "agent_id": "test-agent",
+            "state": {"key": "value"},
+            "conversation_manager_state": {},
+        }
+        mock_session_agent = Mock()
+        mock_session_agent.to_dict.return_value = dict(agent_dict)
+
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.SessionAgent.from_agent",
+            return_value=mock_session_agent,
+        ):
+            current_hash = session_manager._compute_state_hash(mock_agent)
+            session_manager._last_synced_state_hash = current_hash
+
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.SessionAgent.from_agent",
+            return_value=mock_session_agent,
+        ), patch.object(
+            session_manager, "update_agent"
+        ) as mock_update_agent:
+            session_manager.sync_agent(mock_agent)
+
+        mock_update_agent.assert_not_called()
+
+    def test_sync_agent_calls_parent_when_state_changed(self, session_manager, mock_memory_client):
+        """sync_agent should call parent when state hash differs."""
+        mock_agent = Mock()
+        mock_agent.agent_id = "test-agent"
+
+        # Set a different hash than what will be computed
+        session_manager._last_synced_state_hash = 12345
+
+        agent_dict = {
+            "agent_id": "test-agent",
+            "state": {"key": "new_value"},
+            "conversation_manager_state": {},
+        }
+        mock_session_agent = Mock()
+        mock_session_agent.to_dict.return_value = dict(agent_dict)
+        mock_session_agent.agent_id = "test-agent"
+
+        # Mock read_agent to return an existing agent (needed by update_agent)
+        mock_memory_client.list_events.return_value = [
+            {
+                "eventId": "event-1",
+                "payload": [{"blob": '{"agent_id": "test-agent", "state": {}, "conversation_manager_state": {}}'}],
+            }
+        ]
+        mock_memory_client.gmdp_client.create_event.return_value = {"event": {"eventId": "new-event"}}
+
+        # Set up required attributes (normally set by RepositorySessionManager.__init__)
+        session_manager._latest_agent_message = {"test-agent": None}
+        session_manager.session_repository = session_manager
+
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.SessionAgent.from_agent",
+            return_value=mock_session_agent,
+        ):
+            session_manager.sync_agent(mock_agent)
+
+        # update_agent calls read_agent + create_agent, so gmdp_client.create_event should be called
+        mock_memory_client.gmdp_client.create_event.assert_called()
+
+    def test_sync_agent_updates_hash_after_sync(self, session_manager, mock_memory_client):
+        """After a successful sync, _last_synced_state_hash should be updated."""
+        mock_agent = Mock()
+        mock_agent.agent_id = "test-agent"
+
+        session_manager._last_synced_state_hash = None  # Force sync
+
+        agent_dict = {
+            "agent_id": "test-agent",
+            "state": {"key": "value"},
+            "conversation_manager_state": {},
+        }
+        mock_session_agent = Mock()
+        mock_session_agent.to_dict.return_value = dict(agent_dict)
+        mock_session_agent.agent_id = "test-agent"
+
+        # Mock read_agent to return an existing agent
+        mock_memory_client.list_events.return_value = [
+            {
+                "eventId": "event-1",
+                "payload": [{"blob": '{"agent_id": "test-agent", "state": {}, "conversation_manager_state": {}}'}],
+            }
+        ]
+        mock_memory_client.gmdp_client.create_event.return_value = {"event": {"eventId": "new-event"}}
+
+        # Set up required attributes (normally set by RepositorySessionManager.__init__)
+        session_manager._latest_agent_message = {"test-agent": None}
+        session_manager.session_repository = session_manager
+
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.SessionAgent.from_agent",
+            return_value=mock_session_agent,
+        ):
+            expected_hash = session_manager._compute_state_hash(mock_agent)
+            session_manager.sync_agent(mock_agent)
+
+        assert session_manager._last_synced_state_hash == expected_hash
+
+    def test_initialize_sets_initial_hash(self, session_manager):
+        """After calling initialize, _last_synced_state_hash should not be None."""
+        mock_agent = Mock()
+        mock_agent.agent_id = "test-agent"
+        mock_agent.state = {}
+        mock_agent.conversation_manager_state = {}
+        mock_agent.messages = []
+
+        session_manager._latest_agent_message = {}
+        session_manager.list_messages = Mock(return_value=[])
+        session_manager.session_repository = Mock()
+        session_manager.session_repository.read_agent = Mock(return_value=None)
+
+        agent_dict = {
+            "agent_id": "test-agent",
+            "state": {},
+            "conversation_manager_state": {},
+        }
+        mock_session_agent = Mock()
+        mock_session_agent.to_dict.return_value = dict(agent_dict)
+        mock_session_agent.agent_id = "test-agent"
+
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.SessionAgent.from_agent",
+            return_value=mock_session_agent,
+        ):
+            session_manager.initialize(mock_agent)
+
+        assert session_manager._last_synced_state_hash is not None
+
+    def test_sync_agent_does_not_update_hash_on_failure(self, session_manager, mock_memory_client):
+        """If parent sync_agent raises, hash should remain unchanged so next sync retries."""
+        mock_agent = Mock()
+        mock_agent.agent_id = "test-agent"
+
+        original_hash = 99999
+        session_manager._last_synced_state_hash = original_hash
+
+        agent_dict = {
+            "agent_id": "test-agent",
+            "state": {"key": "changed"},
+            "conversation_manager_state": {},
+        }
+        mock_session_agent = Mock()
+        mock_session_agent.to_dict.return_value = dict(agent_dict)
+        mock_session_agent.agent_id = "test-agent"
+
+        # Set up required attributes
+        session_manager._latest_agent_message = {"test-agent": None}
+        session_manager.session_repository = session_manager
+
+        # read_agent catches exceptions and returns None, causing update_agent to raise SessionException
+        mock_memory_client.list_events.side_effect = Exception("API Error")
+
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.SessionAgent.from_agent",
+            return_value=mock_session_agent,
+        ):
+            with pytest.raises(SessionException, match="does not exist"):
+                session_manager.sync_agent(mock_agent)
+
+        # Hash should NOT have been updated since sync failed
+        assert session_manager._last_synced_state_hash == original_hash
