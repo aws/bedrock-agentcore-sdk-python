@@ -1,5 +1,6 @@
 """Tests for AgentCoreMemorySessionManager."""
 
+import logging
 from unittest.mock import Mock, patch
 
 import pytest
@@ -1755,6 +1756,44 @@ class TestBatchingContextManager:
         # Should have flushed despite exception
         assert batching_session_manager.pending_message_count() == 0
         mock_memory_client.create_event.assert_called_once()
+
+    def test_exit_preserves_original_exception_when_flush_fails(self, batching_session_manager, mock_memory_client, caplog):
+        """Test __exit__ logs flush failure and preserves the original exception."""
+        mock_memory_client.create_event.side_effect = RuntimeError("flush failed")
+
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(ValueError, match="original error"):
+                with batching_session_manager:
+                    message = SessionMessage(
+                        message={"role": "user", "content": [{"text": "Hello"}]},
+                        message_id=1,
+                        created_at="2024-01-01T12:00:00Z",
+                    )
+                    batching_session_manager.create_message("test-session-456", "test-agent", message)
+                    raise ValueError("original error")
+
+        assert any(
+            "Failed to flush messages during exception handling" in record.message and record.levelno == logging.ERROR
+            for record in caplog.records
+        )
+
+    def test_exit_raises_flush_exception_when_no_original_exception(self, batching_session_manager, mock_memory_client, caplog):
+        """Test __exit__ still raises flush exceptions when no original exception."""
+        mock_memory_client.create_event.side_effect = RuntimeError("flush failed")
+
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(SessionException, match="flush failed"):
+                with batching_session_manager:
+                    message = SessionMessage(
+                        message={"role": "user", "content": [{"text": "Hello"}]},
+                        message_id=1,
+                        created_at="2024-01-01T12:00:00Z",
+                    )
+                    batching_session_manager.create_message("test-session-456", "test-agent", message)
+
+        assert not any(
+            "Failed to flush messages during exception handling" in record.message for record in caplog.records
+        )
 
 
 class TestBatchingClose:

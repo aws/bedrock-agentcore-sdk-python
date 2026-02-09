@@ -789,6 +789,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             exc_val: Exception value if an exception occurred.
             exc_tb: Exception traceback if an exception occurred.
         """
-        self._flush_messages()
+        try:
+            self._flush_messages()
+        except Exception as e:
+            if exc_type is not None:
+                logger.error("Failed to flush messages during exception handling: %s", e)
+            else:
+                raise
 
     # endregion Batching support
