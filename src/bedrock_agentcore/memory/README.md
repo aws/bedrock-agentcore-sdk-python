@@ -563,6 +563,8 @@ event = session.add_turns([
 - **ActorSummary**: Actor information summary
 - **SessionSummary**: Session information summary
 - **MemoryRecord**: Long-term memory records
+- **EventMetadataFilter**: Filter expression for querying events by metadata
+- **StringValue**: Metadata value type for string data
 
 ### Configuration Classes
 
@@ -570,5 +572,6 @@ event = session.add_turns([
 - **MessageRole**: Enumeration of message roles (USER, ASSISTANT, TOOL, OTHER)
 - **MemoryStatus**: Memory resource status enumeration
 - **StrategyType**: Memory strategy type enumeration
+- **MetadataValue**: Type alias for metadata value types (StringValue)
 
 For detailed API documentation, refer to the inline docstrings and type hints in the source code.
