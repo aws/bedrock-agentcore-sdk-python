@@ -72,7 +72,7 @@ class AgentCoreMemoryConverter:
             list[SessionMessage]: list of SessionMessage objects.
         """
         messages = []
-        for event in events:
+        for event in reversed(events):
             for payload_item in event.get("payload", []):
                 if "conversational" in payload_item:
                     conv = payload_item["conversational"]
@@ -93,7 +93,7 @@ class AgentCoreMemoryConverter:
                                 logger.error("This is not a SessionMessage but just a blob message. Ignoring")
                     except (json.JSONDecodeError, ValueError):
                         logger.error("Failed to parse blob content: %s", payload_item)
-        return list(reversed(messages))
+        return messages
 
     @staticmethod
     def total_length(message: tuple[str, str]) -> int:
