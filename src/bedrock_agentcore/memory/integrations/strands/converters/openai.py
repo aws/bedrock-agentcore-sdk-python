@@ -31,11 +31,14 @@ def _bedrock_to_openai(message: dict) -> dict:
     if content and "toolResult" in content[0]:
         tool_result = content[0]["toolResult"]
         text_parts = [c.get("text", "") for c in tool_result.get("content", []) if "text" in c]
-        return {
+        result = {
             "role": "tool",
             "tool_call_id": tool_result["toolUseId"],
             "content": "\n".join(text_parts),
         }
+        if "status" in tool_result:
+            result["status"] = tool_result["status"]
+        return result
 
     # Separate text and toolUse items
     text_parts = []
@@ -63,7 +66,7 @@ def _bedrock_to_openai(message: dict) -> dict:
         result["content"] = "\n".join(text_parts) if text_parts else None
         result["tool_calls"] = tool_calls
     else:
-        result["content"] = "\n".join(text_parts) if text_parts else None
+        result["content"] = "\n".join(text_parts) if text_parts else ""
 
     return result
 
@@ -82,16 +85,15 @@ def _openai_to_bedrock(openai_msg: dict) -> dict:
 
     # Handle tool response
     if role == "tool":
+        tool_result: dict[str, Any] = {
+            "toolUseId": openai_msg["tool_call_id"],
+            "content": [{"text": openai_msg.get("content", "")}],
+        }
+        if "status" in openai_msg:
+            tool_result["status"] = openai_msg["status"]
         return {
             "role": "user",
-            "content": [
-                {
-                    "toolResult": {
-                        "toolUseId": openai_msg["tool_call_id"],
-                        "content": [{"text": openai_msg.get("content", "")}],
-                    }
-                }
-            ],
+            "content": [{"toolResult": tool_result}],
         }
 
     # Handle system messages — Bedrock Converse has no system role

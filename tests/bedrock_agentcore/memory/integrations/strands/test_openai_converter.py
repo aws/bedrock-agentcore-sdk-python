@@ -501,3 +501,4 @@ class TestOpenAIConverseConverterRoundTrip:
         tr = restored[0].message["content"][0]["toolResult"]
         assert tr["toolUseId"] == "call_1"
         assert tr["content"] == [{"text": "4"}]
+        assert tr["status"] == "success"
