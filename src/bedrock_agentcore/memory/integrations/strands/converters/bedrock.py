@@ -1,4 +1,4 @@
-"""Bedrock AgentCore Memory conversion utilities."""
+"""Bedrock Converse format converter for AgentCore Memory."""
 
 import json
 import logging
@@ -6,13 +6,13 @@ from typing import Any, Tuple
 
 from strands.types.session import SessionMessage
 
+from .protocol import exceeds_conversational_limit
+
 logger = logging.getLogger(__name__)
 
-CONVERSATIONAL_MAX_SIZE = 9000
 
-
-class AgentCoreMemoryConverter:
-    """Handles conversion between Strands and Bedrock AgentCore Memory formats."""
+class BedrockConverseConverter:
+    """Handles conversion between Strands SessionMessages and Bedrock Converse event payloads."""
 
     @staticmethod
     def _filter_empty_text(message: dict) -> dict:
@@ -35,7 +35,7 @@ class AgentCoreMemoryConverter:
         # First convert to dict (which encodes bytes to base64),
         # then filter empty text on the encoded version
         session_dict = session_message.to_dict()
-        filtered_message = AgentCoreMemoryConverter._filter_empty_text(session_dict["message"])
+        filtered_message = BedrockConverseConverter._filter_empty_text(session_dict["message"])
         if not filtered_message.get("content"):
             logger.debug("Skipping message with no content after filtering empty text")
             return []
@@ -77,7 +77,7 @@ class AgentCoreMemoryConverter:
                 if "conversational" in payload_item:
                     conv = payload_item["conversational"]
                     session_msg = SessionMessage.from_dict(json.loads(conv["content"]["text"]))
-                    session_msg.message = AgentCoreMemoryConverter._filter_empty_text(session_msg.message)
+                    session_msg.message = BedrockConverseConverter._filter_empty_text(session_msg.message)
                     if session_msg.message.get("content"):
                         messages.append(session_msg)
                 elif "blob" in payload_item:
@@ -86,7 +86,7 @@ class AgentCoreMemoryConverter:
                         if isinstance(blob_data, (tuple, list)) and len(blob_data) == 2:
                             try:
                                 session_msg = SessionMessage.from_dict(json.loads(blob_data[0]))
-                                session_msg.message = AgentCoreMemoryConverter._filter_empty_text(session_msg.message)
+                                session_msg.message = BedrockConverseConverter._filter_empty_text(session_msg.message)
                                 if session_msg.message.get("content"):
                                     messages.append(session_msg)
                             except (json.JSONDecodeError, ValueError):
@@ -103,4 +103,4 @@ class AgentCoreMemoryConverter:
     @staticmethod
     def exceeds_conversational_limit(message: tuple[str, str]) -> bool:
         """Check if message exceeds conversational size limit."""
-        return AgentCoreMemoryConverter.total_length(message) >= CONVERSATIONAL_MAX_SIZE
+        return exceeds_conversational_limit(message)
