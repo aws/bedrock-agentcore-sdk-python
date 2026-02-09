@@ -1052,8 +1052,44 @@ class TestCodeInterpreterClient:
         client.identifier = "test.identifier"
         client.session_id = "test-session-id"
 
-        original_content = "binary content as text"
-        encoded_content = base64.b64encode(original_content.encode("utf-8")).decode("utf-8")
+        binary_content = b"\x89PNG\r\n\x1a\n"  # PNG header bytes
+        encoded_content = base64.b64encode(binary_content).decode("utf-8")
+
+        mock_response = {
+            "stream": [
+                {
+                    "result": {
+                        "content": [
+                            {"type": "resource", "resource": {"uri": "file://image.png", "blob": encoded_content}}
+                        ]
+                    }
+                }
+            ]
+        }
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        result = client.download_file("image.png")
+
+        # Assert
+        assert result == binary_content
+        assert isinstance(result, bytes)
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_download_file_blob_utf8_returns_str(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        """Blob content that is valid UTF-8 should be decoded and returned as str."""
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        text_content = "hello world"
+        encoded_content = base64.b64encode(text_content.encode("utf-8")).decode("utf-8")
 
         mock_response = {
             "stream": [
@@ -1072,7 +1108,8 @@ class TestCodeInterpreterClient:
         result = client.download_file("data.bin")
 
         # Assert
-        assert result == original_content
+        assert result == text_content
+        assert isinstance(result, str)
 
     @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
@@ -1151,6 +1188,108 @@ class TestCodeInterpreterClient:
 
         # Assert
         assert result == {}
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_download_files_binary(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        binary_content = b"\x89PNG\r\n\x1a\n"  # PNG header bytes
+        encoded_binary = base64.b64encode(binary_content).decode("utf-8")
+
+        mock_response = {
+            "stream": [
+                {
+                    "result": {
+                        "content": [
+                            {
+                                "type": "resource",
+                                "resource": {
+                                    "uri": "file:///opt/amazon/genesis1p-tools/var/data.csv",
+                                    "text": "col1,col2\n1,2",
+                                },
+                            },
+                            {
+                                "type": "resource",
+                                "resource": {
+                                    "uri": "file:///opt/amazon/genesis1p-tools/var/chart.png",
+                                    "blob": encoded_binary,
+                                },
+                            },
+                        ]
+                    }
+                }
+            ]
+        }
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        result = client.download_files(["data.csv", "chart.png"])
+
+        # Assert
+        assert result["/opt/amazon/genesis1p-tools/var/data.csv"] == "col1,col2\n1,2"
+        assert result["/opt/amazon/genesis1p-tools/var/chart.png"] == binary_content
+        assert isinstance(result["/opt/amazon/genesis1p-tools/var/chart.png"], bytes)
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_download_files_blob_utf8_returns_str(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        """Blob content that is valid UTF-8 should be decoded and returned as str in multi-file download."""
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        text_content = "some utf-8 blob content"
+        encoded_text = base64.b64encode(text_content.encode("utf-8")).decode("utf-8")
+        binary_content = b"\x89PNG\r\n\x1a\n"
+        encoded_binary = base64.b64encode(binary_content).decode("utf-8")
+
+        mock_response = {
+            "stream": [
+                {
+                    "result": {
+                        "content": [
+                            {
+                                "type": "resource",
+                                "resource": {
+                                    "uri": "file:///opt/amazon/genesis1p-tools/var/data.bin",
+                                    "blob": encoded_text,
+                                },
+                            },
+                            {
+                                "type": "resource",
+                                "resource": {
+                                    "uri": "file:///opt/amazon/genesis1p-tools/var/chart.png",
+                                    "blob": encoded_binary,
+                                },
+                            },
+                        ]
+                    }
+                }
+            ]
+        }
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        result = client.download_files(["data.bin", "chart.png"])
+
+        # Assert — UTF-8-valid blob comes back as str, invalid UTF-8 blob comes back as bytes
+        assert result["/opt/amazon/genesis1p-tools/var/data.bin"] == text_content
+        assert isinstance(result["/opt/amazon/genesis1p-tools/var/data.bin"], str)
+        assert result["/opt/amazon/genesis1p-tools/var/chart.png"] == binary_content
+        assert isinstance(result["/opt/amazon/genesis1p-tools/var/chart.png"], bytes)
 
     @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")

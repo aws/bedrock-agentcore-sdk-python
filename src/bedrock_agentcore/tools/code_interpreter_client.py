@@ -600,14 +600,15 @@ class CodeInterpreter:
     def download_file(
         self,
         path: str,
-    ) -> str:
+    ) -> Union[str, bytes]:
         """Download/read a file from the code interpreter environment.
 
         Args:
             path: Path to the file to read.
 
         Returns:
-            File content as string.
+            File content as string, or bytes if the file contains binary content
+            (images, PDFs, etc.).
 
         Raises:
             FileNotFoundError: If the file doesn't exist.
@@ -631,21 +632,26 @@ class CodeInterpreter:
                             if "text" in resource:
                                 return resource["text"]
                             elif "blob" in resource:
-                                return base64.b64decode(resource["blob"]).decode("utf-8")
+                                raw = base64.b64decode(resource["blob"])
+                                try:
+                                    return raw.decode("utf-8")
+                                except (UnicodeDecodeError, ValueError):
+                                    return raw
 
         raise FileNotFoundError(f"Could not read file: {path}")
 
     def download_files(
         self,
         paths: List[str],
-    ) -> Dict[str, str]:
+    ) -> Dict[str, Union[str, bytes]]:
         """Download/read multiple files from the code interpreter environment.
 
         Args:
             paths: List of file paths to read.
 
         Returns:
-            Dict mapping file paths to their contents.
+            Dict mapping file paths to their contents. Values are strings for
+            text files, or bytes for binary files (images, PDFs, etc.).
 
         Example:
             >>> files = client.download_files(['data.csv', 'results.json'])
@@ -667,7 +673,11 @@ class CodeInterpreter:
                             if "text" in resource:
                                 files[file_path] = resource["text"]
                             elif "blob" in resource:
-                                files[file_path] = base64.b64decode(resource["blob"]).decode("utf-8")
+                                raw = base64.b64decode(resource["blob"])
+                                try:
+                                    files[file_path] = raw.decode("utf-8")
+                                except (UnicodeDecodeError, ValueError):
+                                    files[file_path] = raw
 
         return files
 
