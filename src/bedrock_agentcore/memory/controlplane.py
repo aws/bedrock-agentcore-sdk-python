@@ -23,8 +23,7 @@ def _deprecation(method_name: str, suggestion: str) -> None:
     """Emit a deprecation warning for a MemoryControlPlaneClient method."""
     warnings.warn(
         f"MemoryControlPlaneClient.{method_name}() is deprecated. "
-        f"Use MemoryClient.{suggestion} instead. "
-        f"See: https://github.com/aws/bedrock-agentcore-sdk-python/issues/247",
+        f"Use MemoryClient.{suggestion} instead.",
         DeprecationWarning,
         stacklevel=3,
     )
@@ -49,7 +48,7 @@ class MemoryControlPlaneClient:
         warnings.warn(
             "MemoryControlPlaneClient is deprecated and will be removed in v1.4.0. "
             "Use MemoryClient instead, which provides all control plane operations "
-            "plus data plane features. See: https://github.com/aws/bedrock-agentcore-sdk-python/issues/247",
+            "plus data plane features.",
             DeprecationWarning,
             stacklevel=2,
         )
