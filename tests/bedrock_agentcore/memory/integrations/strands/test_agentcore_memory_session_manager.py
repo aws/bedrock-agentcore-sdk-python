@@ -51,10 +51,13 @@ def mock_memory_client():
 
 def _create_session_manager(config, mock_memory_client):
     """Helper to create a session manager with mocked dependencies."""
-    with patch(
-        "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient", return_value=mock_memory_client
-    ), patch("boto3.Session") as mock_boto_session, patch(
-        "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
+    with (
+        patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            return_value=mock_memory_client,
+        ),
+        patch("boto3.Session") as mock_boto_session,
+        patch("strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None),
     ):
         mock_session = Mock()
         mock_session.region_name = "us-west-2"
@@ -1620,7 +1623,6 @@ class TestBatchingFlush:
 
         Note: Tests internal grouping logic by directly manipulating buffer.
         """
-        import json
         from datetime import datetime, timezone
 
         conv_calls = {}
@@ -1757,7 +1759,9 @@ class TestBatchingContextManager:
         assert batching_session_manager.pending_message_count() == 0
         mock_memory_client.create_event.assert_called_once()
 
-    def test_exit_preserves_original_exception_when_flush_fails(self, batching_session_manager, mock_memory_client, caplog):
+    def test_exit_preserves_original_exception_when_flush_fails(
+        self, batching_session_manager, mock_memory_client, caplog
+    ):
         """Test __exit__ logs flush failure and preserves the original exception."""
         mock_memory_client.create_event.side_effect = RuntimeError("flush failed")
 
@@ -1777,7 +1781,9 @@ class TestBatchingContextManager:
             for record in caplog.records
         )
 
-    def test_exit_raises_flush_exception_when_no_original_exception(self, batching_session_manager, mock_memory_client, caplog):
+    def test_exit_raises_flush_exception_when_no_original_exception(
+        self, batching_session_manager, mock_memory_client, caplog
+    ):
         """Test __exit__ still raises flush exceptions when no original exception."""
         mock_memory_client.create_event.side_effect = RuntimeError("flush failed")
 

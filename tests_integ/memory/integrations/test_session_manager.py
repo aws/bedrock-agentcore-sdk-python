@@ -199,7 +199,7 @@ class TestAgentCoreMemorySessionManager:
             agent("Test message")
 
     def test_legacy_event_migration(self, test_memory_stm, memory_client):
-        """Test that legacy events with prefixed actorIds are found, migrated to metadata format, and old events deleted.
+        """Test that legacy events with prefixed actorIds are migrated to metadata format.
 
         The constructor calls read_session which creates a metadata-path session if none exists.
         To test legacy migration, we create the legacy event BEFORE constructing the session manager,

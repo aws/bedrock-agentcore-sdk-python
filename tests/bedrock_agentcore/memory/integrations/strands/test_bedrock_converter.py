@@ -12,12 +12,14 @@ def _make_conversational_event(session_messages):
     """Build one event with multiple conversational payloads."""
     payloads = []
     for sm in session_messages:
-        payloads.append({
-            "conversational": {
-                "content": {"text": json.dumps(sm.to_dict())},
-                "role": sm.message["role"].upper(),
+        payloads.append(
+            {
+                "conversational": {
+                    "content": {"text": json.dumps(sm.to_dict())},
+                    "role": sm.message["role"].upper(),
+                }
             }
-        })
+        )
     return {"payload": payloads}
 
 
@@ -268,7 +270,9 @@ class TestAgentCoreMemoryConverter:
         """Test one event with 3 conversational payloads preserves payload order."""
         msgs = [
             SessionMessage(
-                message_id=i, message={"role": "user", "content": [{"text": f"msg{i}"}]}, created_at="2023-01-01T00:00:00Z"
+                message_id=i,
+                message={"role": "user", "content": [{"text": f"msg{i}"}]},
+                created_at="2023-01-01T00:00:00Z",
             )
             for i in range(1, 4)
         ]
