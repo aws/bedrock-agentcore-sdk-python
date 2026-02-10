@@ -5,17 +5,29 @@ which provides all control plane operations plus data plane features.
 """
 
 import logging
+import os
 import time
 import uuid
 import warnings
 from typing import Any, Dict, List, Optional
 
+import boto3
 from botocore.exceptions import ClientError
 
-from .client import MemoryClient
 from .constants import MemoryStatus
 
 logger = logging.getLogger(__name__)
+
+
+def _deprecation(method_name: str, suggestion: str) -> None:
+    """Emit a deprecation warning for a MemoryControlPlaneClient method."""
+    warnings.warn(
+        f"MemoryControlPlaneClient.{method_name}() is deprecated. "
+        f"Use MemoryClient.{suggestion} instead. "
+        f"See: https://github.com/aws/bedrock-agentcore-sdk-python/issues/247",
+        DeprecationWarning,
+        stacklevel=3,
+    )
 
 
 class MemoryControlPlaneClient:
@@ -26,12 +38,13 @@ class MemoryControlPlaneClient:
         plus data plane features.
     """
 
-    def __init__(self, region_name: str = "us-west-2", environment: str = "prod"):
+    def __init__(self, region_name: str = "us-west-2", environment: str = "prod", client=None):
         """Initialize the Memory Control Plane client.
 
         Args:
             region_name: AWS region name
             environment: Environment name (unused, kept for backward compatibility)
+            client: Optional pre-built boto3 client (for testing/backward compatibility)
         """
         warnings.warn(
             "MemoryControlPlaneClient is deprecated and will be removed in v1.4.0. "
@@ -42,19 +55,18 @@ class MemoryControlPlaneClient:
         )
         self.region_name = region_name
         self.environment = environment
-        self._memory_client = MemoryClient(region_name=region_name)
+
+        if client is not None:
+            self.client = client
+        else:
+            self.endpoint = os.getenv(
+                "BEDROCK_AGENTCORE_CONTROL_ENDPOINT",
+                f"https://bedrock-agentcore-control.{region_name}.amazonaws.com",
+            )
+            service_name = os.getenv("BEDROCK_AGENTCORE_CONTROL_SERVICE", "bedrock-agentcore-control")
+            self.client = boto3.client(service_name, region_name=self.region_name, endpoint_url=self.endpoint)
 
         logger.info("Initialized MemoryControlPlaneClient for %s in %s", environment, region_name)
-
-    @property
-    def client(self):
-        """The underlying boto3 control plane client."""
-        return self._memory_client.gmcp_client
-
-    @client.setter
-    def client(self, value):
-        """Allow overriding the underlying boto3 client (used by tests)."""
-        self._memory_client.gmcp_client = value
 
     # ==================== MEMORY OPERATIONS ====================
 
@@ -71,6 +83,9 @@ class MemoryControlPlaneClient:
     ) -> Dict[str, Any]:
         """Create a memory resource with optional strategies.
 
+        .. deprecated::
+            Use :meth:`MemoryClient.create_memory` or :meth:`MemoryClient.create_memory_and_wait`.
+
         Args:
             name: Name for the memory resource
             event_expiry_days: How long to retain events (default: 90 days)
@@ -84,26 +99,46 @@ class MemoryControlPlaneClient:
         Returns:
             Created memory object
         """
-        if wait_for_active:
-            return self._memory_client.create_memory_and_wait(
-                name=name,
-                strategies=strategies or [],
-                description=description,
-                event_expiry_days=event_expiry_days,
-                memory_execution_role_arn=memory_execution_role_arn,
-                max_wait=max_wait,
-                poll_interval=poll_interval,
-            )
-        return self._memory_client.create_memory(
-            name=name,
-            strategies=strategies or [],
-            description=description,
-            event_expiry_days=event_expiry_days,
-            memory_execution_role_arn=memory_execution_role_arn,
-        )
+        _deprecation("create_memory", "create_memory() or create_memory_and_wait()")
+
+        params = {
+            "name": name,
+            "eventExpiryDuration": event_expiry_days,
+            "clientToken": str(uuid.uuid4()),
+        }
+
+        if description:
+            params["description"] = description
+
+        if memory_execution_role_arn:
+            params["memoryExecutionRoleArn"] = memory_execution_role_arn
+
+        if strategies:
+            params["memoryStrategies"] = strategies
+
+        try:
+            response = self.client.create_memory(**params)
+            memory = response["memory"]
+            memory_id = memory["id"]
+
+            logger.info("Created memory: %s", memory_id)
+
+            if wait_for_active:
+                return self._wait_for_memory_active(memory_id, max_wait, poll_interval)
+
+            return memory
+
+        except ClientError as e:
+            logger.error("Failed to create memory: %s", e)
+            raise
 
     def get_memory(self, memory_id: str, include_strategies: bool = True) -> Dict[str, Any]:
         """Get a memory resource by ID.
+
+        .. deprecated::
+            Use ``MemoryClient.get_memory(memoryId=memory_id)`` via the client's
+            ``__getattr__`` forwarding, or :meth:`MemoryClient.get_memory_strategies`
+            for strategy details.
 
         Args:
             memory_id: Memory resource ID
@@ -112,6 +147,8 @@ class MemoryControlPlaneClient:
         Returns:
             Memory resource details
         """
+        _deprecation("get_memory", "get_memory(memoryId=...) or get_memory_strategies()")
+
         try:
             response = self.client.get_memory(memoryId=memory_id)
             memory = response["memory"]
@@ -133,13 +170,43 @@ class MemoryControlPlaneClient:
     def list_memories(self, max_results: int = 100) -> List[Dict[str, Any]]:
         """List all memories for the account with pagination support.
 
+        .. deprecated::
+            Use :meth:`MemoryClient.list_memories`.
+
         Args:
             max_results: Maximum number of memories to return
 
         Returns:
             List of memory summaries
         """
-        return self._memory_client.list_memories(max_results=max_results)
+        _deprecation("list_memories", "list_memories()")
+
+        try:
+            memories = []
+            next_token = None
+
+            while len(memories) < max_results:
+                params = {"maxResults": min(100, max_results - len(memories))}
+                if next_token:
+                    params["nextToken"] = next_token
+
+                response = self.client.list_memories(**params)
+                batch = response.get("memories", [])
+                memories.extend(batch)
+
+                next_token = response.get("nextToken")
+                if not next_token or len(memories) >= max_results:
+                    break
+
+            # Add strategy count to each memory summary
+            for memory in memories:
+                memory["strategyCount"] = 0  # List memories doesn't include strategies
+
+            return memories[:max_results]
+
+        except ClientError as e:
+            logger.error("Failed to list memories: %s", e)
+            raise
 
     def update_memory(
         self,
@@ -156,6 +223,10 @@ class MemoryControlPlaneClient:
     ) -> Dict[str, Any]:
         """Update a memory resource properties and/or strategies.
 
+        .. deprecated::
+            Use :meth:`MemoryClient.update_memory_strategies` for strategy changes,
+            or call ``MemoryClient.update_memory(...)`` directly for property updates.
+
         Args:
             memory_id: Memory resource ID
             description: Optional new description
@@ -171,6 +242,11 @@ class MemoryControlPlaneClient:
         Returns:
             Updated memory object
         """
+        _deprecation(
+            "update_memory",
+            "update_memory_strategies() or update_memory_strategies_and_wait()",
+        )
+
         params: Dict = {
             "memoryId": memory_id,
             "clientToken": str(uuid.uuid4()),
@@ -227,6 +303,9 @@ class MemoryControlPlaneClient:
     ) -> Dict[str, Any]:
         """Delete a memory resource.
 
+        .. deprecated::
+            Use :meth:`MemoryClient.delete_memory` or :meth:`MemoryClient.delete_memory_and_wait`.
+
         Args:
             memory_id: Memory resource ID to delete
             wait_for_deletion: Whether to wait for complete deletion
@@ -237,6 +316,8 @@ class MemoryControlPlaneClient:
         Returns:
             Deletion response
         """
+        _deprecation("delete_memory", "delete_memory() or delete_memory_and_wait()")
+
         try:
             # If requested, wait for all strategies to become ACTIVE before deletion
             if wait_for_strategies:
@@ -253,30 +334,40 @@ class MemoryControlPlaneClient:
 
                     if transitional_strategies:
                         logger.info(
-                            "Waiting for %d strategies to become ACTIVE before deletion", len(transitional_strategies)
+                            "Waiting for %d strategies to become ACTIVE before deletion",
+                            len(transitional_strategies),
                         )
-                        start_time = time.time()
-                        while time.time() - start_time < max_wait:
-                            memory = self.get_memory(memory_id)
-                            strategies = memory.get("strategies", [])
-                            all_ready = all(
-                                s.get("status") in [MemoryStatus.ACTIVE.value, MemoryStatus.FAILED.value]
-                                for s in strategies
-                            )
-                            if all_ready:
-                                break
-                            time.sleep(poll_interval)
+                        self._wait_for_status(
+                            memory_id=memory_id,
+                            target_status=MemoryStatus.ACTIVE.value,
+                            max_wait=max_wait,
+                            poll_interval=poll_interval,
+                            check_strategies=True,
+                        )
                 except Exception as e:
                     logger.warning("Error waiting for strategies to become ACTIVE: %s", e)
 
-            if wait_for_deletion:
-                return self._memory_client.delete_memory_and_wait(
-                    memory_id=memory_id,
-                    max_wait=max_wait,
-                    poll_interval=poll_interval,
-                )
+            # Now delete the memory
+            response = self.client.delete_memory(memoryId=memory_id, clientToken=str(uuid.uuid4()))
 
-            return self._memory_client.delete_memory(memory_id=memory_id)
+            logger.info("Initiated deletion of memory: %s", memory_id)
+
+            if not wait_for_deletion:
+                return response
+
+            # Wait for deletion to complete
+            start_time = time.time()
+            while time.time() - start_time < max_wait:
+                try:
+                    self.client.get_memory(memoryId=memory_id)
+                    time.sleep(poll_interval)
+                except ClientError as e:
+                    if e.response["Error"]["Code"] == "ResourceNotFoundException":
+                        logger.info("Memory %s successfully deleted", memory_id)
+                        return response
+                    raise
+
+            raise TimeoutError(f"Memory {memory_id} was not deleted within {max_wait} seconds")
 
         except ClientError as e:
             logger.error("Failed to delete memory: %s", e)
@@ -294,6 +385,10 @@ class MemoryControlPlaneClient:
     ) -> Dict[str, Any]:
         """Add a strategy to a memory resource.
 
+        .. deprecated::
+            Use :meth:`MemoryClient.update_memory_strategies` with ``add_strategies``,
+            or one of the typed helpers like :meth:`MemoryClient.add_semantic_strategy`.
+
         Args:
             memory_id: Memory resource ID
             strategy: Strategy configuration dictionary
@@ -302,22 +397,54 @@ class MemoryControlPlaneClient:
             poll_interval: Seconds between status checks if wait_for_active is True
 
         Returns:
-            Updated memory object
+            Updated memory object with strategyId field
         """
-        if wait_for_active:
-            return self._memory_client.update_memory_strategies_and_wait(
-                memory_id=memory_id,
-                add_strategies=[strategy],
-                max_wait=max_wait,
-                poll_interval=poll_interval,
-            )
-        return self._memory_client.update_memory_strategies(
+        _deprecation(
+            "add_strategy",
+            "update_memory_strategies(add_strategies=[...]) or add_semantic_strategy() / add_summary_strategy()",
+        )
+
+        # Get the strategy type and name for identification
+        strategy_type = list(strategy.keys())[0]  # e.g., 'semanticMemoryStrategy'
+        strategy_name = strategy[strategy_type].get("name")
+
+        logger.info("Adding strategy %s of type %s to memory %s", strategy_name, strategy_type, memory_id)
+
+        # Use update_memory with add_strategies parameter but don't wait for memory
+        memory = self.update_memory(
             memory_id=memory_id,
             add_strategies=[strategy],
+            wait_for_active=False,  # Don't wait for memory, we'll check strategy specifically
         )
+
+        # If we need to wait for the strategy to become active
+        if wait_for_active:
+            # First, get the memory again to ensure we have the latest state
+            memory = self.get_memory(memory_id)
+
+            # Find the newly added strategy by matching name
+            strategies = memory.get("strategies", [])
+            strategy_id = None
+
+            for s in strategies:
+                # Match by name since that's unique within a memory
+                if s.get("name") == strategy_name:
+                    strategy_id = s.get("strategyId")
+                    logger.info("Found newly added strategy %s with ID %s", strategy_name, strategy_id)
+                    break
+
+            if strategy_id:
+                return self._wait_for_strategy_active(memory_id, strategy_id, max_wait, poll_interval)
+            else:
+                logger.warning("Could not identify newly added strategy %s to wait for activation", strategy_name)
+
+        return memory
 
     def get_strategy(self, memory_id: str, strategy_id: str) -> Dict[str, Any]:
         """Get a specific strategy from a memory resource.
+
+        .. deprecated::
+            Use :meth:`MemoryClient.get_memory_strategies` and filter by strategy ID.
 
         Args:
             memory_id: Memory resource ID
@@ -326,8 +453,11 @@ class MemoryControlPlaneClient:
         Returns:
             Strategy details
         """
+        _deprecation("get_strategy", "get_memory_strategies()")
+
         try:
-            strategies = self._memory_client.get_memory_strategies(memory_id)
+            memory = self.get_memory(memory_id)
+            strategies = memory.get("strategies", [])
 
             for strategy in strategies:
                 if strategy.get("strategyId") == strategy_id:
@@ -352,6 +482,10 @@ class MemoryControlPlaneClient:
     ) -> Dict[str, Any]:
         """Update a strategy in a memory resource.
 
+        .. deprecated::
+            Use :meth:`MemoryClient.update_memory_strategies` with ``modify_strategies``,
+            or :meth:`MemoryClient.modify_strategy`.
+
         Args:
             memory_id: Memory resource ID
             strategy_id: Strategy ID to update
@@ -365,6 +499,12 @@ class MemoryControlPlaneClient:
         Returns:
             Updated memory object
         """
+        _deprecation(
+            "update_strategy",
+            "update_memory_strategies(modify_strategies=[...]) or modify_strategy()",
+        )
+
+        # Note: API expects memoryStrategyId for input but returns strategyId in response
         modify_config: Dict = {"memoryStrategyId": strategy_id}
 
         if description is not None:
@@ -376,17 +516,18 @@ class MemoryControlPlaneClient:
         if configuration is not None:
             modify_config["configuration"] = configuration
 
-        if wait_for_active:
-            return self._memory_client.update_memory_strategies_and_wait(
-                memory_id=memory_id,
-                modify_strategies=[modify_config],
-                max_wait=max_wait,
-                poll_interval=poll_interval,
-            )
-        return self._memory_client.update_memory_strategies(
+        # Use update_memory with modify_strategies parameter but don't wait for memory
+        memory = self.update_memory(
             memory_id=memory_id,
             modify_strategies=[modify_config],
+            wait_for_active=False,  # Don't wait for memory, we'll check strategy specifically
         )
+
+        # If we need to wait for the strategy to become active
+        if wait_for_active:
+            return self._wait_for_strategy_active(memory_id, strategy_id, max_wait, poll_interval)
+
+        return memory
 
     def remove_strategy(
         self,
@@ -398,6 +539,10 @@ class MemoryControlPlaneClient:
     ) -> Dict[str, Any]:
         """Remove a strategy from a memory resource.
 
+        .. deprecated::
+            Use :meth:`MemoryClient.update_memory_strategies` with ``delete_strategy_ids``,
+            or :meth:`MemoryClient.delete_strategy`.
+
         Args:
             memory_id: Memory resource ID
             strategy_id: Strategy ID to remove
@@ -408,56 +553,162 @@ class MemoryControlPlaneClient:
         Returns:
             Updated memory object
         """
-        if wait_for_active:
-            return self._memory_client.update_memory_strategies_and_wait(
-                memory_id=memory_id,
-                delete_strategy_ids=[strategy_id],
-                max_wait=max_wait,
-                poll_interval=poll_interval,
-            )
-        return self._memory_client.update_memory_strategies(
+        _deprecation(
+            "remove_strategy",
+            "update_memory_strategies(delete_strategy_ids=[...]) or delete_strategy()",
+        )
+
+        # For remove_strategy, we only need to wait for memory to be active
+        # since the strategy will be gone
+        return self.update_memory(
             memory_id=memory_id,
             delete_strategy_ids=[strategy_id],
+            wait_for_active=wait_for_active,
+            max_wait=max_wait,
+            poll_interval=poll_interval,
         )
 
     # ==================== HELPER METHODS ====================
 
     def _wait_for_memory_active(self, memory_id: str, max_wait: int, poll_interval: int) -> Dict[str, Any]:
-        """Wait for memory and all strategies to reach ACTIVE state.
-
-        Used by update_memory(wait_for_active=True).
-        """
+        """Wait for memory to return to ACTIVE state."""
         logger.info("Waiting for memory %s to become ACTIVE...", memory_id)
+        return self._wait_for_status(
+            memory_id=memory_id,
+            target_status=MemoryStatus.ACTIVE.value,
+            max_wait=max_wait,
+            poll_interval=poll_interval,
+        )
+
+    def _wait_for_strategy_active(
+        self, memory_id: str, strategy_id: str, max_wait: int, poll_interval: int
+    ) -> Dict[str, Any]:
+        """Wait for specific memory strategy to become ACTIVE."""
+        logger.info("Waiting for strategy %s to become ACTIVE (max wait: %d seconds)...", strategy_id, max_wait)
+
+        start_time = time.time()
+        last_status = None
+
+        while time.time() - start_time < max_wait:
+            try:
+                memory = self.get_memory(memory_id)
+                strategies = memory.get("strategies", [])
+
+                for strategy in strategies:
+                    if strategy.get("strategyId") == strategy_id:
+                        status = strategy["status"]
+
+                        # Log status changes
+                        if status != last_status:
+                            logger.info("Strategy %s status: %s", strategy_id, status)
+                            last_status = status
+
+                        if status == MemoryStatus.ACTIVE.value:
+                            elapsed = time.time() - start_time
+                            logger.info("Strategy %s is now ACTIVE (took %.1f seconds)", strategy_id, elapsed)
+                            return memory
+                        elif status == MemoryStatus.FAILED.value:
+                            failure_reason = strategy.get("failureReason", "Unknown")
+                            raise RuntimeError(f"Strategy {strategy_id} failed to activate: {failure_reason}")
+
+                        break
+                else:
+                    logger.warning("Strategy %s not found in memory %s", strategy_id, memory_id)
+
+                # Wait before checking again
+                time.sleep(poll_interval)
+
+            except ClientError as e:
+                logger.error("Error checking strategy status: %s", e)
+                raise
+
+        elapsed = time.time() - start_time
+        raise TimeoutError(
+            f"Strategy {strategy_id} did not become ACTIVE within {max_wait} seconds (last status: {last_status})"
+        )
+
+    def _wait_for_status(
+        self,
+        memory_id: str,
+        target_status: str,
+        max_wait: int,
+        poll_interval: int,
+        check_strategies: bool = True,
+    ) -> Dict[str, Any]:
+        """Generic method to wait for a memory to reach a specific status.
+
+        Args:
+            memory_id: The ID of the memory to check
+            target_status: The status to wait for (e.g., "ACTIVE")
+            max_wait: Maximum time to wait in seconds
+            poll_interval: Time between status checks in seconds
+            check_strategies: Whether to also check that all strategies are in the target status
+
+        Returns:
+            The memory object once it reaches the target status
+
+        Raises:
+            TimeoutError: If the memory doesn't reach the target status within max_wait
+            RuntimeError: If the memory or any strategy reaches a FAILED state
+        """
+        logger.info("Waiting for memory %s to reach status %s...", memory_id, target_status)
 
         start_time = time.time()
         last_memory_status = None
+        strategy_statuses = {}
 
         while time.time() - start_time < max_wait:
             try:
                 memory = self.get_memory(memory_id)
                 status = memory.get("status")
 
+                # Log status changes for memory
                 if status != last_memory_status:
                     logger.info("Memory %s status: %s", memory_id, status)
                     last_memory_status = status
 
-                if status == MemoryStatus.ACTIVE.value:
-                    strategies = memory.get("strategies", [])
-                    all_strategies_active = all(
-                        s.get("status") in [MemoryStatus.ACTIVE.value, MemoryStatus.FAILED.value] for s in strategies
-                    )
+                if status == target_status:
+                    # Check if all strategies are also in the target status
+                    if check_strategies and target_status == MemoryStatus.ACTIVE.value:
+                        strategies = memory.get("strategies", [])
+                        all_strategies_active = True
 
-                    if not all_strategies_active:
-                        logger.info(
-                            "Memory %s is ACTIVE but %d strategies are still processing",
-                            memory_id,
-                            len([s for s in strategies if s.get("status") != MemoryStatus.ACTIVE.value]),
-                        )
-                        time.sleep(poll_interval)
-                        continue
+                        for strategy in strategies:
+                            strategy_id = strategy.get("strategyId")
+                            strategy_status = strategy.get("status")
+
+                            # Log strategy status changes
+                            if (
+                                strategy_id not in strategy_statuses
+                                or strategy_statuses[strategy_id] != strategy_status
+                            ):
+                                logger.info("Strategy %s status: %s", strategy_id, strategy_status)
+                                strategy_statuses[strategy_id] = strategy_status
+
+                            if strategy_status != target_status:
+                                if strategy_status == MemoryStatus.FAILED.value:
+                                    failure_reason = strategy.get("failureReason", "Unknown")
+                                    raise RuntimeError(f"Strategy {strategy_id} failed: {failure_reason}")
+
+                                all_strategies_active = False
+
+                        if not all_strategies_active:
+                            logger.info(
+                                "Memory %s is %s but %d strategies are still processing",
+                                memory_id,
+                                target_status,
+                                len([s for s in strategies if s.get("status") != target_status]),
+                            )
+                            time.sleep(poll_interval)
+                            continue
 
                     elapsed = time.time() - start_time
-                    logger.info("Memory %s and all strategies are now ACTIVE (took %.1f seconds)", memory_id, elapsed)
+                    logger.info(
+                        "Memory %s and all strategies are now %s (took %.1f seconds)",
+                        memory_id,
+                        target_status,
+                        elapsed,
+                    )
                     return memory
                 elif status == MemoryStatus.FAILED.value:
                     failure_reason = memory.get("failureReason", "Unknown")
@@ -471,6 +722,6 @@ class MemoryControlPlaneClient:
 
         elapsed = time.time() - start_time
         raise TimeoutError(
-            f"Memory {memory_id} did not reach status ACTIVE within {max_wait} seconds "
+            f"Memory {memory_id} did not reach status {target_status} within {max_wait} seconds "
             f"(elapsed: {elapsed:.1f}s)"
         )
