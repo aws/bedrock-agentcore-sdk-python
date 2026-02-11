@@ -218,6 +218,7 @@ result = agent_with_tools("/path/to/image.png")
 - `session_id`: Unique identifier for the conversation session
 - `actor_id`: Unique identifier for the user/actor
 - `retrieval_config`: Dictionary mapping namespaces to RetrievalConfig objects
+- `batch_size`: Number of messages to buffer before sending to AgentCore Memory (1-100, default: 1). A value of 1 sends immediately (no batching).
 
 ### RetrievalConfig Parameters
 
@@ -240,6 +241,55 @@ https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-strategies.
 
 ---
 
+## Message Batching
+
+When `batch_size` is greater than 1, messages are buffered in memory and sent to AgentCore Memory
+in a single API call once the buffer reaches the configured size. This reduces the number of API
+requests in high-throughput conversations.
+
+> **Important:** When using `batch_size > 1`, you **must** use a `with` block or call `close()`
+> when the session is complete. Otherwise, any buffered messages that have not yet reached the
+> batch threshold will be lost.
+
+### Recommended: Context Manager
+
+```python
+config = AgentCoreMemoryConfig(
+    memory_id=MEM_ID,
+    session_id=SESSION_ID,
+    actor_id=ACTOR_ID,
+    batch_size=10,  # Buffer up to 10 messages before sending
+)
+
+# The `with` block guarantees all buffered messages are flushed on exit
+with AgentCoreMemorySessionManager(config, region_name='us-east-1') as session_manager:
+    agent = Agent(
+        system_prompt="You are a helpful assistant.",
+        session_manager=session_manager,
+    )
+    agent("Hello!")
+    agent("Tell me about AWS")
+# All remaining buffered messages are automatically flushed here
+```
+
+### Alternative: Explicit close()
+
+If you cannot use a `with` block, call `close()` manually:
+
+```python
+session_manager = AgentCoreMemorySessionManager(config, region_name='us-east-1')
+try:
+    agent = Agent(
+        system_prompt="You are a helpful assistant.",
+        session_manager=session_manager,
+    )
+    agent("Hello!")
+finally:
+    session_manager.close()  # Flush any remaining buffered messages
+```
+
+---
+
 ## Important Notes
 
 ### Session Management
@@ -255,3 +305,4 @@ https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-strategies.
 - Use consistent `actor_id` for the same user across sessions
 - Configure appropriate `relevance_score` thresholds for your use case
 - Test with different `top_k` values to optimize retrieval performance
+- When using `batch_size > 1`, always use a `with` block or call `close()` to ensure buffered messages are flushed before the session ends
