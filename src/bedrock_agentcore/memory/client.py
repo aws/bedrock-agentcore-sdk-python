@@ -788,6 +788,7 @@ class MemoryClient:
                 all_events.extend(events)
 
                 next_token = response.get("nextToken")
+                # Break if: no more pages or reached max
                 if not next_token or len(all_events) >= max_results:
                     break
 

@@ -5,6 +5,7 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
 import boto3
@@ -19,6 +20,7 @@ from strands.types.session import Session, SessionAgent, SessionMessage
 from typing_extensions import override
 
 from bedrock_agentcore.memory.client import MemoryClient
+from bedrock_agentcore.memory.models.filters import EventMetadataFilter, LeftExpression, OperatorType, RightExpression
 
 from .bedrock_converter import AgentCoreMemoryConverter
 from .config import AgentCoreMemoryConfig, RetrievalConfig
@@ -28,10 +30,22 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SESSION_PREFIX = "session_"
-AGENT_PREFIX = "agent_"
-MESSAGE_PREFIX = "message_"
 MAX_FETCH_ALL_RESULTS = 10000
+
+# Legacy prefixes for backwards compatibility with old events
+LEGACY_SESSION_PREFIX = "session_"
+LEGACY_AGENT_PREFIX = "agent_"
+
+# Metadata keys for event identification
+STATE_TYPE_KEY = "stateType"
+AGENT_ID_KEY = "agentId"
+
+
+class StateType(Enum):
+    """State type for distinguishing session and agent metadata in events."""
+
+    SESSION = "SESSION"
+    AGENT = "AGENT"
 
 
 class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository):
@@ -104,7 +118,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         session = boto_session or boto3.Session(region_name=region_name)
         self.has_existing_agent = False
 
-        # Override the clients if custom boto session or config is provided
+        # Batching support - stores pre-processed messages: (session_id, messages, is_blob, timestamp)
+        self._message_buffer: list[tuple[str, list[tuple[str, str]], bool, datetime]] = []
+        self._buffer_lock = threading.Lock()
+
         # Add strands-agents to the request user agent
         if boto_client_config:
             existing_user_agent = getattr(boto_client_config, "user_agent_extra", None)
@@ -124,38 +141,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             "bedrock-agentcore", region_name=region_name or session.region_name, config=client_config
         )
         super().__init__(session_id=self.config.session_id, session_repository=self)
-
-    def _get_full_session_id(self, session_id: str) -> str:
-        """Get the full session ID with the configured prefix.
-
-        Args:
-            session_id (str): The session ID.
-
-        Returns:
-            str: The full session ID with the prefix.
-        """
-        full_session_id = f"{SESSION_PREFIX}{session_id}"
-        if full_session_id == self.config.actor_id:
-            raise SessionException(
-                f"Cannot have session [ {full_session_id} ] with the same ID as the actor ID: {self.config.actor_id}"
-            )
-        return full_session_id
-
-    def _get_full_agent_id(self, agent_id: str) -> str:
-        """Get the full agent ID with the configured prefix.
-
-        Args:
-            agent_id (str): The agent ID.
-
-        Returns:
-            str: The full agent ID with the prefix.
-        """
-        full_agent_id = f"{AGENT_PREFIX}{agent_id}"
-        if full_agent_id == self.config.actor_id:
-            raise SessionException(
-                f"Cannot create agent [ {full_agent_id} ] with the same ID as the actor ID: {self.config.actor_id}"
-            )
-        return full_agent_id
 
     # region SessionRepository interface implementation
     def create_session(self, session: Session, **kwargs: Any) -> Session:
@@ -179,12 +164,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         event = self.memory_client.gmdp_client.create_event(
             memoryId=self.config.memory_id,
-            actorId=self._get_full_session_id(session.session_id),
+            actorId=self.config.actor_id,
             sessionId=self.session_id,
             payload=[
                 {"blob": json.dumps(session.to_dict())},
             ],
             eventTimestamp=self._get_monotonic_timestamp(),
+            metadata={STATE_TYPE_KEY: {"stringValue": StateType.SESSION.value}},
         )
         logger.info("Created session: %s with event: %s", session.session_id, event.get("event", {}).get("eventId"))
         return session
@@ -206,17 +192,50 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if session_id != self.config.session_id:
             return None
 
+        # 1. Try new approach (metadata filter)
+        event_metadata = [
+            EventMetadataFilter.build_expression(
+                left_operand=LeftExpression.build(STATE_TYPE_KEY),
+                operator=OperatorType.EQUALS_TO,
+                right_operand=RightExpression.build(StateType.SESSION.value),
+            )
+        ]
+
         events = self.memory_client.list_events(
             memory_id=self.config.memory_id,
-            actor_id=self._get_full_session_id(session_id),
+            actor_id=self.config.actor_id,
+            session_id=session_id,
+            event_metadata=event_metadata,
+            max_results=1,
+        )
+        if events:
+            session_data = json.loads(events[0].get("payload", {})[0].get("blob"))
+            return Session.from_dict(session_data)
+
+        # 2. Fallback: check for legacy event and migrate
+        legacy_actor_id = f"{LEGACY_SESSION_PREFIX}{session_id}"
+        events = self.memory_client.list_events(
+            memory_id=self.config.memory_id,
+            actor_id=legacy_actor_id,
             session_id=session_id,
             max_results=1,
         )
-        if not events:
-            return None
+        if events:
+            old_event = events[0]
+            session_data = json.loads(old_event.get("payload", {})[0].get("blob"))
+            session = Session.from_dict(session_data)
+            # Migrate: create new event with metadata, delete old
+            self.create_session(session)
+            self.memory_client.gmdp_client.delete_event(
+                memoryId=self.config.memory_id,
+                actorId=legacy_actor_id,
+                sessionId=session_id,
+                eventId=old_event.get("eventId"),
+            )
+            logger.info("Migrated legacy session event for session: %s", session_id)
+            return session
 
-        session_data = json.loads(events[0].get("payload", {})[0].get("blob"))
-        return Session.from_dict(session_data)
+        return None
 
     def delete_session(self, session_id: str, **kwargs: Any) -> None:
         """Delete session and all associated data.
@@ -250,12 +269,16 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         event = self.memory_client.gmdp_client.create_event(
             memoryId=self.config.memory_id,
-            actorId=self._get_full_agent_id(session_agent.agent_id),
+            actorId=self.config.actor_id,
             sessionId=self.session_id,
             payload=[
                 {"blob": json.dumps(session_agent.to_dict())},
             ],
             eventTimestamp=self._get_monotonic_timestamp(),
+            metadata={
+                STATE_TYPE_KEY: {"stringValue": StateType.AGENT.value},
+                AGENT_ID_KEY: {"stringValue": session_agent.agent_id},
+            },
         )
         logger.info(
             "Created agent: %s in session: %s with event %s",
@@ -280,18 +303,56 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if session_id != self.config.session_id:
             return None
         try:
+            # 1. Try new approach (metadata filter)
+            event_metadata = [
+                EventMetadataFilter.build_expression(
+                    left_operand=LeftExpression.build(STATE_TYPE_KEY),
+                    operator=OperatorType.EQUALS_TO,
+                    right_operand=RightExpression.build(StateType.AGENT.value),
+                ),
+                EventMetadataFilter.build_expression(
+                    left_operand=LeftExpression.build(AGENT_ID_KEY),
+                    operator=OperatorType.EQUALS_TO,
+                    right_operand=RightExpression.build(agent_id),
+                ),
+            ]
+
             events = self.memory_client.list_events(
                 memory_id=self.config.memory_id,
-                actor_id=self._get_full_agent_id(agent_id),
+                actor_id=self.config.actor_id,
                 session_id=session_id,
+                event_metadata=event_metadata,
                 max_results=1,
             )
 
-            if not events:
-                return None
+            if events:
+                agent_data = json.loads(events[0].get("payload", {})[0].get("blob"))
+                return SessionAgent.from_dict(agent_data)
 
-            agent_data = json.loads(events[0].get("payload", {})[0].get("blob"))
-            return SessionAgent.from_dict(agent_data)
+            # 2. Fallback: check for legacy event and migrate
+            legacy_actor_id = f"{LEGACY_AGENT_PREFIX}{agent_id}"
+            events = self.memory_client.list_events(
+                memory_id=self.config.memory_id,
+                actor_id=legacy_actor_id,
+                session_id=session_id,
+                max_results=1,
+            )
+            if events:
+                old_event = events[0]
+                agent_data = json.loads(old_event.get("payload", {})[0].get("blob"))
+                agent = SessionAgent.from_dict(agent_data)
+                # Migrate: create new event with metadata, delete old
+                self.create_agent(session_id, agent)
+                self.memory_client.gmdp_client.delete_event(
+                    memoryId=self.config.memory_id,
+                    actorId=legacy_actor_id,
+                    sessionId=session_id,
+                    eventId=old_event.get("eventId"),
+                )
+                logger.info("Migrated legacy agent event for agent: %s", agent_id)
+                return agent
+
+            return None
         except Exception as e:
             logger.error("Failed to read agent %s", e)
             return None
@@ -311,8 +372,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         previous_agent = self.read_agent(session_id=session_id, agent_id=agent_id)
         if previous_agent is None:
             raise SessionException(f"Agent {agent_id} in session {session_id} does not exist")
+        else:
+            session_agent.created_at = previous_agent.created_at
 
-        session_agent.created_at = previous_agent.created_at
         # Create a new agent as AgentCore Memory is immutable. We always get the latest one in `read_agent`
         self.create_agent(session_id, session_agent)
 
@@ -320,6 +382,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self, session_id: str, agent_id: str, session_message: SessionMessage, **kwargs: Any
     ) -> Optional[dict[str, Any]]:
         """Create a new message in AgentCore Memory.
+
+        If batch_size > 1, the message is buffered and sent when the buffer reaches batch_size.
+        Use _flush_messages() or close() to send any remaining buffered messages.
 
         Args:
             session_id (str): The session ID to create the message in.
@@ -330,6 +395,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         Returns:
             Optional[dict[str, Any]]: The created event data from AgentCore Memory.
+                Returns empty dict if message is buffered (batch_size > 1).
 
         Raises:
             SessionException: If session ID doesn't match configuration or message creation fails.
@@ -350,16 +416,33 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if session_id != self.config.session_id:
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session_id}")
 
+        # Convert and check size ONCE (not again at flush)
+        messages = AgentCoreMemoryConverter.message_to_payload(session_message)
+        if not messages:
+            return None
+
+        is_blob = AgentCoreMemoryConverter.exceeds_conversational_limit(messages[0])
+
+        # Parse the original timestamp and use it as desired timestamp
+        original_timestamp = datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00"))
+        monotonic_timestamp = self._get_monotonic_timestamp(original_timestamp)
+
+        if self.config.batch_size > 1:
+            # Buffer the pre-processed message
+            should_flush = False
+            with self._buffer_lock:
+                self._message_buffer.append((session_id, messages, is_blob, monotonic_timestamp))
+                should_flush = len(self._message_buffer) >= self.config.batch_size
+
+            # Flush outside the lock to prevent deadlock
+            if should_flush:
+                self._flush_messages()
+
+            return {}  # No eventId yet
+
+        # Immediate send (batch_size == 1)
         try:
-            messages = AgentCoreMemoryConverter.message_to_payload(session_message)
-            if not messages:
-                return
-
-            # Parse the original timestamp and use it as desired timestamp
-            original_timestamp = datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00"))
-            monotonic_timestamp = self._get_monotonic_timestamp(original_timestamp)
-
-            if not AgentCoreMemoryConverter.exceeds_conversational_limit(messages[0]):
+            if not is_blob:
                 event = self.memory_client.create_event(
                     memory_id=self.config.memory_id,
                     actor_id=self.config.actor_id,
@@ -586,3 +669,131 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         RepositorySessionManager.initialize(self, agent, **kwargs)
 
     # endregion RepositorySessionManager overrides
+
+    # region Batching support
+
+    def _flush_messages(self) -> list[dict[str, Any]]:
+        """Flush all buffered messages to AgentCore Memory.
+
+        Call this method to send any remaining buffered messages when batch_size > 1.
+        This is automatically called when the buffer reaches batch_size, but should
+        also be called explicitly when the session is complete (via close() or context manager).
+
+        Messages are batched by session_id - all conversational messages for the same
+        session are combined into a single create_event() call to reduce API calls.
+        Blob messages (>9KB) are sent individually as they require a different API path.
+
+        Returns:
+            list[dict[str, Any]]: List of created event responses from AgentCore Memory.
+
+        Raises:
+            SessionException: If any message creation fails. On failure, all messages
+                remain in the buffer to prevent data loss.
+        """
+        with self._buffer_lock:
+            messages_to_send = list(self._message_buffer)
+
+        if not messages_to_send:
+            return []
+
+        # Group conversational messages by session_id, preserve order
+        # Structure: {session_id: {"messages": [...], "timestamp": latest_timestamp}}
+        session_groups: dict[str, dict[str, Any]] = {}
+        blob_messages: list[tuple[str, list[tuple[str, str]], datetime]] = []
+
+        for session_id, messages, is_blob, monotonic_timestamp in messages_to_send:
+            if is_blob:
+                # Blobs cannot be combined - collect them separately
+                blob_messages.append((session_id, messages, monotonic_timestamp))
+            else:
+                # Group conversational messages by session_id
+                if session_id not in session_groups:
+                    session_groups[session_id] = {"messages": [], "timestamp": monotonic_timestamp}
+                # Extend messages list to preserve order (earlier messages first)
+                session_groups[session_id]["messages"].extend(messages)
+                # Use the latest timestamp for the combined event
+                if monotonic_timestamp > session_groups[session_id]["timestamp"]:
+                    session_groups[session_id]["timestamp"] = monotonic_timestamp
+
+        results = []
+        try:
+            # Send one create_event per session_id with combined messages
+            for session_id, group in session_groups.items():
+                event = self.memory_client.create_event(
+                    memory_id=self.config.memory_id,
+                    actor_id=self.config.actor_id,
+                    session_id=session_id,
+                    messages=group["messages"],
+                    event_timestamp=group["timestamp"],
+                )
+                results.append(event)
+                logger.debug("Flushed batched event for session %s: %s", session_id, event.get("eventId"))
+
+            # Send blob messages individually (they use a different API path)
+            for session_id, messages, monotonic_timestamp in blob_messages:
+                event = self.memory_client.gmdp_client.create_event(
+                    memoryId=self.config.memory_id,
+                    actorId=self.config.actor_id,
+                    sessionId=session_id,
+                    payload=[
+                        {"blob": json.dumps(messages[0])},
+                    ],
+                    eventTimestamp=monotonic_timestamp,
+                )
+                results.append(event)
+                logger.debug("Flushed blob event for session %s: %s", session_id, event.get("eventId"))
+
+            # Clear buffer only after ALL messages succeed
+            with self._buffer_lock:
+                self._message_buffer.clear()
+
+        except Exception as e:
+            logger.error("Failed to flush messages to AgentCore Memory for session: %s", e)
+            raise SessionException(f"Failed to flush messages: {e}") from e
+
+        logger.info("Flushed %d events to AgentCore Memory", len(results))
+        return results
+
+    def pending_message_count(self) -> int:
+        """Return the number of messages pending in the buffer.
+
+        Returns:
+            int: Number of buffered messages waiting to be sent.
+        """
+        with self._buffer_lock:
+            return len(self._message_buffer)
+
+    def close(self) -> None:
+        """Explicitly flush pending messages and close the session manager.
+
+        Call this method when the session is complete to ensure all buffered
+        messages are sent to AgentCore Memory. Alternatively, use the context
+        manager protocol (with statement) for automatic cleanup.
+        """
+        self._flush_messages()
+
+    def __enter__(self) -> "AgentCoreMemorySessionManager":
+        """Enter the context manager.
+
+        Returns:
+            AgentCoreMemorySessionManager: This session manager instance.
+        """
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Exit the context manager and flush any pending messages.
+
+        Args:
+            exc_type: Exception type if an exception occurred.
+            exc_val: Exception value if an exception occurred.
+            exc_tb: Exception traceback if an exception occurred.
+        """
+        try:
+            self._flush_messages()
+        except Exception as e:
+            if exc_type is not None:
+                logger.error("Failed to flush messages during exception handling: %s", e)
+            else:
+                raise
+
+    # endregion Batching support

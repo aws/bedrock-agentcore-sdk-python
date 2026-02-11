@@ -8,6 +8,21 @@ from strands.types.session import SessionMessage
 from bedrock_agentcore.memory.integrations.strands.bedrock_converter import AgentCoreMemoryConverter
 
 
+def _make_conversational_event(session_messages):
+    """Build one event with multiple conversational payloads."""
+    payloads = []
+    for sm in session_messages:
+        payloads.append(
+            {
+                "conversational": {
+                    "content": {"text": json.dumps(sm.to_dict())},
+                    "role": sm.message["role"].upper(),
+                }
+            }
+        )
+    return {"payload": payloads}
+
+
 class TestAgentCoreMemoryConverter:
     """Test cases for AgentCoreMemoryConverter."""
 
@@ -221,3 +236,142 @@ class TestAgentCoreMemoryConverter:
         assert isinstance(encoded_bytes, dict)
         assert encoded_bytes.get("__bytes_encoded__") is True
         assert "data" in encoded_bytes
+
+    # --- Ordering tests for events_to_messages ---
+
+    def test_events_to_messages_empty_events(self):
+        """Test that empty input returns empty output."""
+        result = AgentCoreMemoryConverter.events_to_messages([])
+        assert result == []
+
+    def test_events_to_messages_multiple_events_chronological_order(self):
+        """Test two single-payload events in reverse chronological order produce chronological result."""
+        msg_first = SessionMessage(
+            message_id=1, message={"role": "user", "content": [{"text": "First"}]}, created_at="2023-01-01T00:00:00Z"
+        )
+        msg_second = SessionMessage(
+            message_id=2,
+            message={"role": "assistant", "content": [{"text": "Second"}]},
+            created_at="2023-01-01T00:00:01Z",
+        )
+
+        # API returns newest first
+        event_newer = _make_conversational_event([msg_second])
+        event_older = _make_conversational_event([msg_first])
+        events = [event_newer, event_older]
+
+        result = AgentCoreMemoryConverter.events_to_messages(events)
+
+        assert len(result) == 2
+        assert result[0].message["content"][0]["text"] == "First"
+        assert result[1].message["content"][0]["text"] == "Second"
+
+    def test_events_to_messages_single_event_multiple_payloads_preserves_order(self):
+        """Test one event with 3 conversational payloads preserves payload order."""
+        msgs = [
+            SessionMessage(
+                message_id=i,
+                message={"role": "user", "content": [{"text": f"msg{i}"}]},
+                created_at="2023-01-01T00:00:00Z",
+            )
+            for i in range(1, 4)
+        ]
+
+        event = _make_conversational_event(msgs)
+        result = AgentCoreMemoryConverter.events_to_messages([event])
+
+        assert len(result) == 3
+        assert result[0].message["content"][0]["text"] == "msg1"
+        assert result[1].message["content"][0]["text"] == "msg2"
+        assert result[2].message["content"][0]["text"] == "msg3"
+
+    def test_events_to_messages_multiple_batched_events_ordering(self):
+        """Test two multi-payload events: event order reversed, intra-event payload order preserved.
+
+        This is the exact scenario that the original reverse-after-flatten bug broke.
+        """
+        msg1 = SessionMessage(
+            message_id=1, message={"role": "user", "content": [{"text": "msg1"}]}, created_at="2023-01-01T00:00:00Z"
+        )
+        msg2 = SessionMessage(
+            message_id=2,
+            message={"role": "assistant", "content": [{"text": "msg2"}]},
+            created_at="2023-01-01T00:00:01Z",
+        )
+        msg3 = SessionMessage(
+            message_id=3, message={"role": "user", "content": [{"text": "msg3"}]}, created_at="2023-01-01T00:00:02Z"
+        )
+        msg4 = SessionMessage(
+            message_id=4,
+            message={"role": "assistant", "content": [{"text": "msg4"}]},
+            created_at="2023-01-01T00:00:03Z",
+        )
+
+        # API returns newest event first
+        event_newer = _make_conversational_event([msg3, msg4])
+        event_older = _make_conversational_event([msg1, msg2])
+        events = [event_newer, event_older]
+
+        result = AgentCoreMemoryConverter.events_to_messages(events)
+
+        assert len(result) == 4
+        assert result[0].message["content"][0]["text"] == "msg1"
+        assert result[1].message["content"][0]["text"] == "msg2"
+        assert result[2].message["content"][0]["text"] == "msg3"
+        assert result[3].message["content"][0]["text"] == "msg4"
+
+    def test_events_to_messages_mixed_blob_and_conversational_ordering(self):
+        """Test blob and conversational events in reverse chronological order produce chronological result."""
+        msg_first = SessionMessage(
+            message_id=1, message={"role": "user", "content": [{"text": "First"}]}, created_at="2023-01-01T00:00:00Z"
+        )
+        msg_second = SessionMessage(
+            message_id=2,
+            message={"role": "assistant", "content": [{"text": "Second"}]},
+            created_at="2023-01-01T00:00:01Z",
+        )
+
+        # Newer event uses blob format, older event uses conversational format
+        blob_data = [json.dumps(msg_second.to_dict()), "assistant"]
+        event_newer = {"payload": [{"blob": json.dumps(blob_data)}]}
+        event_older = _make_conversational_event([msg_first])
+        events = [event_newer, event_older]
+
+        result = AgentCoreMemoryConverter.events_to_messages(events)
+
+        assert len(result) == 2
+        assert result[0].message["content"][0]["text"] == "First"
+        assert result[1].message["content"][0]["text"] == "Second"
+
+    @patch("bedrock_agentcore.memory.integrations.strands.bedrock_converter.logger")
+    def test_events_to_messages_malformed_payload_does_not_break_batch(self, mock_logger):
+        """Test a malformed blob payload between two valid conversational payloads in a single event."""
+        msg1 = SessionMessage(
+            message_id=1, message={"role": "user", "content": [{"text": "msg1"}]}, created_at="2023-01-01T00:00:00Z"
+        )
+        msg3 = SessionMessage(
+            message_id=3, message={"role": "user", "content": [{"text": "msg3"}]}, created_at="2023-01-01T00:00:02Z"
+        )
+
+        conv1 = {
+            "conversational": {
+                "content": {"text": json.dumps(msg1.to_dict())},
+                "role": "USER",
+            }
+        }
+        bad_blob = {"blob": "invalid json"}
+        conv3 = {
+            "conversational": {
+                "content": {"text": json.dumps(msg3.to_dict())},
+                "role": "USER",
+            }
+        }
+
+        events = [{"payload": [conv1, bad_blob, conv3]}]
+
+        result = AgentCoreMemoryConverter.events_to_messages(events)
+
+        assert len(result) == 2
+        assert result[0].message["content"][0]["text"] == "msg1"
+        assert result[1].message["content"][0]["text"] == "msg3"
+        mock_logger.error.assert_called()

@@ -4,17 +4,22 @@ Integration tests for AgentCore Memory Session Manager.
 Run with: python -m pytest tests_integ/memory/integrations/test_session_manager.py -v
 """
 
+import json
 import logging
 import os
 import time
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from strands import Agent
+from strands.types.session import Session, SessionAgent, SessionType
 
 from bedrock_agentcore.memory import MemoryClient
+from bedrock_agentcore.memory.integrations.strands.bedrock_converter import AgentCoreMemoryConverter
 from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
 from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
+from bedrock_agentcore.memory.models.filters import EventMetadataFilter, LeftExpression, OperatorType
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -41,7 +46,9 @@ class TestAgentCoreMemorySessionManager:
     def test_memory_stm(self, memory_client):
         """Create a test memory for integration tests."""
         memory_name = f"testmemorySTM{uuid.uuid4().hex[:8]}"
-        memory = memory_client.create_memory(name=memory_name, description="Test STM memory for integration tests")
+        memory = memory_client.create_memory_and_wait(
+            name=memory_name, description="Test STM memory for integration tests", strategies=[]
+        )
         yield memory
         # Cleanup
         try:
@@ -190,3 +197,169 @@ class TestAgentCoreMemorySessionManager:
             # This should fail when trying to use the session manager
             agent = Agent(system_prompt="Test", session_manager=session_manager)
             agent("Test message")
+
+    def test_legacy_event_migration(self, test_memory_stm, memory_client):
+        """Test that legacy events with prefixed actorIds are migrated to metadata format.
+
+        The constructor calls read_session which creates a metadata-path session if none exists.
+        To test legacy migration, we create the legacy event BEFORE constructing the session manager,
+        so the constructor's read_session finds it via the fallback and migrates it on first access.
+        """
+        session_id = f"test-legacy-{uuid.uuid4().hex[:8]}"
+        actor_id = f"test-actor-{uuid.uuid4().hex[:8]}"
+
+        # --- Session migration ---
+        # Create a legacy session event BEFORE constructing the session manager.
+        # Legacy events use blob payloads with the session data, so we use gmdp_client directly.
+        legacy_session_actor_id = f"session_{session_id}"
+        session_data = Session(session_id=session_id, session_type=SessionType.AGENT)
+        memory_client.gmdp_client.create_event(
+            memoryId=test_memory_stm["id"],
+            actorId=legacy_session_actor_id,
+            sessionId=session_id,
+            payload=[{"blob": json.dumps(session_data.to_dict())}],
+            eventTimestamp=datetime.now(timezone.utc),
+        )
+
+        # Verify legacy event exists before migration
+        legacy_events_before = memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=legacy_session_actor_id,
+            session_id=session_id,
+        )
+        assert len(legacy_events_before) >= 1
+
+        # Constructing the session manager triggers read_session in __init__,
+        # which should find the legacy event, migrate it, and delete the old one
+        config = AgentCoreMemoryConfig(
+            memory_id=test_memory_stm["id"],
+            session_id=session_id,
+            actor_id=actor_id,
+        )
+        session_manager = AgentCoreMemorySessionManager(agentcore_memory_config=config, region_name=REGION)
+
+        # Verify migration: legacy event should be deleted
+        legacy_events_after = memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=legacy_session_actor_id,
+            session_id=session_id,
+        )
+        assert len(legacy_events_after) == 0
+
+        # Verify migration: read_session finds it via the new metadata path
+        read_session_result = session_manager.read_session(session_id)
+        assert read_session_result is not None
+        assert read_session_result.session_id == session_id
+
+        # --- Agent migration ---
+        agent_id = f"test-agent-{uuid.uuid4().hex[:8]}"
+        legacy_agent_actor_id = f"agent_{agent_id}"
+        agent_data = SessionAgent(
+            agent_id=agent_id,
+            state={"key": "value"},
+            conversation_manager_state={},
+        )
+        memory_client.gmdp_client.create_event(
+            memoryId=test_memory_stm["id"],
+            actorId=legacy_agent_actor_id,
+            sessionId=session_id,
+            payload=[{"blob": json.dumps(agent_data.to_dict())}],
+            eventTimestamp=datetime.now(timezone.utc),
+        )
+
+        # read_agent should find via fallback and migrate
+        read_agent_result = session_manager.read_agent(session_id, agent_id)
+        assert read_agent_result is not None
+        assert read_agent_result.agent_id == agent_id
+
+        # Verify migration: legacy event should be deleted
+        legacy_agent_events = memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=legacy_agent_actor_id,
+            session_id=session_id,
+        )
+        assert len(legacy_agent_events) == 0
+
+    # endregion Event metadata integration tests
+
+    # region End-to-end agent with batching tests
+
+    def test_agent_conversation_with_context_manager(self, test_memory_stm):
+        """Test that Agent messages are flushed when the context manager exits, and session resume loads them."""
+        session_id = f"test-agent-ctx-{uuid.uuid4().hex[:8]}"
+        actor_id = f"test-actor-{uuid.uuid4().hex[:8]}"
+
+        config = AgentCoreMemoryConfig(
+            memory_id=test_memory_stm["id"],
+            session_id=session_id,
+            actor_id=actor_id,
+            batch_size=10,
+        )
+
+        # Use context manager — __exit__ calls _flush_messages() which is blocking
+        with AgentCoreMemorySessionManager(agentcore_memory_config=config, region_name=REGION) as sm:
+            agent = Agent(system_prompt="You are a helpful assistant.", session_manager=sm)
+            response1 = agent("Hello, my name is Bob")
+            assert response1 is not None
+
+        # After __exit__, buffered messages have been flushed (blocking).
+        # Resume session with a new session manager to verify persistence.
+        config2 = AgentCoreMemoryConfig(
+            memory_id=test_memory_stm["id"],
+            session_id=session_id,
+            actor_id=actor_id,
+            batch_size=10,
+        )
+        sm2 = AgentCoreMemorySessionManager(agentcore_memory_config=config2, region_name=REGION)
+        agent2 = Agent(system_prompt="You are a helpful assistant.", session_manager=sm2)
+
+        response2 = agent2("What is my name?")
+        assert response2 is not None
+        assert "Bob" in response2.message["content"][0]["text"]
+
+        sm2.close()
+
+    def test_agent_multi_turn_with_batching(self, test_memory_stm):
+        """Test that a multi-turn conversation within a single Agent works with batching."""
+        session_id = f"test-agent-multi-{uuid.uuid4().hex[:8]}"
+        actor_id = f"test-actor-{uuid.uuid4().hex[:8]}"
+
+        config = AgentCoreMemoryConfig(
+            memory_id=test_memory_stm["id"],
+            session_id=session_id,
+            actor_id=actor_id,
+            batch_size=10,
+        )
+        session_manager = AgentCoreMemorySessionManager(agentcore_memory_config=config, region_name=REGION)
+
+        agent = Agent(system_prompt="You are a helpful assistant.", session_manager=session_manager)
+
+        agent("Hello, my name is Charlie")
+        agent("I live in Seattle")
+        response3 = agent("What is my name and where do I live?")
+        assert response3 is not None
+        response_text = response3.message["content"][0]["text"]
+        assert "Charlie" in response_text
+        assert "Seattle" in response_text
+
+        # Flush remaining buffered messages (blocking)
+        session_manager.close()
+
+        # Verify batched messages are persisted — filter out state events
+        message_filter = EventMetadataFilter.build_expression(
+            left_operand=LeftExpression.build("stateType"),
+            operator=OperatorType.NOT_EXISTS,
+        )
+        events = session_manager.memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=actor_id,
+            session_id=session_id,
+            event_metadata=[message_filter],
+        )
+
+        # Convert events back to messages and verify all turns are present
+        messages = AgentCoreMemoryConverter.events_to_messages(events)
+        # At least 3 user + 3 assistant messages
+        assert len(messages) >= 6
+
+    # endregion End-to-end agent with batching tests
