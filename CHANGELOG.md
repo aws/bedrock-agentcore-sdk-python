@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.0] - 2026-02-11
+
+### Fixed
+- fix: download_file/download_files crash on binary content with UnicodeDecodeError (#257) (e8b63be)
+- fix: remove deprecated save_turn() and process_turn() methods (#241) (9bd2623)
+
+### Other Changes
+- feat(memory): event metadata state identification, message batching, and redundant sync elimination (#244) (fbce2fc)
+- fix(identity): update endpoint for Create/UpdateWorkloadIdentity (#249) (3fa9afe)
+- chore: bump version to 1.2.1 (#250) (cb44b79)
+
 ## [1.2.1] - 2026-02-03
 
 ### Fixed
