@@ -22,8 +22,7 @@ logger = logging.getLogger(__name__)
 def _deprecation(method_name: str, suggestion: str) -> None:
     """Emit a deprecation warning for a MemoryControlPlaneClient method."""
     warnings.warn(
-        f"MemoryControlPlaneClient.{method_name}() is deprecated. "
-        f"Use MemoryClient.{suggestion} instead.",
+        f"MemoryControlPlaneClient.{method_name}() is deprecated. Use MemoryClient.{suggestion} instead.",
         DeprecationWarning,
         stacklevel=3,
     )

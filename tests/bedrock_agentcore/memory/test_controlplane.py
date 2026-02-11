@@ -36,16 +36,10 @@ def test_method_deprecation_warnings():
     """Test that each public method emits its own deprecation warning."""
     client, mock_client = _create_client()
 
-    mock_client.create_memory.return_value = {
-        "memory": {"id": "mem-123", "name": "Test", "status": "CREATING"}
-    }
-    mock_client.get_memory.return_value = {
-        "memory": {"id": "mem-123", "status": "ACTIVE", "strategies": []}
-    }
+    mock_client.create_memory.return_value = {"memory": {"id": "mem-123", "name": "Test", "status": "CREATING"}}
+    mock_client.get_memory.return_value = {"memory": {"id": "mem-123", "status": "ACTIVE", "strategies": []}}
     mock_client.list_memories.return_value = {"memories": [], "nextToken": None}
-    mock_client.update_memory.return_value = {
-        "memory": {"id": "mem-123", "status": "CREATING"}
-    }
+    mock_client.update_memory.return_value = {"memory": {"id": "mem-123", "status": "CREATING"}}
     mock_client.delete_memory.return_value = {"status": "DELETING"}
 
     methods_and_suggestions = [
@@ -66,8 +60,7 @@ def test_method_deprecation_warnings():
                 pass  # Some methods may raise due to mock setup
             deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
             method_warnings = [
-                x for x in deprecation_warnings
-                if f"MemoryControlPlaneClient.{method_name}()" in str(x.message)
+                x for x in deprecation_warnings if f"MemoryControlPlaneClient.{method_name}()" in str(x.message)
             ]
             assert len(method_warnings) >= 1, f"No deprecation warning for {method_name}"
             assert "MemoryClient" in str(method_warnings[0].message)
@@ -78,9 +71,7 @@ def test_create_memory():
     client, mock_client = _create_client()
 
     # Mock successful response
-    mock_client.create_memory.return_value = {
-        "memory": {"id": "mem-123", "name": "Test Memory", "status": "CREATING"}
-    }
+    mock_client.create_memory.return_value = {"memory": {"id": "mem-123", "name": "Test Memory", "status": "CREATING"}}
 
     with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
         result = client.create_memory(name="Test Memory", description="Test description")
@@ -154,9 +145,7 @@ def test_update_memory():
     }
 
     with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
-        result = client.update_memory(
-            memory_id="mem-123", description="Updated description", event_expiry_days=120
-        )
+        result = client.update_memory(memory_id="mem-123", description="Updated description", event_expiry_days=120)
 
         assert result["id"] == "mem-123"
         assert mock_client.update_memory.called
@@ -238,9 +227,7 @@ def test_delete_memory_wait_for_deletion():
     with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
         with patch("time.time", return_value=0):
             with patch("time.sleep"):
-                result = client.delete_memory(
-                    "mem-123", wait_for_deletion=True, max_wait=120, poll_interval=5
-                )
+                result = client.delete_memory("mem-123", wait_for_deletion=True, max_wait=120, poll_interval=5)
 
                 assert result["status"] == "DELETING"
                 assert mock_client.delete_memory.called
@@ -251,9 +238,7 @@ def test_add_strategy():
     """Test add_strategy functionality."""
     client, mock_client = _create_client()
 
-    mock_client.update_memory.return_value = {
-        "memory": {"id": "mem-123", "status": "CREATING"}
-    }
+    mock_client.update_memory.return_value = {"memory": {"id": "mem-123", "status": "CREATING"}}
 
     strategy = {"semanticMemoryStrategy": {"name": "Test Strategy"}}
 
@@ -276,9 +261,7 @@ def test_add_strategy_wait_for_active():
     client, mock_client = _create_client()
 
     # First: update_memory response
-    mock_client.update_memory.return_value = {
-        "memory": {"id": "mem-123", "status": "CREATING"}
-    }
+    mock_client.update_memory.return_value = {"memory": {"id": "mem-123", "status": "CREATING"}}
 
     # Subsequent: get_memory calls for strategy lookup and wait
     mock_client.get_memory.side_effect = [
@@ -309,9 +292,7 @@ def test_add_strategy_wait_for_active():
     with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
         with patch("time.time", return_value=0):
             with patch("time.sleep"):
-                result = client.add_strategy(
-                    "mem-123", strategy, wait_for_active=True, max_wait=120, poll_interval=5
-                )
+                result = client.add_strategy("mem-123", strategy, wait_for_active=True, max_wait=120, poll_interval=5)
 
                 assert result["id"] == "mem-123"
                 assert mock_client.update_memory.called
@@ -341,9 +322,7 @@ def test_update_strategy():
     """Test update_strategy functionality."""
     client, mock_client = _create_client()
 
-    mock_client.update_memory.return_value = {
-        "memory": {"id": "mem-123", "status": "CREATING"}
-    }
+    mock_client.update_memory.return_value = {"memory": {"id": "mem-123", "status": "CREATING"}}
 
     with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
         result = client.update_strategy(
@@ -371,9 +350,7 @@ def test_remove_strategy():
     """Test remove_strategy functionality."""
     client, mock_client = _create_client()
 
-    mock_client.update_memory.return_value = {
-        "memory": {"id": "mem-123", "status": "CREATING"}
-    }
+    mock_client.update_memory.return_value = {"memory": {"id": "mem-123", "status": "CREATING"}}
 
     with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
         result = client.remove_strategy(memory_id="mem-123", strategy_id="strat-456")
@@ -436,12 +413,8 @@ def test_list_memories_with_pagination():
     """Test list_memories with pagination."""
     client, mock_client = _create_client()
 
-    first_batch = [
-        {"id": f"mem-{i}", "name": f"Memory {i}", "status": "ACTIVE"} for i in range(1, 101)
-    ]
-    second_batch = [
-        {"id": f"mem-{i}", "name": f"Memory {i}", "status": "ACTIVE"} for i in range(101, 151)
-    ]
+    first_batch = [{"id": f"mem-{i}", "name": f"Memory {i}", "status": "ACTIVE"} for i in range(1, 101)]
+    second_batch = [{"id": f"mem-{i}", "name": f"Memory {i}", "status": "ACTIVE"} for i in range(101, 151)]
 
     mock_client.list_memories.side_effect = [
         {"memories": first_batch, "nextToken": "token-123"},
@@ -462,9 +435,7 @@ def test_update_memory_minimal():
     """Test update_memory with minimal parameters."""
     client, mock_client = _create_client()
 
-    mock_client.update_memory.return_value = {
-        "memory": {"id": "mem-123", "status": "ACTIVE"}
-    }
+    mock_client.update_memory.return_value = {"memory": {"id": "mem-123", "status": "ACTIVE"}}
 
     with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
         result = client.update_memory(memory_id="mem-123")
@@ -484,9 +455,7 @@ def test_get_strategy_not_found():
     mock_client.get_memory.return_value = {
         "memory": {
             "id": "mem-123",
-            "strategies": [
-                {"strategyId": "strat-other", "name": "Other Strategy", "type": "SEMANTIC"}
-            ],
+            "strategies": [{"strategyId": "strat-other", "name": "Other Strategy", "type": "SEMANTIC"}],
         }
     }
 
@@ -504,9 +473,7 @@ def test_delete_memory_wait_for_deletion_timeout():
     mock_client.delete_memory.return_value = {"status": "DELETING"}
 
     # Mock get_memory to always succeed (memory never gets deleted)
-    mock_client.get_memory.return_value = {
-        "memory": {"id": "mem-persistent", "status": "DELETING"}
-    }
+    mock_client.get_memory.return_value = {"memory": {"id": "mem-persistent", "status": "DELETING"}}
 
     with patch("time.time", side_effect=[0, 0, 0, 301, 301, 301]):
         with patch("time.sleep"):
@@ -530,9 +497,7 @@ def test_wait_for_status_timeout():
     """Test _wait_for_status with timeout."""
     client, mock_client = _create_client()
 
-    mock_client.get_memory.return_value = {
-        "memory": {"id": "mem-timeout", "status": "CREATING", "strategies": []}
-    }
+    mock_client.get_memory.return_value = {"memory": {"id": "mem-timeout", "status": "CREATING", "strategies": []}}
 
     time_values = [0] + [i * 10 for i in range(1, 35)] + [301]
     with patch("time.time", side_effect=time_values):
@@ -621,9 +586,7 @@ def test_get_memory_client_error():
     """Test get_memory with ClientError."""
     client, mock_client = _create_client()
 
-    error_response = {
-        "Error": {"Code": "ResourceNotFoundException", "Message": "Memory not found"}
-    }
+    error_response = {"Error": {"Code": "ResourceNotFoundException", "Message": "Memory not found"}}
     mock_client.get_memory.side_effect = ClientError(error_response, "GetMemory")
 
     try:
@@ -637,9 +600,7 @@ def test_list_memories_client_error():
     """Test list_memories with ClientError."""
     client, mock_client = _create_client()
 
-    error_response = {
-        "Error": {"Code": "AccessDeniedException", "Message": "Insufficient permissions"}
-    }
+    error_response = {"Error": {"Code": "AccessDeniedException", "Message": "Insufficient permissions"}}
     mock_client.list_memories.side_effect = ClientError(error_response, "ListMemories")
 
     try:
@@ -653,9 +614,7 @@ def test_update_memory_client_error():
     """Test update_memory with ClientError."""
     client, mock_client = _create_client()
 
-    error_response = {
-        "Error": {"Code": "ValidationException", "Message": "Invalid memory parameters"}
-    }
+    error_response = {"Error": {"Code": "ValidationException", "Message": "Invalid memory parameters"}}
     mock_client.update_memory.side_effect = ClientError(error_response, "UpdateMemory")
 
     with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
@@ -670,9 +629,7 @@ def test_delete_memory_client_error():
     """Test delete_memory with ClientError."""
     client, mock_client = _create_client()
 
-    error_response = {
-        "Error": {"Code": "ConflictException", "Message": "Memory is in use"}
-    }
+    error_response = {"Error": {"Code": "ConflictException", "Message": "Memory is in use"}}
     mock_client.delete_memory.side_effect = ClientError(error_response, "DeleteMemory")
 
     with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
@@ -687,9 +644,7 @@ def test_get_strategy_client_error():
     """Test get_strategy with ClientError from get_memory."""
     client, mock_client = _create_client()
 
-    error_response = {
-        "Error": {"Code": "ThrottlingException", "Message": "Request throttled"}
-    }
+    error_response = {"Error": {"Code": "ThrottlingException", "Message": "Request throttled"}}
     mock_client.get_memory.side_effect = ClientError(error_response, "GetMemory")
 
     try:
@@ -703,9 +658,7 @@ def test_wait_for_status_client_error():
     """Test _wait_for_status with ClientError."""
     client, mock_client = _create_client()
 
-    error_response = {
-        "Error": {"Code": "InternalServerError", "Message": "Internal server error"}
-    }
+    error_response = {"Error": {"Code": "InternalServerError", "Message": "Internal server error"}}
     mock_client.get_memory.side_effect = ClientError(error_response, "GetMemory")
 
     with patch("time.time", return_value=0):
