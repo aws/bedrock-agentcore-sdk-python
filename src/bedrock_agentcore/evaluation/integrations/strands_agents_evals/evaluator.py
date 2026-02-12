@@ -98,7 +98,7 @@ class StrandsEvalsAgentCoreEvaluator(Evaluator[str, str]):
 
         # Create client with provided or default config
         client_config = config or self._get_default_config()
-        self.client = boto3.client("agentcore-evaluation-dataplane", region_name=region, config=client_config)
+        self.client = boto3.client("bedrock-agentcore", region_name=region, config=client_config)
 
     @staticmethod
     def _get_default_config() -> Config:
