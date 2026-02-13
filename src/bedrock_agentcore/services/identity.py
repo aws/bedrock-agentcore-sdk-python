@@ -166,6 +166,7 @@ class IdentityClient:
         token_poller: Optional[TokenPoller] = None,
         custom_state: Optional[str] = None,
         custom_parameters: Optional[Dict[str, str]] = None,
+        require_par: Optional[bool] = None,
     ) -> str:
         """Get an OAuth2 access token for the specified provider.
 
@@ -181,6 +182,8 @@ class IdentityClient:
             custom_state: A state that allows applications to verify the validity of callbacks to callback_url
             custom_parameters: A map of custom parameters to include in authorization request to the credential provider
                                Note: these parameters are in addition to standard OAuth 2.0 flow parameters
+            require_par: Whether to require Pushed Authorization Request (PAR). Set to False to disable PAR
+                        requirement for identity servers that don't support PAR. Defaults to None (backend default).
 
         Returns:
             The access token string
@@ -208,6 +211,8 @@ class IdentityClient:
             req["customState"] = custom_state
         if custom_parameters:
             req["customParameters"] = custom_parameters
+        if require_par is not None:
+            req["requirePar"] = require_par
 
         response = self.dp_client.get_resource_oauth2_token(**req)
 
@@ -233,8 +238,10 @@ class IdentityClient:
                 req["sessionUri"] = response["sessionUri"]
 
             # Poll for the token
+            # Create a copy of req to avoid modifying the original during polling
+            poll_req = req.copy()
             active_poller = token_poller or _DefaultApiTokenPoller(
-                auth_url, lambda: self.dp_client.get_resource_oauth2_token(**req).get("accessToken", None)
+                auth_url, lambda: self.dp_client.get_resource_oauth2_token(**poll_req).get("accessToken", None)
             )
             return await active_poller.poll_for_token()
 
