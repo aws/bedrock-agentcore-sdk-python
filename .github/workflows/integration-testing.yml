@@ -130,16 +130,16 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e .
-          pip install --no-cache-dir pytest requests strands-agents uvicorn httpx starlette websockets
+          pip install --no-cache-dir pytest requests strands-agents strands-agents-evals uvicorn httpx starlette websockets
 
       - name: Run integration tests
         env:
           AWS_REGION: us-west-2
           PYTHONUNBUFFERED: 1
         id: tests
-        timeout-minutes: 10
+        timeout-minutes: 30
         run: |
-          pytest tests_integ/runtime -s --log-cli-level=INFO
+          pytest tests_integ/ --ignore=tests_integ/tools -s --log-cli-level=INFO
 
   safety-gate:
     runs-on: ubuntu-latest
