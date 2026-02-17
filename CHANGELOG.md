@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.1] - 2026-02-17
+
+### Fixed
+- fix: use correct boto3 service name for evaluation client (#267) (1e2be1b)
+
+### Documentation
+- docs: update memory READMEs with metadata types and message batching (#264) (efea9d4)
+
+### Other Changes
+- chore: bump version to 1.3.0 (#263) (208cc14)
+
 ## [1.3.0] - 2026-02-11
 
 ### Fixed
