@@ -151,7 +151,7 @@ class TestAgentCoreMemorySessionManager:
         response2 = agent("What do I like to eat?")
         assert response2 is not None
         assert "sushi" in str(agent.messages)
-        assert "<user_context>" in str(agent.messages)
+        assert "<retrieved_memory>" in str(agent.messages)
 
     def test_multiple_namespace_retrieval_config(self, test_memory_ltm):
         """Test session manager with multiple namespace retrieval configurations."""
@@ -182,7 +182,7 @@ class TestAgentCoreMemorySessionManager:
         response2 = agent("What do I like to eat?")
         assert response2 is not None
         assert "sushi" in str(agent.messages)
-        assert "<user_context>" in str(agent.messages)
+        assert "<retrieved_memory>" in str(agent.messages)
 
     def test_session_manager_error_handling(self):
         """Test session manager error handling with invalid configuration."""
