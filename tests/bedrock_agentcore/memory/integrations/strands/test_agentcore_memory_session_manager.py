@@ -1156,9 +1156,10 @@ class TestAgentCoreMemorySessionManager:
                     event = MessageAddedEvent(agent=mock_agent, message={"role": "user", "content": [{"text": "test"}]})
                     manager.retrieve_customer_context(event)
 
-                    # Verify context was injected
-                    assert len(mock_agent.messages) == 2
-                    injected_context = mock_agent.messages[1]["content"][0]["text"]
+                    # Verify context was injected into the user message as a content block
+                    # (single-message conversation uses inline injection)
+                    assert len(mock_agent.messages) == 1
+                    injected_context = mock_agent.messages[0]["content"][0]["text"]
 
                     # With threshold 0.5, only scores >= 0.5 should be included (0.6 and 0.9)
                     assert "High relevance 1" in injected_context

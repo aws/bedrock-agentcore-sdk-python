@@ -634,14 +634,15 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                         namespace = future_to_namespace[future]
                         logger.error("Failed to retrieve memories for namespace %s: %s", namespace, e)
 
-            # Inject customer context into the query
+            # Inject retrieved memory as a content block in the last user message.
+            # Prepended so the user's query text remains last (avoids assistant-prefill
+            # errors on Claude 4.6+ and keeps the user request in the position models
+            # attend to most).
             if all_context:
                 context_text = "\n".join(all_context)
-                ltm_msg: Message = {
-                    "role": "assistant",
-                    "content": [{"text": f"<user_context>{context_text}</user_context>"}],
-                }
-                event.agent.messages.append(ltm_msg)
+                event.agent.messages[-1]["content"].insert(
+                    0, {"text": f"<retrieved_memory>{context_text}</retrieved_memory>"}
+                )
                 logger.info("Retrieved %s customer context items", len(all_context))
 
         except Exception as e:
