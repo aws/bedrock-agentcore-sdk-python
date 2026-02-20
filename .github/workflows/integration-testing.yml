@@ -99,6 +99,7 @@ jobs:
             }
 
   check-access-and-checkout:
+    name: Test (${{ matrix.group }})
     runs-on: ubuntu-latest
     needs: authorization-check
     if: needs.authorization-check.outputs.should-run == 'true'
@@ -107,6 +108,25 @@ jobs:
       id-token: write        # Required for AWS OIDC
       pull-requests: read    # Required to read PR info
       contents: read         # Required to checkout code
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: runtime
+            path: tests_integ/runtime
+            timeout: 10
+            extra-deps: ""
+            ignore: ""
+          - group: memory
+            path: tests_integ/memory
+            timeout: 20
+            extra-deps: ""
+            ignore: ""
+          - group: evaluation
+            path: tests_integ/evaluation
+            timeout: 15
+            extra-deps: "strands-agents-evals"
+            ignore: ""
     steps:
       - name: Configure Credentials
         uses: aws-actions/configure-aws-credentials@v5
@@ -130,16 +150,16 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e .
-          pip install --no-cache-dir pytest requests strands-agents uvicorn httpx starlette websockets
+          pip install --no-cache-dir pytest requests strands-agents uvicorn httpx starlette websockets ${{ matrix.extra-deps }}
 
       - name: Run integration tests
         env:
           AWS_REGION: us-west-2
           PYTHONUNBUFFERED: 1
         id: tests
-        timeout-minutes: 10
+        timeout-minutes: ${{ matrix.timeout }}
         run: |
-          pytest tests_integ/runtime -s --log-cli-level=INFO
+          pytest ${{ matrix.path }} ${{ matrix.ignore }} -s --log-cli-level=INFO
 
   safety-gate:
     runs-on: ubuntu-latest
