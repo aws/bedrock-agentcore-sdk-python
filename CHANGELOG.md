@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.2] - 2026-02-23
+
+### Added
+- feat: configurable context_tag with user_context default (#279) (33f09f7)
+
+### Fixed
+- fix: insert retrieved LTM before last user message to avoid prefill error on Claude 4.6+ (#271) (232d05c)
+
+### Other Changes
+- test: add thinking-mode compatibility tests for LTM retrieval (#272) (1bd22b7)
+- chore: bump version to 1.3.1 (#270) (8d7405c)
+
 ## [1.3.1] - 2026-02-17
 
 ### Fixed
