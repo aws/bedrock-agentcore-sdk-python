@@ -199,6 +199,174 @@ class ViewportConfiguration:
 
 
 @dataclass
+class BasicAuth:
+    """HTTP Basic Auth credentials stored in Secrets Manager.
+
+    Attributes:
+        secret_arn: ARN of the Secrets Manager secret containing
+            {"username": "...", "password": "..."} JSON
+    """
+
+    secret_arn: str
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        return {"secretArn": self.secret_arn}
+
+
+@dataclass
+class ProxyCredentials:
+    """Credentials for authenticating with a proxy server.
+
+    Currently supports HTTP Basic Auth. Modeled as a union to allow
+    future credential types (bearer token, mTLS, etc.) without breaking changes.
+
+    Attributes:
+        basic_auth: HTTP Basic Auth credentials via Secrets Manager
+    """
+
+    basic_auth: Optional[BasicAuth] = None
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        creds = {}
+        if self.basic_auth:
+            creds["basicAuth"] = self.basic_auth.to_dict()
+        return creds
+
+
+@dataclass
+class ExternalProxy:
+    """Configuration for an external proxy server.
+
+    Attributes:
+        server: Proxy server hostname
+        port: Proxy server port
+        domain_patterns: Domain patterns to route through this proxy
+        credentials: Optional credentials for proxy authentication
+    """
+
+    server: str
+    port: int
+    domain_patterns: Optional[List[str]] = None
+    credentials: Optional[ProxyCredentials] = None
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        proxy = {"server": self.server, "port": self.port}
+        if self.domain_patterns:
+            proxy["domainPatterns"] = self.domain_patterns
+        if self.credentials:
+            proxy["credentials"] = self.credentials.to_dict()
+        return {"externalProxy": proxy}
+
+
+@dataclass
+class ProxyConfiguration:
+    """Proxy configuration for routing browser traffic through external proxy servers.
+
+    Attributes:
+        proxies: List of external proxy configurations
+        bypass_patterns: Domain patterns that bypass all proxies
+    """
+
+    proxies: List[ExternalProxy]
+    bypass_patterns: Optional[List[str]] = None
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        config = {"proxies": [p.to_dict() for p in self.proxies]}
+        if self.bypass_patterns:
+            config["bypass"] = {"domainPatterns": self.bypass_patterns}
+        return config
+
+
+@dataclass
+class ExtensionS3Location:
+    """S3 location for a browser extension.
+
+    Attributes:
+        bucket: S3 bucket name
+        prefix: S3 key prefix for the extension
+        version_id: Optional S3 object version ID
+    """
+
+    bucket: str
+    prefix: str
+    version_id: Optional[str] = None
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        location = {"bucket": self.bucket, "prefix": self.prefix}
+        if self.version_id:
+            location["versionId"] = self.version_id
+        return location
+
+
+@dataclass
+class BrowserExtension:
+    """A browser extension to load into a session.
+
+    Attributes:
+        s3_location: S3 location of the extension package
+    """
+
+    s3_location: ExtensionS3Location
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        return {"location": {"s3": self.s3_location.to_dict()}}
+
+
+@dataclass
+class ProfileConfiguration:
+    """Profile configuration for persisting browser state across sessions.
+
+    Attributes:
+        profile_identifier: Identifier for the browser profile
+    """
+
+    profile_identifier: str
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        return {"profileIdentifier": self.profile_identifier}
+
+
+@dataclass
+class SessionConfiguration:
+    """Complete session configuration for start().
+
+    Bundles all session-level parameters into one composable type.
+    Usage: client.start(**session_config.to_dict())
+
+    Attributes:
+        viewport: Viewport dimensions for the browser session
+        proxy: Proxy configuration for routing browser traffic
+        extensions: Browser extensions to load into the session
+        profile: Profile configuration for persisting browser state
+    """
+
+    viewport: Optional[ViewportConfiguration] = None
+    proxy: Optional[ProxyConfiguration] = None
+    extensions: Optional[List[BrowserExtension]] = None
+    profile: Optional[ProfileConfiguration] = None
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        config = {}
+        if self.viewport:
+            config["viewport"] = self.viewport.to_dict()
+        if self.proxy:
+            config["proxy_configuration"] = self.proxy.to_dict()
+        if self.extensions:
+            config["extensions"] = [e.to_dict() for e in self.extensions]
+        if self.profile:
+            config["profile_configuration"] = self.profile.to_dict()
+        return config
+
+
+@dataclass
 class BrowserConfiguration:
     """Complete browser configuration for create_browser.
 

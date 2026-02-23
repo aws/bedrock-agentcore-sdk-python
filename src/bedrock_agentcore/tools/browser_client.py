@@ -11,7 +11,7 @@ import logging
 import secrets
 import uuid
 from contextlib import contextmanager
-from typing import Dict, Generator, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
 import boto3
@@ -22,6 +22,13 @@ from botocore.config import Config
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
 from .._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
+from .config import BrowserExtension, ProfileConfiguration, ProxyConfiguration, ViewportConfiguration
+
+
+def _to_dict(value):
+    """Convert a dataclass or dict to a dict. Passes dicts through unchanged."""
+    return value.to_dict() if hasattr(value, "to_dict") else value
+
 
 DEFAULT_IDENTIFIER = "aws.browser.v1"
 DEFAULT_SESSION_TIMEOUT = 3600
@@ -288,7 +295,10 @@ class BrowserClient:
         identifier: Optional[str] = DEFAULT_IDENTIFIER,
         name: Optional[str] = None,
         session_timeout_seconds: Optional[int] = DEFAULT_SESSION_TIMEOUT,
-        viewport: Optional[Dict[str, int]] = None,
+        viewport: Optional[Union[ViewportConfiguration, Dict[str, int]]] = None,
+        proxy_configuration: Optional[Union[ProxyConfiguration, Dict[str, Any]]] = None,
+        extensions: Optional[List[Union[BrowserExtension, Dict[str, Any]]]] = None,
+        profile_configuration: Optional[Union[ProfileConfiguration, Dict[str, Any]]] = None,
     ) -> str:
         """Start a browser sandbox session.
 
@@ -300,8 +310,20 @@ class BrowserClient:
             name (Optional[str]): A name for this session.
             session_timeout_seconds (Optional[int]): The timeout for the session in seconds.
                 Range: 1-28800 (8 hours). Default: 3600 (1 hour).
-            viewport (Optional[Dict[str, int]]): The viewport dimensions:
+            viewport (Optional[Union[ViewportConfiguration, Dict[str, int]]]): The viewport
+                dimensions. Can be a ViewportConfiguration dataclass or a plain dict:
                 {'width': 1920, 'height': 1080}
+            proxy_configuration (Optional[Union[ProxyConfiguration, Dict[str, Any]]]): Proxy
+                configuration for routing browser traffic through external proxy servers.
+                Can be a ProxyConfiguration dataclass or a plain dict matching the API shape.
+            extensions (Optional[List[Union[BrowserExtension, Dict[str, Any]]]]): List of
+                browser extensions to load into the session. Each element can be a
+                BrowserExtension dataclass or a plain dict:
+                [{"location": {"s3": {"bucket": "...", "prefix": "..."}}}]
+            profile_configuration (Optional[Union[ProfileConfiguration, Dict[str, Any]]]): Profile
+                configuration for persisting browser state across sessions. Can be a
+                ProfileConfiguration dataclass or a plain dict:
+                {"profileIdentifier": "my-profile-id"}
 
         Returns:
             str: The session ID of the newly created session.
@@ -316,6 +338,20 @@ class BrowserClient:
             ...     viewport={'width': 1920, 'height': 1080},
             ...     session_timeout_seconds=7200  # 2 hours
             ... )
+            >>>
+            >>> # Use proxy configuration
+            >>> session_id = client.start(
+            ...     proxy_configuration={
+            ...         "proxies": [{
+            ...             "externalProxy": {
+            ...                 "server": "proxy.example.com",
+            ...                 "port": 8080,
+            ...                 "domainPatterns": [".example.com"],
+            ...             }
+            ...         }],
+            ...         "bypass": {"domainPatterns": [".amazonaws.com"]}
+            ...     }
+            ... )
         """
         self.logger.info("Starting browser session...")
 
@@ -326,7 +362,16 @@ class BrowserClient:
         }
 
         if viewport is not None:
-            request_params["viewPort"] = viewport
+            request_params["viewPort"] = _to_dict(viewport)
+
+        if proxy_configuration is not None:
+            request_params["proxyConfiguration"] = _to_dict(proxy_configuration)
+
+        if extensions is not None:
+            request_params["extensions"] = [_to_dict(e) for e in extensions]
+
+        if profile_configuration is not None:
+            request_params["profileConfiguration"] = _to_dict(profile_configuration)
 
         response = self.data_plane_client.start_browser_session(**request_params)
 
@@ -581,14 +626,26 @@ class BrowserClient:
 
 @contextmanager
 def browser_session(
-    region: str, viewport: Optional[Dict[str, int]] = None, identifier: Optional[str] = None
+    region: str,
+    viewport: Optional[Union[ViewportConfiguration, Dict[str, int]]] = None,
+    identifier: Optional[str] = None,
+    proxy_configuration: Optional[Union[ProxyConfiguration, Dict[str, Any]]] = None,
+    extensions: Optional[List[Union[BrowserExtension, Dict[str, Any]]]] = None,
+    profile_configuration: Optional[Union[ProfileConfiguration, Dict[str, Any]]] = None,
 ) -> Generator[BrowserClient, None, None]:
     """Context manager for creating and managing a browser sandbox session.
 
     Args:
         region (str): AWS region.
-        viewport (Optional[Dict[str, int]]): Viewport dimensions.
+        viewport (Optional[Union[ViewportConfiguration, Dict[str, int]]]): Viewport dimensions.
+            Can be a ViewportConfiguration dataclass or a plain dict.
         identifier (Optional[str]): Browser identifier (system or custom).
+        proxy_configuration (Optional[Union[ProxyConfiguration, Dict[str, Any]]]): Proxy
+            configuration. Can be a ProxyConfiguration dataclass or a plain dict.
+        extensions (Optional[List[Union[BrowserExtension, Dict[str, Any]]]]): Browser
+            extensions. Each element can be a BrowserExtension dataclass or a plain dict.
+        profile_configuration (Optional[Union[ProfileConfiguration, Dict[str, Any]]]): Profile
+            configuration. Can be a ProfileConfiguration dataclass or a plain dict.
 
     Yields:
         BrowserClient: An initialized and started browser client.
@@ -602,6 +659,13 @@ def browser_session(
         >>> with browser_session('us-west-2', identifier='my-signed-browser') as client:
         ...     # Automation with reduced CAPTCHA friction
         ...     pass
+        ...
+        >>> # Use proxy configuration
+        >>> with browser_session('us-west-2', proxy_configuration={
+        ...     "proxies": [{"externalProxy": {"server": "proxy.corp.com", "port": 8080}}],
+        ...     "bypass": {"domainPatterns": [".amazonaws.com"]}
+        ... }) as client:
+        ...     ws_url, headers = client.generate_ws_headers()
     """
     client = BrowserClient(region)
     start_kwargs = {}
@@ -609,6 +673,12 @@ def browser_session(
         start_kwargs["viewport"] = viewport
     if identifier is not None:
         start_kwargs["identifier"] = identifier
+    if proxy_configuration is not None:
+        start_kwargs["proxy_configuration"] = proxy_configuration
+    if extensions is not None:
+        start_kwargs["extensions"] = extensions
+    if profile_configuration is not None:
+        start_kwargs["profile_configuration"] = profile_configuration
 
     client.start(**start_kwargs)
 
