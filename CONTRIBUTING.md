@@ -28,7 +28,16 @@ uv sync
 
 # Install pre-commit hooks (one-time)
 pre-commit install
+
+# Install Husky git hooks (manages git hooks layer on top of pre-commit)
+bash scripts/setup-husky.sh
 ```
+
+> **Note:** Husky is used as an additional git hooks manager that delegates to the
+> `pre-commit` framework. The `scripts/setup-husky.sh` script installs the npm
+> dependencies, makes the hook files executable, and configures git to use the
+> `.husky/` directory for hooks. Both systems work together: Husky manages the git
+> hook entry points, and `pre-commit` performs the actual checks.
 
 That's it! You're ready to develop.
 

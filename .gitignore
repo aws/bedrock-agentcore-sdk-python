@@ -228,3 +228,7 @@ local_settings.py
 .dockerignore
 Dockerfile
 CLAUDE.md
+
+# Node.js (Husky git hooks)
+node_modules/
+package-lock.json
