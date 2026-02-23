@@ -1937,7 +1937,7 @@ class TestThinkingModeCompatibility:
                     # Memory prepended, original query remains last
                     content = mock_agent.messages[0]["content"]
                     assert len(content) == 2
-                    assert "<retrieved_memory>" in content[0]["text"]
+                    assert "<user_context>" in content[0]["text"]
                     assert content[1]["text"] == "What are my preferences?"
 
     def test_retrieve_customer_context_no_assistant_message_multi_turn(
@@ -1982,5 +1982,5 @@ class TestThinkingModeCompatibility:
                     # Memory injected into last user message
                     content = mock_agent.messages[-1]["content"]
                     assert len(content) == 2
-                    assert "<retrieved_memory>" in content[0]["text"]
+                    assert "<user_context>" in content[0]["text"]
                     assert content[1]["text"] == "What do I like to eat?"
