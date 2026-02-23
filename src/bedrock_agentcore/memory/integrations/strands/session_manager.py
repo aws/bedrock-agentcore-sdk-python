@@ -641,7 +641,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             if all_context:
                 context_text = "\n".join(all_context)
                 event.agent.messages[-1]["content"].insert(
-                    0, {"text": f"<retrieved_memory>{context_text}</retrieved_memory>"}
+                    0, {"text": f"<{self.config.context_tag}>{context_text}</{self.config.context_tag}>"}
                 )
                 logger.info("Retrieved %s customer context items", len(all_context))
 
