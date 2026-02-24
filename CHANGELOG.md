@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0] - 2026-02-24
+
+### Added
+- feat: add SessionConfiguration with proxy, extensions, and profile support (#274) (ca3c322)
+
+### Other Changes
+- chore: bump version to 1.3.2 (#280) (a637826)
+
 ## [Unreleased]
 
 ### Added
