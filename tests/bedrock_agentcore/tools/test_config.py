@@ -1,12 +1,20 @@
 import pytest
 
 from bedrock_agentcore.tools.config import (
+    BasicAuth,
     BrowserConfiguration,
+    BrowserExtension,
     BrowserSigningConfiguration,
     CodeInterpreterConfiguration,
+    ExtensionS3Location,
+    ExternalProxy,
     NetworkConfiguration,
+    ProfileConfiguration,
+    ProxyConfiguration,
+    ProxyCredentials,
     RecordingConfiguration,
     S3Location,
+    SessionConfiguration,
     ViewportConfiguration,
     VpcConfig,
     create_browser_config,
@@ -464,3 +472,123 @@ class TestCreateBrowserConfig:
         assert result["recording"]["enabled"] is True
         assert result["browserSigning"]["enabled"] is True
         assert result["tags"] == {"Environment": "Test"}
+
+
+class TestBasicAuth:
+    def test_to_dict(self):
+        auth = BasicAuth(secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:proxy-creds")
+        assert auth.to_dict() == {"secretArn": "arn:aws:secretsmanager:us-east-1:123456789012:secret:proxy-creds"}
+
+
+class TestProxyCredentials:
+    def test_to_dict_with_basic_auth(self):
+        creds = ProxyCredentials(
+            basic_auth=BasicAuth(secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:proxy-creds")
+        )
+        assert creds.to_dict() == {
+            "basicAuth": {"secretArn": "arn:aws:secretsmanager:us-east-1:123456789012:secret:proxy-creds"}
+        }
+
+    def test_to_dict_empty(self):
+        creds = ProxyCredentials()
+        assert creds.to_dict() == {}
+
+
+class TestExternalProxy:
+    def test_minimal_to_dict(self):
+        proxy = ExternalProxy(server="proxy.example.com", port=8080)
+        assert proxy.to_dict() == {"externalProxy": {"server": "proxy.example.com", "port": 8080}}
+
+    def test_full_to_dict(self):
+        proxy = ExternalProxy(
+            server="proxy.example.com",
+            port=8080,
+            domain_patterns=[".example.com", ".internal.corp"],
+            credentials=ProxyCredentials(
+                basic_auth=BasicAuth(secret_arn="arn:aws:secretsmanager:us-east-1:123:secret:creds")
+            ),
+        )
+        result = proxy.to_dict()
+        assert result == {
+            "externalProxy": {
+                "server": "proxy.example.com",
+                "port": 8080,
+                "domainPatterns": [".example.com", ".internal.corp"],
+                "credentials": {"basicAuth": {"secretArn": "arn:aws:secretsmanager:us-east-1:123:secret:creds"}},
+            }
+        }
+
+
+class TestProxyConfiguration:
+    def test_without_bypass(self):
+        config = ProxyConfiguration(proxies=[ExternalProxy(server="proxy.example.com", port=8080)])
+        result = config.to_dict()
+        assert result == {"proxies": [{"externalProxy": {"server": "proxy.example.com", "port": 8080}}]}
+
+    def test_with_bypass(self):
+        config = ProxyConfiguration(
+            proxies=[ExternalProxy(server="proxy.example.com", port=8080)],
+            bypass_patterns=[".amazonaws.com", "169.254.169.254"],
+        )
+        result = config.to_dict()
+        assert result == {
+            "proxies": [{"externalProxy": {"server": "proxy.example.com", "port": 8080}}],
+            "bypass": {"domainPatterns": [".amazonaws.com", "169.254.169.254"]},
+        }
+
+
+class TestExtensionS3Location:
+    def test_minimal_to_dict(self):
+        location = ExtensionS3Location(bucket="my-bucket", prefix="extensions/my-ext")
+        assert location.to_dict() == {"bucket": "my-bucket", "prefix": "extensions/my-ext"}
+
+    def test_with_version_id(self):
+        location = ExtensionS3Location(bucket="my-bucket", prefix="extensions/my-ext", version_id="abc123")
+        assert location.to_dict() == {
+            "bucket": "my-bucket",
+            "prefix": "extensions/my-ext",
+            "versionId": "abc123",
+        }
+
+
+class TestBrowserExtension:
+    def test_to_dict(self):
+        ext = BrowserExtension(s3_location=ExtensionS3Location(bucket="my-bucket", prefix="extensions/my-ext"))
+        assert ext.to_dict() == {"location": {"s3": {"bucket": "my-bucket", "prefix": "extensions/my-ext"}}}
+
+
+class TestSessionConfiguration:
+    def test_empty_to_dict(self):
+        config = SessionConfiguration()
+        assert config.to_dict() == {}
+
+    def test_viewport_only(self):
+        config = SessionConfiguration(viewport=ViewportConfiguration.desktop_hd())
+        assert config.to_dict() == {"viewport": {"width": 1920, "height": 1080}}
+
+    def test_full_to_dict(self):
+        config = SessionConfiguration(
+            viewport=ViewportConfiguration(width=1280, height=720),
+            proxy=ProxyConfiguration(
+                proxies=[ExternalProxy(server="proxy.example.com", port=8080)],
+                bypass_patterns=[".amazonaws.com"],
+            ),
+            extensions=[BrowserExtension(s3_location=ExtensionS3Location(bucket="my-bucket", prefix="ext/v1"))],
+            profile=ProfileConfiguration(profile_identifier="my-profile-id"),
+        )
+        result = config.to_dict()
+        assert result == {
+            "viewport": {"width": 1280, "height": 720},
+            "proxy_configuration": {
+                "proxies": [{"externalProxy": {"server": "proxy.example.com", "port": 8080}}],
+                "bypass": {"domainPatterns": [".amazonaws.com"]},
+            },
+            "extensions": [{"location": {"s3": {"bucket": "my-bucket", "prefix": "ext/v1"}}}],
+            "profile_configuration": {"profileIdentifier": "my-profile-id"},
+        }
+
+
+class TestProfileConfiguration:
+    def test_to_dict(self):
+        config = ProfileConfiguration(profile_identifier="my-profile-id")
+        assert config.to_dict() == {"profileIdentifier": "my-profile-id"}

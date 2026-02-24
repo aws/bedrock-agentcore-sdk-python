@@ -8,6 +8,16 @@ from bedrock_agentcore.tools.browser_client import (
     BrowserClient,
     browser_session,
 )
+from bedrock_agentcore.tools.config import (
+    BasicAuth,
+    BrowserExtension,
+    ExtensionS3Location,
+    ExternalProxy,
+    ProfileConfiguration,
+    ProxyConfiguration,
+    ProxyCredentials,
+    ViewportConfiguration,
+)
 
 
 class TestBrowserClient:
@@ -870,4 +880,482 @@ class TestBrowserClient:
         # Assert
         mock_client_class.assert_called_once_with("us-west-2")
         mock_client.start.assert_called_once_with(viewport=viewport, identifier="custom-browser")
+        mock_client.stop.assert_called_once()
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_proxy_configuration(
+        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_browser_session.return_value = mock_response
+
+        proxy_config = {
+            "proxies": [
+                {
+                    "externalProxy": {
+                        "server": "proxy.example.com",
+                        "port": 8080,
+                        "domainPatterns": [".example.com", ".internal.corp"],
+                        "credentials": {
+                            "basicAuth": {
+                                "secretArn": "arn:aws:secretsmanager:us-east-1:123456789012:secret:proxy-creds"
+                            }
+                        },
+                    }
+                }
+            ],
+            "bypass": {"domainPatterns": [".amazonaws.com", "169.254.169.254"]},
+        }
+
+        # Act
+        session_id = client.start(proxy_configuration=proxy_config)
+
+        # Assert
+        client.data_plane_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+            proxyConfiguration=proxy_config,
+        )
+        assert session_id == "session-123"
+        assert client.identifier == "aws.browser.v1"
+        assert client.session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_proxy_configuration_and_viewport(
+        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_browser_session.return_value = mock_response
+
+        viewport = {"width": 1920, "height": 1080}
+        proxy_config = {
+            "proxies": [
+                {
+                    "externalProxy": {
+                        "server": "proxy.example.com",
+                        "port": 8080,
+                    }
+                }
+            ],
+        }
+
+        # Act
+        session_id = client.start(viewport=viewport, proxy_configuration=proxy_config)
+
+        # Assert
+        client.data_plane_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+            viewPort=viewport,
+            proxyConfiguration=proxy_config,
+        )
+        assert session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_proxy_configuration_multiple_proxies(
+        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_browser_session.return_value = mock_response
+
+        proxy_config = {
+            "proxies": [
+                {
+                    "externalProxy": {
+                        "server": "proxy-us.example.com",
+                        "port": 8080,
+                        "domainPatterns": [".us.example.com"],
+                    }
+                },
+                {
+                    "externalProxy": {
+                        "server": "proxy-eu.example.com",
+                        "port": 3128,
+                        "domainPatterns": [".eu.example.com"],
+                        "credentials": {
+                            "basicAuth": {
+                                "secretArn": "arn:aws:secretsmanager:eu-west-1:123456789012:secret:eu-proxy-creds"
+                            }
+                        },
+                    }
+                },
+            ],
+            "bypass": {"domainPatterns": [".amazonaws.com"]},
+        }
+
+        # Act
+        session_id = client.start(proxy_configuration=proxy_config)
+
+        # Assert
+        client.data_plane_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+            proxyConfiguration=proxy_config,
+        )
+        assert session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_without_proxy_configuration_unchanged(
+        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_browser_session.return_value = mock_response
+
+        # Act
+        session_id = client.start()
+
+        # Assert - proxyConfiguration should NOT be in the call
+        client.data_plane_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+        )
+        assert session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.BrowserClient")
+    def test_browser_session_context_manager_with_proxy_configuration(self, mock_client_class):
+        # Arrange
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        proxy_config = {
+            "proxies": [
+                {
+                    "externalProxy": {
+                        "server": "proxy.example.com",
+                        "port": 8080,
+                        "domainPatterns": [".example.com"],
+                    }
+                }
+            ],
+            "bypass": {"domainPatterns": [".amazonaws.com"]},
+        }
+
+        # Act
+        with browser_session("us-west-2", proxy_configuration=proxy_config):
+            pass
+
+        # Assert
+        mock_client_class.assert_called_once_with("us-west-2")
+        mock_client.start.assert_called_once_with(proxy_configuration=proxy_config)
+        mock_client.stop.assert_called_once()
+
+    @patch("bedrock_agentcore.tools.browser_client.BrowserClient")
+    def test_browser_session_context_manager_with_all_params_including_proxy(self, mock_client_class):
+        # Arrange
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        viewport = {"width": 1280, "height": 720}
+
+        proxy_config = {
+            "proxies": [
+                {
+                    "externalProxy": {
+                        "server": "proxy.example.com",
+                        "port": 8080,
+                    }
+                }
+            ],
+        }
+
+        # Act
+        with browser_session(
+            "us-west-2",
+            viewport=viewport,
+            identifier="custom-browser",
+            proxy_configuration=proxy_config,
+        ):
+            pass
+
+        # Assert
+        mock_client_class.assert_called_once_with("us-west-2")
+        mock_client.start.assert_called_once_with(
+            viewport=viewport, identifier="custom-browser", proxy_configuration=proxy_config
+        )
+        mock_client.stop.assert_called_once()
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_extensions(self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_browser_session.return_value = mock_response
+
+        extensions = [{"location": {"s3": {"bucket": "my-bucket", "prefix": "extensions/my-ext"}}}]
+
+        # Act
+        session_id = client.start(extensions=extensions)
+
+        # Assert
+        client.data_plane_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+            extensions=extensions,
+        )
+        assert session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_profile_configuration(
+        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_browser_session.return_value = mock_response
+
+        profile_config = {"profileIdentifier": "my-profile-id"}
+
+        # Act
+        session_id = client.start(profile_configuration=profile_config)
+
+        # Assert
+        client.data_plane_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+            profileConfiguration=profile_config,
+        )
+        assert session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_all_session_params(
+        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_browser_session.return_value = mock_response
+
+        viewport = {"width": 1920, "height": 1080}
+        proxy_config = {
+            "proxies": [{"externalProxy": {"server": "proxy.example.com", "port": 8080}}],
+        }
+        extensions = [{"location": {"s3": {"bucket": "my-bucket", "prefix": "extensions/my-ext"}}}]
+        profile_config = {"profileIdentifier": "my-profile-id"}
+
+        # Act
+        session_id = client.start(
+            viewport=viewport,
+            proxy_configuration=proxy_config,
+            extensions=extensions,
+            profile_configuration=profile_config,
+        )
+
+        # Assert
+        client.data_plane_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+            viewPort=viewport,
+            proxyConfiguration=proxy_config,
+            extensions=extensions,
+            profileConfiguration=profile_config,
+        )
+        assert session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.BrowserClient")
+    def test_browser_session_context_manager_with_extensions(self, mock_client_class):
+        # Arrange
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        extensions = [{"location": {"s3": {"bucket": "my-bucket", "prefix": "extensions/my-ext"}}}]
+
+        # Act
+        with browser_session("us-west-2", extensions=extensions):
+            pass
+
+        # Assert
+        mock_client_class.assert_called_once_with("us-west-2")
+        mock_client.start.assert_called_once_with(extensions=extensions)
+        mock_client.stop.assert_called_once()
+
+    @patch("bedrock_agentcore.tools.browser_client.BrowserClient")
+    def test_browser_session_context_manager_with_profile_configuration(self, mock_client_class):
+        # Arrange
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        profile_config = {"profileIdentifier": "my-profile-id"}
+
+        # Act
+        with browser_session("us-west-2", profile_configuration=profile_config):
+            pass
+
+        # Assert
+        mock_client_class.assert_called_once_with("us-west-2")
+        mock_client.start.assert_called_once_with(profile_configuration=profile_config)
+        mock_client.stop.assert_called_once()
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_proxy_configuration_dataclass(
+        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_browser_session.return_value = mock_response
+
+        proxy_dataclass = ProxyConfiguration(
+            proxies=[
+                ExternalProxy(
+                    server="proxy.example.com",
+                    port=8080,
+                    domain_patterns=[".example.com"],
+                    credentials=ProxyCredentials(
+                        basic_auth=BasicAuth(
+                            secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:proxy-creds"
+                        )
+                    ),
+                )
+            ],
+            bypass_patterns=[".amazonaws.com"],
+        )
+
+        # Act
+        session_id = client.start(proxy_configuration=proxy_dataclass)
+
+        # Assert
+        expected_dict = {
+            "proxies": [
+                {
+                    "externalProxy": {
+                        "server": "proxy.example.com",
+                        "port": 8080,
+                        "domainPatterns": [".example.com"],
+                        "credentials": {
+                            "basicAuth": {
+                                "secretArn": "arn:aws:secretsmanager:us-east-1:123456789012:secret:proxy-creds"
+                            }
+                        },
+                    }
+                }
+            ],
+            "bypass": {"domainPatterns": [".amazonaws.com"]},
+        }
+        client.data_plane_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+            proxyConfiguration=expected_dict,
+        )
+        assert session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_extensions_dataclass(
+        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_browser_session.return_value = mock_response
+
+        extensions = [BrowserExtension(s3_location=ExtensionS3Location(bucket="my-bucket", prefix="extensions/my-ext"))]
+
+        # Act
+        session_id = client.start(extensions=extensions)
+
+        # Assert
+        client.data_plane_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+            extensions=[{"location": {"s3": {"bucket": "my-bucket", "prefix": "extensions/my-ext"}}}],
+        )
+        assert session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.BrowserClient")
+    def test_browser_session_accepts_dataclass_params(self, mock_client_class):
+        # Arrange
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        viewport = ViewportConfiguration(width=1280, height=720)
+        proxy = ProxyConfiguration(
+            proxies=[ExternalProxy(server="proxy.example.com", port=8080)],
+        )
+        profile = ProfileConfiguration(profile_identifier="my-profile")
+
+        # Act
+        with browser_session(
+            "us-west-2",
+            viewport=viewport,
+            proxy_configuration=proxy,
+            profile_configuration=profile,
+        ):
+            pass
+
+        # Assert -- browser_session passes values through to start(), which handles conversion
+        mock_client_class.assert_called_once_with("us-west-2")
+        mock_client.start.assert_called_once_with(
+            viewport=viewport,
+            proxy_configuration=proxy,
+            profile_configuration=profile,
+        )
         mock_client.stop.assert_called_once()
