@@ -344,6 +344,76 @@ class TestIdentityClient:
             )
 
     @pytest.mark.asyncio
+    async def test_get_token_with_require_par_disabled(self):
+        """Test get_token with require_par set to False to disable PAR."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_client = Mock()
+            mock_boto_client.return_value = mock_client
+
+            identity_client = IdentityClient(region)
+
+            provider_name = "test-provider"
+            scopes = ["read", "write"]
+            agent_identity_token = "test-agent-token"
+            expected_token = "test-access-token"
+
+            mock_client.get_resource_oauth2_token.return_value = {"accessToken": expected_token}
+
+            result = await identity_client.get_token(
+                provider_name=provider_name,
+                scopes=scopes,
+                agent_identity_token=agent_identity_token,
+                auth_flow="USER_FEDERATION",
+                require_par=False,
+            )
+
+            assert result == expected_token
+            mock_client.get_resource_oauth2_token.assert_called_once_with(
+                resourceCredentialProviderName=provider_name,
+                scopes=scopes,
+                oauth2Flow="USER_FEDERATION",
+                workloadIdentityToken=agent_identity_token,
+                requirePar=False,
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_token_with_require_par_enabled(self):
+        """Test get_token with require_par set to True to enable PAR."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_client = Mock()
+            mock_boto_client.return_value = mock_client
+
+            identity_client = IdentityClient(region)
+
+            provider_name = "test-provider"
+            scopes = ["read", "write"]
+            agent_identity_token = "test-agent-token"
+            expected_token = "test-access-token"
+
+            mock_client.get_resource_oauth2_token.return_value = {"accessToken": expected_token}
+
+            result = await identity_client.get_token(
+                provider_name=provider_name,
+                scopes=scopes,
+                agent_identity_token=agent_identity_token,
+                auth_flow="USER_FEDERATION",
+                require_par=True,
+            )
+
+            assert result == expected_token
+            mock_client.get_resource_oauth2_token.assert_called_once_with(
+                resourceCredentialProviderName=provider_name,
+                scopes=scopes,
+                oauth2Flow="USER_FEDERATION",
+                workloadIdentityToken=agent_identity_token,
+                requirePar=True,
+            )
+
+    @pytest.mark.asyncio
     async def test_get_api_key_success(self):
         """Test successful API key retrieval."""
         region = "us-west-2"

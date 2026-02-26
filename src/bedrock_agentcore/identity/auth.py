@@ -31,6 +31,7 @@ def requires_access_token(
     token_poller: Optional[TokenPoller] = None,
     custom_state: Optional[str] = None,
     custom_parameters: Optional[Dict[str, str]] = None,
+    require_par: Optional[bool] = None,
 ) -> Callable:
     """Decorator that fetches an OAuth2 access token before calling the decorated function.
 
@@ -46,6 +47,8 @@ def requires_access_token(
         custom_state: A state that allows applications to verify the validity of callbacks to callback_url
         custom_parameters: A map of custom parameters to include in authorization request to the credential provider
                            Note: these parameters are in addition to standard OAuth 2.0 flow parameters
+        require_par: Whether to require Pushed Authorization Request (PAR). Set to False to disable PAR
+                     requirement for identity servers that don't support PAR. Defaults to None (backend default).
 
     Returns:
         Decorator function
@@ -67,6 +70,7 @@ def requires_access_token(
                 token_poller=token_poller,
                 custom_state=custom_state,
                 custom_parameters=custom_parameters,
+                require_par=require_par,
             )
 
         @wraps(func)
