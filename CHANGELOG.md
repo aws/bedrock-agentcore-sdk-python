@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.4.1] - 2026-02-27
+
+### Other Changes
+- chore: bump version to 1.4.0 (#281) (813c2c1)
+
 ## [1.4.0] - 2026-02-24
 
 ### Added
