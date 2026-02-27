@@ -493,7 +493,7 @@ def test_list_events_with_pagination():
         # Check second call parameters
         second_call = mock_gmdp.list_events.call_args_list[1]
         assert second_call[1]["nextToken"] == "token-123"
-        assert second_call[1]["maxResults"] == 50
+        assert second_call[1]["maxResults"] == 100
 
 
 def test_list_events_with_branch_filter():
@@ -662,7 +662,7 @@ def test_list_events_max_results_limit():
 
         # Verify API was called with correct max_results
         args, kwargs = mock_gmdp.list_events.call_args
-        assert kwargs["maxResults"] == 25
+        assert kwargs["maxResults"] == 100
 
 
 def test_list_memories():
