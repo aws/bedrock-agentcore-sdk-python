@@ -761,7 +761,7 @@ class MemoryClient:
                     "memoryId": memory_id,
                     "actorId": actor_id,
                     "sessionId": session_id,
-                    "maxResults": min(100, max_results - len(all_events)),
+                    "maxResults": 100,
                     "includePayloads": include_payload,
                 }
 
