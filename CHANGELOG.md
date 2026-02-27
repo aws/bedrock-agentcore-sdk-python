@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.3] - 2026-02-27
+
+### Added
+- feat: isolate async handler execution on dedicated worker event loop (#273) (c4ef286)
+
+### Other Changes
+- Update list_events max results to max value 100 (#285) (6f99e1b)
+
 ## [Unreleased]
 
 ### Added
