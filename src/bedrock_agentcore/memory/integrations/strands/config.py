@@ -33,6 +33,8 @@ class AgentCoreMemoryConfig(BaseModel):
             Default of 1 means immediate sending (no batching). Max 100.
         context_tag: XML tag name used to wrap retrieved memory context injected into messages.
             Default is "user_context".
+        filter_restored_tool_context: When True, strip historical toolUse/toolResult blocks from
+            restored messages before loading them into Strands runtime memory. Default is False.
     """
 
     memory_id: str = Field(min_length=1)
@@ -41,3 +43,4 @@ class AgentCoreMemoryConfig(BaseModel):
     retrieval_config: Optional[Dict[str, RetrievalConfig]] = None
     batch_size: int = Field(default=1, ge=1, le=100)
     context_tag: str = Field(default="user_context", min_length=1)
+    filter_restored_tool_context: bool = Field(default=False)

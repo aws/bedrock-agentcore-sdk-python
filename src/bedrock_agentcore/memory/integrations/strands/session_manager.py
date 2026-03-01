@@ -22,7 +22,7 @@ from typing_extensions import override
 from bedrock_agentcore.memory.client import MemoryClient
 from bedrock_agentcore.memory.models.filters import EventMetadataFilter, LeftExpression, OperatorType, RightExpression
 
-from .bedrock_converter import AgentCoreMemoryConverter
+from .converters import BedrockConverseConverter, MemoryConverter
 from .config import AgentCoreMemoryConfig, RetrievalConfig
 
 if TYPE_CHECKING:
@@ -98,6 +98,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def __init__(
         self,
         agentcore_memory_config: AgentCoreMemoryConfig,
+        converter: Optional[type[MemoryConverter]] = None,
         region_name: Optional[str] = None,
         boto_session: Optional[boto3.Session] = None,
         boto_client_config: Optional[BotocoreConfig] = None,
@@ -107,12 +108,15 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         Args:
             agentcore_memory_config (AgentCoreMemoryConfig): Configuration for AgentCore Memory integration.
+            converter (Optional[type[MemoryConverter]], optional): Converter used for message format transformation.
+                Defaults to BedrockConverseConverter.
             region_name (Optional[str], optional): AWS region for Bedrock AgentCore Memory. Defaults to None.
             boto_session (Optional[boto3.Session], optional): Optional boto3 session. Defaults to None.
             boto_client_config (Optional[BotocoreConfig], optional): Optional boto3 client configuration.
                Defaults to None.
             **kwargs (Any): Additional keyword arguments.
         """
+        self.converter = converter or BedrockConverseConverter
         self.config = agentcore_memory_config
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
@@ -417,11 +421,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session_id}")
 
         # Convert and check size ONCE (not again at flush)
-        messages = AgentCoreMemoryConverter.message_to_payload(session_message)
+        messages = self.converter.message_to_payload(session_message)
         if not messages:
             return None
 
-        is_blob = AgentCoreMemoryConverter.exceeds_conversational_limit(messages[0])
+        is_blob = self.converter.exceeds_conversational_limit(messages[0])
 
         # Parse the original timestamp and use it as desired timestamp
         original_timestamp = datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00"))
@@ -545,7 +549,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 session_id=session_id,
                 max_results=max_results,
             )
-            messages = AgentCoreMemoryConverter.events_to_messages(events)
+            messages = self.converter.events_to_messages(events)
+            if self.config.filter_restored_tool_context:
+                messages = self._filter_restored_tool_context(messages)
             if limit is not None:
                 return messages[offset : offset + limit]
             else:
@@ -554,6 +560,31 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         except Exception as e:
             logger.error("Failed to list messages from AgentCore Memory: %s", e)
             return []
+
+    def _filter_restored_tool_context(self, messages: list[SessionMessage]) -> list[SessionMessage]:
+        """Strip historical toolUse/toolResult context from restored messages."""
+        filtered_messages: list[SessionMessage] = []
+        for session_message in messages:
+            message = session_message.to_message()
+            filtered_content = [
+                content for content in message.get("content", []) if "toolUse" not in content and "toolResult" not in content
+            ]
+
+            if not filtered_content:
+                continue
+
+            filtered_message: Message = {"role": message["role"], "content": filtered_content}
+            filtered_messages.append(
+                SessionMessage(
+                    message=filtered_message,
+                    message_id=session_message.message_id,
+                    redact_message=session_message.redact_message,
+                    created_at=session_message.created_at,
+                    updated_at=session_message.updated_at,
+                )
+            )
+
+        return filtered_messages
 
     # endregion SessionRepository interface implementation
 
