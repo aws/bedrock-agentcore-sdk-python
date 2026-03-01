@@ -8,9 +8,9 @@ from strands.types.session import SessionMessage
 
 logger = logging.getLogger(__name__)
 
-# Bedrock AgentCore Data Plane conversational payload text limit is 9000 chars.
+# Bedrock AgentCore Data Plane conversational payload text max is 100000 chars.
 # Ref: https://docs.aws.amazon.com/cli/latest/reference/bedrock-agentcore/create-event.html
-CONVERSATIONAL_MAX_SIZE = 9000
+CONVERSATIONAL_MAX_SIZE = 100000
 
 
 class AgentCoreMemoryConverter:

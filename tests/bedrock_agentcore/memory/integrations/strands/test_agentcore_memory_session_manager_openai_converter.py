@@ -58,7 +58,12 @@ def test_create_message_uses_tool_role_with_openai_converter():
 
 def test_list_messages_filters_restored_tool_context():
     """Restored history should exclude toolUse/toolResult blocks."""
-    config = AgentCoreMemoryConfig(memory_id="test-memory-123", session_id="test-session-456", actor_id="test-actor-789")
+    config = AgentCoreMemoryConfig(
+        memory_id="test-memory-123",
+        session_id="test-session-456",
+        actor_id="test-actor-789",
+        filter_restored_tool_context=True,
+    )
 
     mock_memory_client = Mock()
     mock_memory_client.list_events.return_value = [{"payload": []}]

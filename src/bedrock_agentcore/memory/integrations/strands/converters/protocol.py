@@ -4,7 +4,7 @@ from typing import Any, Protocol, Tuple
 
 from strands.types.session import SessionMessage
 
-CONVERSATIONAL_MAX_SIZE = 9000
+CONVERSATIONAL_MAX_SIZE = 100000
 
 
 class MemoryConverter(Protocol):
