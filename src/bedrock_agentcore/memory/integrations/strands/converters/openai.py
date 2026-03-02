@@ -34,11 +34,18 @@ def _bedrock_to_openai(message: dict) -> dict:
 
     text_parts = []
     tool_calls = []
+    reasoning_blocks: list[dict[str, Any]] = []
     for item in content:
         if "text" in item:
-            text = item["text"].strip()
-            if text:
-                text_parts.append(text)
+            text_value = item.get("text")
+            if isinstance(text_value, str):
+                text = text_value.strip()
+                if text:
+                    text_parts.append(text)
+        elif "reasoningContent" in item:
+            # OpenAI message shape does not have a stable multi-turn reasoning block field.
+            # Preserve original block(s) in storage-only extension field for lossless restore.
+            reasoning_blocks.append(item)
         elif "toolUse" in item:
             tu = item["toolUse"]
             tool_calls.append(
@@ -59,6 +66,9 @@ def _bedrock_to_openai(message: dict) -> dict:
         result["tool_calls"] = tool_calls
     else:
         result["content"] = "\n".join(text_parts) if text_parts else ""
+
+    if reasoning_blocks:
+        result["_strands_reasoning_content"] = reasoning_blocks
 
     return result
 
@@ -107,6 +117,10 @@ def _openai_to_bedrock(openai_msg: dict) -> dict:
             }
         )
 
+    for rc in openai_msg.get("_strands_reasoning_content", []):
+        if isinstance(rc, dict) and "reasoningContent" in rc:
+            content_items.append(rc)
+
     bedrock_role = "assistant" if role == "assistant" else "user"
 
     return {"role": bedrock_role, "content": content_items}
@@ -124,7 +138,10 @@ class OpenAIConverseConverter:
             return []
 
         has_non_empty = any(
-            ("text" in item and item["text"].strip()) or "toolUse" in item or "toolResult" in item for item in content
+            (isinstance(item.get("text"), str) and item["text"].strip())
+            or "toolUse" in item
+            or "toolResult" in item
+            for item in content
         )
         if not has_non_empty:
             return []

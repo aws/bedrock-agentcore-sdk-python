@@ -22,7 +22,7 @@ from typing_extensions import override
 from bedrock_agentcore.memory.client import MemoryClient
 from bedrock_agentcore.memory.models.filters import EventMetadataFilter, LeftExpression, OperatorType, RightExpression
 
-from .converters import BedrockConverseConverter, MemoryConverter
+from .converters import AutoConverseConverter, BedrockConverseConverter, MemoryConverter
 from .config import AgentCoreMemoryConfig, RetrievalConfig
 
 if TYPE_CHECKING:
@@ -98,7 +98,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def __init__(
         self,
         agentcore_memory_config: AgentCoreMemoryConfig,
-        converter: Optional[type[MemoryConverter]] = None,
+        converter: Optional[type[MemoryConverter] | str] = None,
         region_name: Optional[str] = None,
         boto_session: Optional[boto3.Session] = None,
         boto_client_config: Optional[BotocoreConfig] = None,
@@ -116,7 +116,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                Defaults to None.
             **kwargs (Any): Additional keyword arguments.
         """
-        self.converter = converter or BedrockConverseConverter
+        self._auto_converter_enabled = converter == "auto"
+        if self._auto_converter_enabled:
+            self.converter = AutoConverseConverter
+            AutoConverseConverter.set_write_converter(BedrockConverseConverter)
+        else:
+            self.converter = converter or BedrockConverseConverter
         self.config = agentcore_memory_config
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
@@ -692,6 +697,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
     @override
     def initialize(self, agent: "Agent", **kwargs: Any) -> None:
+        if self._auto_converter_enabled:
+            selected = AutoConverseConverter.select_write_converter_for_model(agent.model)
+            AutoConverseConverter.set_write_converter(selected)
+            logger.info("Auto converter selected %s for model %s", selected.__name__, agent.model.__class__.__name__)
+
         if self.has_existing_agent:
             logger.warning(
                 "An Agent already exists in session %s. We currently support one agent per session.", self.session_id
@@ -713,7 +723,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         Messages are batched by session_id - all conversational messages for the same
         session are combined into a single create_event() call to reduce API calls.
-        Blob messages (>9KB) are sent individually as they require a different API path.
+        Messages that exceed the conversational payload limit are sent as blob events individually
+        as they require a different API path.
 
         Returns:
             list[dict[str, Any]]: List of created event responses from AgentCore Memory.
