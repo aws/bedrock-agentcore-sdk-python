@@ -3283,6 +3283,74 @@ def test_wrap_configuration_custom_episodic_override():
         )
 
 
+def test_wrap_configuration_custom_self_managed():
+    """Test _wrap_configuration with CUSTOM strategy and SELF_MANAGED type.
+
+    SELF_MANAGED is a valid configuration type but not in the OverrideType enum.
+    The method should handle this gracefully by passing configuration through as-is.
+    See: https://github.com/aws/bedrock-agentcore-sdk-python/issues/212
+    """
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        config = {
+            "extraction": {
+                "historicalContextWindowSize": 10,
+                "triggerEveryNMessages": 5,
+            },
+            "consolidation": {
+                "appendToPrompt": "Consolidate data",
+                "modelId": "consolidation-model",
+            },
+            "reflection": {
+                "appendToPrompt": "Reflect on data",
+                "modelId": "reflection-model",
+            },
+        }
+
+        # Should NOT raise ValueError for SELF_MANAGED
+        wrapped = client._wrap_configuration(config, "CUSTOM", "SELF_MANAGED")
+
+        # Configuration should be passed through as-is (no special wrapping)
+        assert "extraction" in wrapped
+        assert wrapped["extraction"]["historicalContextWindowSize"] == 10
+        assert wrapped["extraction"]["triggerEveryNMessages"] == 5
+
+        # Consolidation should also be passed through (no wrapping for unknown override types)
+        assert "consolidation" in wrapped
+        assert wrapped["consolidation"]["appendToPrompt"] == "Consolidate data"
+        assert wrapped["consolidation"]["modelId"] == "consolidation-model"
+
+        # Reflection should also be passed through
+        assert "reflection" in wrapped
+        assert wrapped["reflection"]["appendToPrompt"] == "Reflect on data"
+        assert wrapped["reflection"]["modelId"] == "reflection-model"
+
+
+def test_try_get_override_type_valid():
+    """Test _try_get_override_type returns enum for valid override types."""
+    with patch("boto3.client"):
+        from bedrock_agentcore.memory.constants import OverrideType
+
+        client = MemoryClient()
+
+        assert client._try_get_override_type("SEMANTIC_OVERRIDE") == OverrideType.SEMANTIC_OVERRIDE
+        assert client._try_get_override_type("EPISODIC_OVERRIDE") == OverrideType.EPISODIC_OVERRIDE
+        assert client._try_get_override_type("SUMMARY_OVERRIDE") == OverrideType.SUMMARY_OVERRIDE
+        assert client._try_get_override_type("USER_PREFERENCE_OVERRIDE") == OverrideType.USER_PREFERENCE_OVERRIDE
+
+
+def test_try_get_override_type_invalid():
+    """Test _try_get_override_type returns None for invalid override types."""
+    with patch("boto3.client"):
+        client = MemoryClient()
+
+        assert client._try_get_override_type(None) is None
+        assert client._try_get_override_type("SELF_MANAGED") is None
+        assert client._try_get_override_type("UNKNOWN_TYPE") is None
+        assert client._try_get_override_type("") is None
+
+
 def test_get_last_k_turns_auto_pagination():
     """Test get_last_k_turns automatically paginates until k turns are found."""
     with patch("boto3.client"):
