@@ -122,6 +122,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self._message_buffer: list[tuple[str, list[tuple[str, str]], bool, datetime]] = []
         self._buffer_lock = threading.Lock()
 
+        # Cache for agent created_at timestamps to avoid fetching on every update
+        self._agent_created_at_cache: dict[str, datetime] = {}
+
         # Add strands-agents to the request user agent
         if boto_client_config:
             existing_user_agent = getattr(boto_client_config, "user_agent_extra", None)
@@ -280,6 +283,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 AGENT_ID_KEY: {"stringValue": session_agent.agent_id},
             },
         )
+
+        # Cache the created_at timestamp to avoid re-fetching on updates
+        if session_agent.created_at:
+            self._agent_created_at_cache[session_agent.agent_id] = session_agent.created_at
+
         logger.info(
             "Created agent: %s in session: %s with event %s",
             session_agent.agent_id,
@@ -327,7 +335,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
             if events:
                 agent_data = json.loads(events[0].get("payload", {})[0].get("blob"))
-                return SessionAgent.from_dict(agent_data)
+                agent = SessionAgent.from_dict(agent_data)
+                # Cache the created_at timestamp to avoid re-fetching on updates
+                if agent.created_at:
+                    self._agent_created_at_cache[agent_id] = agent.created_at
+                return agent
 
             # 2. Fallback: check for legacy event and migrate
             legacy_actor_id = f"{LEGACY_AGENT_PREFIX}{agent_id}"
@@ -369,11 +381,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             SessionException: If session ID doesn't match configuration.
         """
         agent_id = session_agent.agent_id
-        previous_agent = self.read_agent(session_id=session_id, agent_id=agent_id)
-        if previous_agent is None:
-            raise SessionException(f"Agent {agent_id} in session {session_id} does not exist")
-        else:
-            session_agent.created_at = previous_agent.created_at
+
+        if agent_id not in self._agent_created_at_cache:
+            previous_agent = self.read_agent(session_id=session_id, agent_id=agent_id)
+            if previous_agent is None:
+                raise SessionException(f"Agent {agent_id} in session {session_id} does not exist")
+        session_agent.created_at = self._agent_created_at_cache[agent_id]
 
         # Create a new agent as AgentCore Memory is immutable. We always get the latest one in `read_agent`
         self.create_agent(session_id, session_agent)
