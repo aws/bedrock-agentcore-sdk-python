@@ -13,15 +13,15 @@ from bedrock_agentcore.memory.integrations.strands.converters import (
 
 
 class _OpenAIModel:
-    __module__ = "nflx_strands.models.openai"
+    __module__ = "strands.models.openai"
 
 
 class _AnthropicModel:
-    __module__ = "nflx_strands.models.anthropic"
+    __module__ = "strands.models.anthropic"
 
 
 class _GeminiModel:
-    __module__ = "nflx_strands.models.gemini"
+    __module__ = "strands.models.gemini"
 
 
 def test_auto_converter_selects_provider_specific_writer():

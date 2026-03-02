@@ -159,7 +159,7 @@ def test_auto_converter_mode_selects_openai_for_openai_model():
         mock_agent = Mock()
         mock_agent.model = Mock()
         mock_agent.model.__class__.__name__ = "OpenAIModel"
-        mock_agent.model.__class__.__module__ = "nflx_strands.models.openai"
+        mock_agent.model.__class__.__module__ = "strands.models.openai"
 
         manager.initialize(mock_agent)
         assert AutoConverseConverter._write_converter is OpenAIConverseConverter
