@@ -1920,6 +1920,20 @@ class MemoryClient:
         for namespace in namespaces:
             self._validate_namespace(namespace)
 
+    def _try_get_override_type(self, override_type: Optional[str]) -> Optional[OverrideType]:
+        """Safely convert override_type string to OverrideType enum.
+
+        Returns None if override_type is None or not a valid OverrideType value
+        (e.g., 'SELF_MANAGED' which is a valid configuration type but not in the enum).
+        """
+        if override_type is None:
+            return None
+        try:
+            return OverrideType(override_type)
+        except ValueError:
+            # Unknown override type (e.g., SELF_MANAGED), return None
+            return None
+
     def _wrap_configuration(
         self, config: Dict[str, Any], strategy_type: str, override_type: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -1932,8 +1946,8 @@ class MemoryClient:
             builtin_config_keys = ["triggerEveryNMessages", "historicalContextWindowSize"]
 
             if strategy_type == "CUSTOM" and override_type:
-                override_enum = OverrideType(override_type)
-                if override_enum in CUSTOM_EXTRACTION_WRAPPER_KEYS:
+                override_enum = self._try_get_override_type(override_type)
+                if override_enum and override_enum in CUSTOM_EXTRACTION_WRAPPER_KEYS:
                     wrapped_config["extraction"] = {
                         "customExtractionConfiguration": {CUSTOM_EXTRACTION_WRAPPER_KEYS[override_enum]: extraction}
                     }
@@ -1961,13 +1975,16 @@ class MemoryClient:
                             }
                         }
                 elif strategy_type == "CUSTOM" and override_type:
-                    override_enum = OverrideType(override_type)
-                    if override_enum in CUSTOM_CONSOLIDATION_WRAPPER_KEYS:
+                    override_enum = self._try_get_override_type(override_type)
+                    if override_enum and override_enum in CUSTOM_CONSOLIDATION_WRAPPER_KEYS:
                         wrapped_config["consolidation"] = {
                             "customConsolidationConfiguration": {
                                 CUSTOM_CONSOLIDATION_WRAPPER_KEYS[override_enum]: consolidation
                             }
                         }
+                    else:
+                        # Unknown override type (e.g., SELF_MANAGED), pass through as-is
+                        wrapped_config["consolidation"] = consolidation
             else:
                 wrapped_config["consolidation"] = consolidation
 
@@ -1975,11 +1992,14 @@ class MemoryClient:
             reflection = config["reflection"]
 
             if strategy_type == "CUSTOM" and override_type:
-                override_enum = OverrideType(override_type)
-                if override_enum in CUSTOM_REFLECTION_WRAPPER_KEYS:
+                override_enum = self._try_get_override_type(override_type)
+                if override_enum and override_enum in CUSTOM_REFLECTION_WRAPPER_KEYS:
                     wrapped_config["reflection"] = {
                         "customReflectionConfiguration": {CUSTOM_REFLECTION_WRAPPER_KEYS[override_enum]: reflection}
                     }
+                else:
+                    # Unknown override type (e.g., SELF_MANAGED), pass through as-is
+                    wrapped_config["reflection"] = reflection
             else:
                 wrapped_config["reflection"] = reflection
 
