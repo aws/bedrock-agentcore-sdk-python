@@ -1206,6 +1206,58 @@ class TestAgentCoreMemorySessionManager:
         call_kwargs = mock_memory_client.list_events.call_args[1]
         assert call_kwargs["max_results"] == 550  # limit + offset
 
+    def test_append_message_handles_none_from_create_message(self, session_manager, test_agent):
+        """Test that append_message gracefully handles None return from create_message."""
+        # Create a tool use message (no text content, only toolUse block)
+        tool_use_message = {
+            "role": "assistant",
+            "content": [
+                {
+                    "toolUse": {
+                        "toolUseId": "tooluse_abc123",
+                        "name": "calculator",
+                        "input": {"operation": "add", "a": 5, "b": 3},
+                    }
+                }
+            ],
+        }
+
+        # Mock create_message to return None (simulating the behavior for messages with no text)
+        session_manager.create_message = Mock(return_value=None)
+        session_manager._latest_agent_message = {}
+
+        # This should NOT crash - it should handle None gracefully
+        session_manager.append_message(tool_use_message, test_agent)
+
+        # Verify create_message was called
+        session_manager.create_message.assert_called_once()
+
+        # Verify that _latest_agent_message was NOT updated (since message was skipped)
+        assert test_agent.agent_id not in session_manager._latest_agent_message
+
+    def test_append_message_normal_message_still_works(self, session_manager, test_agent):
+        """Test that append_message still works correctly for normal messages with text."""
+        # Create a normal message with text content
+        normal_message = {
+            "role": "assistant",
+            "content": [{"text": "The answer is 8."}],
+        }
+
+        # Mock create_message to return a valid event (normal behavior)
+        mock_event = {"eventId": "event_123456", "memoryId": "test-memory"}
+        session_manager.create_message = Mock(return_value=mock_event)
+        session_manager._latest_agent_message = {}
+
+        # This should work normally
+        session_manager.append_message(normal_message, test_agent)
+
+        # Verify create_message was called
+        session_manager.create_message.assert_called_once()
+
+        # Verify that _latest_agent_message WAS updated
+        assert test_agent.agent_id in session_manager._latest_agent_message
+        assert session_manager._latest_agent_message[test_agent.agent_id].message_id == "event_123456"
+
 
 class TestBatchingConfig:
     """Test batch_size configuration validation."""
