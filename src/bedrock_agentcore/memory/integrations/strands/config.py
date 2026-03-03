@@ -31,6 +31,9 @@ class AgentCoreMemoryConfig(BaseModel):
         retrieval_config: Optional dictionary mapping namespaces to retrieval configurations
         batch_size: Number of messages to batch before sending to AgentCore Memory.
             Default of 1 means immediate sending (no batching). Max 100.
+        flush_interval_seconds: Optional interval in seconds for automatic buffer flushing.
+            Useful for long-running agents to ensure messages are persisted regularly.
+            Default is None (disabled).
         context_tag: XML tag name used to wrap retrieved memory context injected into messages.
             Default is "user_context".
     """
@@ -40,4 +43,5 @@ class AgentCoreMemoryConfig(BaseModel):
     actor_id: str = Field(min_length=1)
     retrieval_config: Optional[Dict[str, RetrievalConfig]] = None
     batch_size: int = Field(default=1, ge=1, le=100)
+    flush_interval_seconds: Optional[float] = Field(default=None, gt=0)
     context_tag: str = Field(default="user_context", min_length=1)
