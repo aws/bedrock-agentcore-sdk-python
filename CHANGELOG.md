@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.2] - 2026-03-03
+
+### Added
+- feat: Add automatic flush for batched messages, on AfterInvocationEvent hook and interval-based periodical flush (#291) (bb4a1b7)
+
+### Fixed
+- fix: fix npe in memory session manager when messages have no text content (#293) (2b6736e)
+- fix: AgentCoreMemorySessionManager - Cache agent timestamps to eliminate redundant list_events calls (#289) (1dd896e)
+
+### Other Changes
+- chore: bump version to 1.4.1 (#287) (ef448dc)
+
 ## [1.4.1] - 2026-02-27
 
 ### Other Changes
