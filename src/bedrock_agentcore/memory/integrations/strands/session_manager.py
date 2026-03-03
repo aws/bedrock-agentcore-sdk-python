@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import boto3
 from botocore.config import Config as BotocoreConfig
-from strands.hooks import MessageAddedEvent
+from strands.hooks import AfterInvocationEvent, MessageAddedEvent
 from strands.hooks.registry import HookRegistry
 from strands.session.repository_session_manager import RepositorySessionManager
 from strands.session.session_repository import SessionRepository
@@ -125,6 +125,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         # Cache for agent created_at timestamps to avoid fetching on every update
         self._agent_created_at_cache: dict[str, datetime] = {}
 
+        # Interval-based flushing support
+        self._flush_timer: Optional[threading.Timer] = None
+        self._timer_lock = threading.Lock()
+        self._shutdown = False
+
         # Add strands-agents to the request user agent
         if boto_client_config:
             existing_user_agent = getattr(boto_client_config, "user_agent_extra", None)
@@ -144,6 +149,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             "bedrock-agentcore", region_name=region_name or session.region_name, config=client_config
         )
         super().__init__(session_id=self.config.session_id, session_repository=self)
+
+        # Start interval-based flush timer if configured
+        if self.config.flush_interval_seconds:
+            self._start_flush_timer()
 
     # region SessionRepository interface implementation
     def create_session(self, session: Session, **kwargs: Any) -> Session:
@@ -672,6 +681,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         RepositorySessionManager.register_hooks(self, registry, **kwargs)
         registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
 
+        # Only register AfterInvocationEvent hook when batching is enabled
+        if self.config.batch_size > 1:
+            registry.add_callback(AfterInvocationEvent, lambda event: self._flush_messages())
+
     @override
     def initialize(self, agent: "Agent", **kwargs: Any) -> None:
         if self.has_existing_agent:
@@ -784,6 +797,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         messages are sent to AgentCore Memory. Alternatively, use the context
         manager protocol (with statement) for automatic cleanup.
         """
+        self._stop_flush_timer()
         self._flush_messages()
 
     def __enter__(self) -> "AgentCoreMemorySessionManager":
@@ -803,6 +817,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             exc_tb: Exception traceback if an exception occurred.
         """
         try:
+            self._stop_flush_timer()
             self._flush_messages()
         except Exception as e:
             if exc_type is not None:
@@ -811,3 +826,70 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 raise
 
     # endregion Batching support
+
+    # region Interval-based flushing support
+
+    def _start_flush_timer(self) -> None:
+        """Start the interval-based flush timer.
+
+        This method schedules a recurring timer that flushes the message buffer
+        at regular intervals if flush_interval_seconds is configured.
+        """
+        with self._timer_lock:
+            if self._shutdown:
+                return
+
+            # Cancel existing timer if any
+            if self._flush_timer is not None:
+                self._flush_timer.cancel()
+
+            # Schedule next flush
+            self._flush_timer = threading.Timer(
+                self.config.flush_interval_seconds,
+                self._interval_flush_callback,
+            )
+            self._flush_timer.daemon = True
+            self._flush_timer.start()
+            logger.debug(
+                "Scheduled interval flush in %.1f seconds",
+                self.config.flush_interval_seconds,
+            )
+
+    def _interval_flush_callback(self) -> None:
+        """Callback executed by the flush timer.
+
+        Flushes the buffer if it contains messages, then reschedules the timer.
+        """
+        try:
+            # Only flush if there are messages in the buffer
+            pending = self.pending_message_count()
+            if pending > 0:
+                logger.debug("Interval flush triggered: %d message(s) pending", pending)
+                self._flush_messages()
+            else:
+                logger.debug("Interval flush skipped: buffer is empty")
+
+            # Reschedule the timer (unless shutdown)
+            if not self._shutdown and self.config.flush_interval_seconds:
+                self._start_flush_timer()
+
+        except Exception as e:
+            logger.error("Error during interval flush: %s", e)
+            # Attempt to reschedule even after error
+            if not self._shutdown and self.config.flush_interval_seconds:
+                self._start_flush_timer()
+
+    def _stop_flush_timer(self) -> None:
+        """Stop the interval-based flush timer.
+
+        This method cancels the timer and prevents it from rescheduling.
+        Should be called during cleanup (close() or __exit__).
+        """
+        with self._timer_lock:
+            self._shutdown = True
+            if self._flush_timer is not None:
+                self._flush_timer.cancel()
+                self._flush_timer = None
+                logger.debug("Stopped interval flush timer")
+
+    # endregion Interval-based flushing support
