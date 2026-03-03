@@ -422,6 +422,23 @@ class TestAgentCoreMemorySessionManager:
         # Should not raise any exceptions
         session_manager.update_agent("test-session-456", session_agent)
 
+    def test_update_agent_uses_cache(self, session_manager, mock_memory_client):
+        """Test that update_agent uses cache to avoid fetching memory events on subsequent updates."""
+
+        # Manually populate the cache (simulating what happens after first agent creation/read)
+        created_at = "2024-01-01T12:00:00+00:00"
+        session_manager._agent_created_at_cache["test-agent-123"] = created_at
+
+        # Now update the agent - should NOT call list_events since it's in cache
+        updated_agent = SessionAgent(agent_id="test-agent-123", state={"key": "value"}, conversation_manager_state={})
+        session_manager.update_agent("test-session-456", updated_agent)
+
+        # Verify that list_events was NOT called (cache was used)
+        mock_memory_client.list_events.assert_not_called()
+
+        # Verify the created_at was preserved from cache
+        assert updated_agent.created_at == created_at
+
     def test_update_agent_wrong_session(self, session_manager):
         """Test updating an agent with wrong session ID."""
         session_agent = SessionAgent(agent_id="test-agent-123", state={}, conversation_manager_state={})
