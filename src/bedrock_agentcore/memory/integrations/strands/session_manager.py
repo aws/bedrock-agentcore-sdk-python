@@ -590,6 +590,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             **kwargs: Additional keyword arguments for future extensibility.
         """
         created_message = self.create_message(self.session_id, agent.agent_id, SessionMessage.from_message(message, 0))
+        if created_message is None:
+            return
         session_message = SessionMessage.from_message(message, created_message.get("eventId"))
         self._latest_agent_message[agent.agent_id] = session_message
 
