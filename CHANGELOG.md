@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.3] - 2026-03-04
+
+### Added
+- feat: add buffering for agent state events (#295) (9e865da)
+
+### Other Changes
+- chore: bump version to 1.4.2 (#294) (bbc00a7)
+
 ## [1.4.2] - 2026-03-03
 
 ### Added
