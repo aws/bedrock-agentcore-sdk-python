@@ -1389,6 +1389,124 @@ class TestBatchingBufferManagement:
 
         assert result == {}
 
+    def test_pending_agent_state_count_empty_buffer(self, batching_session_manager):
+        """Test pending_agent_state_count returns 0 for empty buffer."""
+        assert batching_session_manager.pending_agent_state_count() == 0
+
+    def test_pending_agent_state_count_with_buffered_states(self, batching_session_manager, mock_memory_client):
+        """Test pending_agent_state_count returns correct count."""
+        # First create the agent so update_agent doesn't fail
+        agent = SessionAgent(
+            agent_id="test-agent",
+            state={"description": "Initial"},
+            conversation_manager_state={},
+        )
+        batching_session_manager.create_agent("test-session-456", agent)
+
+        # Update agent state multiple times (should buffer with batch_size=5)
+        for i in range(3):
+            agent.state["description"] = f"Updated description {i}"
+            batching_session_manager.update_agent("test-session-456", agent)
+
+        # Should have 3 agent states in buffer (all updates preserved)
+        assert batching_session_manager.pending_agent_state_count() == 3
+        # Verify no additional create_agent calls were made (still buffered)
+        assert mock_memory_client.gmdp_client.create_event.call_count == 1  # Only the initial create_agent
+
+    def test_agent_state_buffer_keeps_latest_per_agent(self, batching_session_manager, mock_memory_client):
+        """Test that agent state buffer preserves all agent state updates."""
+        # Create two agents
+        agent1 = SessionAgent(
+            agent_id="agent-1",
+            state={"description": "Description 1"},
+            conversation_manager_state={},
+        )
+        agent2 = SessionAgent(
+            agent_id="agent-2",
+            state={"description": "Description 2"},
+            conversation_manager_state={},
+        )
+        batching_session_manager.create_agent("test-session-456", agent1)
+        batching_session_manager.create_agent("test-session-456", agent2)
+
+        # Update agent1 multiple times
+        for i in range(3):
+            agent1.state["description"] = f"Agent 1 update {i}"
+            batching_session_manager.update_agent("test-session-456", agent1)
+
+        # Update agent2 once
+        agent2.state["description"] = "Agent 2 updated"
+        batching_session_manager.update_agent("test-session-456", agent2)
+
+        # Should have 4 agent states in buffer (all updates preserved: 3 for agent1 + 1 for agent2)
+        assert batching_session_manager.pending_agent_state_count() == 4
+
+    def test_agent_state_flushed_with_messages(self, batching_session_manager, mock_memory_client):
+        """Test that agent states are flushed along with messages."""
+        mock_memory_client.create_event.return_value = {"eventId": "event_123"}
+
+        # Create agent
+        agent = SessionAgent(
+            agent_id="test-agent",
+            state={"description": "Initial"},
+            conversation_manager_state={},
+        )
+        batching_session_manager.create_agent("test-session-456", agent)
+
+        # Add messages and update agent state
+        for i in range(3):
+            message = SessionMessage(
+                message={"role": "user", "content": [{"text": f"Message {i}"}]},
+                message_id=i,
+                created_at="2024-01-01T12:00:00Z",
+            )
+            batching_session_manager.create_message("test-session-456", "test-agent", message)
+
+        agent.state["description"] = "Updated"
+        batching_session_manager.update_agent("test-session-456", agent)
+
+        # Verify both are buffered
+        assert batching_session_manager.pending_message_count() == 3
+        assert batching_session_manager.pending_agent_state_count() == 1
+
+        # Flush
+        batching_session_manager._flush_messages()
+
+        # Both buffers should be cleared
+        assert batching_session_manager.pending_message_count() == 0
+        assert batching_session_manager.pending_agent_state_count() == 0
+
+        # Verify create_event was called for messages and agent state
+        # 1 initial create_agent + 1 batched message call + 1 agent state update
+        assert mock_memory_client.create_event.call_count == 1  # batched messages
+        assert mock_memory_client.gmdp_client.create_event.call_count == 2  # initial + update
+
+    def test_agent_state_preserved_on_flush_failure(self, batching_session_manager, mock_memory_client):
+        """Test that agent states remain in buffer if flush fails."""
+        # Create agent
+        agent = SessionAgent(
+            agent_id="test-agent",
+            state={"description": "Initial"},
+            conversation_manager_state={},
+        )
+        batching_session_manager.create_agent("test-session-456", agent)
+
+        # Update agent state
+        agent.state["description"] = "Updated"
+        batching_session_manager.update_agent("test-session-456", agent)
+
+        assert batching_session_manager.pending_agent_state_count() == 1
+
+        # Make flush fail
+        mock_memory_client.gmdp_client.create_event.side_effect = Exception("API Error")
+
+        # Flush should fail
+        with pytest.raises(SessionException):
+            batching_session_manager._flush_messages()
+
+        # Agent state should still be in buffer
+        assert batching_session_manager.pending_agent_state_count() == 1
+
 
 class TestBatchingFlush:
     """Test _flush_messages behavior."""
@@ -2156,7 +2274,7 @@ class TestAfterInvocationHook:
         batching_session_manager.session_repository = Mock()
 
         # Add messages to buffer
-        with batching_session_manager._buffer_lock:
+        with batching_session_manager._message_lock:
             batching_session_manager._message_buffer.append(
                 ("test-session", [("user", "test message")], False, batching_session_manager._get_monotonic_timestamp())
             )
@@ -2379,7 +2497,7 @@ class TestIntervalFlush:
             manager = AgentCoreMemorySessionManager(config)
 
             # Add messages to buffer
-            with manager._buffer_lock:
+            with manager._message_lock:
                 manager._message_buffer.append(
                     ("test-session", [("user", "test message")], False, manager._get_monotonic_timestamp())
                 )
@@ -2441,6 +2559,124 @@ class TestIntervalFlush:
 
             # Verify flush was not called (buffer was empty)
             assert flush_called["count"] == 0
+
+            # Cleanup
+            manager.close()
+
+    def test_interval_flush_callback_flushes_when_agent_state_pending(self):
+        """Test that interval flush callback flushes when agent state is pending."""
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory",
+            session_id="test-session",
+            actor_id="test-actor",
+            batch_size=10,
+            flush_interval_seconds=5.0,
+        )
+
+        mock_client = Mock()
+        mock_client.list_events.return_value = []
+        mock_client.create_event.return_value = {"eventId": "event_123"}
+
+        with (
+            patch(
+                "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+                return_value=mock_client,
+            ),
+            patch("boto3.Session") as mock_boto_session,
+            patch("strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None),
+        ):
+            mock_session = Mock()
+            mock_session.region_name = "us-west-2"
+            mock_gmdp_client = Mock()
+            mock_gmdp_client.create_event.return_value = {"eventId": "event_456"}
+            mock_session.client.return_value = mock_gmdp_client
+            mock_boto_session.return_value = mock_session
+
+            manager = AgentCoreMemorySessionManager(config)
+            manager.session_id = "test-session"  # Set session_id since parent __init__ is mocked
+
+            # Add agent state to buffer (no messages)
+            from strands.types.session import SessionAgent
+
+            agent = SessionAgent(
+                agent_id="test-agent",
+                state={"description": "Test"},
+                conversation_manager_state={},
+            )
+            with manager._agent_state_lock:
+                manager._agent_state_buffer.append(("test-session", agent))
+                manager._agent_created_at_cache["test-agent"] = agent.created_at
+
+            assert manager.pending_message_count() == 0
+            assert manager.pending_agent_state_count() == 1
+
+            # Manually trigger interval flush callback
+            manager._interval_flush_callback()
+
+            # Verify buffer was flushed
+            assert manager.pending_agent_state_count() == 0
+
+            # Cleanup
+            manager.close()
+
+    def test_interval_flush_callback_flushes_when_both_buffers_have_data(self):
+        """Test that interval flush callback flushes when both messages and agent states are pending."""
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory",
+            session_id="test-session",
+            actor_id="test-actor",
+            batch_size=10,
+            flush_interval_seconds=5.0,
+        )
+
+        mock_client = Mock()
+        mock_client.list_events.return_value = []
+        mock_client.create_event.return_value = {"eventId": "event_123"}
+
+        with (
+            patch(
+                "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+                return_value=mock_client,
+            ),
+            patch("boto3.Session") as mock_boto_session,
+            patch("strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None),
+        ):
+            mock_session = Mock()
+            mock_session.region_name = "us-west-2"
+            mock_gmdp_client = Mock()
+            mock_gmdp_client.create_event.return_value = {"eventId": "event_456"}
+            mock_session.client.return_value = mock_gmdp_client
+            mock_boto_session.return_value = mock_session
+
+            manager = AgentCoreMemorySessionManager(config)
+            manager.session_id = "test-session"  # Set session_id since parent __init__ is mocked
+
+            # Add both messages and agent state to buffers
+            with manager._message_lock:
+                manager._message_buffer.append(
+                    ("test-session", [("user", "test message")], False, manager._get_monotonic_timestamp())
+                )
+
+            from strands.types.session import SessionAgent
+
+            agent = SessionAgent(
+                agent_id="test-agent",
+                state={"description": "Test"},
+                conversation_manager_state={},
+            )
+            with manager._agent_state_lock:
+                manager._agent_state_buffer.append(("test-session", agent))
+                manager._agent_created_at_cache["test-agent"] = agent.created_at
+
+            assert manager.pending_message_count() == 1
+            assert manager.pending_agent_state_count() == 1
+
+            # Manually trigger interval flush callback
+            manager._interval_flush_callback()
+
+            # Verify both buffers were flushed
+            assert manager.pending_message_count() == 0
+            assert manager.pending_agent_state_count() == 0
 
             # Cleanup
             manager.close()
