@@ -421,6 +421,151 @@ class TestBedrockAgentCoreApp:
         assert response.headers.get("x-custom-mw") == "mw"
 
 
+class TestCustomStatusCodes:
+    """Test that entrypoint handlers can return custom HTTP status codes (#284)."""
+
+    def test_http_exception_returns_custom_status(self):
+        """Test raising HTTPException returns its status code instead of 500."""
+        from starlette.exceptions import HTTPException
+
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            raise HTTPException(status_code=400, detail="Prompt missing")
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={})
+
+        assert response.status_code == 400
+        assert response.json() == {"error": "Prompt missing"}
+
+    def test_http_exception_422(self):
+        """Test HTTPException with 422 status code."""
+        from starlette.exceptions import HTTPException
+
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            raise HTTPException(status_code=422, detail="Validation failed")
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={})
+
+        assert response.status_code == 422
+        assert response.json() == {"error": "Validation failed"}
+
+    def test_http_exception_500_still_returns_500(self):
+        """Test HTTPException with 500 is not swallowed."""
+        from starlette.exceptions import HTTPException
+
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            raise HTTPException(status_code=500, detail="Intentional server error")
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={})
+
+        assert response.status_code == 500
+        assert response.json() == {"error": "Intentional server error"}
+
+    def test_return_response_passthrough(self):
+        """Test returning a Response object passes it through without wrapping."""
+        from starlette.responses import JSONResponse
+
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            return JSONResponse({"error": "not found"}, status_code=404)
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={})
+
+        assert response.status_code == 404
+        assert response.json() == {"error": "not found"}
+
+    def test_return_response_200_passthrough(self):
+        """Test returning a Response with 200 also passes through."""
+        from starlette.responses import JSONResponse
+
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            return JSONResponse({"custom": True}, status_code=200, headers={"x-custom": "yes"})
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={})
+
+        assert response.status_code == 200
+        assert response.json() == {"custom": True}
+        assert response.headers.get("x-custom") == "yes"
+
+    def test_normal_dict_return_still_200(self):
+        """Test that normal dict returns are unaffected."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            return {"message": "ok"}
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={})
+
+        assert response.status_code == 200
+        assert response.json() == {"message": "ok"}
+
+    def test_generic_exception_still_500(self):
+        """Test that non-HTTP exceptions still return 500."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            raise ValueError("something broke")
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={})
+
+        assert response.status_code == 500
+        assert response.json() == {"error": "something broke"}
+
+    def test_async_handler_http_exception(self):
+        """Test HTTPException works from async handlers too."""
+        from starlette.exceptions import HTTPException
+
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        async def handler(payload):
+            raise HTTPException(status_code=400, detail="Bad request")
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={})
+
+        assert response.status_code == 400
+        assert response.json() == {"error": "Bad request"}
+
+    def test_async_handler_response_passthrough(self):
+        """Test returning Response from async handler."""
+        from starlette.responses import JSONResponse
+
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        async def handler(payload):
+            return JSONResponse({"error": "gone"}, status_code=410)
+
+        client = TestClient(app)
+        response = client.post("/invocations", json={})
+
+        assert response.status_code == 410
+        assert response.json() == {"error": "gone"}
+
+
 class TestConcurrentInvocations:
     """Test concurrent invocation handling simplified without limits."""
 
