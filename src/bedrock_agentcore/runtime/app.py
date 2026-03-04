@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, Optional
 
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
+from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route, WebSocketRoute
@@ -418,6 +419,18 @@ class BedrockAgentCoreApp(Starlette):
                 self.logger.info("Returning streaming response (async generator) (%.3fs)", duration)
                 return StreamingResponse(self._stream_with_error_handling(result), media_type="text/event-stream")
 
+            # If handler returned a Starlette Response directly, pass it through.
+            # This lets handlers control status codes (e.g. JSONResponse(data, status_code=404)).
+            if isinstance(result, Response):
+                status = getattr(result, "status_code", 200)
+                # Log at warning level for error responses so operators can distinguish
+                # intentional error responses from successful invocations in logs.
+                if status >= 400:
+                    self.logger.warning("Invocation returned HTTP %d (%.3fs)", status, duration)
+                else:
+                    self.logger.info("Invocation completed successfully (%.3fs)", duration)
+                return result
+
             self.logger.info("Invocation completed successfully (%.3fs)", duration)
             # Use safe serialization for consistency with streaming paths
             safe_json_string = self._safe_serialize_to_json_string(result)
@@ -427,6 +440,16 @@ class BedrockAgentCoreApp(Starlette):
             duration = time.time() - start_time
             self.logger.warning("Invalid JSON in request (%.3fs): %s", duration, e)
             return JSONResponse({"error": "Invalid JSON", "details": str(e)}, status_code=400)
+        except HTTPException as e:
+            duration = time.time() - start_time
+            # Use error level for 5xx to match the generic Exception handler's severity,
+            # since server errors warrant the same urgency regardless of how they're raised.
+            # Use warning for 4xx since those are intentional client-error responses.
+            if e.status_code >= 500:
+                self.logger.error("HTTP %d (%.3fs): %s", e.status_code, duration, e.detail)
+            else:
+                self.logger.warning("HTTP %d (%.3fs): %s", e.status_code, duration, e.detail)
+            return JSONResponse({"error": e.detail}, status_code=e.status_code)
         except Exception as e:
             duration = time.time() - start_time
             self.logger.exception("Invocation failed (%.3fs)", duration)
