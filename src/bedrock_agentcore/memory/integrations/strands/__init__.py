@@ -1,5 +1,5 @@
 """Strands integration for Bedrock AgentCore Memory."""
 
-from .converters import BedrockConverseConverter, MemoryConverter, OpenAIConverseConverter
+from .converters import MemoryConverter, OpenAIConverseConverter
 
-__all__ = ["BedrockConverseConverter", "MemoryConverter", "OpenAIConverseConverter"]
+__all__ = ["MemoryConverter", "OpenAIConverseConverter"]

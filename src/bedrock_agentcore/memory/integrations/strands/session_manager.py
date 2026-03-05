@@ -20,10 +20,16 @@ from strands.types.session import Session, SessionAgent, SessionMessage
 from typing_extensions import override
 
 from bedrock_agentcore.memory.client import MemoryClient
-from bedrock_agentcore.memory.models.filters import EventMetadataFilter, LeftExpression, OperatorType, RightExpression
+from bedrock_agentcore.memory.models.filters import (
+    EventMetadataFilter,
+    LeftExpression,
+    OperatorType,
+    RightExpression,
+)
 
-from .converters import AutoConverseConverter, BedrockConverseConverter, MemoryConverter
+from .bedrock_converter import AgentCoreMemoryConverter
 from .config import AgentCoreMemoryConfig, RetrievalConfig
+from .converters import MemoryConverter
 
 if TYPE_CHECKING:
     from strands.agent.agent import Agent
@@ -98,7 +104,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def __init__(
         self,
         agentcore_memory_config: AgentCoreMemoryConfig,
-        converter: Optional[type[MemoryConverter] | str] = None,
+        converter: Optional[type[MemoryConverter]] = None,
         region_name: Optional[str] = None,
         boto_session: Optional[boto3.Session] = None,
         boto_client_config: Optional[BotocoreConfig] = None,
@@ -108,20 +114,15 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         Args:
             agentcore_memory_config (AgentCoreMemoryConfig): Configuration for AgentCore Memory integration.
-            converter (Optional[type[MemoryConverter]], optional): Converter used for message format transformation.
-                Defaults to BedrockConverseConverter.
+            converter (Optional[type[MemoryConverter]], optional): Optional custom converter.
+                If None, native Bedrock/Strands converter is used.
             region_name (Optional[str], optional): AWS region for Bedrock AgentCore Memory. Defaults to None.
             boto_session (Optional[boto3.Session], optional): Optional boto3 session. Defaults to None.
             boto_client_config (Optional[BotocoreConfig], optional): Optional boto3 client configuration.
                Defaults to None.
             **kwargs (Any): Additional keyword arguments.
         """
-        self._auto_converter_enabled = converter == "auto"
-        if self._auto_converter_enabled:
-            self.converter = AutoConverseConverter
-            AutoConverseConverter.set_write_converter(BedrockConverseConverter)
-        else:
-            self.converter = converter or BedrockConverseConverter
+        self.converter = converter
         self.config = agentcore_memory_config
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
@@ -426,11 +427,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session_id}")
 
         # Convert and check size ONCE (not again at flush)
-        messages = self.converter.message_to_payload(session_message)
+        converter = self.converter or AgentCoreMemoryConverter
+        messages = converter.message_to_payload(session_message)
         if not messages:
             return None
 
-        is_blob = self.converter.exceeds_conversational_limit(messages[0])
+        is_blob = converter.exceeds_conversational_limit(messages[0])
 
         # Parse the original timestamp and use it as desired timestamp
         original_timestamp = datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00"))
@@ -554,7 +556,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 session_id=session_id,
                 max_results=max_results,
             )
-            messages = self.converter.events_to_messages(events)
+            converter = self.converter or AgentCoreMemoryConverter
+            messages = converter.events_to_messages(events)
             if self.config.filter_restored_tool_context:
                 messages = self._filter_restored_tool_context(messages)
             if limit is not None:
@@ -572,7 +575,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         for session_message in messages:
             message = session_message.to_message()
             filtered_content = [
-                content for content in message.get("content", []) if "toolUse" not in content and "toolResult" not in content
+                content
+                for content in message.get("content", [])
+                if "toolUse" not in content and "toolResult" not in content
             ]
 
             if not filtered_content:
@@ -697,11 +702,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
     @override
     def initialize(self, agent: "Agent", **kwargs: Any) -> None:
-        if self._auto_converter_enabled:
-            selected = AutoConverseConverter.select_write_converter_for_model(agent.model)
-            AutoConverseConverter.set_write_converter(selected)
-            logger.info("Auto converter selected %s for model %s", selected.__name__, agent.model.__class__.__name__)
-
         if self.has_existing_agent:
             logger.warning(
                 "An Agent already exists in session %s. We currently support one agent per session.", self.session_id
