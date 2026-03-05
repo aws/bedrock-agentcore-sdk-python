@@ -122,7 +122,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                Defaults to None.
             **kwargs (Any): Additional keyword arguments.
         """
-        self.converter = converter
+        self.converter = converter or AgentCoreMemoryConverter
         self.config = agentcore_memory_config
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
@@ -427,12 +427,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session_id}")
 
         # Convert and check size ONCE (not again at flush)
-        converter = self.converter or AgentCoreMemoryConverter
-        messages = converter.message_to_payload(session_message)
+        messages = self.converter.message_to_payload(session_message)
         if not messages:
             return None
 
-        is_blob = converter.exceeds_conversational_limit(messages[0])
+        is_blob = self.converter.exceeds_conversational_limit(messages[0])
 
         # Parse the original timestamp and use it as desired timestamp
         original_timestamp = datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00"))
@@ -556,8 +555,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 session_id=session_id,
                 max_results=max_results,
             )
-            converter = self.converter or AgentCoreMemoryConverter
-            messages = converter.events_to_messages(events)
+            messages = self.converter.events_to_messages(events)
             if self.config.filter_restored_tool_context:
                 messages = self._filter_restored_tool_context(messages)
             if limit is not None:
