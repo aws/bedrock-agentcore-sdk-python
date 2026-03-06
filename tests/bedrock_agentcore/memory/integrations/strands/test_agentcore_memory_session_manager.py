@@ -1361,7 +1361,7 @@ class TestBatchingBufferManagement:
 
     def test_buffer_auto_flushes_at_batch_size(self, batching_session_manager, mock_memory_client):
         """Test buffer automatically flushes when reaching batch_size."""
-        mock_memory_client.create_event.return_value = {"eventId": "event_123"}
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
 
         # Add exactly batch_size messages (5)
         for i in range(5):
@@ -1375,7 +1375,7 @@ class TestBatchingBufferManagement:
         # Buffer should have been flushed
         assert batching_session_manager.pending_message_count() == 0
         # One batched API call for all messages in the same session
-        assert mock_memory_client.create_event.call_count == 1
+        assert mock_memory_client.gmdp_client.create_event.call_count == 1
 
     def test_create_message_returns_empty_dict_when_buffered(self, batching_session_manager):
         """Test create_message returns empty dict when message is buffered."""
@@ -1408,12 +1408,12 @@ class TestBatchingBufferManagement:
             agent.state["description"] = f"Updated description {i}"
             batching_session_manager.update_agent("test-session-456", agent)
 
-        # Should have 3 agent states in buffer (all updates preserved)
-        assert batching_session_manager.pending_agent_state_count() == 3
+        # Should have 4 agent states in buffer (1 initial create + 3 updates)
+        assert batching_session_manager.pending_agent_state_count() == 4
         # Verify no additional create_agent calls were made (still buffered)
-        assert mock_memory_client.gmdp_client.create_event.call_count == 1  # Only the initial create_agent
+        assert mock_memory_client.gmdp_client.create_event.call_count == 0  # All buffered, none flushed
 
-    def test_agent_state_buffer_keeps_latest_per_agent(self, batching_session_manager, mock_memory_client):
+    def test_agent_state_buffer_keeps_state_per_agent(self, batching_session_manager, mock_memory_client):
         """Test that agent state buffer preserves all agent state updates."""
         # Create two agents
         agent1 = SessionAgent(
@@ -1429,21 +1429,21 @@ class TestBatchingBufferManagement:
         batching_session_manager.create_agent("test-session-456", agent1)
         batching_session_manager.create_agent("test-session-456", agent2)
 
-        # Update agent1 multiple times
-        for i in range(3):
-            agent1.state["description"] = f"Agent 1 update {i}"
-            batching_session_manager.update_agent("test-session-456", agent1)
+        # Update agent1 once
+        agent1.state["description"] = "Agent 1 update"
+        batching_session_manager.update_agent("test-session-456", agent1)
 
         # Update agent2 once
         agent2.state["description"] = "Agent 2 updated"
         batching_session_manager.update_agent("test-session-456", agent2)
 
-        # Should have 4 agent states in buffer (all updates preserved: 3 for agent1 + 1 for agent2)
+        # Total: 2 creates + 1 update + 1 update = 4 states in buffer (batch_size=5, so no auto-flush)
+        # Should have 4 agent states in buffer (all preserved: 2 creates + 1 for agent1 + 1 for agent2)
         assert batching_session_manager.pending_agent_state_count() == 4
 
     def test_agent_state_flushed_with_messages(self, batching_session_manager, mock_memory_client):
         """Test that agent states are flushed along with messages."""
-        mock_memory_client.create_event.return_value = {"eventId": "event_123"}
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
 
         # Create agent
         agent = SessionAgent(
@@ -1467,7 +1467,8 @@ class TestBatchingBufferManagement:
 
         # Verify both are buffered
         assert batching_session_manager.pending_message_count() == 3
-        assert batching_session_manager.pending_agent_state_count() == 1
+        # Should have 2 agent states: 1 initial create + 1 update
+        assert batching_session_manager.pending_agent_state_count() == 2
 
         # Flush
         batching_session_manager._flush_messages()
@@ -1476,10 +1477,9 @@ class TestBatchingBufferManagement:
         assert batching_session_manager.pending_message_count() == 0
         assert batching_session_manager.pending_agent_state_count() == 0
 
-        # Verify create_event was called for messages and agent state
-        # 1 initial create_agent + 1 batched message call + 1 agent state update
-        assert mock_memory_client.create_event.call_count == 1  # batched messages
-        assert mock_memory_client.gmdp_client.create_event.call_count == 2  # initial + update
+        # Verify create_event was called for messages and agent states
+        # 2 calls total: 1 for batched messages + 1 for batched agent states
+        assert mock_memory_client.gmdp_client.create_event.call_count == 2
 
     def test_agent_state_preserved_on_flush_failure(self, batching_session_manager, mock_memory_client):
         """Test that agent states remain in buffer if flush fails."""
@@ -1495,7 +1495,8 @@ class TestBatchingBufferManagement:
         agent.state["description"] = "Updated"
         batching_session_manager.update_agent("test-session-456", agent)
 
-        assert batching_session_manager.pending_agent_state_count() == 1
+        # Should have 2 states: 1 initial create + 1 update
+        assert batching_session_manager.pending_agent_state_count() == 2
 
         # Make flush fail
         mock_memory_client.gmdp_client.create_event.side_effect = Exception("API Error")
@@ -1504,8 +1505,8 @@ class TestBatchingBufferManagement:
         with pytest.raises(SessionException):
             batching_session_manager._flush_messages()
 
-        # Agent state should still be in buffer
-        assert batching_session_manager.pending_agent_state_count() == 1
+        # Agent states should still be in buffer (2 states preserved)
+        assert batching_session_manager.pending_agent_state_count() == 2
 
 
 class TestBatchingFlush:
@@ -1518,7 +1519,7 @@ class TestBatchingFlush:
 
     def test__flush_messages_sends_all_buffered(self, batching_session_manager, mock_memory_client):
         """Test _flush_messages sends all buffered messages in a single batched call."""
-        mock_memory_client.create_event.return_value = {"eventId": "event_123"}
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
 
         # Add 3 messages (below batch_size of 10)
         for i in range(3):
@@ -1537,17 +1538,17 @@ class TestBatchingFlush:
         # One batched API call for all messages in the same session
         assert len(results) == 1
         assert batching_session_manager.pending_message_count() == 0
-        assert mock_memory_client.create_event.call_count == 1
+        assert mock_memory_client.gmdp_client.create_event.call_count == 1
 
     def test__flush_messages_maintains_order(self, batching_session_manager, mock_memory_client):
         """Test _flush_messages maintains message order within batched payload."""
         sent_payloads = []
 
         def track_create_event(**kwargs):
-            sent_payloads.append(kwargs.get("messages"))
+            sent_payloads.append(kwargs.get("payload"))
             return {"eventId": f"event_{len(sent_payloads)}"}
 
-        mock_memory_client.create_event.side_effect = track_create_event
+        mock_memory_client.gmdp_client.create_event.side_effect = track_create_event
 
         # Add messages with distinct content
         for i in range(3):
@@ -1562,14 +1563,14 @@ class TestBatchingFlush:
 
         # Should be one batched call with messages in order
         assert len(sent_payloads) == 1
-        combined_messages = sent_payloads[0]
-        assert len(combined_messages) == 3
-        for i, msg in enumerate(combined_messages):
-            assert f"Message_{i}" in msg[0]
+        combined_payload = sent_payloads[0]
+        assert len(combined_payload) == 3
+        for i, item in enumerate(combined_payload):
+            assert f"Message_{i}" in item["conversational"]["content"]["text"]
 
     def test__flush_messages_clears_buffer(self, batching_session_manager, mock_memory_client):
         """Test _flush_messages clears the buffer after sending."""
-        mock_memory_client.create_event.return_value = {"eventId": "event_123"}
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
 
         message = SessionMessage(
             message={"role": "user", "content": [{"text": "Hello"}]},
@@ -1588,7 +1589,7 @@ class TestBatchingFlush:
 
     def test__flush_messages_exception_handling(self, batching_session_manager, mock_memory_client):
         """Test _flush_messages raises SessionException on failure."""
-        mock_memory_client.create_event.side_effect = Exception("API Error")
+        mock_memory_client.gmdp_client.create_event.side_effect = Exception("API Error")
 
         message = SessionMessage(
             message={"role": "user", "content": [{"text": "Hello"}]},
@@ -1600,9 +1601,11 @@ class TestBatchingFlush:
         with pytest.raises(SessionException, match="Failed to flush messages"):
             batching_session_manager._flush_messages()
 
-    def test_partial_flush_failure_preserves_all_messages(self, batching_session_manager, mock_memory_client):
+    def test__flush_messages_partial_flush_failure_preserves_all_messages(
+        self, batching_session_manager, mock_memory_client
+    ):
         """Test that on flush failure, all messages remain in buffer to prevent data loss."""
-        mock_memory_client.create_event.side_effect = Exception("API Error")
+        mock_memory_client.gmdp_client.create_event.side_effect = Exception("API Error")
 
         # Add multiple messages
         for i in range(3):
@@ -1623,22 +1626,24 @@ class TestBatchingFlush:
         assert batching_session_manager.pending_message_count() == 3
 
         # Fix the mock and retry - should succeed now
-        mock_memory_client.create_event.side_effect = None
-        mock_memory_client.create_event.return_value = {"eventId": "event_123"}
+        mock_memory_client.gmdp_client.create_event.side_effect = None
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
 
         results = batching_session_manager._flush_messages()
         assert len(results) == 1  # One batched call for all messages
         assert batching_session_manager.pending_message_count() == 0
 
-    def test_batching_combines_messages_for_same_session(self, batching_session_manager, mock_memory_client):
+    def test__flush_messages_batching_combines_messages_for_same_session(
+        self, batching_session_manager, mock_memory_client
+    ):
         """Test that multiple messages for the same session are combined into one API call."""
         sent_payloads = []
 
         def track_create_event(**kwargs):
-            sent_payloads.append(kwargs.get("messages"))
+            sent_payloads.append(kwargs.get("payload"))
             return {"eventId": f"event_{len(sent_payloads)}"}
 
-        mock_memory_client.create_event.side_effect = track_create_event
+        mock_memory_client.gmdp_client.create_event.side_effect = track_create_event
 
         # Add 5 messages to the same session
         for i in range(5):
@@ -1652,15 +1657,17 @@ class TestBatchingFlush:
         batching_session_manager._flush_messages()
 
         # Should be ONE API call with all 5 messages combined
-        assert mock_memory_client.create_event.call_count == 1
+        assert mock_memory_client.gmdp_client.create_event.call_count == 1
         assert len(sent_payloads) == 1
         # The combined payload should have all 5 messages
         assert len(sent_payloads[0]) == 5
         # Messages should be in order
         for i in range(5):
-            assert f"Message_{i}" in sent_payloads[0][i][0]
+            assert f"Message_{i}" in sent_payloads[0][i]["conversational"]["content"]["text"]
 
-    def test_multiple_sessions_grouped_into_separate_api_calls(self, batching_session_manager, mock_memory_client):
+    def test__flush_messages_multiple_sessions_grouped_into_separate_api_calls(
+        self, batching_session_manager, mock_memory_client
+    ):
         """Test that messages to different sessions are grouped into separate API calls.
 
         Note: In normal usage, create_message enforces session_id == config.session_id,
@@ -1672,12 +1679,12 @@ class TestBatchingFlush:
         calls_by_session = {}
 
         def track_create_event(**kwargs):
-            session_id = kwargs.get("session_id")
-            messages = kwargs.get("messages")
-            calls_by_session[session_id] = messages
+            session_id = kwargs.get("sessionId")
+            payload = kwargs.get("payload")
+            calls_by_session[session_id] = payload
             return {"eventId": f"event_{session_id}"}
 
-        mock_memory_client.create_event.side_effect = track_create_event
+        mock_memory_client.gmdp_client.create_event.side_effect = track_create_event
 
         # Directly populate buffer with messages for multiple sessions
         # Buffer format: (session_id, messages, is_blob, monotonic_timestamp)
@@ -1694,31 +1701,33 @@ class TestBatchingFlush:
         batching_session_manager._flush_messages()
 
         # Should be TWO API calls - one per session
-        assert mock_memory_client.create_event.call_count == 2
+        assert mock_memory_client.gmdp_client.create_event.call_count == 2
         assert len(calls_by_session) == 2
 
         # Session A should have 3 messages combined
         assert "session-A" in calls_by_session
         assert len(calls_by_session["session-A"]) == 3
-        assert calls_by_session["session-A"][0] == ("SessionA_Message_0", "user")
-        assert calls_by_session["session-A"][1] == ("SessionA_Message_1", "user")
-        assert calls_by_session["session-A"][2] == ("SessionA_Message_2", "user")
+        assert calls_by_session["session-A"][0]["conversational"]["content"]["text"] == "SessionA_Message_0"
+        assert calls_by_session["session-A"][1]["conversational"]["content"]["text"] == "SessionA_Message_1"
+        assert calls_by_session["session-A"][2]["conversational"]["content"]["text"] == "SessionA_Message_2"
 
         # Session B should have 3 messages combined
         assert "session-B" in calls_by_session
         assert len(calls_by_session["session-B"]) == 3
         for i in range(3):
-            assert calls_by_session["session-B"][i] == (f"SessionB_Message_{i}", "user")
+            assert calls_by_session["session-B"][i]["conversational"]["content"]["text"] == f"SessionB_Message_{i}"
 
-    def test_latest_timestamp_used_for_combined_events(self, batching_session_manager, mock_memory_client):
+    def test__flush_messages_latest_timestamp_used_for_combined_events(
+        self, batching_session_manager, mock_memory_client
+    ):
         """Test that the latest timestamp from grouped messages is used for the combined event."""
         captured_timestamps = []
 
         def track_create_event(**kwargs):
-            captured_timestamps.append(kwargs.get("event_timestamp"))
+            captured_timestamps.append(kwargs.get("eventTimestamp"))
             return {"eventId": "event_123"}
 
-        mock_memory_client.create_event.side_effect = track_create_event
+        mock_memory_client.gmdp_client.create_event.side_effect = track_create_event
 
         # Add messages with different timestamps (out of order)
         timestamps = ["2024-01-01T12:05:00Z", "2024-01-01T12:01:00Z", "2024-01-01T12:10:00Z"]
@@ -1741,7 +1750,9 @@ class TestBatchingFlush:
         # Account for monotonic timestamp adjustment (may add microseconds)
         assert captured_timestamps[0] >= expected_latest
 
-    def test_partial_failure_multiple_sessions_preserves_buffer(self, batching_session_manager, mock_memory_client):
+    def test__flush_messages_partial_failure_multiple_sessions_preserves_buffer(
+        self, batching_session_manager, mock_memory_client
+    ):
         """Test that when one session fails, ALL messages remain in buffer.
 
         Note: Tests internal grouping logic by directly manipulating buffer.
@@ -1749,12 +1760,12 @@ class TestBatchingFlush:
         from datetime import datetime, timezone
 
         def fail_on_second_session(**kwargs):
-            session_id = kwargs.get("session_id")
+            session_id = kwargs.get("sessionId")
             if session_id == "session-B":
                 raise Exception("API Error for session B")
             return {"eventId": f"event_{session_id}"}
 
-        mock_memory_client.create_event.side_effect = fail_on_second_session
+        mock_memory_client.gmdp_client.create_event.side_effect = fail_on_second_session
 
         # Directly populate buffer with messages for multiple sessions
         base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
@@ -1775,8 +1786,8 @@ class TestBatchingFlush:
         # This is because buffer is only cleared after ALL succeed
         assert batching_session_manager.pending_message_count() == 4
 
-    def test_blob_messages_sent_individually_not_batched(self, batching_session_manager, mock_memory_client):
-        """Test that multiple blob messages are sent as individual API calls, not batched."""
+    def test_blob_messages_sent_batched(self, batching_session_manager, mock_memory_client):
+        """Test that multiple blob messages are sent as batched."""
         blob_calls = []
 
         def track_blob_event(**kwargs):
@@ -1784,7 +1795,6 @@ class TestBatchingFlush:
             return {"event": {"eventId": f"blob_event_{len(blob_calls)}"}}
 
         mock_memory_client.gmdp_client.create_event.side_effect = track_blob_event
-        mock_memory_client.create_event.return_value = {"eventId": "conv_event"}
 
         # Add multiple blob messages (>9KB each)
         for i in range(3):
@@ -1798,15 +1808,17 @@ class TestBatchingFlush:
 
         batching_session_manager._flush_messages()
 
-        # Each blob should be sent individually (3 separate API calls)
-        assert mock_memory_client.gmdp_client.create_event.call_count == 3
-        assert len(blob_calls) == 3
+        # Blobs are now batched together in one call with multiple payloads
+        assert mock_memory_client.gmdp_client.create_event.call_count == 1
+        assert len(blob_calls) == 1
 
-        # Verify each blob was sent separately with correct content
-        for i, call in enumerate(blob_calls):
-            assert "payload" in call
-            assert "blob" in call["payload"][0]
-            assert f"blob_{i}_" in call["payload"][0]["blob"]
+        # Verify the batched call contains all 3 blobs
+        call = blob_calls[0]
+        assert "payload" in call
+        assert len(call["payload"]) == 3
+        for i in range(3):
+            assert "blob" in call["payload"][i]
+            assert f"blob_{i}_" in call["payload"][i]["blob"]
 
     def test_mixed_sessions_with_blobs_and_conversational(self, batching_session_manager, mock_memory_client):
         """Test complex scenario: multiple sessions with both blob and conversational messages.
@@ -1815,20 +1827,15 @@ class TestBatchingFlush:
         """
         from datetime import datetime, timezone
 
-        conv_calls = {}
-        blob_calls = []
+        calls_by_session = {}
 
-        def track_conv_event(**kwargs):
-            session_id = kwargs.get("session_id")
-            conv_calls[session_id] = kwargs.get("messages")
-            return {"eventId": f"conv_event_{session_id}"}
+        def track_create_event(**kwargs):
+            session_id = kwargs.get("sessionId")
+            payload = kwargs.get("payload")
+            calls_by_session[session_id] = payload
+            return {"eventId": f"event_{session_id}"}
 
-        def track_blob_event(**kwargs):
-            blob_calls.append(kwargs)
-            return {"event": {"eventId": f"blob_event_{len(blob_calls)}"}}
-
-        mock_memory_client.create_event.side_effect = track_conv_event
-        mock_memory_client.gmdp_client.create_event.side_effect = track_blob_event
+        mock_memory_client.gmdp_client.create_event.side_effect = track_create_event
 
         # Directly populate buffer with mixed messages
         base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
@@ -1845,23 +1852,278 @@ class TestBatchingFlush:
 
         batching_session_manager._flush_messages()
 
-        # Should have:
-        # - 2 conversational API calls (one per session)
-        # - 1 blob API call
-        assert mock_memory_client.create_event.call_count == 2
+        # Should have 2 gmdp_client.create_event calls (one per session)
+        # Each session combines conversational and blob messages
+        assert mock_memory_client.gmdp_client.create_event.call_count == 2
+
+        # Session A should have 3 items in payload (2 conversational + 1 blob)
+        assert "session-A" in calls_by_session
+        assert len(calls_by_session["session-A"]) == 3
+
+        # Session B should have 1 conversational message
+        assert "session-B" in calls_by_session
+        assert len(calls_by_session["session-B"]) == 1
+
+    def test__flush_messages_calls_both_flush_methods(self, batching_session_manager, mock_memory_client):
+        """Test that _flush_messages() calls both _flush_messages_only() and _flush_agent_states_only()."""
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
+
+        # Add messages
+        for i in range(2):
+            message = SessionMessage(
+                message={"role": "user", "content": [{"text": f"Message {i}"}]},
+                message_id=i,
+                created_at="2024-01-01T12:00:00Z",
+            )
+            batching_session_manager.create_message("test-session-456", "test-agent", message)
+
+        # Add agent state
+        agent = SessionAgent(
+            agent_id="test-agent",
+            state={"description": "Test agent"},
+            conversation_manager_state={},
+        )
+        batching_session_manager.create_agent("test-session-456", agent)
+
+        # Verify both buffers have content
+        assert batching_session_manager.pending_message_count() == 2
+        assert batching_session_manager.pending_agent_state_count() == 1
+
+        # Flush all
+        results = batching_session_manager._flush_messages()
+
+        # Should have 2 API calls: 1 for messages + 1 for agent states
+        assert mock_memory_client.gmdp_client.create_event.call_count == 2
+        assert len(results) == 2
+
+        # Both buffers should be cleared
+        assert batching_session_manager.pending_message_count() == 0
+        assert batching_session_manager.pending_agent_state_count() == 0
+
+    def test__flush_messages_with_only_messages(self, batching_session_manager, mock_memory_client):
+        """Test that _flush_messages() works when only messages are buffered."""
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
+
+        # Add only messages (no agent states)
+        for i in range(3):
+            message = SessionMessage(
+                message={"role": "user", "content": [{"text": f"Message {i}"}]},
+                message_id=i,
+                created_at="2024-01-01T12:00:00Z",
+            )
+            batching_session_manager.create_message("test-session-456", "test-agent", message)
+
+        assert batching_session_manager.pending_message_count() == 3
+        assert batching_session_manager.pending_agent_state_count() == 0
+
+        # Flush all
+        results = batching_session_manager._flush_messages()
+
+        # Should have 1 API call for messages only
+        assert mock_memory_client.gmdp_client.create_event.call_count == 1
+        assert len(results) == 1
+        assert batching_session_manager.pending_message_count() == 0
+
+    def test__flush_messages_with_only_agent_states(self, batching_session_manager, mock_memory_client):
+        """Test that _flush_messages() works when only agent states are buffered."""
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
+
+        # Add only agent states (no messages)
+        agent = SessionAgent(
+            agent_id="test-agent",
+            state={"description": "Test agent"},
+            conversation_manager_state={},
+        )
+        batching_session_manager.create_agent("test-session-456", agent)
+
+        agent.state["description"] = "Updated"
+        batching_session_manager.update_agent("test-session-456", agent)
+
+        assert batching_session_manager.pending_message_count() == 0
+        assert batching_session_manager.pending_agent_state_count() == 2
+
+        # Flush all
+        results = batching_session_manager._flush_messages()
+
+        # Should have 1 API call for agent states only
+        assert mock_memory_client.gmdp_client.create_event.call_count == 1
+        assert len(results) == 1
+        assert batching_session_manager.pending_agent_state_count() == 0
+
+    def test__flush_agent_states_only_empty_buffer(self, batching_session_manager):
+        """Test _flush_agent_states_only with empty buffer returns empty list."""
+        results = batching_session_manager._flush_agent_states_only()
+        assert results == []
+
+    def test__flush_agent_states_only_sends_all_buffered(self, batching_session_manager, mock_memory_client):
+        """Test _flush_agent_states_only sends all buffered agent states in a single batched call."""
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
+
+        # Create agent
+        agent = SessionAgent(
+            agent_id="test-agent",
+            state={"description": "Initial"},
+            conversation_manager_state={},
+        )
+        batching_session_manager.create_agent("test-session-456", agent)
+
+        # Update agent state twice
+        for i in range(2):
+            agent.state["description"] = f"Updated {i}"
+            batching_session_manager.update_agent("test-session-456", agent)
+
+        # Should have 3 agent states: 1 create + 2 updates
+        assert batching_session_manager.pending_agent_state_count() == 3
+
+        # Flush agent states only
+        results = batching_session_manager._flush_agent_states_only()
+
+        # One batched API call for all agent states
+        assert len(results) == 1
+        assert batching_session_manager.pending_agent_state_count() == 0
         assert mock_memory_client.gmdp_client.create_event.call_count == 1
 
-        # Session A conversational messages should be batched together
-        assert "session-A" in conv_calls
-        assert len(conv_calls["session-A"]) == 2
+        # Verify the call had metadata for agent state
+        call_kwargs = mock_memory_client.gmdp_client.create_event.call_args[1]
+        assert "metadata" in call_kwargs
+        assert "stateType" in call_kwargs["metadata"]
 
-        # Session B conversational message
-        assert "session-B" in conv_calls
-        assert len(conv_calls["session-B"]) == 1
+    def test__flush_agent_states_only_preserves_messages(self, batching_session_manager, mock_memory_client):
+        """Test _flush_agent_states_only preserves message buffer."""
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
 
-        # Blob sent separately
-        assert len(blob_calls) == 1
-        assert "blob_A_" in blob_calls[0]["payload"][0]["blob"]
+        # Add messages
+        for i in range(2):
+            message = SessionMessage(
+                message={"role": "user", "content": [{"text": f"Message {i}"}]},
+                message_id=i,
+                created_at="2024-01-01T12:00:00Z",
+            )
+            batching_session_manager.create_message("test-session-456", "test-agent", message)
+
+        # Add agent state
+        agent = SessionAgent(
+            agent_id="test-agent",
+            state={"description": "Test agent"},
+            conversation_manager_state={},
+        )
+        batching_session_manager.create_agent("test-session-456", agent)
+
+        assert batching_session_manager.pending_message_count() == 2
+        assert batching_session_manager.pending_agent_state_count() == 1
+
+        # Flush only agent states
+        batching_session_manager._flush_agent_states_only()
+
+        # Agent states should be flushed, messages should remain
+        assert batching_session_manager.pending_agent_state_count() == 0
+        assert batching_session_manager.pending_message_count() == 2
+        assert mock_memory_client.gmdp_client.create_event.call_count == 1
+
+    def test__flush_agent_states_only_clears_buffer(self, batching_session_manager, mock_memory_client):
+        """Test _flush_agent_states_only clears the agent state buffer after sending."""
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
+
+        agent = SessionAgent(
+            agent_id="test-agent",
+            state={"description": "Test agent"},
+            conversation_manager_state={},
+        )
+        batching_session_manager.create_agent("test-session-456", agent)
+
+        # First flush
+        batching_session_manager._flush_agent_states_only()
+        assert batching_session_manager.pending_agent_state_count() == 0
+
+        # Second flush should be no-op
+        results = batching_session_manager._flush_agent_states_only()
+        assert results == []
+
+    def test__flush_agent_states_only_exception_handling(self, batching_session_manager, mock_memory_client):
+        """Test _flush_agent_states_only raises SessionException on failure."""
+        mock_memory_client.gmdp_client.create_event.side_effect = Exception("API Error")
+
+        agent = SessionAgent(
+            agent_id="test-agent",
+            state={"description": "Test agent"},
+            conversation_manager_state={},
+        )
+        batching_session_manager.create_agent("test-session-456", agent)
+
+        with pytest.raises(SessionException, match="Failed to flush agent states"):
+            batching_session_manager._flush_agent_states_only()
+
+    def test__flush_agent_states_only_failure_preserves_agent_states(
+        self, batching_session_manager, mock_memory_client
+    ):
+        """Test that on flush failure, all agent states remain in buffer to prevent data loss."""
+        mock_memory_client.gmdp_client.create_event.side_effect = Exception("API Error")
+
+        # Create agent and update twice
+        agent = SessionAgent(
+            agent_id="test-agent",
+            state={"description": "Initial"},
+            conversation_manager_state={},
+        )
+        batching_session_manager.create_agent("test-session-456", agent)
+
+        agent.state["description"] = "Updated 1"
+        batching_session_manager.update_agent("test-session-456", agent)
+
+        agent.state["description"] = "Updated 2"
+        batching_session_manager.update_agent("test-session-456", agent)
+
+        assert batching_session_manager.pending_agent_state_count() == 3
+
+        # Flush should fail
+        with pytest.raises(SessionException):
+            batching_session_manager._flush_agent_states_only()
+
+        # All agent states should still be in buffer (not cleared on failure)
+        assert batching_session_manager.pending_agent_state_count() == 3
+
+        # Fix the mock and retry - should succeed now
+        mock_memory_client.gmdp_client.create_event.side_effect = None
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
+
+        results = batching_session_manager._flush_agent_states_only()
+        assert len(results) == 1
+        assert batching_session_manager.pending_agent_state_count() == 0
+
+    def test__flush_agent_states_only_batches_multiple_states(self, batching_session_manager, mock_memory_client):
+        """Test that multiple agent states are batched into a single API call."""
+        sent_payloads = []
+
+        def track_create_event(**kwargs):
+            sent_payloads.append(kwargs.get("payload"))
+            return {"eventId": f"event_{len(sent_payloads)}"}
+
+        mock_memory_client.gmdp_client.create_event.side_effect = track_create_event
+
+        # Create agent and update 4 times
+        agent = SessionAgent(
+            agent_id="test-agent",
+            state={"description": "Initial"},
+            conversation_manager_state={},
+        )
+        batching_session_manager.create_agent("test-session-456", agent)
+
+        for i in range(4):
+            agent.state["description"] = f"Updated {i}"
+            batching_session_manager.update_agent("test-session-456", agent)
+
+        # Should have 5 agent states: 1 create + 4 updates
+        assert batching_session_manager.pending_agent_state_count() == 5
+
+        batching_session_manager._flush_agent_states_only()
+
+        # Should be ONE API call with all 5 agent states combined
+        assert mock_memory_client.gmdp_client.create_event.call_count == 1
+        assert len(sent_payloads) == 1
+        # The combined payload should have all 5 agent states as blobs
+        assert len(sent_payloads[0]) == 5
+        for item in sent_payloads[0]:
+            assert "blob" in item
 
 
 class TestBatchingBackwardsCompatibility:
@@ -1912,7 +2174,7 @@ class TestBatchingContextManager:
 
     def test_context_manager_flushes_on_exit(self, batching_session_manager, mock_memory_client):
         """Test __exit__ flushes pending messages."""
-        mock_memory_client.create_event.return_value = {"eventId": "event_123"}
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
 
         with batching_session_manager:
             message = SessionMessage(
@@ -1927,11 +2189,11 @@ class TestBatchingContextManager:
 
         # After exiting context, should have flushed
         assert batching_session_manager.pending_message_count() == 0
-        mock_memory_client.create_event.assert_called_once()
+        mock_memory_client.gmdp_client.create_event.assert_called_once()
 
     def test_context_manager_flushes_on_exception(self, batching_session_manager, mock_memory_client):
         """Test __exit__ flushes even when exception occurs."""
-        mock_memory_client.create_event.return_value = {"eventId": "event_123"}
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
 
         try:
             with batching_session_manager:
@@ -1947,13 +2209,13 @@ class TestBatchingContextManager:
 
         # Should have flushed despite exception
         assert batching_session_manager.pending_message_count() == 0
-        mock_memory_client.create_event.assert_called_once()
+        mock_memory_client.gmdp_client.create_event.assert_called_once()
 
     def test_exit_preserves_original_exception_when_flush_fails(
         self, batching_session_manager, mock_memory_client, caplog
     ):
         """Test __exit__ logs flush failure and preserves the original exception."""
-        mock_memory_client.create_event.side_effect = RuntimeError("flush failed")
+        mock_memory_client.gmdp_client.create_event.side_effect = RuntimeError("flush failed")
 
         with caplog.at_level(logging.ERROR):
             with pytest.raises(ValueError, match="original error"):
@@ -1975,7 +2237,7 @@ class TestBatchingContextManager:
         self, batching_session_manager, mock_memory_client, caplog
     ):
         """Test __exit__ still raises flush exceptions when no original exception."""
-        mock_memory_client.create_event.side_effect = RuntimeError("flush failed")
+        mock_memory_client.gmdp_client.create_event.side_effect = RuntimeError("flush failed")
 
         with caplog.at_level(logging.ERROR):
             with pytest.raises(SessionException, match="flush failed"):
@@ -1997,7 +2259,7 @@ class TestBatchingClose:
 
     def test_close_flushes_pending_messages(self, batching_session_manager, mock_memory_client):
         """Test close() flushes all pending messages in a batched call."""
-        mock_memory_client.create_event.return_value = {"eventId": "event_123"}
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}
 
         # Add messages
         for i in range(3):
@@ -2015,7 +2277,7 @@ class TestBatchingClose:
 
         assert batching_session_manager.pending_message_count() == 0
         # One batched API call for all messages in the same session
-        assert mock_memory_client.create_event.call_count == 1
+        assert mock_memory_client.gmdp_client.create_event.call_count == 1
 
     def test_close_with_empty_buffer(self, batching_session_manager, mock_memory_client):
         """Test close() with empty buffer is a no-op."""
@@ -2051,8 +2313,7 @@ class TestBatchingBlobMessages:
 
     def test_mixed_conversational_and_blob_messages(self, batching_session_manager, mock_memory_client):
         """Test batching correctly handles mix of conversational and blob messages."""
-        mock_memory_client.create_event.return_value = {"eventId": "conv_event"}
-        mock_memory_client.gmdp_client.create_event.return_value = {"event": {"eventId": "blob_event"}}
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "conv_event"}
 
         # Add small (conversational) message
         small_message = SessionMessage(
@@ -2074,9 +2335,8 @@ class TestBatchingBlobMessages:
         # Flush
         batching_session_manager._flush_messages()
 
-        # Verify both paths were used
-        assert mock_memory_client.create_event.call_count == 1  # Conversational
-        assert mock_memory_client.gmdp_client.create_event.call_count == 1  # Blob
+        # Both messages should be sent via gmdp_client.create_event (batched together)
+        assert mock_memory_client.gmdp_client.create_event.call_count == 1
 
 
 class TestThinkingModeCompatibility:
