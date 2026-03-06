@@ -36,6 +36,8 @@ class AgentCoreMemoryConfig(BaseModel):
             Default is None (disabled).
         context_tag: XML tag name used to wrap retrieved memory context injected into messages.
             Default is "user_context".
+        filter_restored_tool_context: When True, strip historical toolUse/toolResult blocks from
+            restored messages before loading them into Strands runtime memory. Default is False.
     """
 
     memory_id: str = Field(min_length=1)
@@ -45,3 +47,4 @@ class AgentCoreMemoryConfig(BaseModel):
     batch_size: int = Field(default=1, ge=1, le=100)
     flush_interval_seconds: Optional[float] = Field(default=None, gt=0)
     context_tag: str = Field(default="user_context", min_length=1)
+    filter_restored_tool_context: bool = Field(default=False)

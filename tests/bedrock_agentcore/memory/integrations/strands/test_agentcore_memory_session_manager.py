@@ -13,7 +13,10 @@ from strands.hooks.registry import HookRegistry
 from strands.types.exceptions import SessionException
 from strands.types.session import Session, SessionAgent, SessionMessage, SessionType
 
-from bedrock_agentcore.memory.integrations.strands.bedrock_converter import AgentCoreMemoryConverter
+from bedrock_agentcore.memory.integrations.strands.bedrock_converter import (
+    CONVERSATIONAL_MAX_SIZE,
+    AgentCoreMemoryConverter,
+)
 from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
 from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
 
@@ -1798,7 +1801,7 @@ class TestBatchingFlush:
 
         # Add multiple blob messages (>9KB each)
         for i in range(3):
-            large_text = f"blob_{i}_" + "x" * 10000
+            large_text = f"blob_{i}_" + "x" * (CONVERSATIONAL_MAX_SIZE + 100)
             message = SessionMessage(
                 message={"role": "user", "content": [{"text": large_text}]},
                 message_id=i,
@@ -1839,7 +1842,7 @@ class TestBatchingFlush:
 
         # Directly populate buffer with mixed messages
         base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-        blob_content = {"role": "user", "content": [{"text": "blob_A_" + "x" * 10000}]}
+        blob_content = {"role": "user", "content": [{"text": "blob_A_" + "x" * (CONVERSATIONAL_MAX_SIZE + 100)}]}
         batching_session_manager._message_buffer = [
             # Session A: 2 conversational messages
             ("session-A", [("SessionA_conv_0", "user")], False, base_time),
@@ -2294,8 +2297,8 @@ class TestBatchingBlobMessages:
         """Test large messages (blobs) are sent via gmdp_client."""
         mock_memory_client.gmdp_client.create_event.return_value = {"event": {"eventId": "blob_event_123"}}
 
-        # Create a message that exceeds CONVERSATIONAL_MAX_SIZE (9000)
-        large_text = "x" * 10000
+        # Create a message that exceeds CONVERSATIONAL_MAX_SIZE.
+        large_text = "x" * (CONVERSATIONAL_MAX_SIZE + 100)
         message = SessionMessage(
             message={"role": "user", "content": [{"text": large_text}]},
             message_id=1,
@@ -2324,7 +2327,7 @@ class TestBatchingBlobMessages:
         batching_session_manager.create_message("test-session-456", "test-agent", small_message)
 
         # Add large (blob) message
-        large_text = "x" * 10000
+        large_text = "x" * (CONVERSATIONAL_MAX_SIZE + 100)
         large_message = SessionMessage(
             message={"role": "user", "content": [{"text": large_text}]},
             message_id=2,
