@@ -83,6 +83,44 @@ class TestCloudWatchSpanHelper:
 
         assert results == []
 
+    def test_query_log_group_default_query_includes_ispresent_filters(self):
+        """Test default query includes ispresent filters for scope.name, traceId, spanId."""
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "query-123"}
+        mock_client.get_query_results.return_value = {"status": "Complete", "results": []}
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        start_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        end_time = datetime(2024, 1, 2, tzinfo=timezone.utc)
+
+        helper.query_log_group("test-log-group", "session-123", start_time, end_time)
+
+        query_string = mock_client.start_query.call_args[1]["queryString"]
+        assert 'filter @message like "session-123"' in query_string
+        assert "ispresent(scope.name)" in query_string
+        assert "ispresent(traceId)" in query_string
+        assert "ispresent(spanId)" in query_string
+
+    def test_query_log_group_custom_query_string(self):
+        """Test custom query_string overrides the default."""
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "query-123"}
+        mock_client.get_query_results.return_value = {"status": "Complete", "results": []}
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        start_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        end_time = datetime(2024, 1, 2, tzinfo=timezone.utc)
+        custom_query = 'fields @message | filter attributes.session.id = "sess-1"'
+
+        helper.query_log_group("test-log-group", "session-123", start_time, end_time, query_string=custom_query)
+
+        query_string = mock_client.start_query.call_args[1]["queryString"]
+        assert query_string == custom_query
+
     def test_query_log_group_invalid_json(self):
         """Test handling of invalid JSON in messages."""
         mock_client = Mock()
@@ -126,23 +164,50 @@ class TestFetchSpansFromCloudWatch:
         }
 
         start_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        end_time = datetime(2024, 1, 2, tzinfo=timezone.utc)
 
         with patch("boto3.client", return_value=mock_client):
             spans = fetch_spans_from_cloudwatch(
                 session_id="session-123",
                 event_log_group="/aws/bedrock-agentcore/runtimes/my-agent-ABC-DEFAULT",
                 start_time=start_time,
+                end_time=end_time,
             )
 
         assert len(spans) == 2  # Called twice (aws/spans + event logs)
         assert all(_is_valid_adot_document(span) for span in spans)
 
-    def test_fetch_spans_from_cloudwatch_filters_invalid(self):
-        """Test that invalid documents are filtered out."""
+    def test_fetch_spans_end_time_defaults_to_now(self):
+        """Test that end_time defaults to datetime.now() when not provided."""
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "query-123"}
+        mock_client.get_query_results.return_value = {"status": "Complete", "results": []}
+
+        start_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+        with patch("boto3.client", return_value=mock_client):
+            fetch_spans_from_cloudwatch(
+                session_id="session-123",
+                event_log_group="/aws/logs/my-agent",
+                start_time=start_time,
+            )
+
+        # Should have called start_query twice (aws/spans + event log group)
+        assert mock_client.start_query.call_count == 2
+        # end_time should be a recent timestamp, not None
+        for c in mock_client.start_query.call_args_list:
+            assert c[1]["endTime"] > int(start_time.timestamp())
+
+    def test_fetch_spans_from_cloudwatch_combines_both_log_groups(self):
+        """Test that results from both log groups are combined.
+
+        Filtering of invalid documents is handled server-side by the
+        CloudWatch query (ispresent filters), so all parsed results
+        are returned.
+        """
         mock_client = Mock()
         mock_client.start_query.return_value = {"queryId": "query-123"}
 
-        # First call returns valid, second returns invalid
         mock_client.get_query_results.side_effect = [
             {
                 "status": "Complete",
@@ -153,19 +218,22 @@ class TestFetchSpansFromCloudWatch:
             {
                 "status": "Complete",
                 "results": [
-                    [{"field": "@message", "value": '{"invalid": "document"}'}]  # Missing required fields
+                    [{"field": "@message", "value": '{"scope": {"name": "test2"}, "traceId": "789", "spanId": "012"}'}]
                 ],
             },
         ]
 
         start_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        end_time = datetime(2024, 1, 2, tzinfo=timezone.utc)
 
         with patch("boto3.client", return_value=mock_client):
             spans = fetch_spans_from_cloudwatch(
                 session_id="session-123",
                 event_log_group="/aws/bedrock-agentcore/runtimes/my-agent-ABC-DEFAULT",
                 start_time=start_time,
+                end_time=end_time,
             )
 
-        assert len(spans) == 1  # Only valid document
+        assert len(spans) == 2
         assert spans[0]["scope"]["name"] == "test"
+        assert spans[1]["scope"]["name"] == "test2"
