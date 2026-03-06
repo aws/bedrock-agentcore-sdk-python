@@ -126,12 +126,14 @@ class TestFetchSpansFromCloudWatch:
         }
 
         start_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        end_time = datetime(2024, 1, 2, tzinfo=timezone.utc)
 
         with patch("boto3.client", return_value=mock_client):
             spans = fetch_spans_from_cloudwatch(
                 session_id="session-123",
                 event_log_group="/aws/bedrock-agentcore/runtimes/my-agent-ABC-DEFAULT",
                 start_time=start_time,
+                end_time=end_time,
             )
 
         assert len(spans) == 2  # Called twice (aws/spans + event logs)
@@ -159,12 +161,14 @@ class TestFetchSpansFromCloudWatch:
         ]
 
         start_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        end_time = datetime(2024, 1, 2, tzinfo=timezone.utc)
 
         with patch("boto3.client", return_value=mock_client):
             spans = fetch_spans_from_cloudwatch(
                 session_id="session-123",
                 event_log_group="/aws/bedrock-agentcore/runtimes/my-agent-ABC-DEFAULT",
                 start_time=start_time,
+                end_time=end_time,
             )
 
         assert len(spans) == 1  # Only valid document

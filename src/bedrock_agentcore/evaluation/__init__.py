@@ -1,5 +1,6 @@
-"""AgentCore Evaluation integration for Strands."""
+"""AgentCore Evaluation: EvaluationClient and Strands integration."""
 
+from bedrock_agentcore.evaluation.client import EvaluationClient
 from bedrock_agentcore.evaluation.integrations.strands_agents_evals.evaluator import (
     StrandsEvalsAgentCoreEvaluator,
     create_strands_evaluator,
@@ -12,8 +13,9 @@ from bedrock_agentcore.evaluation.utils.cloudwatch_span_helper import (
 )
 
 __all__ = [
-    "create_strands_evaluator",
+    "EvaluationClient",
     "StrandsEvalsAgentCoreEvaluator",
     "convert_strands_to_adot",
+    "create_strands_evaluator",
     "fetch_spans_from_cloudwatch",
 ]

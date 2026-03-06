@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from datetime import datetime
-from typing import Any, List
+from typing import Any, List, Optional
 
 import boto3
 
@@ -43,6 +43,7 @@ class CloudWatchSpanHelper:
         session_id: str,
         start_time: datetime,
         end_time: datetime,
+        query_string: Optional[str] = None,
     ) -> List[dict]:
         """Query a single CloudWatch log group for session data.
 
@@ -51,17 +52,28 @@ class CloudWatchSpanHelper:
             session_id: Session ID to filter by
             start_time: Query start time
             end_time: Query end time
+            query_string: Optional custom query string. When provided, used instead
+                of the default substring match query.
 
         Returns:
             List of parsed JSON log messages
         """
-        query_string = f"""fields @timestamp, @message
+        if query_string is None:
+            query_string = f"""fields @timestamp, @message
         | filter @message like "{session_id}"
         | sort @timestamp asc"""
 
         max_attempts = 30
         initial_backoff = 0.5
         max_backoff = 5.0
+
+        logger.debug(
+            "Querying log group %s: start_time=%s, end_time=%s, query=%s",
+            log_group_name,
+            start_time,
+            end_time,
+            query_string,
+        )
 
         try:
             response = self.logs_client.start_query(
@@ -133,6 +145,7 @@ class CloudWatchSpanHelper:
         session_id: str,
         event_log_group: str,
         start_time: datetime,
+        end_time: datetime,
     ) -> List[dict]:
         """Fetch ADOT spans from CloudWatch with configurable event log group.
 
@@ -145,6 +158,7 @@ class CloudWatchSpanHelper:
                 - For Runtime agents: "/aws/bedrock-agentcore/runtimes/{agent_id}-{endpoint}"
                 - For custom agents: Any log group you configured (e.g., "/my-app/agent-events")
             start_time: Start time for log query
+            end_time: End time for log query
 
         Returns:
             List of ADOT span and log record dictionaries
@@ -153,21 +167,22 @@ class CloudWatchSpanHelper:
             >>> from datetime import datetime, timedelta, timezone
             >>> helper = CloudWatchSpanHelper(region="us-west-2")
             >>> start_time = datetime.now(timezone.utc) - timedelta(minutes=10)
-            >>> spans = fetcher.fetch_spans(
+            >>> end_time = datetime.now(timezone.utc)
+            >>> spans = helper.fetch_spans(
             ...     session_id="abc-123",
             ...     event_log_group="/aws/bedrock-agentcore/runtimes/my-agent-ABC-DEFAULT",
-            ...     start_time=start_time
+            ...     start_time=start_time,
+            ...     end_time=end_time,
             ... )
 
         Example (Custom agent):
-            >>> spans = fetcher.fetch_spans(
+            >>> spans = helper.fetch_spans(
             ...     session_id="abc-123",
             ...     event_log_group="/my-app/agent-events",
-            ...     start_time=start_time
+            ...     start_time=start_time,
+            ...     end_time=end_time,
             ... )
         """
-        end_time = datetime.now()
-
         # Query both log groups
         aws_spans = self.query_log_group("aws/spans", session_id, start_time, end_time)
         event_logs = self.query_log_group(event_log_group, session_id, start_time, end_time)
@@ -184,6 +199,7 @@ def fetch_spans_from_cloudwatch(
     session_id: str,
     event_log_group: str,
     start_time: datetime,
+    end_time: datetime,
     region: str = DEFAULT_REGION,
 ) -> List[dict]:
     """Fetch ADOT spans from CloudWatch with configurable event log group.
@@ -199,6 +215,7 @@ def fetch_spans_from_cloudwatch(
             - For Runtime agents: "/aws/bedrock-agentcore/runtimes/{agent_id}-{endpoint}"
             - For custom agents: Any log group you configured (e.g., "/my-app/agent-events")
         start_time: Start time for log query
+        end_time: End time for log query
         region: AWS region (default: from DEFAULT_REGION constant)
 
     Returns:
@@ -207,18 +224,21 @@ def fetch_spans_from_cloudwatch(
     Example (Runtime agent):
         >>> from datetime import datetime, timedelta, timezone
         >>> start_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+        >>> end_time = datetime.now(timezone.utc)
         >>> spans = fetch_spans_from_cloudwatch(
         ...     session_id="abc-123",
         ...     event_log_group="/aws/bedrock-agentcore/runtimes/my-agent-ABC-DEFAULT",
-        ...     start_time=start_time
+        ...     start_time=start_time,
+        ...     end_time=end_time,
         ... )
 
     Example (Custom agent):
         >>> spans = fetch_spans_from_cloudwatch(
         ...     session_id="abc-123",
         ...     event_log_group="/my-app/agent-events",
-        ...     start_time=start_time
+        ...     start_time=start_time,
+        ...     end_time=end_time,
         ... )
     """
     helper = CloudWatchSpanHelper(region=region)
-    return helper.fetch_spans(session_id, event_log_group, start_time)
+    return helper.fetch_spans(session_id, event_log_group, start_time, end_time)
