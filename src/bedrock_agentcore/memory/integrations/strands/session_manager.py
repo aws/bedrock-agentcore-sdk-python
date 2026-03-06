@@ -628,7 +628,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             event (MessageAddedEvent): The message added event containing the agent and message data.
         """
         messages = event.agent.messages
-        if not messages or messages[-1].get("role") != "user" or "toolResult" in messages[-1].get("content")[0]:
+        if not messages or messages[-1].get("role") != "user" or "text" not in messages[-1].get("content")[0]:
             return None
         if not self.config.retrieval_config:
             # Only retrieve LTM
