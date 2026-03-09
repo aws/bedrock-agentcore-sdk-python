@@ -51,6 +51,7 @@ class MemoryControlPlaneClient:
         description: Optional[str] = None,
         memory_execution_role_arn: Optional[str] = None,
         strategies: Optional[List[Dict[str, Any]]] = None,
+        stream_delivery_resources: Optional[Dict[str, Any]] = None,
         wait_for_active: bool = False,
         max_wait: int = 300,
         poll_interval: int = 10,
@@ -63,6 +64,7 @@ class MemoryControlPlaneClient:
             description: Optional description
             memory_execution_role_arn: IAM role ARN for memory execution
             strategies: Optional list of strategy configurations
+            stream_delivery_resources: Optional delivery configuration for streaming memory records
             wait_for_active: Whether to wait for memory to become ACTIVE
             max_wait: Maximum seconds to wait if wait_for_active is True
             poll_interval: Seconds between status checks if wait_for_active is True
@@ -84,6 +86,9 @@ class MemoryControlPlaneClient:
 
         if strategies:
             params["memoryStrategies"] = strategies
+
+        if stream_delivery_resources is not None:
+            params["streamDeliveryResources"] = stream_delivery_resources
 
         try:
             response = self.client.create_memory(**params)
@@ -174,6 +179,7 @@ class MemoryControlPlaneClient:
         add_strategies: Optional[List[Dict[str, Any]]] = None,
         modify_strategies: Optional[List[Dict[str, Any]]] = None,
         delete_strategy_ids: Optional[List[str]] = None,
+        stream_delivery_resources: Optional[Dict[str, Any]] = None,
         wait_for_active: bool = False,
         max_wait: int = 300,
         poll_interval: int = 10,
@@ -188,6 +194,7 @@ class MemoryControlPlaneClient:
             add_strategies: Optional list of strategies to add
             modify_strategies: Optional list of strategies to modify
             delete_strategy_ids: Optional list of strategy IDs to delete
+            stream_delivery_resources: Optional delivery configuration for streaming memory records
             wait_for_active: Whether to wait for memory to become ACTIVE
             max_wait: Maximum seconds to wait if wait_for_active is True
             poll_interval: Seconds between status checks if wait_for_active is True
@@ -209,6 +216,9 @@ class MemoryControlPlaneClient:
 
         if memory_execution_role_arn is not None:
             params["memoryExecutionRoleArn"] = memory_execution_role_arn
+
+        if stream_delivery_resources is not None:
+            params["streamDeliveryResources"] = stream_delivery_resources
 
         # Add strategy operations if provided
         memory_strategies = {}

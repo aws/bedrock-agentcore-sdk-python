@@ -128,6 +128,76 @@ def test_update_memory():
             assert kwargs["clientToken"] == "12345678-1234-5678-1234-567812345678"
 
 
+def test_create_memory_with_stream_delivery():
+    """Test create_memory with stream_delivery_resources."""
+    with patch("boto3.client"):
+        client = MemoryControlPlaneClient()
+
+        mock_client = MagicMock()
+        client.client = mock_client
+
+        delivery_config = {
+            "resources": [
+                {
+                    "kinesis": {
+                        "dataStreamArn": "arn:aws:kinesis:us-west-2:123456789012:stream/test",
+                        "contentConfigurations": [{"type": "MEMORY_RECORDS", "level": "FULL_CONTENT"}],
+                    }
+                }
+            ]
+        }
+
+        mock_client.create_memory.return_value = {
+            "memory": {
+                "id": "mem-123",
+                "name": "Test",
+                "status": "CREATING",
+                "streamDeliveryResources": delivery_config,
+            }
+        }
+
+        result = client.create_memory(name="Test", stream_delivery_resources=delivery_config)
+
+        assert result["streamDeliveryResources"] == delivery_config
+        args, kwargs = mock_client.create_memory.call_args
+        assert kwargs["streamDeliveryResources"] == delivery_config
+
+
+def test_update_memory_with_stream_delivery():
+    """Test update_memory with stream_delivery_resources."""
+    with patch("boto3.client"):
+        client = MemoryControlPlaneClient()
+
+        mock_client = MagicMock()
+        client.client = mock_client
+
+        delivery_config = {
+            "resources": [
+                {
+                    "kinesis": {
+                        "dataStreamArn": "arn:aws:kinesis:us-west-2:123456789012:stream/test",
+                        "contentConfigurations": [{"type": "MEMORY_RECORDS", "level": "METADATA_ONLY"}],
+                    }
+                }
+            ]
+        }
+
+        mock_client.update_memory.return_value = {
+            "memory": {
+                "id": "mem-123",
+                "name": "Test",
+                "status": "UPDATING",
+                "streamDeliveryResources": delivery_config,
+            }
+        }
+
+        result = client.update_memory(memory_id="mem-123", stream_delivery_resources=delivery_config)
+
+        assert result["streamDeliveryResources"] == delivery_config
+        args, kwargs = mock_client.update_memory.call_args
+        assert kwargs["streamDeliveryResources"] == delivery_config
+
+
 def test_delete_memory():
     """Test delete_memory functionality."""
     with patch("boto3.client"):
