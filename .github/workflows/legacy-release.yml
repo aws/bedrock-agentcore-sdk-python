@@ -1,5 +1,7 @@
-name: Release
+name: Legacy Release (deprecated)
 
+# DEPRECATED: Replaced by release-prepare.yml and release-publish.yml
+# Kept as a fallback. Remove once new workflows are verified.
 on:
   workflow_dispatch:
     inputs:

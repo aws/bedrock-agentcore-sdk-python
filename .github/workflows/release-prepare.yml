@@ -1,0 +1,217 @@
+name: Release Prepare
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - pre
+      changelog:
+        description: 'Custom changelog entry (optional - leave empty to auto-generate)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+
+    steps:
+      - name: Validate running from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "❌ ERROR: Must run from main branch, got ${{ github.ref }}"
+          exit 1
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: Configure git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Get current version
+        id: current
+        run: |
+          VERSION=$(grep -m1 -oP '^version = "\K[^"]+' pyproject.toml)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Bump version
+        id: bump
+        env:
+          CHANGELOG_INPUT: ${{ github.event.inputs.changelog }}
+          BUMP_TYPE: ${{ github.event.inputs.bump_type }}
+        run: |
+          chmod +x scripts/bump_version.py
+
+          if [ -z "$CHANGELOG_INPUT" ]; then
+            echo "ℹ️  No custom changelog provided. Will auto-generate from commits."
+          fi
+
+          if [ -n "$CHANGELOG_INPUT" ]; then
+            python scripts/bump_version.py "$BUMP_TYPE" --changelog "$CHANGELOG_INPUT"
+          else
+            python scripts/bump_version.py "$BUMP_TYPE"
+          fi
+
+          uv lock --no-progress
+
+          NEW_VERSION=$(grep -m1 -oP '^version = "\K[^"]+' pyproject.toml)
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Create release branch and push
+        env:
+          NEW_VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          BRANCH_NAME="release/v$NEW_VERSION"
+
+          if git ls-remote --exit-code --heads origin $BRANCH_NAME; then
+            echo "⚠️  Branch $BRANCH_NAME already exists. Deleting it first..."
+            git push origin --delete $BRANCH_NAME
+          fi
+
+          if git show-ref --verify --quiet refs/heads/$BRANCH_NAME; then
+            git branch -D $BRANCH_NAME
+          fi
+
+          git checkout -b $BRANCH_NAME
+          git add -A
+          git commit -m "chore: bump version to $NEW_VERSION
+
+          Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+
+          git push origin $BRANCH_NAME
+
+          COMMITTED_VERSION=$(git show HEAD:pyproject.toml | grep -m1 -oP '^version = "\K[^"]+')
+          if [ "$COMMITTED_VERSION" != "$NEW_VERSION" ]; then
+            echo "❌ ERROR: Version not committed correctly!"
+            exit 1
+          fi
+
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW_VERSION: ${{ steps.bump.outputs.version }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: |
+          BRANCH_NAME="release/v$NEW_VERSION"
+
+          WARNING_TEXT=""
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            WARNING_TEXT="**WARNING**: Not running from main branch!"
+          else
+            WARNING_TEXT="✅ Running from main branch"
+          fi
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH_NAME" \
+            --title "Release v$NEW_VERSION" \
+            --body "## 🚀 Release v$NEW_VERSION
+
+          This PR was automatically created by the release workflow.
+
+          ### ⚠️  Pre-merge Checklist
+          - [ ] Review CHANGELOG.md - ensure it has meaningful release notes
+          - [ ] Verify version numbers are correct in all files
+          - [ ] All CI checks are passing
+
+          ### 📝 How to improve changelog
+          If the auto-generated changelog isn't good enough:
+          1. Edit CHANGELOG.md in this PR
+          2. Commit the changes
+          3. Then approve and merge
+
+          ### 🔄 Release Process
+          After merging this PR, the **release-publish** workflow will:
+          1. Build the package from main
+          2. Require **manual approval** before publishing to PyPI
+          3. Publish to PyPI, create tag and GitHub release
+
+          ### 🚨 Running from: $GITHUB_REF
+          $WARNING_TEXT
+
+          ---
+          *Triggered by @$GITHUB_ACTOR*"
+
+  test-and-build:
+    name: Test and Build
+    needs: prepare-release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: release/v${{ needs.prepare-release.outputs.version }}
+
+      - name: Verify version before build
+        env:
+          EXPECTED_VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          ACTUAL_VERSION=$(grep -m1 -oP '^version = "\K[^"]+' pyproject.toml)
+          echo "Expected version: $EXPECTED_VERSION"
+          echo "Actual version: $ACTUAL_VERSION"
+
+          if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "❌ ERROR: Version mismatch!"
+            exit 1
+          fi
+          echo "✓ Version verified: $ACTUAL_VERSION"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Setup build environment
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install build twine
+
+      - name: Build and check package
+        run: |
+          source .venv/bin/activate
+          uv build
+          twine check dist/*
+          echo "=== Package contents ==="
+          python -m zipfile -l dist/*.whl | head -20
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
