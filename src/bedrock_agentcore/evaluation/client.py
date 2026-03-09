@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, List, Optional
 
 import boto3
 from botocore.config import Config
@@ -156,16 +156,9 @@ class EvaluationClient:
             requests = self._build_requests_for_level(evaluator_id, level, base_input, spans)
             if len(requests) > 1:
                 logger.debug("Split into %d batched request(s) for evaluator %s", len(requests), evaluator_id)
-            evaluator_result_count = 0
             for request in requests:
-                try:
-                    response = self._dp_client.evaluate(evaluatorId=evaluator_id, **request)
-                    results = response.get("evaluationResults", [])
-                    evaluator_result_count += len(results)
-                    all_results.extend(results)
-                except Exception as e:
-                    logger.warning("Evaluator %s failed: %s", evaluator_id, e)
-            logger.debug("Evaluator %s returned %d result(s)", evaluator_id, evaluator_result_count)
+                response = self._dp_client.evaluate(evaluatorId=evaluator_id, **request)
+                all_results.extend(response.get("evaluationResults", []))
 
         logger.info(
             "Evaluation complete: %d result(s) from %d evaluator(s)",
@@ -206,8 +199,8 @@ class EvaluationClient:
             if not trace_ids:
                 raise ValueError(f"No trace IDs found for trace-level evaluator {evaluator_id}")
             return [
-                {**base_input, "evaluationTarget": {"traceIds": batch}}
-                for batch in self._batch(trace_ids, MAX_TARGET_IDS_PER_REQUEST)
+                {**base_input, "evaluationTarget": {"traceIds": trace_ids[i : i + MAX_TARGET_IDS_PER_REQUEST]}}
+                for i in range(0, len(trace_ids), MAX_TARGET_IDS_PER_REQUEST)
             ]
 
         if level == "TOOL_CALL":
@@ -216,8 +209,8 @@ class EvaluationClient:
             if not tool_span_ids:
                 raise ValueError(f"No tool span IDs found for tool-level evaluator {evaluator_id}")
             return [
-                {**base_input, "evaluationTarget": {"spanIds": batch}}
-                for batch in self._batch(tool_span_ids, MAX_TARGET_IDS_PER_REQUEST)
+                {**base_input, "evaluationTarget": {"spanIds": tool_span_ids[i : i + MAX_TARGET_IDS_PER_REQUEST]}}
+                for i in range(0, len(tool_span_ids), MAX_TARGET_IDS_PER_REQUEST)
             ]
 
         raise ValueError(f"Unknown evaluator level: {level}")
@@ -225,14 +218,7 @@ class EvaluationClient:
     @staticmethod
     def _extract_trace_ids(spans: list) -> List[str]:
         """Extract unique trace IDs from spans, ordered by appearance."""
-        seen: set = set()
-        trace_ids: List[str] = []
-        for span in spans:
-            trace_id = span.get("traceId")
-            if trace_id and trace_id not in seen:
-                trace_ids.append(trace_id)
-                seen.add(trace_id)
-        return trace_ids
+        return list(dict.fromkeys(span.get("traceId") for span in spans if span.get("traceId")))
 
     @staticmethod
     def _extract_tool_span_ids(spans: list) -> List[str]:
@@ -247,8 +233,3 @@ class EvaluationClient:
                     tool_span_ids.append(span_id)
         return tool_span_ids
 
-    @staticmethod
-    def _batch(items: list, size: int) -> Iterator[list]:
-        """Yield successive chunks of the given size."""
-        for i in range(0, len(items), size):
-            yield items[i : i + size]

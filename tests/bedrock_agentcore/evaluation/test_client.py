@@ -199,15 +199,14 @@ class TestRunEndToEnd:
         assert len(results) == 2
         assert client._dp_client.evaluate.call_count == 2
 
-    def test_evaluator_api_error_is_caught(self, client):
+    def test_evaluator_api_error_propagates(self, client):
         client._cp_client.get_evaluator.return_value = {"level": "SESSION"}
         client._dp_client.evaluate.side_effect = RuntimeError("API error")
 
         with patch("bedrock_agentcore.evaluation.client.CloudWatchAgentSpanCollector") as mock_collector_cls:
             mock_collector_cls.return_value.collect.return_value = SAMPLE_SPANS
-            results = client.run(evaluator_ids=["accuracy"], session_id="sess-1", agent_id="my-agent")
-
-        assert results == []
+            with pytest.raises(RuntimeError, match="API error"):
+                client.run(evaluator_ids=["accuracy"], session_id="sess-1", agent_id="my-agent")
 
     def test_custom_look_back_time(self, client):
         with patch("bedrock_agentcore.evaluation.client.CloudWatchAgentSpanCollector") as mock_collector_cls:
@@ -327,19 +326,3 @@ class TestExtractToolSpanIds:
         assert EvaluationClient._extract_tool_span_ids([]) == []
 
 
-class TestBatch:
-    def test_exact_batches(self):
-        batches = list(EvaluationClient._batch([1, 2, 3, 4], 2))
-        assert batches == [[1, 2], [3, 4]]
-
-    def test_remainder(self):
-        batches = list(EvaluationClient._batch([1, 2, 3], 2))
-        assert batches == [[1, 2], [3]]
-
-    def test_single_batch(self):
-        batches = list(EvaluationClient._batch([1, 2], 10))
-        assert batches == [[1, 2]]
-
-    def test_empty(self):
-        batches = list(EvaluationClient._batch([], 10))
-        assert batches == []
