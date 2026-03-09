@@ -1,0 +1,158 @@
+name: Release Publish
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build from Main
+    if: >
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'release/v')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Build and check package
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install build twine
+          uv build
+          twine check dist/*
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(ls dist/*.whl | sed -n 's/.*-\([0-9.]*\)-.*/\1/p')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  release-approval:
+    name: Release Approval
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-approval
+
+    steps:
+      - name: Approval checkpoint
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          echo "✅ Build successful for v$VERSION"
+          echo "📦 Package ready for PyPI publication"
+          echo ""
+          echo "⚠️  MANUAL APPROVAL REQUIRED"
+          echo "Verify version and changelog before approving."
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [build, release-approval]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/bedrock-agentcore/
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist/
+
+      - name: Verify PyPI token exists
+        env:
+          PYPI_TOKEN_SET: ${{ secrets.PYPI_API_TOKEN != '' }}
+        run: |
+          if [ "$PYPI_TOKEN_SET" != "true" ]; then
+            echo "❌ ERROR: PYPI_API_TOKEN not configured!"
+            exit 1
+          fi
+          echo "✓ PyPI token is configured"
+
+      - name: Check if version exists on PyPI
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          if pip index versions bedrock-agentcore | grep -q "^Available versions.*$VERSION"; then
+            echo "❌ ERROR: Version $VERSION already exists on PyPI!"
+            exit 1
+          fi
+          echo "✓ Version $VERSION is not on PyPI, safe to publish"
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: false
+          verbose: true
+
+      - name: Wait for PyPI availability
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          echo "Waiting for package to be available on PyPI..."
+          for i in {1..10}; do
+            if pip index versions bedrock-agentcore | grep -q "$VERSION"; then
+              echo "✓ Package version $VERSION is now available on PyPI"
+              break
+            fi
+            echo "Attempt $i/10: Package not yet available, waiting 30s..."
+            sleep 30
+          done
+
+      - name: Create and push tag
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build.outputs.version }}
+          name: Bedrock AgentCore SDK v${{ needs.build.outputs.version }}
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## Installation
+            ```bash
+            pip install bedrock-agentcore==${{ needs.build.outputs.version }}
+            ```
+
+            ## What's Changed
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/v${{ needs.build.outputs.version }}/CHANGELOG.md) for details.
