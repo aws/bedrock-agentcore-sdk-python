@@ -324,5 +324,3 @@ class TestExtractToolSpanIds:
 
     def test_empty_spans(self):
         assert EvaluationClient._extract_tool_span_ids([]) == []
-
-

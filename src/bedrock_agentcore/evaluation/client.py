@@ -232,4 +232,3 @@ class EvaluationClient:
                 if span_id:
                     tool_span_ids.append(span_id)
         return tool_span_ids
-
