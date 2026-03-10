@@ -1213,7 +1213,7 @@ class TestSessionManager:
 
             # Verify strategy_id was passed
             call_args = mock_client_instance.retrieve_memory_records.call_args[1]
-            assert call_args["searchCriteria"]["strategyId"] == "strategy-123"
+            assert call_args["searchCriteria"]["memoryStrategyId"] == "strategy-123"
 
     def test_search_long_term_memories_client_error(self):
         """Test search_long_term_memories with ClientError."""
@@ -2182,7 +2182,7 @@ class TestEdgeCases:
 
             # Verify strategy_id was not passed
             call_args = mock_client_instance.retrieve_memory_records.call_args[1]
-            assert "strategyId" not in call_args["searchCriteria"]
+            assert "memoryStrategyId" not in call_args["searchCriteria"]
 
     def test_list_long_term_memory_records_without_strategy_id(self):
         """Test list_long_term_memory_records without strategy_id to cover missing branch."""
