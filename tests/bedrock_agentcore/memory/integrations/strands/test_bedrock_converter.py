@@ -107,7 +107,7 @@ class TestAgentCoreMemoryConverter:
 
     def test_exceeds_conversational_limit_true(self):
         """Test message over conversational limit."""
-        long_text = "x" * 5000
+        long_text = "x" * 60000
         message = (long_text, long_text)
         result = AgentCoreMemoryConverter.exceeds_conversational_limit(message)
         assert result is True
