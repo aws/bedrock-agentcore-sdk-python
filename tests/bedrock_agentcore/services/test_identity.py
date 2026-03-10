@@ -4,6 +4,7 @@ import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from bedrock_agentcore.services.identity import (
     DEFAULT_POLLING_INTERVAL_SECONDS,
@@ -861,6 +862,171 @@ class TestIdentityClient:
 
             assert result == expected_response
             mock_cp_client.list_payment_credential_providers.assert_called_once_with(maxResults=max_results)
+
+    def test_list_payment_credential_providers_with_zero_max_results(self):
+        """Test list_payment_credential_providers validates max_results=0."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            # max_results=0 should raise ValueError (outside valid range 1-20)
+            with pytest.raises(ValueError, match="max_results must be between 1 and 20"):
+                identity_client.list_payment_credential_providers(max_results=0)
+
+    def test_list_payment_credential_providers_with_empty_next_token(self):
+        """Test list_payment_credential_providers with next_token="" (edge case)."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            # Test data - next_token="" should be passed through, not treated as falsy
+            next_token = ""
+            expected_response = {"credentialProviders": []}
+
+            mock_cp_client.list_payment_credential_providers.return_value = expected_response
+
+            result = identity_client.list_payment_credential_providers(next_token=next_token)
+
+            assert result == expected_response
+            mock_cp_client.list_payment_credential_providers.assert_called_once_with(nextToken="")
+
+    def test_create_payment_credential_provider_client_error(self):
+        """Test create_payment_credential_provider propagates ClientError."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            # Mock boto3 to raise ClientError
+            error_response = {"Error": {"Code": "ProviderNotFound", "Message": "Provider not found"}}
+            mock_cp_client.create_payment_credential_provider.side_effect = ClientError(
+                error_response, "CreatePaymentCredentialProvider"
+            )
+
+            with pytest.raises(ClientError):
+                identity_client.create_payment_credential_provider("test-provider", "CoinbaseCDP", {})
+
+    def test_update_payment_credential_provider_client_error(self):
+        """Test update_payment_credential_provider propagates ClientError."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            # Mock boto3 to raise ClientError
+            error_response = {"Error": {"Code": "AccessDenied", "Message": "Access denied"}}
+            mock_cp_client.update_payment_credential_provider.side_effect = ClientError(
+                error_response, "UpdatePaymentCredentialProvider"
+            )
+
+            with pytest.raises(ClientError):
+                identity_client.update_payment_credential_provider("test-provider", "CoinbaseCDP", {})
+
+    def test_delete_payment_credential_provider_client_error(self):
+        """Test delete_payment_credential_provider propagates ClientError."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            # Mock boto3 to raise ClientError
+            error_response = {"Error": {"Code": "ProviderNotFound", "Message": "Provider not found"}}
+            mock_cp_client.delete_payment_credential_provider.side_effect = ClientError(
+                error_response, "DeletePaymentCredentialProvider"
+            )
+
+            with pytest.raises(ClientError):
+                identity_client.delete_payment_credential_provider("test-provider")
+
+    def test_get_payment_credential_provider_client_error(self):
+        """Test get_payment_credential_provider propagates ClientError."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            # Mock boto3 to raise ClientError
+            error_response = {"Error": {"Code": "ProviderNotFound", "Message": "Provider not found"}}
+            mock_cp_client.get_payment_credential_provider.side_effect = ClientError(
+                error_response, "GetPaymentCredentialProvider"
+            )
+
+            with pytest.raises(ClientError):
+                identity_client.get_payment_credential_provider("test-provider")
+
+    def test_list_payment_credential_providers_client_error(self):
+        """Test list_payment_credential_providers propagates ClientError."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            # Mock boto3 to raise ClientError
+            error_response = {"Error": {"Code": "ServiceUnavailable", "Message": "Service unavailable"}}
+            mock_cp_client.list_payment_credential_providers.side_effect = ClientError(
+                error_response, "ListPaymentCredentialProviders"
+            )
+
+            with pytest.raises(ClientError):
+                identity_client.list_payment_credential_providers()
+
+    def test_list_payment_credential_providers_max_results_below_range(self):
+        """Test list_payment_credential_providers validates max_results < 1."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            with pytest.raises(ValueError, match="max_results must be between 1 and 20"):
+                identity_client.list_payment_credential_providers(max_results=0)
+
+    def test_list_payment_credential_providers_max_results_above_range(self):
+        """Test list_payment_credential_providers validates max_results > 20."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_cp_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
+
+            identity_client = IdentityClient(region)
+
+            with pytest.raises(ValueError, match="max_results must be between 1 and 20"):
+                identity_client.list_payment_credential_providers(max_results=50)
 
 
 class TestDefaultApiTokenPoller:
