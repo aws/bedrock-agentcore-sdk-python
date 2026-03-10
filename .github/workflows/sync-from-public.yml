@@ -1,0 +1,101 @@
+name: Sync from Public Repo
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Every 6 hours
+  workflow_dispatch: # Manual trigger via Actions tab
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch public main
+        run: |
+          git remote add public https://github.com/aws/bedrock-agentcore-sdk-python.git
+          git fetch public main
+
+      - name: Sync main with public/main
+        run: |
+          git checkout main
+          git reset --hard origin/main
+
+          # Check if public/main is already merged
+          if git merge-base --is-ancestor public/main HEAD; then
+            echo "✅ main is already up to date with public/main"
+            exit 0
+          fi
+
+          # Try to merge public/main
+          if git merge public/main -m "chore: sync main with public/main"; then
+            git push origin main
+            echo "✅ main synced successfully"
+          else
+            echo "⚠️  Conflict detected in main"
+
+            # Capture conflicted files before aborting
+            conflicted_files=$(git diff --name-only --diff-filter=U 2>/dev/null || echo "Unable to determine conflicted files")
+            git merge --abort
+
+            # Check if a sync PR already exists
+            existing_pr=$(gh pr list --base "main" --search "Merge public/main" --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
+
+            if [ -n "$existing_pr" ]; then
+              echo "ℹ️  PR #$existing_pr already exists, skipping"
+              exit 0
+            fi
+
+            conflict_branch="sync-conflict-main-$(date +%Y%m%d-%H%M%S)"
+            git checkout -b "$conflict_branch"
+
+            git merge public/main --no-commit --no-ff || true
+            git add -A
+            git commit -m "chore: sync main with public/main (conflicts present)
+
+          This automated sync detected merge conflicts that require manual resolution.
+
+          Source: public/main (https://github.com/aws/bedrock-agentcore-sdk-python)
+          Target: main
+
+          Please resolve conflicts and merge this PR." || true
+
+            git push origin "$conflict_branch"
+
+            gh pr create \
+              --title "🔀 [Sync Conflict] Merge public/main → main" \
+              --body "## Automated Sync Conflict
+
+          This PR was automatically created because merging \`public/main\` into \`main\` encountered conflicts.
+
+          **Source:** \`main\` from [aws/bedrock-agentcore-sdk-python](https://github.com/aws/bedrock-agentcore-sdk-python)
+          **Target:** \`main\`
+
+          ### Action Required
+          1. \`git fetch origin && git checkout $conflict_branch\`
+          2. Resolve merge conflicts
+          3. \`git add . && git commit\`
+          4. \`git push origin $conflict_branch\`
+          5. Merge this PR
+
+          ### Files with Conflicts
+          \`\`\`
+          $conflicted_files
+          \`\`\`" \
+              --base "main" \
+              --head "$conflict_branch" || echo "⚠️  Failed to create PR"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
