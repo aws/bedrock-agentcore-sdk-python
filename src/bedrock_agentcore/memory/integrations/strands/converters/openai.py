@@ -138,9 +138,7 @@ class OpenAIConverseConverter:
             return []
 
         has_non_empty = any(
-            (isinstance(item.get("text"), str) and item["text"].strip())
-            or "toolUse" in item
-            or "toolResult" in item
+            (isinstance(item.get("text"), str) and item["text"].strip()) or "toolUse" in item or "toolResult" in item
             for item in content
         )
         if not has_non_empty:
