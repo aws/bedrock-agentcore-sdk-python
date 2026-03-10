@@ -1,0 +1,51 @@
+name: Slack Open PRs Notification
+
+on:
+  schedule:
+    - cron: '0 13 * * *'  # 8:00 AM EST (13:00 UTC)
+  workflow_dispatch:
+
+permissions:
+  pull-requests: read
+
+jobs:
+  notify-slack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get open PRs
+        id: open-prs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+            });
+
+            const count = prs.length;
+
+            // Format each PR with plain text and bare URL (Slack auto-links URLs)
+            const prList = prs.map(pr =>
+              `• #${pr.number} - ${pr.title} (by ${pr.user.login})\n  ${pr.html_url}`
+            ).join('\n');
+
+            core.setOutput('count', count);
+
+            // Use GITHUB_OUTPUT delimiter for multiline support
+            const fs = require('fs');
+            fs.appendFileSync(
+              process.env.GITHUB_OUTPUT,
+              `pr_list<<PRLIST_EOF\n${prList}\nPRLIST_EOF\n`
+            );
+
+      - name: Send open PRs summary to Slack
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          webhook: ${{ secrets.SLACK_OPEN_PRS_WEBHOOK_URL }}
+          webhook-type: webhook-trigger
+          payload: |
+            pr_count: "${{ steps.open-prs.outputs.count }}"
+            pr_list: ${{ toJSON(steps.open-prs.outputs.pr_list) }}
+            repository: "${{ github.repository }}"
+            repository_url: "https://github.com/${{ github.repository }}/pulls"
