@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.4] - 2026-03-10
+
+### Added
+- feat: add streamDeliveryResources support to memory SDK (#302) (907f816)
+- feat: split release workflow into prepare and publish (#301) (17e1357)
+- feat: add EvaluationClient with run() for on-demand session evaluation (#300) (102ba0d)
+
+### Fixed
+- fix: Session manager batching improvements (#298) (328acba)
+- fix: allow custom HTTP status codes from entrypoint handlers (#284) (#296) (2371461)
+
+### Other Changes
+- feat(strands-memory): add converter injection and optional restored-tool filtering (#288) (6cda0a3)
+- chore: bump version to 1.4.3 (#297) (a29aeec)
+
 ## [1.4.3] - 2026-03-04
 
 ### Added
