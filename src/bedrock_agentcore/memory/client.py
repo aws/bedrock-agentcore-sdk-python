@@ -133,6 +133,7 @@ class MemoryClient:
         description: Optional[str] = None,
         event_expiry_days: int = 90,
         memory_execution_role_arn: Optional[str] = None,
+        stream_delivery_resources: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Create a memory with simplified configuration."""
         if strategies is None:
@@ -154,6 +155,9 @@ class MemoryClient:
             if memory_execution_role_arn is not None:
                 params["memoryExecutionRoleArn"] = memory_execution_role_arn
 
+            if stream_delivery_resources is not None:
+                params["streamDeliveryResources"] = stream_delivery_resources
+
             response = self.gmcp_client.create_memory(**params)
 
             memory = response["memory"]
@@ -174,6 +178,7 @@ class MemoryClient:
         description: Optional[str] = None,
         event_expiry_days: int = 90,
         memory_execution_role_arn: Optional[str] = None,
+        stream_delivery_resources: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Create a memory resource or fetch the existing memory details if it already exists.
 
@@ -187,6 +192,7 @@ class MemoryClient:
                 description=description,
                 event_expiry_days=event_expiry_days,
                 memory_execution_role_arn=memory_execution_role_arn,
+                stream_delivery_resources=stream_delivery_resources,
             )
             return memory
         except ClientError as e:
@@ -208,6 +214,7 @@ class MemoryClient:
         description: Optional[str] = None,
         event_expiry_days: int = 90,
         memory_execution_role_arn: Optional[str] = None,
+        stream_delivery_resources: Optional[Dict[str, Any]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
     ) -> Dict[str, Any]:
@@ -222,6 +229,7 @@ class MemoryClient:
             description: Optional description
             event_expiry_days: How long to retain events (default: 90 days)
             memory_execution_role_arn: IAM role ARN for memory execution
+            stream_delivery_resources: Optional delivery configuration for streaming memory records
             max_wait: Maximum seconds to wait (default: 300)
             poll_interval: Seconds between status checks (default: 10)
 
@@ -239,6 +247,7 @@ class MemoryClient:
             description=description,
             event_expiry_days=event_expiry_days,
             memory_execution_role_arn=memory_execution_role_arn,
+            stream_delivery_resources=stream_delivery_resources,
         )
 
         memory_id = memory.get("memoryId", memory.get("id"))  # Handle both field names
