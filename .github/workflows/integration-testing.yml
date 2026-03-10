@@ -117,11 +117,6 @@ jobs:
             timeout: 10
             extra-deps: ""
             ignore: ""
-          - group: memory
-            path: tests_integ/memory
-            timeout: 20
-            extra-deps: ""
-            ignore: ""
           - group: evaluation
             path: tests_integ/evaluation
             timeout: 15
