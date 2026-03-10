@@ -440,6 +440,10 @@ class BedrockAgentCoreApp(Starlette):
             duration = time.time() - start_time
             self.logger.warning("Invalid JSON in request (%.3fs): %s", duration, e)
             return JSONResponse({"error": "Invalid JSON", "details": str(e)}, status_code=400)
+        except UnicodeDecodeError as e:
+            duration = time.time() - start_time
+            self.logger.warning("Invalid encoding in request (%.3fs): %s", duration, e)
+            return JSONResponse({"error": "Invalid encoding", "details": str(e)}, status_code=400)
         except HTTPException as e:
             duration = time.time() - start_time
             # Use error level for 5xx to match the generic Exception handler's severity,

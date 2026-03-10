@@ -472,6 +472,24 @@ class TestCustomStatusCodes:
         assert response.status_code == 500
         assert response.json() == {"error": "Intentional server error"}
 
+    def test_unicode_decode_error_returns_400(self):
+        """Test UnicodeDecodeError from invalid input returns 400, not 500."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            return payload
+
+        client = TestClient(app, raise_server_exceptions=False)
+        response = client.post(
+            "/invocations",
+            content=b"\x80\x81\x82",
+            headers={"content-type": "application/json"},
+        )
+
+        assert response.status_code == 400
+        assert "Invalid encoding" in response.json()["error"]
+
     def test_return_response_passthrough(self):
         """Test returning a Response object passes it through without wrapping."""
         from starlette.responses import JSONResponse
