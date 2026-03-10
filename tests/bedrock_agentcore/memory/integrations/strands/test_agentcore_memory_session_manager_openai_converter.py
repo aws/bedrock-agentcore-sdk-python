@@ -1,4 +1,5 @@
 """Session manager tests with OpenAI converter."""
+
 from unittest.mock import Mock, patch
 
 from strands.types.session import Session, SessionMessage, SessionType
