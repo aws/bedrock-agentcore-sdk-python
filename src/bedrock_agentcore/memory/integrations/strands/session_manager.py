@@ -104,22 +104,23 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def __init__(
         self,
         agentcore_memory_config: AgentCoreMemoryConfig,
-        converter: Optional[type[MemoryConverter]] = None,
         region_name: Optional[str] = None,
         boto_session: Optional[boto3.Session] = None,
         boto_client_config: Optional[BotocoreConfig] = None,
+        *,
+        converter: Optional[type[MemoryConverter]] = None,
         **kwargs: Any,
     ):
         """Initialize AgentCoreMemorySessionManager with Bedrock AgentCore Memory.
 
         Args:
             agentcore_memory_config (AgentCoreMemoryConfig): Configuration for AgentCore Memory integration.
-            converter (Optional[type[MemoryConverter]], optional): Optional custom converter.
-                If None, native Bedrock/Strands converter is used.
             region_name (Optional[str], optional): AWS region for Bedrock AgentCore Memory. Defaults to None.
             boto_session (Optional[boto3.Session], optional): Optional boto3 session. Defaults to None.
             boto_client_config (Optional[BotocoreConfig], optional): Optional boto3 client configuration.
                Defaults to None.
+            converter (Optional[type[MemoryConverter]], optional): Optional custom converter.
+                If None, native Bedrock/Strands converter is used.
             **kwargs (Any): Additional keyword arguments.
         """
         self.converter = converter or AgentCoreMemoryConverter
