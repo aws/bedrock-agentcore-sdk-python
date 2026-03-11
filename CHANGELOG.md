@@ -4,9 +4,9 @@
 
 ### Fixed
 - fix: apply ruff formatting to openai converter files (#312) (98871e9)
+- fix(strands-memory): restore positional arg order in AgentCoreMemorySessionManager.__init__ (#318) (98100d7)
 
 ### Other Changes
-- fix(strands-memory): restore positional arg order in AgentCoreMemorySessionManager.__init__ (#318) (98100d7)
 - chore: remove deprecated legacy-release workflow (#315) (84d2916)
 - ci: temporarily disable memory integration tests (#319) (ae4c15c)
 - chore(deps-dev): bump wheel from 0.45.1 to 0.46.2 (#221) (a77f13a)
