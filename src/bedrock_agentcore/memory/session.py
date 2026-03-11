@@ -905,7 +905,7 @@ class MemorySessionManager:
         logger.info("  -> Querying long-term memory in namespace '%s' with query: '%s'...", namespace_prefix, query)
         search_criteria = {"searchQuery": query, "topK": top_k}
         if strategy_id:
-            search_criteria["strategyId"] = strategy_id
+            search_criteria["memoryStrategyId"] = strategy_id
 
         namespace = namespace_prefix
         params = {
