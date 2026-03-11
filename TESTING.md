@@ -28,7 +28,6 @@ uv run pytest tests_integ/memory/test_memory_client.py -xvs
 
 # Client and developer experience
 uv run pytest tests_integ/memory/test_memory_client.py -xvs
-uv run pytest tests_integ/memory/test_devex.py -xvs
 ```
 
 ## Identity
