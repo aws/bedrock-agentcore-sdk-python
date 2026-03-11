@@ -2012,4 +2012,9 @@ class MemoryClient:
             else:
                 wrapped_config["reflection"] = reflection
 
+        # Pass through any keys the SDK doesn't know about (e.g., selfManagedConfiguration)
+        for key in config:
+            if key not in wrapped_config:
+                wrapped_config[key] = config[key]
+
         return wrapped_config
