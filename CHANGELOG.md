@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.4.5] - 2026-03-11
+
+### Fixed
+- fix: apply ruff formatting to openai converter files (#312) (98871e9)
+
+### Other Changes
+- fix(strands-memory): restore positional arg order in AgentCoreMemorySessionManager.__init__ (#318) (98100d7)
+- chore: remove deprecated legacy-release workflow (#315) (84d2916)
+- ci: temporarily disable memory integration tests (#319) (ae4c15c)
+- chore(deps-dev): bump wheel from 0.45.1 to 0.46.2 (#221) (a77f13a)
+- chore(deps): bump cryptography from 45.0.5 to 46.0.5 (#306) (9a21bdc)
+- chore(deps): bump starlette from 0.47.1 to 0.49.1 (#307) (538c56f)
+- chore(deps): bump werkzeug from 3.1.5 to 3.1.6 (#308) (3f8424c)
+- chore(deps): bump pillow from 11.3.0 to 12.1.1 (#309) (85d1465)
+- chore(deps): bump mcp from 1.12.2 to 1.23.0 (#310) (db3fcba)
+- ci(deps): bump actions/download-artifact from 5 to 6 (#139) (ff66b49)
+- ci(deps): bump actions/upload-artifact from 4 to 5 (#140) (fc68025)
+- Add daily Slack notification for open PRs (#304) (fda82da)
+- chore(deps): bump python-multipart from 0.0.20 to 0.0.22 (#224) (8b8c6fd)
+- chore(deps): bump werkzeug from 3.1.3 to 3.1.5 (#228) (7b2bb45)
+- chore(deps): bump virtualenv from 20.31.2 to 20.36.1 (#229) (d92ad87)
+- chore(deps): bump urllib3 from 2.5.0 to 2.6.3 (#230) (6105816)
+- chore(deps): bump filelock from 3.18.0 to 3.20.3 (#231) (6d9dbde)
+- chore(deps): bump aiohttp from 3.13.2 to 3.13.3 (#232) (5c7559a)
+- ci: parallelize integration tests into matrix jobs (#269) (bd3b7b0)
+
 ## [1.4.4] - 2026-03-10
 
 ### Added
