@@ -159,6 +159,7 @@ jobs:
           PYTHONUNBUFFERED: 1
           MEMORY_KINESIS_ARN: ${{ secrets.MEMORY_KINESIS_ARN }}
           MEMORY_ROLE_ARN: ${{ secrets.MEMORY_ROLE_ARN }}
+          MEMORY_PREPOPULATED_ID: ${{ secrets.MEMORY_PREPOPULATED_ID }}
         id: tests
         timeout-minutes: ${{ matrix.timeout }}
         run: |
