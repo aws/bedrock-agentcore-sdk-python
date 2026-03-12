@@ -1,7 +1,7 @@
 import logging
 import textwrap
 
-from tests_integ.runtime.base_test import AGENT_SERVER_ENDPOINT, BaseSDKRuntimeTest, start_agent_server
+from tests_integ.runtime.base_test import DEFAULT_PORT, BaseSDKRuntimeTest, start_agent_server
 from tests_integ.runtime.http_client import HttpClient
 
 logger = logging.getLogger("sdk-runtime-simple-agent-test")
@@ -28,7 +28,7 @@ class TestSDKSimpleAgent(BaseSDKRuntimeTest):
 
     def run_test(self):
         with start_agent_server(self.agent_module):
-            client = HttpClient(AGENT_SERVER_ENDPOINT)
+            client = HttpClient(f"http://127.0.0.1:{DEFAULT_PORT}")
 
             ping_response = client.ping()
             logger.info(ping_response)
