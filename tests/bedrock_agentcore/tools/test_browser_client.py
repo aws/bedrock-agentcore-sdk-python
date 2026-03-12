@@ -16,6 +16,7 @@ from bedrock_agentcore.tools.config import (
     ProfileConfiguration,
     ProxyConfiguration,
     ProxyCredentials,
+    SessionConfiguration,
     ViewportConfiguration,
 )
 
@@ -1359,3 +1360,87 @@ class TestBrowserClient:
             profile_configuration=profile,
         )
         mock_client.stop.assert_called_once()
+
+    @patch("bedrock_agentcore.tools.browser_client.BrowserClient")
+    def test_browser_session_context_manager_with_name(self, mock_client_class):
+        # Arrange
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        # Act
+        with browser_session("us-west-2", name="my-session"):
+            pass
+
+        # Assert
+        mock_client_class.assert_called_once_with("us-west-2")
+        mock_client.start.assert_called_once_with(name="my-session")
+        mock_client.stop.assert_called_once()
+
+    @patch("bedrock_agentcore.tools.browser_client.BrowserClient")
+    def test_browser_session_context_manager_with_name_and_all_params(self, mock_client_class):
+        # Arrange
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        viewport = {"width": 1280, "height": 720}
+        proxy_config = {
+            "proxies": [
+                {
+                    "externalProxy": {
+                        "server": "proxy.example.com",
+                        "port": 8080,
+                    }
+                }
+            ],
+        }
+        extensions = [{"location": {"s3": {"bucket": "my-bucket", "prefix": "extensions/my-ext"}}}]
+        profile_config = {"profileIdentifier": "my-profile-id"}
+
+        # Act
+        with browser_session(
+            "us-west-2",
+            viewport=viewport,
+            identifier="custom-browser",
+            name="my-named-session",
+            proxy_configuration=proxy_config,
+            extensions=extensions,
+            profile_configuration=profile_config,
+        ):
+            pass
+
+        # Assert
+        mock_client_class.assert_called_once_with("us-west-2")
+        mock_client.start.assert_called_once_with(
+            viewport=viewport,
+            identifier="custom-browser",
+            name="my-named-session",
+            proxy_configuration=proxy_config,
+            extensions=extensions,
+            profile_configuration=profile_config,
+        )
+        mock_client.stop.assert_called_once()
+
+    def test_session_configuration_with_name(self):
+        # Arrange
+        config = SessionConfiguration(name="test")
+
+        # Act
+        result = config.to_dict()
+
+        # Assert
+        assert result == {"name": "test"}
+
+    def test_session_configuration_with_name_and_viewport(self):
+        # Arrange
+        config = SessionConfiguration(
+            name="test-session",
+            viewport=ViewportConfiguration(width=1920, height=1080),
+        )
+
+        # Act
+        result = config.to_dict()
+
+        # Assert
+        assert result == {
+            "name": "test-session",
+            "viewport": {"width": 1920, "height": 1080},
+        }

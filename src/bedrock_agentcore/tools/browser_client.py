@@ -629,6 +629,7 @@ def browser_session(
     region: str,
     viewport: Optional[Union[ViewportConfiguration, Dict[str, int]]] = None,
     identifier: Optional[str] = None,
+    name: Optional[str] = None,
     proxy_configuration: Optional[Union[ProxyConfiguration, Dict[str, Any]]] = None,
     extensions: Optional[List[Union[BrowserExtension, Dict[str, Any]]]] = None,
     profile_configuration: Optional[Union[ProfileConfiguration, Dict[str, Any]]] = None,
@@ -640,6 +641,7 @@ def browser_session(
         viewport (Optional[Union[ViewportConfiguration, Dict[str, int]]]): Viewport dimensions.
             Can be a ViewportConfiguration dataclass or a plain dict.
         identifier (Optional[str]): Browser identifier (system or custom).
+        name (Optional[str]): A name for this session.
         proxy_configuration (Optional[Union[ProxyConfiguration, Dict[str, Any]]]): Proxy
             configuration. Can be a ProxyConfiguration dataclass or a plain dict.
         extensions (Optional[List[Union[BrowserExtension, Dict[str, Any]]]]): Browser
@@ -660,6 +662,10 @@ def browser_session(
         ...     # Automation with reduced CAPTCHA friction
         ...     pass
         ...
+        >>> # Use named session
+        >>> with browser_session('us-west-2', name='my-research-session') as client:
+        ...     ws_url, headers = client.generate_ws_headers()
+        ...
         >>> # Use proxy configuration
         >>> with browser_session('us-west-2', proxy_configuration={
         ...     "proxies": [{"externalProxy": {"server": "proxy.corp.com", "port": 8080}}],
@@ -673,6 +679,8 @@ def browser_session(
         start_kwargs["viewport"] = viewport
     if identifier is not None:
         start_kwargs["identifier"] = identifier
+    if name is not None:
+        start_kwargs["name"] = name
     if proxy_configuration is not None:
         start_kwargs["proxy_configuration"] = proxy_configuration
     if extensions is not None:

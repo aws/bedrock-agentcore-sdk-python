@@ -341,12 +341,14 @@ class SessionConfiguration:
     Usage: client.start(**session_config.to_dict())
 
     Attributes:
+        name: Optional name for the session
         viewport: Viewport dimensions for the browser session
         proxy: Proxy configuration for routing browser traffic
         extensions: Browser extensions to load into the session
         profile: Profile configuration for persisting browser state
     """
 
+    name: Optional[str] = None
     viewport: Optional[ViewportConfiguration] = None
     proxy: Optional[ProxyConfiguration] = None
     extensions: Optional[List[BrowserExtension]] = None
@@ -355,6 +357,8 @@ class SessionConfiguration:
     def to_dict(self) -> Dict:
         """Convert to API-compatible dictionary."""
         config = {}
+        if self.name is not None:
+            config["name"] = self.name
         if self.viewport:
             config["viewport"] = self.viewport.to_dict()
         if self.proxy:
