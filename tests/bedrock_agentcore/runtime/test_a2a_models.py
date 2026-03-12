@@ -328,6 +328,111 @@ class TestBuildRuntimeUrl:
         assert "%2F" in url  # Encoded slash
 
 
+class TestJsonRpcErrorWithData:
+    def test_error_to_dict_with_data(self):
+        """Test error serialization with data field."""
+        from bedrock_agentcore.runtime.a2a_models import JsonRpcError
+
+        error = JsonRpcError(code=-32600, message="Invalid", data={"detail": "missing field"})
+        result = error.to_dict()
+        assert result == {
+            "code": -32600,
+            "message": "Invalid",
+            "data": {"detail": "missing field"},
+        }
+
+    def test_error_to_dict_without_data(self):
+        """Test error serialization without data field."""
+        from bedrock_agentcore.runtime.a2a_models import JsonRpcError
+
+        error = JsonRpcError(code=-32600, message="Invalid")
+        result = error.to_dict()
+        assert "data" not in result
+
+    def test_error_response_with_data(self):
+        """Test creating error response with data."""
+        response = JsonRpcResponse.error_response(
+            "req-001", -32600, "Invalid request", data={"details": "extra info"}
+        )
+        result = response.to_dict()
+        assert result["error"]["data"] == {"details": "extra info"}
+
+
+class TestA2AMessagePartAdvanced:
+    def test_to_dict_with_file(self):
+        """Test message part serialization with file field."""
+        part = A2AMessagePart(kind="file", file={"uri": "s3://bucket/file.pdf", "mimeType": "application/pdf"})
+        result = part.to_dict()
+        assert result == {
+            "kind": "file",
+            "file": {"uri": "s3://bucket/file.pdf", "mimeType": "application/pdf"},
+        }
+
+    def test_to_dict_with_data(self):
+        """Test message part serialization with data field."""
+        part = A2AMessagePart(kind="data", data={"key": "value", "count": 42})
+        result = part.to_dict()
+        assert result == {
+            "kind": "data",
+            "data": {"key": "value", "count": 42},
+        }
+
+    def test_to_dict_text_only(self):
+        """Test message part with only text (no file/data)."""
+        part = A2AMessagePart(kind="text", text="Hello")
+        result = part.to_dict()
+        assert "file" not in result
+        assert "data" not in result
+
+    def test_from_dict_with_file_and_data(self):
+        """Test creating message part from dict with file and data."""
+        data = {
+            "kind": "file",
+            "file": {"uri": "https://example.com/file.txt"},
+            "data": {"meta": "info"},
+        }
+        part = A2AMessagePart.from_dict(data)
+        assert part.kind == "file"
+        assert part.file == {"uri": "https://example.com/file.txt"}
+        assert part.data == {"meta": "info"}
+
+
+class TestA2AMessageAdvanced:
+    def test_to_dict_without_message_id(self):
+        """Test message serialization without message_id."""
+        parts = [A2AMessagePart(kind="text", text="Hello")]
+        message = A2AMessage(role="user", parts=parts)
+        result = message.to_dict()
+        assert "messageId" not in result
+
+    def test_get_text_skips_non_text_parts(self):
+        """Test get_text ignores non-text parts."""
+        parts = [
+            A2AMessagePart(kind="text", text="Hello"),
+            A2AMessagePart(kind="file", file={"uri": "s3://bucket/file"}),
+            A2AMessagePart(kind="text", text="World"),
+        ]
+        message = A2AMessage(role="user", parts=parts)
+        assert message.get_text() == "Hello\nWorld"
+
+    def test_get_text_empty_parts(self):
+        """Test get_text with no parts."""
+        message = A2AMessage(role="user", parts=[])
+        assert message.get_text() == ""
+
+    def test_get_text_skips_none_text(self):
+        """Test get_text skips parts with kind=text but text=None."""
+        parts = [A2AMessagePart(kind="text", text=None)]
+        message = A2AMessage(role="user", parts=parts)
+        assert message.get_text() == ""
+
+    def test_from_dict_without_message_id(self):
+        """Test creating message from dict without messageId."""
+        data = {"role": "user", "parts": [{"kind": "text", "text": "Hi"}]}
+        message = A2AMessage.from_dict(data)
+        assert message.message_id is None
+
+
 class TestConstants:
     def test_default_port(self):
         """Test A2A default port."""
