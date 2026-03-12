@@ -5,9 +5,11 @@ import textwrap
 
 import websockets
 
-from tests_integ.runtime.base_test import AGENT_SERVER_ENDPOINT, BaseSDKRuntimeTest, start_agent_server
+from tests_integ.runtime.base_test import BaseSDKRuntimeTest, start_agent_server
 
 logger = logging.getLogger("sdk-runtime-websocket-test")
+
+WEBSOCKET_PORT = 8081
 
 
 class TestSDKWebSocketAgent(BaseSDKRuntimeTest):
@@ -53,14 +55,13 @@ class TestSDKWebSocketAgent(BaseSDKRuntimeTest):
                     finally:
                         await websocket.close()
 
-                app.run()
+                app.run(port=8081)
             """).strip()
             file.write(content)
 
     def run_test(self):
-        with start_agent_server(self.agent_module):
-            # Replace http:// with ws:// for WebSocket connection
-            ws_endpoint = AGENT_SERVER_ENDPOINT.replace("http://", "ws://") + "/ws"
+        with start_agent_server(self.agent_module, port=WEBSOCKET_PORT):
+            ws_endpoint = f"ws://127.0.0.1:{WEBSOCKET_PORT}/ws"
 
             # Run async WebSocket tests
             asyncio.run(self._test_websocket_echo(ws_endpoint))

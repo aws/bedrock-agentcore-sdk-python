@@ -10,7 +10,7 @@ from typing import IO, Generator
 
 logger = logging.getLogger("sdk-runtime-base-test")
 
-AGENT_SERVER_ENDPOINT = "http://127.0.0.1:8080"
+DEFAULT_PORT = 8080
 
 
 class BaseSDKRuntimeTest(ABC):
@@ -36,8 +36,8 @@ class BaseSDKRuntimeTest(ABC):
 
 
 @contextmanager
-def start_agent_server(agent_module, timeout=5) -> Generator[Popen, None, None]:
-    logger.info("Starting agent server...")
+def start_agent_server(agent_module, port=DEFAULT_PORT, timeout=5) -> Generator[Popen, None, None]:
+    logger.info("Starting agent server on port %d...", port)
     start_time = time.time()
 
     try:
@@ -58,7 +58,7 @@ def start_agent_server(agent_module, timeout=5) -> Generator[Popen, None, None]:
                 line = line.strip()
                 if line:
                     logger.info(line)
-                    if "Uvicorn running on http://127.0.0.1:8080" in line:
+                    if f"Uvicorn running on http://127.0.0.1:{port}" in line:
                         _start_logging_thread(agent_server.stdout)
                         yield agent_server
                         return
