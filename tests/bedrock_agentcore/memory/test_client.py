@@ -14,78 +14,99 @@ from bedrock_agentcore.memory.constants import StrategyType
 
 def test_client_initialization():
     """Test client initialization."""
-    with patch("boto3.client") as mock_boto_client:
-        # Setup the mock to return a consistent region_name
-        mock_client_instance = MagicMock()
-        mock_client_instance.meta.region_name = "us-west-2"
-        mock_boto_client.return_value = mock_client_instance
+    with patch("boto3.Session") as mock_session_cls:
+        mock_session = MagicMock()
+        mock_session.region_name = "us-west-2"
+        mock_session_cls.return_value = mock_session
 
         client = MemoryClient(region_name="us-west-2")
 
-        # Check that the region was set correctly and boto3.client was called twice
+        # Check that the region was set correctly and session.client was called twice
         assert client.region_name == "us-west-2"
         assert client.integration_source is None
-        assert mock_boto_client.call_count == 2
+        assert mock_session.client.call_count == 2
 
-        # Verify config was passed to boto3.client calls
-        for call in mock_boto_client.call_args_list:
+        # Verify config was passed to session.client calls
+        for call in mock_session.client.call_args_list:
             assert "config" in call.kwargs
 
 
 def test_client_initialization_with_integration_source():
     """Test client initialization with integration_source."""
-    with patch("boto3.client") as mock_boto_client:
-        mock_client_instance = MagicMock()
-        mock_client_instance.meta.region_name = "us-west-2"
-        mock_boto_client.return_value = mock_client_instance
+    with patch("boto3.Session") as mock_session_cls:
+        mock_session = MagicMock()
+        mock_session.region_name = "us-west-2"
+        mock_session_cls.return_value = mock_session
 
         client = MemoryClient(region_name="us-west-2", integration_source="langchain")
 
         assert client.region_name == "us-west-2"
         assert client.integration_source == "langchain"
-        assert mock_boto_client.call_count == 2
+        assert mock_session.client.call_count == 2
+
+
+def test_client_initialization_with_boto3_session():
+    """Test client initialization with a custom boto3 session."""
+    mock_session = MagicMock()
+    mock_session.region_name = "eu-west-1"
+
+    client = MemoryClient(boto3_session=mock_session)
+
+    assert client.region_name == "eu-west-1"
+    assert mock_session.client.call_count == 2
+
+    # Verify both clients were created via the provided session
+    call_args = [call[0][0] for call in mock_session.client.call_args_list]
+    assert "bedrock-agentcore-control" in call_args
+    assert "bedrock-agentcore" in call_args
+
+
+def test_client_initialization_with_boto3_session_and_region():
+    """Test that explicit region_name takes precedence over session region."""
+    mock_session = MagicMock()
+    mock_session.region_name = "eu-west-1"
+
+    client = MemoryClient(region_name="us-east-1", boto3_session=mock_session)
+
+    assert client.region_name == "us-east-1"
+    # Clients should still be created via the provided session
+    assert mock_session.client.call_count == 2
 
 
 def test_client_initialization_region_mismatch():
     """Test client initialization with region mismatch warning."""
 
-    with patch("boto3.client") as mock_boto_client:
-        # First test - environment variable takes precedence
-        with patch("boto3.Session") as mock_session:
-            # Mock the session instance to simulate AWS_REGION=us-east-1
-            mock_session_instance = MagicMock()
-            mock_session_instance.region_name = "us-east-1"
-            mock_session.return_value = mock_session_instance
+    # First test - explicit region_name takes precedence over session region
+    with patch("boto3.Session") as mock_session_cls:
+        mock_session_instance = MagicMock()
+        mock_session_instance.region_name = "us-east-1"
+        mock_session_cls.return_value = mock_session_instance
 
-            # Mock the boto client
-            mock_client_instance = MagicMock()
-            mock_client_instance.meta.region_name = "us-east-1"
-            mock_boto_client.return_value = mock_client_instance
+        client1 = MemoryClient(region_name="us-west-2")
+        assert client1.region_name == "us-west-2"
 
-            # When region_name is provided, environment variable should still take precedence
-            client1 = MemoryClient(region_name="us-west-2")
-            assert client1.region_name == "us-west-2"
+    # Second test - no region_name, falls back to session region
+    with patch("boto3.Session") as mock_session_cls:
+        mock_session_instance = MagicMock()
+        mock_session_instance.region_name = "us-east-1"
+        mock_session_cls.return_value = mock_session_instance
 
-        # Second test - no environment variable, explicit param is used
-        with patch("boto3.Session") as mock_session:
-            # Mock the session instance to simulate no AWS_REGION set
-            mock_session_instance = MagicMock()
-            mock_session_instance.region_name = None
-            mock_session.return_value = mock_session_instance
+        client2 = MemoryClient()
+        assert client2.region_name == "us-east-1"
 
-            # Mock the boto client
-            mock_client_instance = MagicMock()
-            mock_client_instance.meta.region_name = "us-west-2"
-            mock_boto_client.return_value = mock_client_instance
+    # Third test - no region_name, no session region, falls back to default
+    with patch("boto3.Session") as mock_session_cls:
+        mock_session_instance = MagicMock()
+        mock_session_instance.region_name = None
+        mock_session_cls.return_value = mock_session_instance
 
-            # When AWS_REGION is not set, explicitly provided region should be used
-            client2 = MemoryClient(region_name="us-west-2")
-            assert client2.region_name == "us-west-2"
+        client3 = MemoryClient()
+        assert client3.region_name == "us-west-2"
 
 
 def test_namespace_defaults():
     """Test namespace defaults."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Test strategy without namespace
@@ -97,7 +118,7 @@ def test_namespace_defaults():
 
 def test_create_memory():
     """Test create_memory."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock UUID generation to ensure deterministic test
@@ -123,7 +144,7 @@ def test_create_memory():
 
 def test_save_conversation_and_retrieve_memories():
     """Test save_conversation and retrieve_memories."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the clients
@@ -166,7 +187,7 @@ def test_save_conversation_and_retrieve_memories():
 
 def test_error_handling():
     """Test error handling."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client to raise an error
@@ -185,7 +206,7 @@ def test_error_handling():
 
 def test_branch_operations():
     """Test branch operations."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the clients
@@ -231,7 +252,7 @@ def test_branch_operations():
 
 def test_memory_strategy_management():
     """Test memory strategy management."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the clients
@@ -269,7 +290,7 @@ def test_memory_strategy_management():
 
 def test_timestamp_and_advanced_message_handling():
     """Test timestamp and advanced message handling."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
         mock_gmdp = MagicMock()
         client.gmdp_client = mock_gmdp
@@ -295,7 +316,7 @@ def test_timestamp_and_advanced_message_handling():
 
 def test_create_memory_and_wait_success():
     """Test successful create_memory_and_wait scenario."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock both clients
@@ -326,7 +347,7 @@ def test_create_memory_and_wait_success():
 
 def test_create_memory_and_wait_timeout():
     """Test timeout scenario for create_memory_and_wait."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock both clients
@@ -358,7 +379,7 @@ def test_create_memory_and_wait_timeout():
 
 def test_create_memory_and_wait_failure():
     """Test failure scenario for create_memory_and_wait."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock both clients
@@ -390,7 +411,7 @@ def test_create_memory_and_wait_failure():
 
 def test_process_turn_with_llm_success_with_retrieval():
     """Test successful process_turn_with_llm with memory retrieval."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the clients
@@ -452,7 +473,7 @@ def test_process_turn_with_llm_success_with_retrieval():
 
 def test_list_events_with_pagination():
     """Test list_events with pagination support."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -498,7 +519,7 @@ def test_list_events_with_pagination():
 
 def test_list_events_with_branch_filter():
     """Test list_events with branch filtering."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -538,7 +559,7 @@ def test_list_events_with_branch_filter():
 
 def test_list_events_with_event_metadata_filter():
     """Test list_events with event metadata filtering."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -590,7 +611,7 @@ def test_list_events_with_event_metadata_filter():
 
 def test_list_events_with_branch_and_event_metadata_filter():
     """Test list_events with both branch and event metadata filtering."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -636,7 +657,7 @@ def test_list_events_with_branch_and_event_metadata_filter():
 
 def test_list_events_max_results_limit():
     """Test list_events respects max_results limit."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -667,7 +688,7 @@ def test_list_events_max_results_limit():
 
 def test_list_memories():
     """Test list_memories functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -695,7 +716,7 @@ def test_list_memories():
 
 def test_list_memories_with_pagination():
     """Test list_memories with pagination support."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -743,7 +764,7 @@ def test_list_memories_with_pagination():
 
 def test_delete_memory():
     """Test delete_memory functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -767,7 +788,7 @@ def test_delete_memory():
 
 def test_get_memory_status():
     """Test get_memory_status functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -789,7 +810,7 @@ def test_get_memory_status():
 
 def test_add_summary_strategy():
     """Test add_summary_strategy functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -815,7 +836,7 @@ def test_add_summary_strategy():
 
 def test_add_user_preference_strategy():
     """Test add_user_preference_strategy functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -860,7 +881,7 @@ def test_add_user_preference_strategy():
 
 def test_add_custom_semantic_strategy():
     """Test add_custom_semantic_strategy functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -934,7 +955,7 @@ def test_add_custom_semantic_strategy():
 
 def test_merge_branch_context():
     """Test merge_branch_context functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -970,7 +991,7 @@ def test_merge_branch_context():
 
 def test_wait_for_memories():
     """Test wait_for_memories functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -997,7 +1018,7 @@ def test_wait_for_memories():
 
 def test_wait_for_memories_wildcard_namespace():
     """Test wait_for_memories rejects wildcard namespaces."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client (shouldn't be called)
@@ -1017,7 +1038,7 @@ def test_wait_for_memories_wildcard_namespace():
 
 def test_get_last_k_turns():
     """Test get_last_k_turns functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1056,7 +1077,7 @@ def test_get_last_k_turns():
 
 def test_delete_memory_and_wait():
     """Test delete_memory_and_wait functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1086,7 +1107,7 @@ def test_delete_memory_and_wait():
 
 def test_update_memory_strategies():
     """Test update_memory_strategies functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1112,7 +1133,7 @@ def test_update_memory_strategies():
 
 def test_update_memory_strategies_modify():
     """Test update_memory_strategies with modify_strategies."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1154,7 +1175,7 @@ def test_update_memory_strategies_modify():
 
 def test_normalize_memory_response():
     """Test _normalize_memory_response functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Test memory with new field names only
@@ -1183,7 +1204,7 @@ def test_normalize_memory_response():
 
 def test_wait_for_memory_active():
     """Test _wait_for_memory_active functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1209,7 +1230,7 @@ def test_wait_for_memory_active():
 
 def test_wait_for_memory_active_failed_status():
     """Test _wait_for_memory_active when memory status becomes FAILED."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1236,7 +1257,7 @@ def test_wait_for_memory_active_failed_status():
 
 def test_wait_for_memory_active_client_error():
     """Test _wait_for_memory_active when ClientError is raised."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1262,7 +1283,7 @@ def test_wait_for_memory_active_client_error():
 
 def test_wrap_configuration():
     """Test _wrap_configuration functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Test basic configuration wrapping
@@ -1281,7 +1302,7 @@ def test_wrap_configuration():
 
 def test_wrap_configuration_basic():
     """Test _wrap_configuration with basic config."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Test config that doesn't need wrapping
@@ -1296,7 +1317,7 @@ def test_wrap_configuration_basic():
 
 def test_wrap_configuration_semantic_strategy():
     """Test _wrap_configuration with SEMANTIC strategy type."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Test extraction configuration that needs wrapping
@@ -1316,7 +1337,7 @@ def test_wrap_configuration_semantic_strategy():
 
 def test_wrap_configuration_user_preference_strategy():
     """Test _wrap_configuration with USER_PREFERENCE strategy type."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Test extraction configuration that needs wrapping for user preferences
@@ -1336,7 +1357,7 @@ def test_wrap_configuration_user_preference_strategy():
 
 def test_wrap_configuration_custom_semantic_override():
     """Test _wrap_configuration with CUSTOM strategy and SEMANTIC_OVERRIDE."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Test custom semantic override configuration
@@ -1377,7 +1398,7 @@ def test_wrap_configuration_custom_semantic_override():
 
 def test_list_branch_events_pagination():
     """Test list_branch_events with pagination."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1433,7 +1454,7 @@ def test_list_branch_events_pagination():
 
 def test_modify_strategy():
     """Test modify_strategy convenience method."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1480,7 +1501,7 @@ def test_modify_strategy():
 
 def test_retrieve_memories_resource_not_found_error():
     """Test retrieve_memories with ResourceNotFoundException."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1509,7 +1530,7 @@ def test_retrieve_memories_resource_not_found_error():
 
 def test_retrieve_memories_validation_error():
     """Test retrieve_memories with ValidationException."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1537,7 +1558,7 @@ def test_retrieve_memories_validation_error():
 
 def test_retrieve_memories_service_error():
     """Test retrieve_memories with ServiceException."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1564,7 +1585,7 @@ def test_retrieve_memories_service_error():
 
 def test_retrieve_memories_unknown_error():
     """Test retrieve_memories with unknown ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1587,7 +1608,7 @@ def test_retrieve_memories_unknown_error():
 
 def test_retrieve_memories_wildcard_namespace():
     """Test retrieve_memories rejects wildcard namespaces."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client (shouldn't be called)
@@ -1608,7 +1629,7 @@ def test_retrieve_memories_wildcard_namespace():
 
 def test_add_semantic_strategy_and_wait():
     """Test add_semantic_strategy_and_wait functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1641,7 +1662,7 @@ def test_add_semantic_strategy_and_wait():
 
 def test_add_summary_strategy_and_wait():
     """Test add_summary_strategy_and_wait functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1674,7 +1695,7 @@ def test_add_summary_strategy_and_wait():
 
 def test_add_user_preference_strategy_and_wait():
     """Test add_user_preference_strategy_and_wait functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1707,7 +1728,7 @@ def test_add_user_preference_strategy_and_wait():
 
 def test_add_custom_semantic_strategy_and_wait():
     """Test add_custom_semantic_strategy_and_wait functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1747,7 +1768,7 @@ def test_add_custom_semantic_strategy_and_wait():
 
 def test_update_memory_strategies_and_wait():
     """Test update_memory_strategies_and_wait functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1785,7 +1806,7 @@ def test_update_memory_strategies_and_wait():
 
 def test_fork_conversation():
     """Test fork_conversation functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1821,7 +1842,7 @@ def test_fork_conversation():
 
 def test_fork_conversation_with_metadata():
     """Test fork_conversation with metadata parameter."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1861,7 +1882,7 @@ def test_fork_conversation_with_metadata():
 
 def test_delete_strategy():
     """Test delete_strategy functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1889,7 +1910,7 @@ def test_delete_strategy():
 
 def test_add_strategy_warning():
     """Test add_strategy shows deprecation warning."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1920,7 +1941,7 @@ def test_add_strategy_warning():
 
 def test_create_event():
     """Test create_event functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1952,7 +1973,7 @@ def test_create_event():
 
 def test_create_event_with_branch():
     """Test create_event with branch parameter."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -1981,7 +2002,7 @@ def test_create_event_with_branch():
 
 def test_create_event_with_metadata():
     """Test create_event with metadata parameter."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2017,7 +2038,7 @@ def test_create_event_with_metadata():
 
 def test_create_event_with_multiple_metadata_keys():
     """Test create_event with multiple metadata key-value pairs."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2059,7 +2080,7 @@ def test_create_event_with_multiple_metadata_keys():
 
 def test_create_memory_and_wait_client_error():
     """Test create_memory_and_wait with ClientError during status check."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock both clients
@@ -2090,7 +2111,7 @@ def test_create_memory_and_wait_client_error():
 
 def test_create_event_client_error():
     """Test create_event with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2115,7 +2136,7 @@ def test_create_event_client_error():
 
 def test_create_event_no_messages_error():
     """Test create_event with no messages raises ValueError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         try:
@@ -2132,7 +2153,7 @@ def test_create_event_no_messages_error():
 
 def test_create_event_invalid_message_format_error():
     """Test create_event with invalid message format raises ValueError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Test with message that doesn't have exactly 2 elements
@@ -2162,7 +2183,7 @@ def test_create_event_invalid_message_format_error():
 
 def test_create_event_invalid_role_error():
     """Test create_event with invalid role raises ValueError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         try:
@@ -2180,7 +2201,7 @@ def test_create_event_invalid_role_error():
 
 def test_save_conversation_client_error():
     """Test save_conversation with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2205,7 +2226,7 @@ def test_save_conversation_client_error():
 
 def test_list_events_client_error():
     """Test list_events with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2225,7 +2246,7 @@ def test_list_events_client_error():
 
 def test_list_branches_client_error():
     """Test list_branches with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2245,7 +2266,7 @@ def test_list_branches_client_error():
 
 def test_list_branch_events_client_error():
     """Test list_branch_events with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2271,7 +2292,7 @@ def test_list_branch_events_client_error():
 
 def test_get_event():
     """Test get_event functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2315,7 +2336,7 @@ def test_get_event():
 
 def test_get_event_client_error():
     """Test get_event with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2340,7 +2361,7 @@ def test_get_event_client_error():
 
 def test_delete_event():
     """Test delete_event functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2365,7 +2386,7 @@ def test_delete_event():
 
 def test_delete_event_client_error():
     """Test delete_event with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2390,7 +2411,7 @@ def test_delete_event_client_error():
 
 def test_get_memory_record():
     """Test get_memory_record functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2428,7 +2449,7 @@ def test_get_memory_record():
 
 def test_get_memory_record_client_error():
     """Test get_memory_record with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2451,7 +2472,7 @@ def test_get_memory_record_client_error():
 
 def test_delete_memory_record():
     """Test delete_memory_record functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2477,7 +2498,7 @@ def test_delete_memory_record():
 
 def test_delete_memory_record_client_error():
     """Test delete_memory_record with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2500,7 +2521,7 @@ def test_delete_memory_record_client_error():
 
 def test_list_memory_records():
     """Test list_memory_records functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2550,7 +2571,7 @@ def test_list_memory_records():
 
 def test_list_memory_records_with_strategy_filter():
     """Test list_memory_records with strategy filter."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2592,7 +2613,7 @@ def test_list_memory_records_with_strategy_filter():
 
 def test_list_memory_records_pagination():
     """Test list_memory_records pagination."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2629,7 +2650,7 @@ def test_list_memory_records_pagination():
 
 def test_list_memory_records_client_error():
     """Test list_memory_records with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2659,7 +2680,7 @@ def test_list_memory_records_client_error():
 
 def test_get_last_k_turns_client_error():
     """Test get_last_k_turns with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2679,7 +2700,7 @@ def test_get_last_k_turns_client_error():
 
 def test_fork_conversation_client_error():
     """Test fork_conversation with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2706,7 +2727,7 @@ def test_fork_conversation_client_error():
 
 def test_get_memory_strategies_client_error():
     """Test get_memory_strategies with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2726,7 +2747,7 @@ def test_get_memory_strategies_client_error():
 
 def test_list_memories_client_error():
     """Test list_memories with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2746,7 +2767,7 @@ def test_list_memories_client_error():
 
 def test_delete_memory_client_error():
     """Test delete_memory with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2767,7 +2788,7 @@ def test_delete_memory_client_error():
 
 def test_update_memory_strategies_client_error():
     """Test update_memory_strategies with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2789,7 +2810,7 @@ def test_update_memory_strategies_client_error():
 
 def test_save_conversation_no_messages_error():
     """Test save_conversation with no messages raises ValueError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         try:
@@ -2806,7 +2827,7 @@ def test_save_conversation_no_messages_error():
 
 def test_save_conversation_invalid_message_format_error():
     """Test save_conversation with invalid message format raises ValueError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Test with message that doesn't have exactly 2 elements
@@ -2836,7 +2857,7 @@ def test_save_conversation_invalid_message_format_error():
 
 def test_save_conversation_invalid_role_error():
     """Test save_conversation with invalid role raises ValueError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         try:
@@ -2854,7 +2875,7 @@ def test_save_conversation_invalid_role_error():
 
 def test_create_blob_event():
     """Test create_blob_event functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2887,7 +2908,7 @@ def test_create_blob_event():
 
 def test_create_blob_event_with_branch():
     """Test create_blob_event with branch parameter."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2917,7 +2938,7 @@ def test_create_blob_event_with_branch():
 
 def test_create_blob_event_with_metadata():
     """Test create_blob_event with metadata parameter."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2955,7 +2976,7 @@ def test_create_blob_event_with_metadata():
 
 def test_create_blob_event_client_error():
     """Test create_blob_event with ClientError."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the client
@@ -2985,7 +3006,7 @@ def test_create_blob_event_client_error():
 
 def test_create_or_get_memory_creates_new():
     """Test create_or_get_memory creates new memory when it doesn't exist."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock create_memory_and_wait to return successful result
@@ -3003,7 +3024,7 @@ def test_create_or_get_memory_creates_new():
 
 def test_create_or_get_memory_gets_existing():
     """Test create_or_get_memory returns existing memory when it already exists."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the gmcp_client
@@ -3038,7 +3059,7 @@ def test_create_or_get_memory_gets_existing():
 
 def test_create_or_get_memory_other_client_error():
     """Test create_or_get_memory raises other ClientErrors."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the gmcp_client
@@ -3068,7 +3089,7 @@ def test_create_or_get_memory_other_client_error():
 
 def test_create_or_get_memory_general_exception():
     """Test create_or_get_memory raises general exceptions."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         # Mock the gmcp_client
@@ -3091,7 +3112,7 @@ def test_create_or_get_memory_general_exception():
 
 def test_add_episodic_strategy():
     """Test add_episodic_strategy functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         mock_gmcp = MagicMock()
@@ -3130,7 +3151,7 @@ def test_add_episodic_strategy():
 
 def test_add_custom_episodic_strategy():
     """Test add_custom_episodic_strategy functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         mock_gmcp = MagicMock()
@@ -3182,7 +3203,7 @@ def test_add_custom_episodic_strategy():
 
 def test_add_episodic_strategy_and_wait():
     """Test add_episodic_strategy_and_wait functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         mock_gmcp = MagicMock()
@@ -3207,7 +3228,7 @@ def test_add_episodic_strategy_and_wait():
 
 def test_add_custom_episodic_strategy_and_wait():
     """Test add_custom_episodic_strategy_and_wait functionality."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         mock_gmcp = MagicMock()
@@ -3238,7 +3259,7 @@ def test_add_custom_episodic_strategy_and_wait():
 
 def test_wrap_configuration_custom_episodic_override():
     """Test _wrap_configuration with CUSTOM strategy and EPISODIC_OVERRIDE."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         config = {
@@ -3290,7 +3311,7 @@ def test_wrap_configuration_custom_self_managed():
     The method should handle this gracefully by passing configuration through as-is.
     See: https://github.com/aws/bedrock-agentcore-sdk-python/issues/212
     """
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         config = {
@@ -3329,7 +3350,7 @@ def test_wrap_configuration_custom_self_managed():
 
 def test_try_get_override_type_valid():
     """Test _try_get_override_type returns enum for valid override types."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         from bedrock_agentcore.memory.constants import OverrideType
 
         client = MemoryClient()
@@ -3342,7 +3363,7 @@ def test_try_get_override_type_valid():
 
 def test_try_get_override_type_invalid():
     """Test _try_get_override_type returns None for invalid override types."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         assert client._try_get_override_type(None) is None
@@ -3353,7 +3374,7 @@ def test_try_get_override_type_invalid():
 
 def test_get_last_k_turns_auto_pagination():
     """Test get_last_k_turns automatically paginates until k turns are found."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         mock_gmdp = MagicMock()
@@ -3387,7 +3408,7 @@ def test_get_last_k_turns_auto_pagination():
 
 def test_get_last_k_turns_explicit_max_results():
     """Test get_last_k_turns respects explicitly provided max_results (backward compatible)."""
-    with patch("boto3.client"):
+    with patch("boto3.Session"):
         client = MemoryClient()
 
         mock_gmdp = MagicMock()
