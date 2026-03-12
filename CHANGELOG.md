@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.4.6] - 2026-03-12
+
+### Added
+- feat: rewrite controlplane integration tests with pytest (#323) (7d7fa48)
+- feat: add `name` parameter to `browser_session()` and `SessionConfiguration` (#326) (1ec1a62)
+
+### Fixed
+- fix: replace hardcoded sleeps with polling in session manager tests (#324) (18b428a)
+- fix: use memoryStrategyId instead of strategyId in search_long_term_memories (#314) (a30f8da)
+- fix: return 400 for UnicodeDecodeError in invocation handler (#313) (4730894)
+
+### Other Changes
+- feat(memory): add boto3_session parameter to MemoryClient (#330) (66c8488)
+- chore: remove test_devex.py, update TESTING.md (#325) (a01ce71)
+- fix(memory): pass through unknown config keys in _wrap_configuration (#322) (2afa155)
+- test: add stream delivery integ tests and TESTING.md (#317) (32aa019)
+- fix(memory): handle SELF_MANAGED override type in _wrap_configuration (#290) (0206ae4)
+
 ## [1.4.5] - 2026-03-11
 
 ### Fixed
