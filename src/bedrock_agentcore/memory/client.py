@@ -65,17 +65,32 @@ class MemoryClient:
         "list_memory_strategies",
     }
 
-    def __init__(self, region_name: Optional[str] = None, integration_source: Optional[str] = None):
-        """Initialize the Memory client."""
-        self.region_name = region_name or boto3.Session().region_name or "us-west-2"
+    def __init__(
+        self,
+        region_name: Optional[str] = None,
+        integration_source: Optional[str] = None,
+        boto3_session: Optional[boto3.Session] = None,
+    ):
+        """Initialize the Memory client.
+
+        Args:
+            region_name: AWS region name. If not provided, uses the session's region or "us-west-2".
+            integration_source: Optional integration source for user-agent telemetry.
+            boto3_session: Optional boto3 Session to use. If not provided, a default session
+                          is created. Useful for named profiles or custom credentials.
+        """
+        session = boto3_session if boto3_session else boto3.Session()
+        self.region_name = region_name or session.region_name or "us-west-2"
         self.integration_source = integration_source
 
         # Build config with user-agent for telemetry
         user_agent_extra = build_user_agent_suffix(integration_source)
         client_config = Config(user_agent_extra=user_agent_extra)
 
-        self.gmcp_client = boto3.client("bedrock-agentcore-control", region_name=self.region_name, config=client_config)
-        self.gmdp_client = boto3.client("bedrock-agentcore", region_name=self.region_name, config=client_config)
+        self.gmcp_client = session.client(
+            "bedrock-agentcore-control", region_name=self.region_name, config=client_config
+        )
+        self.gmdp_client = session.client("bedrock-agentcore", region_name=self.region_name, config=client_config)
 
         logger.info(
             "Initialized MemoryClient for control plane: %s, data plane: %s",
