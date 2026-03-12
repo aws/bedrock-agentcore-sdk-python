@@ -125,17 +125,18 @@ class TestAgentCoreMemorySessionManager:
         response1 = agent("Hello, my name is John")
         assert response1 is not None
 
-        time.sleep(15)  # throttling
+        time.sleep(2)  # throttling
         response2 = agent("What is my name?")
         assert response2 is not None
         assert "John" in response2.message["content"][0]["text"]
 
     def test_session_manager_with_retrieval_config_adds_context(self, test_memory_ltm):
         """Test session manager with custom retrieval configuration."""
+        actor_id = f"test-actor-{int(time.time())}"
         config = AgentCoreMemoryConfig(
             memory_id=test_memory_ltm["id"],
             session_id=f"test-session-{int(time.time())}",
-            actor_id=f"test-actor-{int(time.time())}",
+            actor_id=actor_id,
             retrieval_config={"/preferences/{actorId}/": RetrievalConfig(top_k=5, relevance_score=0.7)},
         )
 
@@ -145,8 +146,13 @@ class TestAgentCoreMemorySessionManager:
 
         response1 = agent("I like sushi with tuna")
         assert response1 is not None
-        logger.info("\nWaiting 90 seconds for memory extraction...")
-        time.sleep(90)
+        self.client.wait_for_memories(
+            memory_id=test_memory_ltm["id"],
+            namespace=f"/preferences/{actor_id}/",
+            test_query="sushi",
+            max_wait=180,
+            poll_interval=10,
+        )
 
         response2 = agent("What do I like to eat?")
         assert response2 is not None
@@ -155,10 +161,11 @@ class TestAgentCoreMemorySessionManager:
 
     def test_multiple_namespace_retrieval_config(self, test_memory_ltm):
         """Test session manager with multiple namespace retrieval configurations."""
+        actor_id = f"test-actor-{int(time.time())}"
         config = AgentCoreMemoryConfig(
             memory_id=test_memory_ltm["id"],
             session_id=f"test-session-{int(time.time())}",
-            actor_id=f"test-actor-{int(time.time())}",
+            actor_id=actor_id,
             retrieval_config={
                 "/preferences/{actorId}/": RetrievalConfig(top_k=5, relevance_score=0.7),
                 "/facts/{actorId}/": RetrievalConfig(top_k=10, relevance_score=0.3),
@@ -176,8 +183,13 @@ class TestAgentCoreMemorySessionManager:
 
         response1 = agent("I like sushi with tuna")
         assert response1 is not None
-        logger.info("\nWaiting 90 seconds for memory extraction...")
-        time.sleep(90)
+        self.client.wait_for_memories(
+            memory_id=test_memory_ltm["id"],
+            namespace=f"/preferences/{actor_id}/",
+            test_query="sushi",
+            max_wait=180,
+            poll_interval=10,
+        )
 
         response2 = agent("What do I like to eat?")
         assert response2 is not None
