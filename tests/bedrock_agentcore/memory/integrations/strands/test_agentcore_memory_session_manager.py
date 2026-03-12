@@ -1986,10 +1986,12 @@ class TestBatchingFlush:
         assert batching_session_manager.pending_agent_state_count() == 0
         assert mock_memory_client.gmdp_client.create_event.call_count == 1
 
-        # Verify the call had metadata for agent state
+        # Verify the call had metadata for agent state and agent id
         call_kwargs = mock_memory_client.gmdp_client.create_event.call_args[1]
         assert "metadata" in call_kwargs
         assert "stateType" in call_kwargs["metadata"]
+        assert "agentId" in call_kwargs["metadata"]
+        assert call_kwargs["metadata"]["agentId"] == {"stringValue": "test-agent"}
 
     def test__flush_agent_states_only_preserves_messages(self, batching_session_manager, mock_memory_client):
         """Test _flush_agent_states_only preserves message buffer."""

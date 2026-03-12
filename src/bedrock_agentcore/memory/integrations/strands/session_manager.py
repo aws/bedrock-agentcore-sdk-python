@@ -846,8 +846,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         """Flush only buffered agent states to AgentCore Memory.
 
         Call this method to send any remaining agent state when batch_size > 1.
-        This is called when the agent state buffer reaches batch_size.
-        All agent states are batched into a single create_event() call.
+        Agent states are grouped by agent_id and sent as separate events so that
+        each event carries the correct agentId metadata for read_agent() lookups.
 
         Returns:
             list[dict[str, Any]]: List of created event responses from AgentCore Memory.
@@ -863,28 +863,31 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         results = []
         try:
-            # Convert all agent states to payload format
-            agent_state_payloads = []
+            # Group agent states by agent_id
+            agent_groups: dict[str, list[dict]] = {}
             for _session_id, session_agent in agent_states_to_send:
-                agent_state_payloads.append({"blob": json.dumps(session_agent.to_dict())})
+                agent_id = session_agent.agent_id
+                if agent_id not in agent_groups:
+                    agent_groups[agent_id] = []
+                agent_groups[agent_id].append({"blob": json.dumps(session_agent.to_dict())})
 
-            # Send all agent states in a single batched create_event call
-            event = self.memory_client.gmdp_client.create_event(
-                memoryId=self.config.memory_id,
-                actorId=self.config.actor_id,
-                sessionId=self.config.session_id,
-                payload=agent_state_payloads,
-                eventTimestamp=self._get_monotonic_timestamp(),
-                metadata={
-                    STATE_TYPE_KEY: {"stringValue": StateType.AGENT.value},
-                },
-            )
-            results.append(event)
-            logger.debug(
-                "Flushed %d agent states in batched event: %s", len(agent_states_to_send), event.get("eventId")
-            )
+            # Send one event per agent_id with correct metadata
+            for agent_id, payloads in agent_groups.items():
+                event = self.memory_client.gmdp_client.create_event(
+                    memoryId=self.config.memory_id,
+                    actorId=self.config.actor_id,
+                    sessionId=self.config.session_id,
+                    payload=payloads,
+                    eventTimestamp=self._get_monotonic_timestamp(),
+                    metadata={
+                        STATE_TYPE_KEY: {"stringValue": StateType.AGENT.value},
+                        AGENT_ID_KEY: {"stringValue": agent_id},
+                    },
+                )
+                results.append(event)
+                logger.debug("Flushed %d agent states for agent %s: %s", len(payloads), agent_id, event.get("eventId"))
 
-            # Clear agent state buffer only after success
+            # Clear agent state buffer only after ALL events succeed
             with self._agent_state_lock:
                 self._agent_state_buffer.clear()
 
