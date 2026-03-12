@@ -1,7 +1,5 @@
 """Tests for A2A models."""
 
-import pytest
-
 from bedrock_agentcore.runtime.a2a_models import (
     A2A_DEFAULT_PORT,
     A2A_METHOD_MESSAGE_SEND,

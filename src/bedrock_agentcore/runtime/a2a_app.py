@@ -38,6 +38,7 @@ from .models import (
     SESSION_HEADER,
     PingStatus,
 )
+from .utils import convert_complex_objects
 
 
 class A2ARequestContextFormatter(logging.Formatter):
@@ -207,13 +208,20 @@ class BedrockAgentCoreA2AApp(Starlette):
 
         return current_status
 
-    def _get_runtime_url(self) -> Optional[str]:
-        """Get the runtime URL from environment variable.
+    def _get_runtime_url(self, request=None) -> Optional[str]:
+        """Get the runtime URL from environment or current request.
 
         Returns:
             The runtime URL if set, None otherwise.
         """
-        return os.environ.get("AGENTCORE_RUNTIME_URL")
+        runtime_url = os.environ.get("AGENTCORE_RUNTIME_URL")
+        if runtime_url:
+            return runtime_url
+
+        if request is not None and getattr(request, "base_url", None):
+            return str(request.base_url)
+
+        return None
 
     def _build_request_context(self, request) -> RequestContext:
         """Build request context and setup all context variables."""
@@ -273,9 +281,17 @@ class BedrockAgentCoreA2AApp(Starlette):
         """Handle JSON-RPC 2.0 requests at root endpoint."""
         request_context = self._build_request_context(request)
         start_time = time.time()
+        body = None
 
         try:
             body = await request.json()
+            if not isinstance(body, dict):
+                return self._jsonrpc_error_response(
+                    None,
+                    JsonRpcErrorCode.INVALID_REQUEST,
+                    "Invalid request object",
+                )
+
             self.logger.debug("Processing JSON-RPC request: %s", body.get("method", "unknown"))
 
             # Validate JSON-RPC format
@@ -328,7 +344,7 @@ class BedrockAgentCoreA2AApp(Starlette):
 
             # Non-streaming response
             self.logger.info("Request completed successfully (%.3fs)", duration)
-            response = JsonRpcResponse.success(jsonrpc_request.id, result)
+            response = JsonRpcResponse.success(jsonrpc_request.id, self._convert_to_serializable(result))
             return JSONResponse(response.to_dict())
 
         except json.JSONDecodeError as e:
@@ -343,7 +359,7 @@ class BedrockAgentCoreA2AApp(Starlette):
             duration = time.time() - start_time
             self.logger.exception("Request failed (%.3fs)", duration)
             return self._jsonrpc_error_response(
-                body.get("id") if "body" in dir() else None,
+                body.get("id") if body is not None else None,
                 JsonRpcErrorCode.INTERNAL_ERROR,
                 str(e),
             )
@@ -400,13 +416,39 @@ class BedrockAgentCoreA2AApp(Starlette):
 
     def _to_sse(self, data: Any) -> bytes:
         """Convert data to SSE format."""
-        json_string = json.dumps(data, ensure_ascii=False)
+        json_string = self._safe_serialize_to_json_string(data)
         return f"data: {json_string}\n\n".encode("utf-8")
+
+    def _convert_to_serializable(self, obj: Any) -> Any:
+        """Convert A2A helper models and common Python objects to JSON-safe payloads."""
+        if hasattr(obj, "to_dict") and callable(obj.to_dict):
+            return self._convert_to_serializable(obj.to_dict())
+
+        if isinstance(obj, dict):
+            return {key: self._convert_to_serializable(value) for key, value in obj.items()}
+
+        if isinstance(obj, (list, tuple)):
+            return [self._convert_to_serializable(value) for value in obj]
+
+        if isinstance(obj, set):
+            return [self._convert_to_serializable(value) for value in obj]
+
+        return convert_complex_objects(obj)
+
+    def _safe_serialize_to_json_string(self, obj: Any) -> str:
+        """Safely serialize streaming payloads to JSON."""
+        try:
+            return json.dumps(obj, ensure_ascii=False)
+        except (TypeError, ValueError, UnicodeEncodeError):
+            try:
+                return json.dumps(self._convert_to_serializable(obj), ensure_ascii=False)
+            except Exception:
+                return json.dumps(str(obj), ensure_ascii=False)
 
     def _handle_agent_card(self, request):
         """Handle GET /.well-known/agent-card.json endpoint."""
         try:
-            runtime_url = self._get_runtime_url()
+            runtime_url = self._get_runtime_url(request)
             card_dict = self.agent_card.to_dict(url=runtime_url)
 
             self.logger.debug("Serving Agent Card: %s", self.agent_card.name)

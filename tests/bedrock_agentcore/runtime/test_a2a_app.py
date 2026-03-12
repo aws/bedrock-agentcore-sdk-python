@@ -11,10 +11,10 @@ import pytest
 from starlette.testclient import TestClient
 
 from bedrock_agentcore.runtime import (
+    A2AArtifact,
     AgentCard,
     AgentSkill,
     BedrockAgentCoreA2AApp,
-    JsonRpcRequest,
 )
 
 
@@ -69,6 +69,7 @@ class TestAgentCardEndpoint:
         assert data["name"] == agent_card.name
         assert data["description"] == agent_card.description
         assert data["protocolVersion"] == agent_card.protocol_version
+        assert data["url"] == "http://testserver/"
         assert len(data["skills"]) == 1
         assert data["skills"][0]["id"] == "test"
 
@@ -180,6 +181,29 @@ class TestJsonRpcHandling:
         assert "result" in data
         assert "artifacts" in data["result"]
 
+    def test_dataclass_response_is_serialized(self, app):
+        """Test A2A helper models are serialized in JSON-RPC responses."""
+
+        @app.entrypoint
+        def handler(request, context):
+            return {"artifacts": [A2AArtifact.from_text("art-1", "response", "Hello")]}
+
+        client = TestClient(app)
+        response = client.post(
+            "/",
+            json={
+                "jsonrpc": "2.0",
+                "id": "req-001",
+                "method": "message/send",
+                "params": {},
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["result"]["artifacts"][0]["artifactId"] == "art-1"
+        assert data["result"]["artifacts"][0]["parts"][0]["text"] == "Hello"
+
     def test_invalid_jsonrpc_version(self, app):
         """Test invalid JSON-RPC version returns error."""
 
@@ -223,6 +247,25 @@ class TestJsonRpcHandling:
         data = response.json()
         assert "error" in data
         assert data["error"]["code"] == -32600  # Invalid request
+
+    def test_non_object_request_returns_invalid_request(self, app):
+        """Test non-object JSON-RPC payload returns invalid request."""
+
+        @app.entrypoint
+        def handler(request, context):
+            return {}
+
+        client = TestClient(app)
+        response = client.post(
+            "/",
+            json=[],
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "error" in data
+        assert data["error"]["code"] == -32600  # Invalid request
+        assert data["id"] is None
 
     def test_no_entrypoint_defined(self, app):
         """Test error when no entrypoint is defined."""
@@ -371,6 +414,35 @@ class TestStreamingResponse:
         events = response.text.split("\n\n")
         events = [e for e in events if e.strip()]
         assert len(events) == 2
+
+    def test_streaming_dataclass_response_is_serialized(self, app):
+        """Test streaming payloads serialize A2A helper models."""
+
+        @app.entrypoint
+        def handler(request, context):
+            def generate():
+                yield {"artifacts": [A2AArtifact.from_text("art-1", "response", "Hello")]}
+
+            return generate()
+
+        client = TestClient(app)
+        response = client.post(
+            "/",
+            json={
+                "jsonrpc": "2.0",
+                "id": "req-001",
+                "method": "message/stream",
+            },
+        )
+
+        assert response.status_code == 200
+        events = response.text.split("\n\n")
+        events = [e for e in events if e.strip()]
+        assert len(events) == 1
+
+        data = json.loads(events[0][6:])
+        assert data["result"]["artifacts"][0]["artifactId"] == "art-1"
+        assert data["result"]["artifacts"][0]["parts"][0]["text"] == "Hello"
 
 
 class TestSessionHeader:
