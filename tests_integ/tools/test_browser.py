@@ -27,3 +27,11 @@ with browser_session("us-west-2", viewport={"width": 1280, "height": 720}) as cl
     url, headers = client.generate_ws_headers()
     assert url.startswith("wss")
 print("✅ Test 2 passed")
+
+# Test 3: Browser session with custom name
+print("\nTest 3: Browser session with custom name")
+with browser_session("us-west-2", name="sdk-integ-test-session") as client:
+    assert client.session_id is not None
+    session_info = client.get_session()
+    assert session_info.get("name") == "sdk-integ-test-session"
+print("✅ Test 3 passed")
