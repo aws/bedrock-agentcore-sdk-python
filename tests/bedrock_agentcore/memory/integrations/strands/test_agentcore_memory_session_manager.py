@@ -18,7 +18,10 @@ from bedrock_agentcore.memory.integrations.strands.bedrock_converter import (
     AgentCoreMemoryConverter,
 )
 from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
-from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
+from bedrock_agentcore.memory.integrations.strands.session_manager import (
+    AgentCoreMemorySessionManager,
+    BufferedMessage,
+)
 
 
 @pytest.fixture
@@ -1690,15 +1693,14 @@ class TestBatchingFlush:
         mock_memory_client.gmdp_client.create_event.side_effect = track_create_event
 
         # Directly populate buffer with messages for multiple sessions
-        # Buffer format: (session_id, messages, is_blob, monotonic_timestamp)
         base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         batching_session_manager._message_buffer = [
-            ("session-A", [("SessionA_Message_0", "user")], False, base_time),
-            ("session-A", [("SessionA_Message_1", "user")], False, base_time),
-            ("session-B", [("SessionB_Message_0", "user")], False, base_time),
-            ("session-B", [("SessionB_Message_1", "user")], False, base_time),
-            ("session-B", [("SessionB_Message_2", "user")], False, base_time),
-            ("session-A", [("SessionA_Message_2", "user")], False, base_time),  # Non-consecutive
+            BufferedMessage("session-A", [("SessionA_Message_0", "user")], False, base_time),
+            BufferedMessage("session-A", [("SessionA_Message_1", "user")], False, base_time),
+            BufferedMessage("session-B", [("SessionB_Message_0", "user")], False, base_time),
+            BufferedMessage("session-B", [("SessionB_Message_1", "user")], False, base_time),
+            BufferedMessage("session-B", [("SessionB_Message_2", "user")], False, base_time),
+            BufferedMessage("session-A", [("SessionA_Message_2", "user")], False, base_time),  # Non-consecutive
         ]
 
         batching_session_manager._flush_messages()
@@ -1773,10 +1775,10 @@ class TestBatchingFlush:
         # Directly populate buffer with messages for multiple sessions
         base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         batching_session_manager._message_buffer = [
-            ("session-A", [("SessionA_Message_0", "user")], False, base_time),
-            ("session-A", [("SessionA_Message_1", "user")], False, base_time),
-            ("session-B", [("SessionB_Message_0", "user")], False, base_time),
-            ("session-B", [("SessionB_Message_1", "user")], False, base_time),
+            BufferedMessage("session-A", [("SessionA_Message_0", "user")], False, base_time),
+            BufferedMessage("session-A", [("SessionA_Message_1", "user")], False, base_time),
+            BufferedMessage("session-B", [("SessionB_Message_0", "user")], False, base_time),
+            BufferedMessage("session-B", [("SessionB_Message_1", "user")], False, base_time),
         ]
 
         assert batching_session_manager.pending_message_count() == 4
@@ -1845,12 +1847,12 @@ class TestBatchingFlush:
         blob_content = {"role": "user", "content": [{"text": "blob_A_" + "x" * (CONVERSATIONAL_MAX_SIZE + 100)}]}
         batching_session_manager._message_buffer = [
             # Session A: 2 conversational messages
-            ("session-A", [("SessionA_conv_0", "user")], False, base_time),
-            ("session-A", [("SessionA_conv_1", "user")], False, base_time),
+            BufferedMessage("session-A", [("SessionA_conv_0", "user")], False, base_time),
+            BufferedMessage("session-A", [("SessionA_conv_1", "user")], False, base_time),
             # Session A: 1 blob message
-            ("session-A", [blob_content], True, base_time),
+            BufferedMessage("session-A", [blob_content], True, base_time),
             # Session B: 1 conversational message
-            ("session-B", [("SessionB_conv_0", "user")], False, base_time),
+            BufferedMessage("session-B", [("SessionB_conv_0", "user")], False, base_time),
         ]
 
         batching_session_manager._flush_messages()
@@ -2541,7 +2543,7 @@ class TestAfterInvocationHook:
         # Add messages to buffer
         with batching_session_manager._message_lock:
             batching_session_manager._message_buffer.append(
-                ("test-session", [("user", "test message")], False, batching_session_manager._get_monotonic_timestamp())
+                BufferedMessage("test-session", [("user", "test message")], False, batching_session_manager._get_monotonic_timestamp())
             )
 
         assert batching_session_manager.pending_message_count() == 1
@@ -2764,7 +2766,7 @@ class TestIntervalFlush:
             # Add messages to buffer
             with manager._message_lock:
                 manager._message_buffer.append(
-                    ("test-session", [("user", "test message")], False, manager._get_monotonic_timestamp())
+                    BufferedMessage("test-session", [("user", "test message")], False, manager._get_monotonic_timestamp())
                 )
 
             assert manager.pending_message_count() == 1
@@ -2919,7 +2921,7 @@ class TestIntervalFlush:
             # Add both messages and agent state to buffers
             with manager._message_lock:
                 manager._message_buffer.append(
-                    ("test-session", [("user", "test message")], False, manager._get_monotonic_timestamp())
+                    BufferedMessage("test-session", [("user", "test message")], False, manager._get_monotonic_timestamp())
                 )
 
             from strands.types.session import SessionAgent
@@ -2984,3 +2986,147 @@ class TestIntervalFlush:
                 actor_id="test-actor",
                 flush_interval_seconds=-5.0,
             )
+
+
+class TestMetadataSupport:
+    """Tests for user-supplied event metadata on messages."""
+
+    @pytest.fixture
+    def config_with_metadata(self):
+        """Config with default metadata."""
+        return AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            default_metadata={"location": {"stringValue": "NYC"}, "team": {"stringValue": "support"}},
+        )
+
+    @pytest.fixture
+    def session_manager_with_metadata(self, config_with_metadata, mock_memory_client):
+        """Session manager with default metadata configured."""
+        return _create_session_manager(config_with_metadata, mock_memory_client)
+
+    def test_create_message_with_default_metadata(self, session_manager_with_metadata, mock_memory_client):
+        """Config-level default_metadata flows to create_event."""
+        mock_memory_client.create_event.return_value = {"eventId": "evt_1"}
+        session_message = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
+
+        session_manager_with_metadata.create_message("test-session-456", "agent-1", session_message)
+
+        mock_memory_client.create_event.assert_called_once()
+        call_kwargs = mock_memory_client.create_event.call_args[1]
+        assert call_kwargs["metadata"] == {"location": {"stringValue": "NYC"}, "team": {"stringValue": "support"}}
+
+    def test_create_message_with_per_call_metadata(self, session_manager, mock_memory_client):
+        """Per-call metadata passed via kwargs flows to create_event."""
+        mock_memory_client.create_event.return_value = {"eventId": "evt_1"}
+        session_message = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
+        per_call = {"project": {"stringValue": "alpha"}}
+
+        session_manager.create_message("test-session-456", "agent-1", session_message, metadata=per_call)
+
+        mock_memory_client.create_event.assert_called_once()
+        call_kwargs = mock_memory_client.create_event.call_args[1]
+        assert call_kwargs["metadata"] == {"project": {"stringValue": "alpha"}}
+
+    def test_metadata_merging_precedence(self, session_manager_with_metadata, mock_memory_client):
+        """Per-call metadata overrides config default for the same key."""
+        mock_memory_client.create_event.return_value = {"eventId": "evt_1"}
+        session_message = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
+        per_call = {"location": {"stringValue": "SF"}, "project": {"stringValue": "beta"}}
+
+        session_manager_with_metadata.create_message("test-session-456", "agent-1", session_message, metadata=per_call)
+
+        call_kwargs = mock_memory_client.create_event.call_args[1]
+        assert call_kwargs["metadata"]["location"] == {"stringValue": "SF"}
+        assert call_kwargs["metadata"]["team"] == {"stringValue": "support"}
+        assert call_kwargs["metadata"]["project"] == {"stringValue": "beta"}
+
+    def test_metadata_reserved_keys_rejected(self, session_manager):
+        """ValueError raised when user metadata contains reserved keys."""
+        from bedrock_agentcore.memory.integrations.strands.session_manager import RESERVED_METADATA_KEYS
+
+        session_message = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
+
+        for reserved_key in RESERVED_METADATA_KEYS:
+            with pytest.raises(ValueError, match="reserved"):
+                session_manager.create_message(
+                    "test-session-456",
+                    "agent-1",
+                    session_message,
+                    metadata={reserved_key: {"stringValue": "bad"}},
+                )
+
+    def test_metadata_max_keys_exceeded(self, session_manager):
+        """ValueError raised when combined metadata exceeds MAX_METADATA_KEYS."""
+        from bedrock_agentcore.memory.integrations.strands.session_manager import MAX_METADATA_KEYS
+
+        session_message = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
+        too_many = {f"key_{i}": {"stringValue": f"val_{i}"} for i in range(MAX_METADATA_KEYS + 1)}
+
+        with pytest.raises(ValueError, match="exceeding the maximum"):
+            session_manager.create_message("test-session-456", "agent-1", session_message, metadata=too_many)
+
+    def test_create_message_no_metadata_passes_none(self, session_manager, mock_memory_client):
+        """When no metadata configured and none passed, metadata kwarg is None."""
+        mock_memory_client.create_event.return_value = {"eventId": "evt_1"}
+        session_message = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
+
+        session_manager.create_message("test-session-456", "agent-1", session_message)
+
+        call_kwargs = mock_memory_client.create_event.call_args[1]
+        assert call_kwargs.get("metadata") is None
+
+    def test_batched_messages_include_metadata(self, mock_memory_client):
+        """Metadata flows through the batching path and appears in the flushed event."""
+        from datetime import datetime, timezone
+
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            batch_size=5,
+            default_metadata={"env": {"stringValue": "staging"}},
+        )
+        manager = _create_session_manager(config, mock_memory_client)
+
+        mock_memory_client.gmdp_client.create_event.return_value = {"event": {"eventId": "batch_evt_1"}}
+
+        # Buffer messages with metadata
+        base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        manager._message_buffer = [
+            BufferedMessage(
+                "test-session-456",
+                [("hello", "user")],
+                False,
+                base_time,
+                metadata={"env": {"stringValue": "staging"}},
+            ),
+            BufferedMessage(
+                "test-session-456",
+                [("world", "assistant")],
+                False,
+                base_time,
+                metadata={"env": {"stringValue": "staging"}, "extra": {"stringValue": "val"}},
+            ),
+        ]
+
+        manager._flush_messages_only()
+
+        call_kwargs = mock_memory_client.gmdp_client.create_event.call_args[1]
+        # Merged metadata: later message's metadata overrides earlier
+        assert call_kwargs["metadata"]["env"] == {"stringValue": "staging"}
+        assert call_kwargs["metadata"]["extra"] == {"stringValue": "val"}
+
+    def test_blob_message_with_metadata(self, session_manager_with_metadata, mock_memory_client):
+        """Blob messages also receive metadata."""
+        from bedrock_agentcore.memory.integrations.strands.bedrock_converter import CONVERSATIONAL_MAX_SIZE
+
+        mock_memory_client.gmdp_client.create_event.return_value = {"event": {"eventId": "blob_1"}}
+        big_text = "x" * (CONVERSATIONAL_MAX_SIZE + 100)
+        session_message = SessionMessage.from_message({"role": "user", "content": [{"text": big_text}]}, 0)
+
+        session_manager_with_metadata.create_message("test-session-456", "agent-1", session_message)
+
+        call_kwargs = mock_memory_client.gmdp_client.create_event.call_args[1]
+        assert call_kwargs["metadata"] == {"location": {"stringValue": "NYC"}, "team": {"stringValue": "support"}}

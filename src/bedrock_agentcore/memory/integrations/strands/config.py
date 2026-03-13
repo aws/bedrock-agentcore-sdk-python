@@ -1,6 +1,6 @@
 """Configuration for AgentCore Memory Session Manager."""
 
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -38,6 +38,9 @@ class AgentCoreMemoryConfig(BaseModel):
             Default is "user_context".
         filter_restored_tool_context: When True, strip historical toolUse/toolResult blocks from
             restored messages before loading them into Strands runtime memory. Default is False.
+        default_metadata: Optional default metadata key-value pairs to attach to every message event.
+            Merged with any per-call metadata. Maximum 15 total keys per event (including internal keys).
+            Example: {"location": {"stringValue": "NYC"}}
     """
 
     memory_id: str = Field(min_length=1)
@@ -48,3 +51,4 @@ class AgentCoreMemoryConfig(BaseModel):
     flush_interval_seconds: Optional[float] = Field(default=None, gt=0)
     context_tag: str = Field(default="user_context", min_length=1)
     filter_restored_tool_context: bool = Field(default=False)
+    default_metadata: Optional[Dict[str, Any]] = None

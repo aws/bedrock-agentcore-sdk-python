@@ -219,6 +219,7 @@ result = agent_with_tools("/path/to/image.png")
 - `actor_id`: Unique identifier for the user/actor
 - `retrieval_config`: Dictionary mapping namespaces to RetrievalConfig objects
 - `batch_size`: Number of messages to buffer before sending to AgentCore Memory (1-100, default: 1). A value of 1 sends immediately (no batching).
+- `default_metadata`: Optional dictionary of key-value metadata to attach to every message event. Maximum 15 total keys per event (including internal keys). Example: `{"location": {"stringValue": "NYC"}}`
 
 ### RetrievalConfig Parameters
 
@@ -238,6 +239,46 @@ https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-strategies.
 - `/facts/{actorId}/`: User-specific facts
 - `/summaries/{actorId}/{sessionId}/`: Session-specific summaries
 
+
+---
+
+## Event Metadata
+
+You can attach custom key-value metadata to every message event. This is useful for tagging
+conversations with contextual information (e.g., location, project, case type) that can later
+be used to filter events with `list_events`.
+
+### Default Metadata (applied to all messages)
+
+```python
+config = AgentCoreMemoryConfig(
+    memory_id=MEM_ID,
+    session_id=SESSION_ID,
+    actor_id=ACTOR_ID,
+    default_metadata={
+        "project": {"stringValue": "atlas"},
+        "env": {"stringValue": "production"},
+    },
+)
+session_manager = AgentCoreMemorySessionManager(config, region_name='us-east-1')
+agent = Agent(session_manager=session_manager)
+agent("Hello!")  # This event will have project=atlas and env=production metadata
+```
+
+### Per-call Metadata
+
+You can also pass metadata on individual `create_message` calls. Per-call metadata is merged
+with `default_metadata` (per-call values override defaults for the same key):
+
+```python
+session_manager.create_message(
+    session_id, agent_id, message,
+    metadata={"priority": {"stringValue": "high"}},
+)
+```
+
+> **Note:** The API allows a maximum of 15 metadata key-value pairs per event.
+> The keys `stateType` and `agentId` are reserved for internal use.
 
 ---
 
