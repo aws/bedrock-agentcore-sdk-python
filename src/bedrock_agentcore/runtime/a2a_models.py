@@ -20,12 +20,13 @@ class JsonRpcErrorCode(int, Enum):
     INVALID_PARAMS = -32602
     INTERNAL_ERROR = -32603
 
-    # A2A-specific error codes (AgentCore Runtime)
-    RESOURCE_NOT_FOUND = -32501
-    VALIDATION_ERROR = -32502
-    THROTTLING = -32503
-    RESOURCE_CONFLICT = -32504
-    RUNTIME_CLIENT_ERROR = -32505
+    # A2A-specific error codes (per A2A protocol specification)
+    TASK_NOT_FOUND = -32001
+    TASK_NOT_CANCELABLE = -32002
+    PUSH_NOTIFICATION_NOT_SUPPORTED = -32003
+    UNSUPPORTED_OPERATION = -32004
+    CONTENT_TYPE_NOT_SUPPORTED = -32005
+    INVALID_AGENT_RESPONSE = -32006
 
 
 @dataclass
@@ -259,16 +260,27 @@ class A2AArtifact:
         )
 
 
-def build_runtime_url(agent_arn: str, region: str = "us-west-2") -> str:
+def build_runtime_url(agent_arn: str) -> str:
     """Build the AgentCore Runtime URL from an agent ARN.
+
+    The region is automatically extracted from the ARN.
 
     Args:
         agent_arn: The ARN of the agent runtime
-        region: AWS region (default: us-west-2)
+            (e.g., arn:aws:bedrock:us-west-2:123456789012:agent-runtime/xxx)
 
     Returns:
         The full runtime URL with properly encoded ARN
+
+    Raises:
+        ValueError: If the ARN format is invalid and region cannot be parsed
     """
+    # Parse region from ARN (format: arn:partition:service:region:account:resource)
+    arn_parts = agent_arn.split(":")
+    if len(arn_parts) < 4 or not arn_parts[3]:
+        raise ValueError(f"Cannot parse region from ARN: {agent_arn}")
+    region = arn_parts[3]
+
     # URL encode the ARN (safe='' means encode all special characters)
     escaped_arn = quote(agent_arn, safe="")
     return f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{escaped_arn}/invocations/"

@@ -328,7 +328,7 @@ class TestJsonRpcHandling:
         data = response.json()
         assert "error" in data
         assert data["error"]["code"] == -32603  # Internal error
-        assert "Test error" in data["error"]["message"]
+        assert data["error"]["message"] == "Internal error"
 
 
 class TestAsyncHandler:

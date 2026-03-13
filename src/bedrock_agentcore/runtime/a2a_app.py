@@ -4,7 +4,6 @@ Provides a Starlette-based web server for A2A (Agent-to-Agent) protocol communic
 """
 
 import asyncio
-import contextvars
 import inspect
 import json
 import logging
@@ -16,6 +15,7 @@ from collections.abc import Sequence
 from typing import Any, Callable, Dict, Optional
 
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware import Middleware
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
@@ -361,7 +361,7 @@ class BedrockAgentCoreA2AApp(Starlette):
             return self._jsonrpc_error_response(
                 body.get("id") if body is not None else None,
                 JsonRpcErrorCode.INTERNAL_ERROR,
-                str(e),
+                "Internal error",
             )
 
     def _jsonrpc_error_response(
@@ -391,7 +391,7 @@ class BedrockAgentCoreA2AApp(Starlette):
             error_response = JsonRpcResponse.error_response(
                 request_id,
                 JsonRpcErrorCode.INTERNAL_ERROR,
-                str(e),
+                "Internal error",
             )
             yield self._to_sse(error_response.to_dict())
 
@@ -410,7 +410,7 @@ class BedrockAgentCoreA2AApp(Starlette):
             error_response = JsonRpcResponse.error_response(
                 request_id,
                 JsonRpcErrorCode.INTERNAL_ERROR,
-                str(e),
+                "Internal error",
             )
             yield self._to_sse(error_response.to_dict())
 
@@ -475,9 +475,7 @@ class BedrockAgentCoreA2AApp(Starlette):
             if asyncio.iscoroutinefunction(handler):
                 return await handler(*args)
             else:
-                loop = asyncio.get_event_loop()
-                ctx = contextvars.copy_context()
-                return await loop.run_in_executor(None, ctx.run, handler, *args)
+                return await run_in_threadpool(handler, *args)
         except Exception:
             handler_name = getattr(handler, "__name__", "unknown")
             self.logger.debug("Handler '%s' execution failed", handler_name)

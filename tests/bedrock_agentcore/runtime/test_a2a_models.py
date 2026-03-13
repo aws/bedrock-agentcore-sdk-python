@@ -312,10 +312,10 @@ class TestBuildRuntimeUrl:
         assert url.startswith("https://bedrock-agentcore.us-west-2.amazonaws.com/runtimes/")
         assert url.endswith("/invocations/")
 
-    def test_url_with_region(self):
-        """Test building URL with custom region."""
+    def test_region_parsed_from_arn(self):
+        """Test that region is automatically parsed from the ARN."""
         arn = "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/my-agent"
-        url = build_runtime_url(arn, region="us-east-1")
+        url = build_runtime_url(arn)
         assert "us-east-1" in url
         assert "bedrock-agentcore.us-east-1.amazonaws.com" in url
 
