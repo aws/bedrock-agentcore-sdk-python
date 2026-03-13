@@ -208,6 +208,101 @@ class BedrockAgentCoreA2AApp(Starlette):
 
         return current_status
 
+    def async_task(self, func: Callable) -> Callable:
+        """Decorator to track async tasks for ping status.
+
+        When a function is decorated with @async_task, it will:
+        - Set ping status to HEALTHY_BUSY while running
+        - Revert to HEALTHY when complete
+        """
+        if not asyncio.iscoroutinefunction(func):
+            raise ValueError("@async_task can only be applied to async functions")
+
+        async def wrapper(*args, **kwargs):
+            task_id = self.add_async_task(func.__name__)
+
+            try:
+                self.logger.debug("Starting async task: %s", func.__name__)
+                start_time = time.time()
+                result = await func(*args, **kwargs)
+                duration = time.time() - start_time
+                self.logger.info("Async task completed: %s (%.3fs)", func.__name__, duration)
+                return result
+            except Exception:
+                duration = time.time() - start_time
+                self.logger.exception("Async task failed: %s (%.3fs)", func.__name__, duration)
+                raise
+            finally:
+                self.complete_async_task(task_id)
+
+        wrapper.__name__ = func.__name__
+        return wrapper
+
+    def force_ping_status(self, status: PingStatus):
+        """Force ping status to a specific value."""
+        self._forced_ping_status = status
+
+    def clear_forced_ping_status(self):
+        """Clear forced status and resume automatic."""
+        self._forced_ping_status = None
+
+    def get_async_task_info(self) -> Dict[str, Any]:
+        """Get info about running async tasks."""
+        running_jobs = []
+        for t in self._active_tasks.values():
+            try:
+                running_jobs.append(
+                    {"name": t.get("name", "unknown"), "duration": time.time() - t.get("start_time", time.time())}
+                )
+            except Exception as e:
+                self.logger.warning("Caught exception, continuing...: %s", e)
+                continue
+
+        return {"active_count": len(self._active_tasks), "running_jobs": running_jobs}
+
+    def add_async_task(self, name: str, metadata: Optional[Dict] = None) -> int:
+        """Register an async task for interactive health tracking.
+
+        Args:
+            name: Human-readable task name for monitoring
+            metadata: Optional additional task metadata
+
+        Returns:
+            Task ID for tracking and completion
+        """
+        with self._task_counter_lock:
+            task_id = hash(str(uuid.uuid4()))
+
+            task_info = {"name": name, "start_time": time.time()}
+            if metadata:
+                task_info["metadata"] = metadata
+
+            self._active_tasks[task_id] = task_info
+
+        self.logger.info("Async task started: %s (ID: %s)", name, task_id)
+        return task_id
+
+    def complete_async_task(self, task_id: int) -> bool:
+        """Mark an async task as complete for interactive health tracking.
+
+        Args:
+            task_id: Task ID returned from add_async_task
+
+        Returns:
+            True if task was found and completed, False otherwise
+        """
+        with self._task_counter_lock:
+            task_info = self._active_tasks.pop(task_id, None)
+            if task_info:
+                task_name = task_info.get("name", "unknown")
+                duration = time.time() - task_info.get("start_time", time.time())
+
+                self.logger.info("Async task completed: %s (ID: %s, Duration: %.2fs)", task_name, task_id, duration)
+                return True
+            else:
+                self.logger.warning("Attempted to complete unknown task ID: %s", task_id)
+                return False
+
     def _get_runtime_url(self, request=None) -> Optional[str]:
         """Get the runtime URL from environment or current request.
 
@@ -455,7 +550,7 @@ class BedrockAgentCoreA2AApp(Starlette):
             return JSONResponse(card_dict)
         except Exception as e:
             self.logger.exception("Failed to serve Agent Card")
-            return JSONResponse({"error": str(e)}, status_code=500)
+            return JSONResponse({"error": "Internal error"}, status_code=500)
 
     def _handle_ping(self, request):
         """Handle GET /ping health check endpoint."""
