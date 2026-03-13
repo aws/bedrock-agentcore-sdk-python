@@ -441,3 +441,23 @@ class TestConstants:
     def test_method_constants(self):
         """Test A2A method constants."""
         assert A2A_METHOD_MESSAGE_SEND == "message/send"
+
+
+class TestJsonRpcErrorCodes:
+    """Test that error code values match AWS Bedrock AgentCore documentation."""
+
+    def test_standard_jsonrpc_codes(self):
+        """Test standard JSON-RPC 2.0 error codes."""
+        assert JsonRpcErrorCode.PARSE_ERROR == -32700
+        assert JsonRpcErrorCode.INVALID_REQUEST == -32600
+        assert JsonRpcErrorCode.METHOD_NOT_FOUND == -32601
+        assert JsonRpcErrorCode.INVALID_PARAMS == -32602
+        assert JsonRpcErrorCode.INTERNAL_ERROR == -32603
+
+    def test_agentcore_specific_codes(self):
+        """Test AgentCore-specific error codes per AWS documentation."""
+        assert JsonRpcErrorCode.RESOURCE_NOT_FOUND == -32501
+        assert JsonRpcErrorCode.VALIDATION_ERROR == -32052
+        assert JsonRpcErrorCode.THROTTLING == -32053
+        assert JsonRpcErrorCode.RESOURCE_CONFLICT == -32054
+        assert JsonRpcErrorCode.RUNTIME_CLIENT_ERROR == -32055

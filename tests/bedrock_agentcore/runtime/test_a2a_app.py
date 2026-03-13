@@ -999,3 +999,103 @@ class TestGetRuntimeUrl:
             os.environ.pop("AGENTCORE_RUNTIME_URL", None)
             url = app._get_runtime_url()
             assert url is None
+
+
+class TestAsyncTaskDecorator:
+    def test_async_task_decorator(self, agent_card):
+        """Test @async_task decorator tracks task and returns result."""
+        app = BedrockAgentCoreA2AApp(agent_card=agent_card)
+
+        @app.async_task
+        async def my_task():
+            return "done"
+
+        assert my_task.__name__ == "my_task"
+        result = asyncio.get_event_loop().run_until_complete(my_task())
+        assert result == "done"
+        assert len(app._active_tasks) == 0  # task completed
+
+    def test_async_task_rejects_sync(self, agent_card):
+        """Test @async_task raises ValueError for sync functions."""
+        app = BedrockAgentCoreA2AApp(agent_card=agent_card)
+
+        with pytest.raises(ValueError, match="async"):
+            @app.async_task
+            def sync_func():
+                pass
+
+    def test_async_task_exception_cleanup(self, agent_card):
+        """Test @async_task cleans up task on exception."""
+        app = BedrockAgentCoreA2AApp(agent_card=agent_card)
+
+        @app.async_task
+        async def failing_task():
+            raise RuntimeError("fail")
+
+        with pytest.raises(RuntimeError, match="fail"):
+            asyncio.get_event_loop().run_until_complete(failing_task())
+        assert len(app._active_tasks) == 0
+
+
+class TestAsyncTaskManagement:
+    def test_add_and_complete_task(self, agent_card):
+        """Test add_async_task and complete_async_task."""
+        app = BedrockAgentCoreA2AApp(agent_card=agent_card)
+        task_id = app.add_async_task("test-task", metadata={"key": "val"})
+        assert len(app._active_tasks) == 1
+        assert app._active_tasks[task_id]["name"] == "test-task"
+        assert app._active_tasks[task_id]["metadata"] == {"key": "val"}
+
+        result = app.complete_async_task(task_id)
+        assert result is True
+        assert len(app._active_tasks) == 0
+
+    def test_complete_unknown_task(self, agent_card):
+        """Test completing a non-existent task returns False."""
+        app = BedrockAgentCoreA2AApp(agent_card=agent_card)
+        result = app.complete_async_task(99999)
+        assert result is False
+
+    def test_get_async_task_info(self, agent_card):
+        """Test get_async_task_info returns correct data."""
+        app = BedrockAgentCoreA2AApp(agent_card=agent_card)
+        app.add_async_task("job-1")
+        app.add_async_task("job-2")
+
+        info = app.get_async_task_info()
+        assert info["active_count"] == 2
+        assert len(info["running_jobs"]) == 2
+        names = {j["name"] for j in info["running_jobs"]}
+        assert names == {"job-1", "job-2"}
+
+    def test_force_and_clear_ping_status(self, agent_card):
+        """Test force_ping_status and clear_forced_ping_status."""
+        app = BedrockAgentCoreA2AApp(agent_card=agent_card)
+        app.force_ping_status(PingStatus.HEALTHY_BUSY)
+        assert app.get_current_ping_status() == PingStatus.HEALTHY_BUSY
+
+        app.clear_forced_ping_status()
+        assert app.get_current_ping_status() == PingStatus.HEALTHY
+
+
+class TestContextVarsPropagation:
+    def test_sync_handler_preserves_context_vars(self, agent_card):
+        """Test sync handler receives context variables via contextvars.copy_context()."""
+        app = BedrockAgentCoreA2AApp(agent_card=agent_card)
+        captured_request_id = None
+
+        @app.entrypoint
+        def handler(request, context):
+            nonlocal captured_request_id
+            from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+            captured_request_id = BedrockAgentCoreContext.get_request_id()
+            return {"ok": True}
+
+        client = TestClient(app)
+        client.post(
+            "/",
+            json={"jsonrpc": "2.0", "id": "1", "method": "test"},
+            headers={"X-Amzn-Bedrock-AgentCore-Runtime-Request-Id": "ctx-req-123"},
+        )
+
+        assert captured_request_id == "ctx-req-123"

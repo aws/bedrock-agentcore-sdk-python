@@ -20,13 +20,12 @@ class JsonRpcErrorCode(int, Enum):
     INVALID_PARAMS = -32602
     INTERNAL_ERROR = -32603
 
-    # A2A-specific error codes (per A2A protocol specification)
-    TASK_NOT_FOUND = -32001
-    TASK_NOT_CANCELABLE = -32002
-    PUSH_NOTIFICATION_NOT_SUPPORTED = -32003
-    UNSUPPORTED_OPERATION = -32004
-    CONTENT_TYPE_NOT_SUPPORTED = -32005
-    INVALID_AGENT_RESPONSE = -32006
+    # AgentCore-specific error codes (per AWS Bedrock AgentCore documentation)
+    RESOURCE_NOT_FOUND = -32501
+    VALIDATION_ERROR = -32052
+    THROTTLING = -32053
+    RESOURCE_CONFLICT = -32054
+    RUNTIME_CLIENT_ERROR = -32055
 
 
 @dataclass
