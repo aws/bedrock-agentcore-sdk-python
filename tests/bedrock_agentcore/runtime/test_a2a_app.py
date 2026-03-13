@@ -756,7 +756,7 @@ class TestBuildRequestContext:
             return original_set(*args, **kwargs)
 
         with patch(
-            "bedrock_agentcore.runtime.a2a_app.BedrockAgentCoreContext.set_request_context",
+            "bedrock_agentcore.runtime.base_app.BedrockAgentCoreContext.set_request_context",
             side_effect=failing_then_ok,
         ):
             client = TestClient(app)
