@@ -191,12 +191,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         internal_metadata: Optional[Dict[str, MetadataValue]] = None,
         per_call_metadata: Optional[Dict[str, MetadataValue]] = None,
     ) -> Optional[Dict[str, MetadataValue]]:
-        """Build merged metadata from config defaults, per-call overrides, and internal keys.
+        """Build merged metadata from config defaults, provider, per-call overrides, and internal keys.
 
         Merge precedence (highest wins):
             1. internal_metadata (stateType, agentId) — always wins
             2. per_call_metadata (passed via **kwargs)
-            3. self.config.default_metadata (set at config construction time)
+            3. metadata_provider() (called at event creation time for dynamic values)
+            4. self.config.default_metadata (set at config construction time)
 
         Args:
             internal_metadata: System-reserved metadata (e.g. stateType, agentId).
@@ -212,6 +213,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         if self.config.default_metadata:
             merged.update(self.config.default_metadata)
+
+        if self.config.metadata_provider:
+            merged.update(self.config.metadata_provider())
 
         if per_call_metadata:
             merged.update(per_call_metadata)

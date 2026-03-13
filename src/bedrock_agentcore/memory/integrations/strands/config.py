@@ -1,8 +1,8 @@
 """Configuration for AgentCore Memory Session Manager."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RetrievalConfig(BaseModel):
@@ -41,7 +41,12 @@ class AgentCoreMemoryConfig(BaseModel):
         default_metadata: Optional default metadata key-value pairs to attach to every message event.
             Merged with any per-call metadata. Maximum 15 total keys per event (including internal keys).
             Example: {"location": {"stringValue": "NYC"}}
+        metadata_provider: Optional callable that returns metadata key-value pairs. Called at each
+            event creation, so it can return dynamic values (e.g. current traceId). The returned
+            dict is merged after default_metadata but before per-call metadata.
     """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     memory_id: str = Field(min_length=1)
     session_id: str = Field(min_length=1)
@@ -52,3 +57,4 @@ class AgentCoreMemoryConfig(BaseModel):
     context_tag: str = Field(default="user_context", min_length=1)
     filter_restored_tool_context: bool = Field(default=False)
     default_metadata: Optional[Dict[str, Any]] = None
+    metadata_provider: Optional[Callable[[], Dict[str, Any]]] = None

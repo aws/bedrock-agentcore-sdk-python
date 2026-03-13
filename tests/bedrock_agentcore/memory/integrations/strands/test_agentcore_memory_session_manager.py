@@ -3130,3 +3130,72 @@ class TestMetadataSupport:
 
         call_kwargs = mock_memory_client.gmdp_client.create_event.call_args[1]
         assert call_kwargs["metadata"] == {"location": {"stringValue": "NYC"}, "team": {"stringValue": "support"}}
+
+    def test_metadata_provider_called_per_event(self, mock_memory_client):
+        """metadata_provider is called at each create_message and its values appear in the event."""
+        call_count = 0
+
+        def provider():
+            nonlocal call_count
+            call_count += 1
+            return {"traceId": {"stringValue": f"trace-{call_count}"}}
+
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            metadata_provider=provider,
+        )
+        manager = _create_session_manager(config, mock_memory_client)
+        mock_memory_client.create_event.return_value = {"eventId": "evt_1"}
+
+        msg1 = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
+        manager.create_message("test-session-456", "agent-1", msg1)
+
+        assert call_count == 1
+        kwargs1 = mock_memory_client.create_event.call_args[1]
+        assert kwargs1["metadata"]["traceId"] == {"stringValue": "trace-1"}
+
+        msg2 = SessionMessage.from_message({"role": "user", "content": [{"text": "world"}]}, 0)
+        manager.create_message("test-session-456", "agent-1", msg2)
+
+        assert call_count == 2
+        kwargs2 = mock_memory_client.create_event.call_args[1]
+        assert kwargs2["metadata"]["traceId"] == {"stringValue": "trace-2"}
+
+    def test_metadata_provider_merged_with_defaults(self, mock_memory_client):
+        """metadata_provider values override default_metadata for same key, but both appear."""
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            default_metadata={"env": {"stringValue": "prod"}, "team": {"stringValue": "support"}},
+            metadata_provider=lambda: {"env": {"stringValue": "staging"}, "traceId": {"stringValue": "t-1"}},
+        )
+        manager = _create_session_manager(config, mock_memory_client)
+        mock_memory_client.create_event.return_value = {"eventId": "evt_1"}
+
+        msg = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
+        manager.create_message("test-session-456", "agent-1", msg)
+
+        call_kwargs = mock_memory_client.create_event.call_args[1]
+        # provider overrides default for "env"
+        assert call_kwargs["metadata"]["env"] == {"stringValue": "staging"}
+        # default still present
+        assert call_kwargs["metadata"]["team"] == {"stringValue": "support"}
+        # provider adds new key
+        assert call_kwargs["metadata"]["traceId"] == {"stringValue": "t-1"}
+
+    def test_metadata_provider_reserved_keys_rejected(self, mock_memory_client):
+        """metadata_provider returning reserved keys raises ValueError."""
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            metadata_provider=lambda: {"stateType": {"stringValue": "bad"}},
+        )
+        manager = _create_session_manager(config, mock_memory_client)
+
+        msg = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
+        with pytest.raises(ValueError, match="reserved"):
+            manager.create_message("test-session-456", "agent-1", msg)

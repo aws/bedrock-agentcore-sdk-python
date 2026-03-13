@@ -220,6 +220,7 @@ result = agent_with_tools("/path/to/image.png")
 - `retrieval_config`: Dictionary mapping namespaces to RetrievalConfig objects
 - `batch_size`: Number of messages to buffer before sending to AgentCore Memory (1-100, default: 1). A value of 1 sends immediately (no batching).
 - `default_metadata`: Optional dictionary of key-value metadata to attach to every message event. Maximum 15 total keys per event (including internal keys). Example: `{"location": {"stringValue": "NYC"}}`
+- `metadata_provider`: Optional callable returning a metadata dictionary. Called at each event creation for dynamic values (e.g., traceId). Merged after `default_metadata`.
 
 ### RetrievalConfig Parameters
 
@@ -265,10 +266,32 @@ agent = Agent(session_manager=session_manager)
 agent("Hello!")  # This event will have project=atlas and env=production metadata
 ```
 
+### Dynamic Metadata (metadata_provider)
+
+For values that change per invocation (e.g., traceId for Langfuse), use `metadata_provider` —
+a callable invoked at each event creation:
+
+```python
+from langfuse.decorators import langfuse_context
+
+def get_trace_metadata():
+    return {"traceId": {"stringValue": langfuse_context.get_current_trace_id() or ""}}
+
+config = AgentCoreMemoryConfig(
+    memory_id=MEM_ID,
+    session_id=SESSION_ID,
+    actor_id=ACTOR_ID,
+    metadata_provider=get_trace_metadata,
+)
+session_manager = AgentCoreMemorySessionManager(config, region_name='us-east-1')
+agent = Agent(session_manager=session_manager)
+agent("Hello!")  # Event gets the current traceId automatically
+```
+
 ### Per-call Metadata
 
 You can also pass metadata on individual `create_message` calls. Per-call metadata is merged
-with `default_metadata` (per-call values override defaults for the same key):
+with `default_metadata` and `metadata_provider` (per-call values override both for the same key):
 
 ```python
 session_manager.create_message(
