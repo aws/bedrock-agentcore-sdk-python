@@ -10,6 +10,8 @@ import boto3
 from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 
+from bedrock_agentcore._utils.snake_case import accept_snake_case_kwargs
+
 from .constants import BlobMessage, ConversationalMessage, MessageRole, RetrievalConfig
 from .models import (
     ActorSummary,
@@ -240,7 +242,7 @@ class MemorySessionManager:
         if name in self._ALLOWED_DATA_PLANE_METHODS and hasattr(self._data_plane_client, name):
             method = getattr(self._data_plane_client, name)
             logger.debug("Forwarding method '%s' to _data_plane_client", name)
-            return method
+            return accept_snake_case_kwargs(method)
 
         # Method not found on client
         raise AttributeError(
