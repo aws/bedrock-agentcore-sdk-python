@@ -59,7 +59,7 @@ def _bedrock_to_openai(message: dict) -> dict:
                 }
             )
 
-    result: dict[str, Any] = {"role": role}
+    result: dict[str, Any] = {"role": role}  # type: ignore[no-redef]
 
     if tool_calls:
         result["content"] = "\n".join(text_parts) if text_parts else None
@@ -144,7 +144,7 @@ class OpenAIConverseConverter:
         if not has_non_empty:
             return []
 
-        openai_msg = _bedrock_to_openai(message)
+        openai_msg = _bedrock_to_openai(message)  # type: ignore[arg-type]
         role = openai_msg.get("role", "user")
         return [(json.dumps(openai_msg), role)]
 
@@ -177,7 +177,7 @@ class OpenAIConverseConverter:
                 if openai_msg and isinstance(openai_msg, dict):
                     bedrock_msg = _openai_to_bedrock(openai_msg)
                     if bedrock_msg.get("content"):
-                        session_msg = SessionMessage(message=bedrock_msg, message_id=0)
+                        session_msg = SessionMessage(message=bedrock_msg, message_id=0)  # type: ignore[arg-type]
                         messages.append(session_msg)
 
         return messages

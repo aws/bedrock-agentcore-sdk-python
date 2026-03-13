@@ -41,6 +41,9 @@ jobs:
       - name: Run pre-commit
         run: uv run pre-commit run --all-files
 
+      - name: Run mypy
+        run: uv run mypy src/
+
   test:
     name: Test Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest

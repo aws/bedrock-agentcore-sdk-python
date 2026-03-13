@@ -9,7 +9,7 @@ class StringValue(TypedDict):
 
     stringValue: str
 
-    @staticmethod
+    @staticmethod  # type: ignore[misc]
     def build(value: str) -> "StringValue":
         """Build a StringValue from a string."""
         return {"stringValue": value}
@@ -34,7 +34,7 @@ class LeftExpression(TypedDict):
 
     metadataKey: MetadataKey
 
-    @staticmethod
+    @staticmethod  # type: ignore[misc]
     def build(key: str) -> "LeftExpression":
         """Builds the `metadataKey` for `LeftExpression`."""
         return {"metadataKey": key}
@@ -63,7 +63,7 @@ class RightExpression(TypedDict):
 
     metadataValue: MetadataValue
 
-    @staticmethod
+    @staticmethod  # type: ignore[misc]
     def build(value: str) -> "RightExpression":
         """Builds the `RightExpression` for `stringValue` type."""
         return {"metadataValue": StringValue.build(value)}
@@ -82,7 +82,7 @@ class EventMetadataFilter(TypedDict):
     operator: OperatorType
     right: Optional[RightExpression]
 
-    def build_expression(
+    def build_expression(  # type: ignore[misc]
         left_operand: LeftExpression,
         operator: OperatorType,
         right_operand: Optional[RightExpression] = None,

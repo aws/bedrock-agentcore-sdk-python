@@ -32,7 +32,7 @@ class BedrockAgentCoreContext:
     _request_headers: ContextVar[Optional[Dict[str, str]]] = ContextVar("request_headers")
 
     @classmethod
-    def set_workload_access_token(cls, token: str):
+    def set_workload_access_token(cls, token: str) -> None:
         """Set the workload access token in the context."""
         cls._workload_access_token.set(token)
 
@@ -45,7 +45,7 @@ class BedrockAgentCoreContext:
             return None
 
     @classmethod
-    def set_oauth2_callback_url(cls, workload_callback_url: str):
+    def set_oauth2_callback_url(cls, workload_callback_url: str) -> None:
         """Set the oauth2 callback url in the context."""
         cls._oauth2_callback_url.set(workload_callback_url)
 
@@ -58,7 +58,7 @@ class BedrockAgentCoreContext:
             return None
 
     @classmethod
-    def set_request_context(cls, request_id: str, session_id: Optional[str] = None):
+    def set_request_context(cls, request_id: str, session_id: Optional[str] = None) -> None:
         """Set request-scoped identifiers."""
         cls._request_id.set(request_id)
         cls._session_id.set(session_id)
@@ -80,7 +80,7 @@ class BedrockAgentCoreContext:
             return None
 
     @classmethod
-    def set_request_headers(cls, headers: Dict[str, str]):
+    def set_request_headers(cls, headers: Dict[str, str]) -> None:
         """Set request headers in the context."""
         cls._request_headers.set(headers)
 

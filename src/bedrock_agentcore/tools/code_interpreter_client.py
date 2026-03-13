@@ -104,8 +104,8 @@ class CodeInterpreter:
             config=data_config,
         )
 
-        self._identifier = None
-        self._session_id = None
+        self._identifier: Optional[str] = None
+        self._session_id: Optional[str] = None
         self._file_descriptions: Dict[str, str] = {}
 
     @property
@@ -114,7 +114,7 @@ class CodeInterpreter:
         return self._identifier
 
     @identifier.setter
-    def identifier(self, value: Optional[str]):
+    def identifier(self, value: Optional[str]) -> None:
         """Set the code interpreter identifier."""
         self._identifier = value
 
@@ -124,7 +124,7 @@ class CodeInterpreter:
         return self._session_id
 
     @session_id.setter
-    def session_id(self, value: Optional[str]):
+    def session_id(self, value: Optional[str]) -> None:
         """Set the session ID."""
         self._session_id = value
 
@@ -184,7 +184,7 @@ class CodeInterpreter:
         """
         self.logger.info("Creating code interpreter: %s", name)
 
-        request_params = {
+        request_params: Dict[str, Any] = {
             "name": name,
             "executionRoleArn": execution_role_arn,
             "networkConfiguration": network_configuration or {"networkMode": "PUBLIC"},
@@ -200,7 +200,7 @@ class CodeInterpreter:
             request_params["clientToken"] = client_token
 
         response = self.control_plane_client.create_code_interpreter(**request_params)
-        return response
+        return response  # type: ignore[no-any-return]
 
     def delete_code_interpreter(self, interpreter_id: str, client_token: Optional[str] = None) -> Dict:
         """Delete a custom code interpreter.
@@ -220,12 +220,12 @@ class CodeInterpreter:
         """
         self.logger.info("Deleting code interpreter: %s", interpreter_id)
 
-        request_params = {"codeInterpreterId": interpreter_id}
+        request_params: Dict[str, Any] = {"codeInterpreterId": interpreter_id}
         if client_token:
             request_params["clientToken"] = client_token
 
         response = self.control_plane_client.delete_code_interpreter(**request_params)
-        return response
+        return response  # type: ignore[no-any-return]
 
     def get_code_interpreter(self, interpreter_id: str) -> Dict:
         """Get detailed information about a code interpreter.
@@ -248,7 +248,7 @@ class CodeInterpreter:
         """
         self.logger.info("Getting code interpreter: %s", interpreter_id)
         response = self.control_plane_client.get_code_interpreter(codeInterpreterId=interpreter_id)
-        return response
+        return response  # type: ignore[no-any-return]
 
     def list_code_interpreters(
         self,
@@ -276,14 +276,14 @@ class CodeInterpreter:
         """
         self.logger.info("Listing code interpreters (type=%s)", interpreter_type)
 
-        request_params = {"maxResults": max_results}
+        request_params: Dict[str, Any] = {"maxResults": max_results}
         if interpreter_type:
             request_params["type"] = interpreter_type
         if next_token:
             request_params["nextToken"] = next_token
 
         response = self.control_plane_client.list_code_interpreters(**request_params)
-        return response
+        return response  # type: ignore[no-any-return]
 
     def start(
         self,
@@ -376,7 +376,7 @@ class CodeInterpreter:
         response = self.data_plane_client.get_code_interpreter_session(
             codeInterpreterIdentifier=interpreter_id, sessionId=session_id
         )
-        return response
+        return response  # type: ignore[no-any-return]
 
     def list_sessions(
         self,
@@ -410,16 +410,16 @@ class CodeInterpreter:
 
         self.logger.info("Listing sessions for interpreter: %s", interpreter_id)
 
-        request_params = {"codeInterpreterIdentifier": interpreter_id, "maxResults": max_results}
+        request_params: Dict[str, Any] = {"codeInterpreterIdentifier": interpreter_id, "maxResults": max_results}
         if status:
             request_params["status"] = status
         if next_token:
             request_params["nextToken"] = next_token
 
         response = self.data_plane_client.list_code_interpreter_sessions(**request_params)
-        return response
+        return response  # type: ignore[no-any-return]
 
-    def invoke(self, method: str, params: Optional[Dict] = None):
+    def invoke(self, method: str, params: Optional[Dict] = None) -> Dict[str, Any]:
         r"""Invoke a method in the code interpreter sandbox.
 
         If no session is active, automatically starts a new session.
@@ -442,7 +442,7 @@ class CodeInterpreter:
         if not self.session_id or not self.identifier:
             self.start()
 
-        return self.data_plane_client.invoke_code_interpreter(
+        return self.data_plane_client.invoke_code_interpreter(  # type: ignore[no-any-return]
             codeInterpreterIdentifier=self.identifier,
             sessionId=self.session_id,
             name=method,
@@ -546,8 +546,8 @@ class CodeInterpreter:
             if path.startswith("/"):
                 raise ValueError(f"Path must be relative, not absolute. Got: {path}")
 
-            if isinstance(content, bytes):
-                file_contents.append({"path": path, "blob": base64.b64encode(content).decode("utf-8")})
+            if isinstance(content, bytes):  # type: ignore[unreachable]
+                file_contents.append({"path": path, "blob": base64.b64encode(content).decode("utf-8")})  # type: ignore[unreachable]
             else:
                 file_contents.append({"path": path, "text": content})
 
@@ -630,7 +630,7 @@ class CodeInterpreter:
                         if content_item.get("type") == "resource":
                             resource = content_item.get("resource", {})
                             if "text" in resource:
-                                return resource["text"]
+                                return resource["text"]  # type: ignore[no-any-return]
                             elif "blob" in resource:
                                 raw = base64.b64decode(resource["blob"])
                                 try:

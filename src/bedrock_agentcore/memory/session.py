@@ -192,7 +192,7 @@ class MemorySessionManager:
                 new_user_agent = f"{existing_user_agent} {sdk_user_agent}"
             else:
                 new_user_agent = sdk_user_agent
-            return boto_client_config.merge(BotocoreConfig(user_agent_extra=new_user_agent))
+            return boto_client_config.merge(BotocoreConfig(user_agent_extra=new_user_agent))  # type: ignore[no-any-return]
         else:
             return BotocoreConfig(user_agent_extra=sdk_user_agent)
 
@@ -205,7 +205,7 @@ class MemorySessionManager:
         """
         original_serialize_timestamp = self._data_plane_client._serializer._serializer._serialize_type_timestamp
 
-        def serialize_timestamp_as_float(serialized, value, shape, name):
+        def serialize_timestamp_as_float(serialized: Any, value: Any, shape: Any, name: Any) -> None:
             if isinstance(value, datetime):
                 serialized[name] = value.timestamp()  # Convert to float (seconds since epoch with fractional seconds)
             else:
@@ -213,7 +213,7 @@ class MemorySessionManager:
 
         self._data_plane_client._serializer._serializer._serialize_type_timestamp = serialize_timestamp_as_float
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         """Dynamically forward method calls to the appropriate boto3 client.
 
         This method enables access to all data_plane boto3 client methods without explicitly
@@ -409,7 +409,7 @@ class MemorySessionManager:
                 retrieved_memories.extend(memory_records)
 
         logger.info("Retrieved %d memories for LLM context", len(retrieved_memories))
-        return retrieved_memories
+        return retrieved_memories  # type: ignore[return-value]
 
     def _save_conversation_turn(
         self,
@@ -432,7 +432,7 @@ class MemorySessionManager:
             event_timestamp=event_timestamp,
         )
         logger.info("Completed full conversation turn with LLM")
-        return event
+        return event  # type: ignore[return-value]
 
     def add_turns(
         self,
@@ -547,7 +547,7 @@ class MemorySessionManager:
             )
 
             logger.info("Created branch '%s' from event %s", branch_name, root_event_id)
-            return event
+            return event  # type: ignore[return-value]
 
         except ClientError as e:
             logger.error("Failed to fork conversation: %s", e)
@@ -662,7 +662,7 @@ class MemorySessionManager:
 
                 # Add eventMetadata filter if specified
                 if eventMetadata:
-                    filterMap["eventMetadata"] = eventMetadata
+                    filterMap["eventMetadata"] = eventMetadata  # type: ignore[assignment]
 
                 if filterMap:
                     params["filter"] = filterMap
@@ -760,7 +760,7 @@ class MemorySessionManager:
             # Only add main branch if there are actual events
             if main_branch_events:
                 result.append(
-                    {
+                    {  # type: ignore[arg-type]
                         "name": "main",
                         "rootEventId": None,
                         "firstEventId": main_branch_events[0]["eventId"],
@@ -770,10 +770,10 @@ class MemorySessionManager:
                 )
 
             # Add other branches
-            result.extend(list(branches.values()))
+            result.extend(list(branches.values()))  # type: ignore[arg-type]
 
             logger.info("Found %d branches in session %s", len(result), session_id)
-            return [Branch(branch) for branch in result]
+            return [Branch(branch) for branch in result]  # type: ignore[arg-type]
 
         except ClientError as e:
             logger.error("Failed to list branches: %s", e)
@@ -807,7 +807,7 @@ class MemorySessionManager:
         }
 
         if branch_name and branch_name != "main":
-            base_params["filter"] = {"branch": {"name": branch_name, "includeParentBranches": include_parent_branches}}
+            base_params["filter"] = {"branch": {"name": branch_name, "includeParentBranches": include_parent_branches}}  # type: ignore[assignment]
 
         try:
             turns: List[List[EventMessage]] = []
@@ -875,7 +875,7 @@ class MemorySessionManager:
             logger.error("     ❌ Error retrieving event: %s", e)
             raise
 
-    def delete_event(self, actor_id: str, session_id: str, event_id: str):
+    def delete_event(self, actor_id: str, session_id: str, event_id: str) -> None:
         """Deletes a specific event from short-term memory by its ID.
 
         Maps to: bedrock-agentcore.delete_event.
@@ -895,7 +895,7 @@ class MemorySessionManager:
         query: str,
         namespace_prefix: str,
         top_k: int = 3,
-        strategy_id: str = None,
+        strategy_id: Optional[str] = None,
         max_results: int = 20,
     ) -> List[MemoryRecord]:
         """Performs a semantic search against the long-term memory for this actor.
@@ -1000,7 +1000,7 @@ class MemorySessionManager:
             logger.error("  ❌ Error retrieving record: %s", e)
             raise
 
-    def delete_memory_record(self, record_id: str):
+    def delete_memory_record(self, record_id: str) -> None:
         """Deletes a specific long-term memory record by its ID.
 
         Maps to: bedrock-agentcore.delete_memory_record.
@@ -1077,7 +1077,7 @@ class MemorySessionManager:
 
         return {"successfulRecords": all_successful, "failedRecords": all_failed}
 
-    def create_memory_session(self, actor_id: str, session_id: str = None) -> "MemorySession":
+    def create_memory_session(self, actor_id: str, session_id: Optional[str] = None) -> "MemorySession":
         """Creates a new MemorySession instance."""
         session_id = session_id or str(uuid.uuid4())
         logger.info("💬 Creating new conversation for actor '%s' in session '%s'...", actor_id, session_id)
@@ -1128,7 +1128,7 @@ class MemorySession(DictWrapper):
         event_timestamp: Optional[datetime] = None,
     ) -> Event:
         """Delegates to manager.fork_conversation."""
-        return self._manager.fork_conversation(
+        return self._manager.fork_conversation(  # type: ignore[return-value]
             self._actor_id, self._session_id, root_event_id, branch_name, messages, metadata, event_timestamp
         )
 
@@ -1179,14 +1179,19 @@ class MemorySession(DictWrapper):
     ) -> List[List[EventMessage]]:
         """Delegates to manager.get_last_k_turns."""
         return self._manager.get_last_k_turns(
-            self._actor_id, self._session_id, k, branch_name, include_parent_branches, max_results
+            self._actor_id,
+            self._session_id,
+            k,
+            branch_name,
+            include_parent_branches,  # type: ignore[arg-type]
+            max_results,
         )
 
     def get_event(self, event_id: str) -> Event:
         """Delegates to manager.get_event."""
         return self._manager.get_event(self._actor_id, self._session_id, event_id)
 
-    def delete_event(self, event_id: str):
+    def delete_event(self, event_id: str) -> None:
         """Delegates to manager.delete_event."""
         return self._manager.delete_event(self._actor_id, self._session_id, event_id)
 
@@ -1194,7 +1199,7 @@ class MemorySession(DictWrapper):
         """Delegates to manager.get_memory_record."""
         return self._manager.get_memory_record(record_id)
 
-    def delete_memory_record(self, record_id: str):
+    def delete_memory_record(self, record_id: str) -> None:
         """Delegates to manager.delete_memory_record."""
         return self._manager.delete_memory_record(record_id)
 
