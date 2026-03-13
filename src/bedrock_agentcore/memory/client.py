@@ -20,6 +20,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+from bedrock_agentcore._utils.snake_case import accept_snake_case_kwargs
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
 from .constants import (
@@ -126,12 +127,12 @@ class MemoryClient:
         if name in self._ALLOWED_GMDP_METHODS and hasattr(self.gmdp_client, name):
             method = getattr(self.gmdp_client, name)
             logger.debug("Forwarding method '%s' to gmdp_client", name)
-            return method
+            return accept_snake_case_kwargs(method)
 
         if name in self._ALLOWED_GMCP_METHODS and hasattr(self.gmcp_client, name):
             method = getattr(self.gmcp_client, name)
             logger.debug("Forwarding method '%s' to gmcp_client", name)
-            return method
+            return accept_snake_case_kwargs(method)
 
         # Method not found on either client
         raise AttributeError(

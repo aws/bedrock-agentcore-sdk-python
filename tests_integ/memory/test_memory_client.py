@@ -94,13 +94,12 @@ class TestMemoryClient:
         assert memory["streamDeliveryResources"] == delivery_config
 
         # Test update via MemoryClient.__getattr__ passthrough to boto3 client.
-        # Uses camelCase params because the passthrough forwards directly to boto3
-        # without the snake_case translation that explicit SDK methods provide.
+        # Uses snake_case params — the passthrough wrapper converts to camelCase.
         updated_config = self._make_delivery_config("METADATA_ONLY")
         response = self.client.update_memory(
-            memoryId=memory_id,
-            clientToken=str(uuid.uuid4()),
-            streamDeliveryResources=updated_config,
+            memory_id=memory_id,
+            client_token=str(uuid.uuid4()),
+            stream_delivery_resources=updated_config,
         )
         assert response["memory"]["streamDeliveryResources"] == updated_config
 
