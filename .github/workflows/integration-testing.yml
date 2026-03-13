@@ -128,6 +128,11 @@ jobs:
             timeout: 15
             extra-deps: "strands-agents-evals"
             ignore: ""
+          - group: services
+            path: tests_integ/services
+            timeout: 5
+            extra-deps: ""
+            ignore: ""
     steps:
       - name: Configure Credentials
         uses: aws-actions/configure-aws-credentials@v5
@@ -160,6 +165,8 @@ jobs:
           MEMORY_KINESIS_ARN: ${{ secrets.MEMORY_KINESIS_ARN }}
           MEMORY_ROLE_ARN: ${{ secrets.MEMORY_ROLE_ARN }}
           MEMORY_PREPOPULATED_ID: ${{ secrets.MEMORY_PREPOPULATED_ID }}
+          RESOURCE_POLICY_TEST_ARN: ${{ secrets.RESOURCE_POLICY_TEST_ARN }}
+          RESOURCE_POLICY_TEST_PRINCIPAL: ${{ secrets.RESOURCE_POLICY_TEST_PRINCIPAL }}
         id: tests
         timeout-minutes: ${{ matrix.timeout }}
         run: |
