@@ -375,3 +375,152 @@ class TestAgentCoreMemorySessionManager:
         assert len(messages) >= 6
 
     # endregion End-to-end agent with batching tests
+
+    # region Multi-agent tests
+
+    def test_multi_agent_conversation(self, test_memory_stm):
+        """Test two agents write to same session, each retrieves only their own messages."""
+        session_id = f"multi-agent-session-{int(time.time())}"
+        actor_id = f"test-actor-{int(time.time())}"
+
+        # Create session manager for agent A
+        config_a = AgentCoreMemoryConfig(
+            memory_id=test_memory_stm["id"],
+            session_id=session_id,
+            actor_id=actor_id,
+        )
+        sm_a = AgentCoreMemorySessionManager(agentcore_memory_config=config_a, region_name=REGION)
+
+        agent_a = Agent(
+            agent_id="agent-A",
+            system_prompt="You are Agent A. Always start your responses with 'Agent A here:'.",
+            session_manager=sm_a,
+        )
+
+        # Agent A has a conversation
+        response_a = agent_a("Hello from user to Agent A. Remember the word 'pineapple'.")
+        assert response_a is not None
+
+        time.sleep(2)
+
+        # Create session manager for agent B (same session, same actor)
+        config_b = AgentCoreMemoryConfig(
+            memory_id=test_memory_stm["id"],
+            session_id=session_id,
+            actor_id=actor_id,
+        )
+        sm_b = AgentCoreMemorySessionManager(agentcore_memory_config=config_b, region_name=REGION)
+
+        agent_b = Agent(
+            agent_id="agent-B",
+            system_prompt="You are Agent B. Always start your responses with 'Agent B here:'.",
+            session_manager=sm_b,
+        )
+
+        # Agent B has a conversation
+        response_b = agent_b("Hello from user to Agent B. Remember the word 'strawberry'.")
+        assert response_b is not None
+
+        time.sleep(2)
+
+        # Now verify each agent retrieves only its own messages via metadata filter
+        agent_a_filter = EventMetadataFilter.build_expression(
+            left_operand=LeftExpression.build("agentId"),
+            operator=OperatorType.EQUALS_TO,
+            right_operand={"metadataValue": {"stringValue": "agent-A"}},
+        )
+        agent_b_filter = EventMetadataFilter.build_expression(
+            left_operand=LeftExpression.build("agentId"),
+            operator=OperatorType.EQUALS_TO,
+            right_operand={"metadataValue": {"stringValue": "agent-B"}},
+        )
+
+        events_a = sm_a.memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=actor_id,
+            session_id=session_id,
+            event_metadata=[agent_a_filter],
+        )
+        events_b = sm_b.memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=actor_id,
+            session_id=session_id,
+            event_metadata=[agent_b_filter],
+        )
+
+        # Each agent should have its own events (at least user + assistant)
+        assert len(events_a) >= 2, f"Expected >=2 events for agent-A, got {len(events_a)}"
+        assert len(events_b) >= 2, f"Expected >=2 events for agent-B, got {len(events_b)}"
+
+        # The two sets should be disjoint
+        event_ids_a = {e["eventId"] for e in events_a}
+        event_ids_b = {e["eventId"] for e in events_b}
+        assert event_ids_a.isdisjoint(event_ids_b), "Agent A and B events should be disjoint"
+
+    def test_multi_agent_with_batching(self, test_memory_stm):
+        """Test two agents with batching enabled, verify flush groups correctly."""
+        session_id = f"multi-agent-batch-{int(time.time())}"
+        actor_id = f"test-actor-{int(time.time())}"
+
+        config = AgentCoreMemoryConfig(
+            memory_id=test_memory_stm["id"],
+            session_id=session_id,
+            actor_id=actor_id,
+            batch_size=10,
+        )
+
+        with AgentCoreMemorySessionManager(agentcore_memory_config=config, region_name=REGION) as sm:
+            agent_a = Agent(
+                agent_id="agent-A",
+                system_prompt="You are Agent A. Keep responses very short (one sentence).",
+                session_manager=sm,
+            )
+            agent_b = Agent(
+                agent_id="agent-B",
+                system_prompt="You are Agent B. Keep responses very short (one sentence).",
+                session_manager=sm,
+            )
+
+            agent_a("Hello Agent A, remember the color blue.")
+            time.sleep(2)
+            agent_b("Hello Agent B, remember the color red.")
+        # Context manager flushes remaining buffered messages
+
+        time.sleep(2)
+
+        # Verify events are tagged correctly with agent metadata
+        agent_a_filter = EventMetadataFilter.build_expression(
+            left_operand=LeftExpression.build("agentId"),
+            operator=OperatorType.EQUALS_TO,
+            right_operand={"metadataValue": {"stringValue": "agent-A"}},
+        )
+        agent_b_filter = EventMetadataFilter.build_expression(
+            left_operand=LeftExpression.build("agentId"),
+            operator=OperatorType.EQUALS_TO,
+            right_operand={"metadataValue": {"stringValue": "agent-B"}},
+        )
+
+        client = MemoryClient(region_name=REGION)
+        events_a = client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=actor_id,
+            session_id=session_id,
+            event_metadata=[agent_a_filter],
+        )
+        events_b = client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=actor_id,
+            session_id=session_id,
+            event_metadata=[agent_b_filter],
+        )
+
+        # Both agents should have events
+        assert len(events_a) >= 1, f"Expected >=1 events for agent-A, got {len(events_a)}"
+        assert len(events_b) >= 1, f"Expected >=1 events for agent-B, got {len(events_b)}"
+
+        # Events should be disjoint between agents
+        event_ids_a = {e["eventId"] for e in events_a}
+        event_ids_b = {e["eventId"] for e in events_b}
+        assert event_ids_a.isdisjoint(event_ids_b), "Agent A and B events should be disjoint"
+
+    # endregion Multi-agent tests

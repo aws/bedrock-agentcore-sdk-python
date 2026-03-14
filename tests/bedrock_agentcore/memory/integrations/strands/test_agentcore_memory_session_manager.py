@@ -1195,9 +1195,11 @@ class TestAgentCoreMemorySessionManager:
 
         session_manager.list_messages("test-session-456", "test-agent-123")
 
-        mock_memory_client.list_events.assert_called_once()
-        call_kwargs = mock_memory_client.list_events.call_args[1]
-        assert call_kwargs["max_results"] == 10000
+        # With multi-agent support, first call filters by agent_id; second is fallback
+        assert mock_memory_client.list_events.call_count == 2
+        # Both calls should use the same max_results
+        for call in mock_memory_client.list_events.call_args_list:
+            assert call[1]["max_results"] == 10000
 
     def test_list_messages_with_limit_calculates_max_results(self, session_manager, mock_memory_client):
         """Test listing messages with limit calculates max_results correctly."""
@@ -1205,9 +1207,10 @@ class TestAgentCoreMemorySessionManager:
 
         session_manager.list_messages("test-session-456", "test-agent-123", limit=500, offset=50)
 
-        mock_memory_client.list_events.assert_called_once()
-        call_kwargs = mock_memory_client.list_events.call_args[1]
-        assert call_kwargs["max_results"] == 550  # limit + offset
+        # With multi-agent support, first call filters by agent_id; second is fallback
+        assert mock_memory_client.list_events.call_count == 2
+        for call in mock_memory_client.list_events.call_args_list:
+            assert call[1]["max_results"] == 550  # limit + offset
 
     def test_append_message_handles_none_from_create_message(self, session_manager, test_agent):
         """Test that append_message gracefully handles None return from create_message."""
@@ -1690,15 +1693,15 @@ class TestBatchingFlush:
         mock_memory_client.gmdp_client.create_event.side_effect = track_create_event
 
         # Directly populate buffer with messages for multiple sessions
-        # Buffer format: (session_id, messages, is_blob, monotonic_timestamp)
+        # Buffer format: (session_id, agent_id, messages, is_blob, monotonic_timestamp)
         base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         batching_session_manager._message_buffer = [
-            ("session-A", [("SessionA_Message_0", "user")], False, base_time),
-            ("session-A", [("SessionA_Message_1", "user")], False, base_time),
-            ("session-B", [("SessionB_Message_0", "user")], False, base_time),
-            ("session-B", [("SessionB_Message_1", "user")], False, base_time),
-            ("session-B", [("SessionB_Message_2", "user")], False, base_time),
-            ("session-A", [("SessionA_Message_2", "user")], False, base_time),  # Non-consecutive
+            ("session-A", "agent-1", [("SessionA_Message_0", "user")], False, base_time),
+            ("session-A", "agent-1", [("SessionA_Message_1", "user")], False, base_time),
+            ("session-B", "agent-1", [("SessionB_Message_0", "user")], False, base_time),
+            ("session-B", "agent-1", [("SessionB_Message_1", "user")], False, base_time),
+            ("session-B", "agent-1", [("SessionB_Message_2", "user")], False, base_time),
+            ("session-A", "agent-1", [("SessionA_Message_2", "user")], False, base_time),  # Non-consecutive
         ]
 
         batching_session_manager._flush_messages()
@@ -1773,10 +1776,10 @@ class TestBatchingFlush:
         # Directly populate buffer with messages for multiple sessions
         base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         batching_session_manager._message_buffer = [
-            ("session-A", [("SessionA_Message_0", "user")], False, base_time),
-            ("session-A", [("SessionA_Message_1", "user")], False, base_time),
-            ("session-B", [("SessionB_Message_0", "user")], False, base_time),
-            ("session-B", [("SessionB_Message_1", "user")], False, base_time),
+            ("session-A", "agent-1", [("SessionA_Message_0", "user")], False, base_time),
+            ("session-A", "agent-1", [("SessionA_Message_1", "user")], False, base_time),
+            ("session-B", "agent-1", [("SessionB_Message_0", "user")], False, base_time),
+            ("session-B", "agent-1", [("SessionB_Message_1", "user")], False, base_time),
         ]
 
         assert batching_session_manager.pending_message_count() == 4
@@ -1845,12 +1848,12 @@ class TestBatchingFlush:
         blob_content = {"role": "user", "content": [{"text": "blob_A_" + "x" * (CONVERSATIONAL_MAX_SIZE + 100)}]}
         batching_session_manager._message_buffer = [
             # Session A: 2 conversational messages
-            ("session-A", [("SessionA_conv_0", "user")], False, base_time),
-            ("session-A", [("SessionA_conv_1", "user")], False, base_time),
+            ("session-A", "agent-1", [("SessionA_conv_0", "user")], False, base_time),
+            ("session-A", "agent-1", [("SessionA_conv_1", "user")], False, base_time),
             # Session A: 1 blob message
-            ("session-A", [blob_content], True, base_time),
+            ("session-A", "agent-1", [blob_content], True, base_time),
             # Session B: 1 conversational message
-            ("session-B", [("SessionB_conv_0", "user")], False, base_time),
+            ("session-B", "agent-1", [("SessionB_conv_0", "user")], False, base_time),
         ]
 
         batching_session_manager._flush_messages()
@@ -2541,7 +2544,7 @@ class TestAfterInvocationHook:
         # Add messages to buffer
         with batching_session_manager._message_lock:
             batching_session_manager._message_buffer.append(
-                ("test-session", [("user", "test message")], False, batching_session_manager._get_monotonic_timestamp())
+                ("test-session", "agent-1", [("user", "test message")], False, batching_session_manager._get_monotonic_timestamp())
             )
 
         assert batching_session_manager.pending_message_count() == 1
@@ -2764,7 +2767,7 @@ class TestIntervalFlush:
             # Add messages to buffer
             with manager._message_lock:
                 manager._message_buffer.append(
-                    ("test-session", [("user", "test message")], False, manager._get_monotonic_timestamp())
+                    ("test-session", "agent-1", [("user", "test message")], False, manager._get_monotonic_timestamp())
                 )
 
             assert manager.pending_message_count() == 1
@@ -2919,7 +2922,7 @@ class TestIntervalFlush:
             # Add both messages and agent state to buffers
             with manager._message_lock:
                 manager._message_buffer.append(
-                    ("test-session", [("user", "test message")], False, manager._get_monotonic_timestamp())
+                    ("test-session", "agent-1", [("user", "test message")], False, manager._get_monotonic_timestamp())
                 )
 
             from strands.types.session import SessionAgent
@@ -2984,3 +2987,279 @@ class TestIntervalFlush:
                 actor_id="test-actor",
                 flush_interval_seconds=-5.0,
             )
+
+
+class TestMultiAgentSupport:
+    """Test multi-agent support: agent_id metadata tagging, filtering, and initialize behavior."""
+
+    def test_create_message_tags_agent_id_metadata(self, session_manager, mock_memory_client):
+        """Verify AGENT_ID_KEY metadata is auto-added to message events."""
+        mock_memory_client.create_event.return_value = {"eventId": "event-123"}
+
+        message = SessionMessage(
+            message={"role": "user", "content": [{"text": "Hello"}]},
+            message_id=1,
+            created_at="2024-01-01T12:00:00Z",
+        )
+
+        session_manager.create_message("test-session-456", "my-agent-id", message)
+
+        mock_memory_client.create_event.assert_called_once()
+        call_kwargs = mock_memory_client.create_event.call_args[1]
+        assert call_kwargs["metadata"] == {"agentId": {"stringValue": "my-agent-id"}}
+
+    def test_create_message_blob_tags_agent_id_metadata(self, session_manager, mock_memory_client):
+        """Verify AGENT_ID_KEY metadata is auto-added to blob message events."""
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event-123"}
+
+        # Create a message that exceeds the conversational limit (becomes blob)
+        large_text = "x" * (CONVERSATIONAL_MAX_SIZE + 100)
+        message = SessionMessage(
+            message={"role": "user", "content": [{"text": large_text}]},
+            message_id=1,
+            created_at="2024-01-01T12:00:00Z",
+        )
+
+        session_manager.create_message("test-session-456", "my-agent-id", message)
+
+        mock_memory_client.gmdp_client.create_event.assert_called_once()
+        call_kwargs = mock_memory_client.gmdp_client.create_event.call_args[1]
+        assert call_kwargs["metadata"] == {"agentId": {"stringValue": "my-agent-id"}}
+
+    def test_create_message_no_agent_id_omits_metadata(self, session_manager, mock_memory_client):
+        """Verify no metadata is added when agent_id is empty/None."""
+        mock_memory_client.create_event.return_value = {"eventId": "event-123"}
+
+        message = SessionMessage(
+            message={"role": "user", "content": [{"text": "Hello"}]},
+            message_id=1,
+            created_at="2024-01-01T12:00:00Z",
+        )
+
+        session_manager.create_message("test-session-456", "", message)
+
+        mock_memory_client.create_event.assert_called_once()
+        call_kwargs = mock_memory_client.create_event.call_args[1]
+        assert call_kwargs.get("metadata") is None
+
+    def test_list_messages_filters_by_agent_id(self, session_manager, mock_memory_client):
+        """Verify agent_id filter is passed to list_events when agent_id is provided."""
+        mock_memory_client.list_events.return_value = [
+            {
+                "eventId": "event-1",
+                "eventTimestamp": "2024-01-01T12:00:00Z",
+                "payload": [
+                    {
+                        "conversational": {
+                            "content": {
+                                "text": '{"message": {"role": "user", "content": [{"text": "Hello"}]}, "message_id": 1}'
+                            },
+                            "role": "USER",
+                        }
+                    }
+                ],
+            }
+        ]
+
+        session_manager.list_messages("test-session-456", "my-agent-id")
+
+        # First call should include the agent_id filter
+        first_call_kwargs = mock_memory_client.list_events.call_args_list[0][1]
+        assert "event_metadata" in first_call_kwargs
+        filter_expr = first_call_kwargs["event_metadata"][0]
+        assert filter_expr["left"]["metadataKey"] == "agentId"
+        assert filter_expr["right"]["metadataValue"]["stringValue"] == "my-agent-id"
+
+        # Since filtered call returned results, no fallback needed
+        assert mock_memory_client.list_events.call_count == 1
+
+    def test_list_messages_fallback_when_no_agent_metadata(self, session_manager, mock_memory_client):
+        """Verify backward-compat fallback when filtered query returns empty."""
+        events_data = [
+            {
+                "eventId": "event-1",
+                "eventTimestamp": "2024-01-01T12:00:00Z",
+                "payload": [
+                    {
+                        "conversational": {
+                            "content": {
+                                "text": '{"message": {"role": "user", "content": [{"text": "Legacy msg"}]}, "message_id": 1}'  # noqa E501
+                            },
+                            "role": "USER",
+                        }
+                    }
+                ],
+            }
+        ]
+        # First call (filtered) returns empty, second (unfiltered) returns events
+        mock_memory_client.list_events.side_effect = [[], events_data]
+
+        messages = session_manager.list_messages("test-session-456", "my-agent-id")
+
+        # Two calls: filtered then fallback
+        assert mock_memory_client.list_events.call_count == 2
+        # Fallback call should NOT have event_metadata
+        fallback_kwargs = mock_memory_client.list_events.call_args_list[1][1]
+        assert "event_metadata" not in fallback_kwargs
+        # Should still return the legacy messages
+        assert len(messages) == 1
+        assert messages[0].message["content"][0]["text"] == "Legacy msg"
+
+    def test_list_messages_no_agent_id_skips_filter(self, session_manager, mock_memory_client):
+        """Verify no filter is applied when agent_id is empty."""
+        mock_memory_client.list_events.return_value = []
+
+        session_manager.list_messages("test-session-456", "")
+
+        mock_memory_client.list_events.assert_called_once()
+        call_kwargs = mock_memory_client.list_events.call_args[1]
+        assert "event_metadata" not in call_kwargs
+
+    def test_initialize_allows_multiple_agents(self, session_manager, mock_memory_client):
+        """Verify initialize no longer blocks multiple agents with a warning."""
+        session_manager._latest_agent_message = {}
+        session_manager.session_repository = Mock()
+        session_manager.session_repository.read_agent = Mock(return_value=None)
+
+        agent1 = Agent(
+            agent_id="agent-1",
+            messages=[{"role": "user", "content": [{"text": "Hello"}]}],
+        )
+        agent2 = Agent(
+            agent_id="agent-2",
+            messages=[{"role": "user", "content": [{"text": "Hi"}]}],
+        )
+
+        # First agent initializes normally
+        session_manager.initialize(agent1)
+        assert session_manager.has_existing_agent is True
+
+        # Second agent should also initialize without raising
+        session_manager.initialize(agent2)
+        assert session_manager.has_existing_agent is True
+
+    def test_initialize_logs_info_for_second_agent(self, session_manager, mock_memory_client, caplog):
+        """Verify second agent initialization logs info (not warning)."""
+        session_manager._latest_agent_message = {}
+        session_manager.session_repository = Mock()
+        session_manager.session_repository.read_agent = Mock(return_value=None)
+
+        agent1 = Agent(
+            agent_id="agent-1",
+            messages=[{"role": "user", "content": [{"text": "Hello"}]}],
+        )
+        agent2 = Agent(
+            agent_id="agent-2",
+            messages=[{"role": "user", "content": [{"text": "Hi"}]}],
+        )
+
+        session_manager.initialize(agent1)
+
+        with caplog.at_level(logging.INFO):
+            session_manager.initialize(agent2)
+
+        assert "Multiple agents registered" in caplog.text
+
+    def test_batched_messages_grouped_by_agent_id(self, mock_memory_client):
+        """Verify batched flush groups messages by (session_id, agent_id)."""
+        from datetime import datetime, timedelta, timezone
+
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            batch_size=10,
+        )
+        manager = _create_session_manager(config, mock_memory_client)
+
+        mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event-123"}
+
+        base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        manager._message_buffer = [
+            ("test-session-456", "agent-A", [("msg1", "user")], False, base_time),
+            ("test-session-456", "agent-B", [("msg2", "user")], False, base_time + timedelta(seconds=1)),
+            ("test-session-456", "agent-A", [("msg3", "assistant")], False, base_time + timedelta(seconds=2)),
+        ]
+
+        manager._flush_messages_only()
+
+        # Should be 2 API calls: one for agent-A, one for agent-B
+        assert mock_memory_client.gmdp_client.create_event.call_count == 2
+
+        # Verify each call has correct agent metadata
+        calls = mock_memory_client.gmdp_client.create_event.call_args_list
+        agent_ids_seen = set()
+        for call in calls:
+            kwargs = call[1]
+            assert "metadata" in kwargs
+            agent_id = kwargs["metadata"]["agentId"]["stringValue"]
+            agent_ids_seen.add(agent_id)
+        assert agent_ids_seen == {"agent-A", "agent-B"}
+
+    def test_batched_messages_agent_a_has_two_messages(self, mock_memory_client):
+        """Verify agent-A gets both its messages combined in the batched flush."""
+        from datetime import datetime, timedelta, timezone
+
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            batch_size=10,
+        )
+        manager = _create_session_manager(config, mock_memory_client)
+
+        calls_by_agent: dict[str, list] = {}
+
+        def track_create_event(**kwargs):
+            agent_id = kwargs.get("metadata", {}).get("agentId", {}).get("stringValue", "unknown")
+            calls_by_agent[agent_id] = kwargs["payload"]
+            return {"eventId": f"event_{agent_id}"}
+
+        mock_memory_client.gmdp_client.create_event.side_effect = track_create_event
+
+        base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        manager._message_buffer = [
+            ("test-session-456", "agent-A", [("msg1", "user")], False, base_time),
+            ("test-session-456", "agent-B", [("msg2", "user")], False, base_time + timedelta(seconds=1)),
+            ("test-session-456", "agent-A", [("msg3", "assistant")], False, base_time + timedelta(seconds=2)),
+        ]
+
+        manager._flush_messages_only()
+
+        assert len(calls_by_agent["agent-A"]) == 2
+        assert len(calls_by_agent["agent-B"]) == 1
+
+    def test_two_agents_independent_messages(self, mock_memory_client):
+        """Test two agents create and list messages, each sees only their own."""
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+        )
+        manager = _create_session_manager(config, mock_memory_client)
+
+        # Agent A creates a message
+        mock_memory_client.create_event.return_value = {"eventId": "event-a1"}
+        msg_a = SessionMessage(
+            message={"role": "user", "content": [{"text": "From Agent A"}]},
+            message_id=1,
+            created_at="2024-01-01T12:00:00Z",
+        )
+        manager.create_message("test-session-456", "agent-A", msg_a)
+
+        # Verify agent_id metadata was set for agent A
+        call_kwargs_a = mock_memory_client.create_event.call_args[1]
+        assert call_kwargs_a["metadata"] == {"agentId": {"stringValue": "agent-A"}}
+
+        # Agent B creates a message
+        mock_memory_client.create_event.return_value = {"eventId": "event-b1"}
+        msg_b = SessionMessage(
+            message={"role": "user", "content": [{"text": "From Agent B"}]},
+            message_id=2,
+            created_at="2024-01-01T12:01:00Z",
+        )
+        manager.create_message("test-session-456", "agent-B", msg_b)
+
+        # Verify agent_id metadata was set for agent B
+        call_kwargs_b = mock_memory_client.create_event.call_args[1]
+        assert call_kwargs_b["metadata"] == {"agentId": {"stringValue": "agent-B"}}
