@@ -94,6 +94,7 @@ def test_list_messages_filters_restored_tool_context():
         manager.session_id = config.session_id
         manager.session = Session(session_id=config.session_id, session_type=SessionType.AGENT)
 
+        manager.memory_client.gmdp_client.list_events.return_value = {"events": [{"payload": []}]}
         manager.converter = Mock()
         manager.converter.events_to_messages.return_value = [
             SessionMessage(message={"role": "user", "content": [{"text": "hello"}]}, message_id=0),
