@@ -2,7 +2,7 @@
 
 from typing import Any, Callable, Dict, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 def normalize_metadata(raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -52,8 +52,6 @@ class AgentCoreMemoryConfig(BaseModel):
             dict is merged after default_metadata but before per-call metadata.
             Accepts plain strings (auto-wrapped) or explicit MetadataValue dicts.
     """
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     memory_id: str = Field(min_length=1)
     session_id: str = Field(min_length=1)
