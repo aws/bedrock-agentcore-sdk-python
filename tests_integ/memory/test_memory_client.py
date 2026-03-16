@@ -422,3 +422,81 @@ class TestMemoryClient:
         self.client.delete_memory_and_wait(self.lifecycle_memory_id)
         if self.lifecycle_memory_id in self.memory_ids:
             self.memory_ids.remove(self.lifecycle_memory_id)
+
+    # --- Passthrough Tests (order 19-23) ---
+
+    @pytest.mark.order(19)
+    def test_list_actors(self):
+        """list_actors returns actors that have created events in the memory."""
+        response = self.client.list_actors(memoryId=self.memory_id)
+        assert "actorSummaries" in response
+        assert len(response["actorSummaries"]) > 0
+
+    @pytest.mark.order(20)
+    def test_list_sessions(self):
+        """list_sessions returns sessions for a known actor."""
+        actor_id = f"{self.id_prefix}-save-actor"
+        response = self.client.list_sessions(memoryId=self.memory_id, actorId=actor_id)
+        assert "sessionSummaries" in response
+        assert len(response["sessionSummaries"]) > 0
+
+    @pytest.mark.order(21)
+    def test_get_event(self):
+        """get_event retrieves an event by ID after creation."""
+        actor_id = f"{self.id_prefix}-getev-actor"
+        session_id = f"{self.id_prefix}-getev-session"
+        created = self.client.save_conversation(
+            memory_id=self.memory_id,
+            actor_id=actor_id,
+            session_id=session_id,
+            messages=[("test get event", "USER"), ("acknowledged", "ASSISTANT")],
+        )
+        event_id = created["eventId"]
+        self.__class__.get_event_actor_id = actor_id
+        self.__class__.get_event_session_id = session_id
+        self.__class__.get_event_event_id = event_id
+
+        poll_until(
+            fn=lambda: self.client.list_events(self.memory_id, actor_id, session_id),
+            predicate=lambda e: len(e) >= 1,
+        )
+
+        response = self.client.get_event(
+            memoryId=self.memory_id,
+            sessionId=session_id,
+            actorId=actor_id,
+            eventId=event_id,
+        )
+        assert response["event"]["eventId"] == event_id
+
+    @pytest.mark.order(22)
+    def test_delete_event(self):
+        """delete_event removes an event and subsequent get_event raises ResourceNotFoundException."""
+        event_id = getattr(self, "get_event_event_id", None)
+        if not event_id:
+            pytest.skip("test_get_event did not run")
+        response = self.client.delete_event(
+            memoryId=self.memory_id,
+            sessionId=self.get_event_session_id,
+            eventId=event_id,
+            actorId=self.get_event_actor_id,
+        )
+        assert response["eventId"] == event_id
+
+        with pytest.raises(self.client.gmdp_client.exceptions.ResourceNotFoundException):
+            self.client.get_event(
+                memoryId=self.memory_id,
+                sessionId=self.get_event_session_id,
+                actorId=self.get_event_actor_id,
+                eventId=event_id,
+            )
+
+    @pytest.mark.order(23)
+    def test_list_memory_records(self):
+        """list_memory_records returns extracted records from a prepopulated memory."""
+        response = self.client.list_memory_records(
+            memoryId=self.prepopulated_memory_id,
+            namespace=f"/facts/{self.prepopulated_actor_id}/",
+        )
+        assert "memoryRecordSummaries" in response
+        assert len(response["memoryRecordSummaries"]) > 0

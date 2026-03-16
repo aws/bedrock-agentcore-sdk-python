@@ -53,6 +53,13 @@ class MemoryClient:
         "get_event",
         "delete_event",
         "list_events",
+        "batch_create_memory_records",
+        "batch_delete_memory_records",
+        "batch_update_memory_records",
+        "start_memory_extraction_job",
+        "list_memory_extraction_jobs",
+        "list_sessions",
+        "list_actors",
     }
 
     # AgentCore Memory control plane methods
