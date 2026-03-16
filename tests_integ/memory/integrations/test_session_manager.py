@@ -523,4 +523,50 @@ class TestAgentCoreMemorySessionManager:
         event_ids_b = {e["eventId"] for e in events_b}
         assert event_ids_a.isdisjoint(event_ids_b), "Agent A and B events should be disjoint"
 
+    def test_multi_agent_list_messages_isolation(self, test_memory_stm):
+        """Test that list_messages returns only the calling agent's messages."""
+        session_id = f"multi-agent-list-{int(time.time())}"
+        actor_id = f"test-actor-{int(time.time())}"
+
+        config = AgentCoreMemoryConfig(
+            memory_id=test_memory_stm["id"],
+            session_id=session_id,
+            actor_id=actor_id,
+        )
+        sm = AgentCoreMemorySessionManager(agentcore_memory_config=config, region_name=REGION)
+
+        agent_a = Agent(
+            agent_id="agent-A",
+            system_prompt="You are Agent A. Always mention the word 'pineapple' in your response.",
+            session_manager=sm,
+        )
+        agent_b = Agent(
+            agent_id="agent-B",
+            system_prompt="You are Agent B. Always mention the word 'strawberry' in your response.",
+            session_manager=sm,
+        )
+
+        agent_a("Hello Agent A")
+        time.sleep(2)
+        agent_b("Hello Agent B")
+        time.sleep(2)
+
+        # Use the session manager's list_messages (the code path under test)
+        messages_a = sm.list_messages(session_id, "agent-A")
+        messages_b = sm.list_messages(session_id, "agent-B")
+
+        # Each agent should have at least user + assistant
+        assert len(messages_a) >= 2, f"Expected >=2 messages for agent-A, got {len(messages_a)}"
+        assert len(messages_b) >= 2, f"Expected >=2 messages for agent-B, got {len(messages_b)}"
+
+        # Agent A's messages should contain 'pineapple' (from its system prompt), not 'strawberry'
+        messages_a_text = json.dumps([m.message for m in messages_a])
+        assert "pineapple" in messages_a_text.lower(), "Agent A messages should contain 'pineapple'"
+        assert "strawberry" not in messages_a_text.lower(), "Agent A messages should not contain 'strawberry'"
+
+        # Agent B's messages should contain 'strawberry', not 'pineapple'
+        messages_b_text = json.dumps([m.message for m in messages_b])
+        assert "strawberry" in messages_b_text.lower(), "Agent B messages should contain 'strawberry'"
+        assert "pineapple" not in messages_b_text.lower(), "Agent B messages should not contain 'pineapple'"
+
     # endregion Multi-agent tests
