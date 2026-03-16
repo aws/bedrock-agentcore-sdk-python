@@ -19,7 +19,12 @@ from bedrock_agentcore.memory import MemoryClient
 from bedrock_agentcore.memory.integrations.strands.bedrock_converter import AgentCoreMemoryConverter
 from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
 from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
-from bedrock_agentcore.memory.models.filters import EventMetadataFilter, LeftExpression, OperatorType
+from bedrock_agentcore.memory.models.filters import (
+    EventMetadataFilter,
+    LeftExpression,
+    OperatorType,
+    RightExpression,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -375,3 +380,197 @@ class TestAgentCoreMemorySessionManager:
         assert len(messages) >= 6
 
     # endregion End-to-end agent with batching tests
+
+    # region Event metadata integration tests
+
+    def test_create_message_with_metadata_and_filter(self, test_memory_stm, memory_client):
+        """Test that user-supplied metadata is persisted and that filters actually exclude non-matching events."""
+        session_id = f"test-meta-{uuid.uuid4().hex[:8]}"
+        actor_id = f"test-actor-{uuid.uuid4().hex[:8]}"
+
+        config = AgentCoreMemoryConfig(
+            memory_id=test_memory_stm["id"],
+            session_id=session_id,
+            actor_id=actor_id,
+            default_metadata={"project": {"stringValue": "atlas"}, "env": {"stringValue": "test"}},
+        )
+        session_manager = AgentCoreMemorySessionManager(agentcore_memory_config=config, region_name=REGION)
+
+        agent = Agent(system_prompt="You are a helpful assistant.", session_manager=session_manager)
+        agent("Hello, remember my project is Atlas")
+
+        # Get ALL events (unfiltered) to know the total count
+        all_events = memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=actor_id,
+            session_id=session_id,
+        )
+        assert len(all_events) >= 1  # Sanity: events exist
+
+        # Positive filter: query events matching our custom metadata
+        project_filter = EventMetadataFilter.build_expression(
+            left_operand=LeftExpression.build("project"),
+            operator=OperatorType.EQUALS_TO,
+            right_operand=RightExpression.build("atlas"),
+        )
+        matching_events = memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=actor_id,
+            session_id=session_id,
+            event_metadata=[project_filter],
+        )
+        assert len(matching_events) >= 1
+
+        # Verify metadata values round-trip correctly
+        for event in matching_events:
+            meta = event.get("metadata", {})
+            assert meta.get("project", {}).get("stringValue") == "atlas"
+            assert meta.get("env", {}).get("stringValue") == "test"
+
+        # Negative filter: query with a value that was never written
+        wrong_filter = EventMetadataFilter.build_expression(
+            left_operand=LeftExpression.build("project"),
+            operator=OperatorType.EQUALS_TO,
+            right_operand=RightExpression.build("nonexistent_project"),
+        )
+        non_matching_events = memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=actor_id,
+            session_id=session_id,
+            event_metadata=[wrong_filter],
+        )
+        assert len(non_matching_events) == 0, (
+            f"Expected 0 events for nonexistent metadata value, got {len(non_matching_events)}"
+        )
+
+        # The positive set should be a strict subset of all events
+        # (all_events includes state events that don't have user metadata)
+        assert len(matching_events) < len(all_events)
+
+    def test_metadata_survives_session_resume(self, test_memory_stm, memory_client):
+        """Events with metadata written by one session manager are filterable from another."""
+        session_id = f"test-meta-resume-{uuid.uuid4().hex[:8]}"
+        actor_id = f"test-actor-{uuid.uuid4().hex[:8]}"
+
+        # First session: write messages with metadata
+        config1 = AgentCoreMemoryConfig(
+            memory_id=test_memory_stm["id"],
+            session_id=session_id,
+            actor_id=actor_id,
+            default_metadata={"source": {"stringValue": "session1"}},
+        )
+        sm1 = AgentCoreMemorySessionManager(agentcore_memory_config=config1, region_name=REGION)
+        agent1 = Agent(system_prompt="You are a helpful assistant.", session_manager=sm1)
+        agent1("My favourite colour is blue")
+
+        # Second session: resume without metadata configured
+        config2 = AgentCoreMemoryConfig(
+            memory_id=test_memory_stm["id"],
+            session_id=session_id,
+            actor_id=actor_id,
+        )
+        sm2 = AgentCoreMemorySessionManager(agentcore_memory_config=config2, region_name=REGION)
+
+        # Positive: filter matches metadata written by session 1
+        source_filter = EventMetadataFilter.build_expression(
+            left_operand=LeftExpression.build("source"),
+            operator=OperatorType.EQUALS_TO,
+            right_operand=RightExpression.build("session1"),
+        )
+        matching = sm2.memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=actor_id,
+            session_id=session_id,
+            event_metadata=[source_filter],
+        )
+        assert len(matching) >= 1
+
+        # Negative: filter for a different source value returns nothing
+        wrong_source_filter = EventMetadataFilter.build_expression(
+            left_operand=LeftExpression.build("source"),
+            operator=OperatorType.EQUALS_TO,
+            right_operand=RightExpression.build("session999"),
+        )
+        not_matching = sm2.memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=actor_id,
+            session_id=session_id,
+            event_metadata=[wrong_source_filter],
+        )
+        assert len(not_matching) == 0
+
+    def test_metadata_provider_attaches_dynamic_trace_id(self, test_memory_stm, memory_client):
+        """metadata_provider injects a different traceId per invocation and events are filterable by each."""
+        session_id = f"test-meta-prov-{uuid.uuid4().hex[:8]}"
+        actor_id = f"test-actor-{uuid.uuid4().hex[:8]}"
+
+        current_trace = {"traceId": {"stringValue": "trace-AAA"}}
+
+        config = AgentCoreMemoryConfig(
+            memory_id=test_memory_stm["id"],
+            session_id=session_id,
+            actor_id=actor_id,
+            metadata_provider=lambda: dict(current_trace),
+        )
+        sm = AgentCoreMemorySessionManager(agentcore_memory_config=config, region_name=REGION)
+        agent = Agent(system_prompt="You are a helpful assistant.", session_manager=sm)
+
+        # First invocation with trace-AAA
+        agent("Hello from trace AAA")
+
+        # Switch trace for second invocation
+        current_trace["traceId"] = {"stringValue": "trace-BBB"}
+        agent("Hello from trace BBB")
+
+        # Filter for trace-AAA — should find events
+        filter_aaa = EventMetadataFilter.build_expression(
+            left_operand=LeftExpression.build("traceId"),
+            operator=OperatorType.EQUALS_TO,
+            right_operand=RightExpression.build("trace-AAA"),
+        )
+        events_aaa = memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=actor_id,
+            session_id=session_id,
+            event_metadata=[filter_aaa],
+        )
+        assert len(events_aaa) >= 1
+        for e in events_aaa:
+            assert e.get("metadata", {}).get("traceId", {}).get("stringValue") == "trace-AAA"
+
+        # Filter for trace-BBB — should find events
+        filter_bbb = EventMetadataFilter.build_expression(
+            left_operand=LeftExpression.build("traceId"),
+            operator=OperatorType.EQUALS_TO,
+            right_operand=RightExpression.build("trace-BBB"),
+        )
+        events_bbb = memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=actor_id,
+            session_id=session_id,
+            event_metadata=[filter_bbb],
+        )
+        assert len(events_bbb) >= 1
+        for e in events_bbb:
+            assert e.get("metadata", {}).get("traceId", {}).get("stringValue") == "trace-BBB"
+
+        # Negative: nonexistent trace returns nothing
+        filter_none = EventMetadataFilter.build_expression(
+            left_operand=LeftExpression.build("traceId"),
+            operator=OperatorType.EQUALS_TO,
+            right_operand=RightExpression.build("trace-DOES-NOT-EXIST"),
+        )
+        events_none = memory_client.list_events(
+            memory_id=test_memory_stm["id"],
+            actor_id=actor_id,
+            session_id=session_id,
+            event_metadata=[filter_none],
+        )
+        assert len(events_none) == 0
+
+        # The two traces should be disjoint sets
+        aaa_ids = {e["eventId"] for e in events_aaa}
+        bbb_ids = {e["eventId"] for e in events_bbb}
+        assert aaa_ids.isdisjoint(bbb_ids), "trace-AAA and trace-BBB events should not overlap"
+
+    # endregion Event metadata integration tests
