@@ -40,7 +40,7 @@ jobs:
             );
 
       - name: Send open PRs summary to Slack
-        uses: slackapi/slack-github-action@v2.0.0
+        uses: slackapi/slack-github-action@v3.0.1
         with:
           webhook: ${{ secrets.SLACK_OPEN_PRS_WEBHOOK_URL }}
           webhook-type: webhook-trigger
