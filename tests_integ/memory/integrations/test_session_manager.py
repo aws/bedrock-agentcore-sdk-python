@@ -375,3 +375,29 @@ class TestAgentCoreMemorySessionManager:
         assert len(messages) >= 6
 
     # endregion End-to-end agent with batching tests
+
+    def test_list_messages_limit_excludes_state_events(self, test_memory_stm, memory_client):
+        """list_messages with limit returns the requested count even when state events are present.
+
+        https://github.com/aws/bedrock-agentcore-sdk-python/pull/244 changed state events
+        (session/agent blobs) to share the same actorId as conversational events, distinguished
+        only by metadata. If list_messages counts raw events toward the limit, state events
+        consume slots and the caller gets fewer messages than requested.
+        """
+        session_id = f"test-pagination-{uuid.uuid4().hex[:8]}"
+        actor_id = f"test-actor-{uuid.uuid4().hex[:8]}"
+
+        config = AgentCoreMemoryConfig(
+            memory_id=test_memory_stm["id"],
+            session_id=session_id,
+            actor_id=actor_id,
+        )
+        sm = AgentCoreMemorySessionManager(agentcore_memory_config=config, region_name=REGION)
+
+        agent = Agent(system_prompt="You are a helpful assistant.", session_manager=sm)
+        agent("Remember the number 42")
+        agent("Remember the color blue")
+        agent("Remember the city Paris")
+
+        messages = sm.list_messages(session_id, agent.agent_id, limit=4)
+        assert len(messages) == 4

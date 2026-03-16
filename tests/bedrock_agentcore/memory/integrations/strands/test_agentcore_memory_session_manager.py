@@ -302,36 +302,22 @@ class TestAgentCoreMemorySessionManager:
 
     def test_list_messages(self, session_manager, mock_memory_client):
         """Test listing messages."""
-        mock_memory_client.list_events.return_value = [
-            {
-                "eventId": "event-1",
-                "eventTimestamp": "2024-01-01T12:00:00Z",
-                "payload": [
-                    {
-                        "conversational": {
-                            "content": {
-                                "text": '{"message": {"role": "user", "content": [{"text": "Hello"}]}, "message_id": 1}'
-                            },
-                            "role": "USER",
-                        }
-                    }
-                ],
-            },
-            {
-                "eventId": "event-2",
-                "eventTimestamp": "2024-01-01T12:00:00Z",
-                "payload": [
-                    {
-                        "conversational": {
-                            "content": {
-                                "text": '{"message": {"role": "assistant", "content": [{"text": "Hi there"}]}, "message_id": 2}'  # noqa E501
-                            },
-                            "role": "ASSISTANT",
-                        }
-                    }
-                ],
-            },
-        ]
+        user_text = '{"message": {"role": "user", "content": [{"text": "Hello"}]}, "message_id": 1}'
+        asst_text = '{"message": {"role": "assistant", "content": [{"text": "Hi there"}]}, "message_id": 2}'
+        session_manager.memory_client.gmdp_client.list_events.return_value = {
+            "events": [
+                {
+                    "eventId": "event-1",
+                    "eventTimestamp": "2024-01-01T12:00:00Z",
+                    "payload": [{"conversational": {"content": {"text": user_text}, "role": "USER"}}],
+                },
+                {
+                    "eventId": "event-2",
+                    "eventTimestamp": "2024-01-01T12:00:00Z",
+                    "payload": [{"conversational": {"content": {"text": asst_text}, "role": "ASSISTANT"}}],
+                },
+            ]
+        }
 
         messages = session_manager.list_messages("test-session-456", "test-agent-123")
 
@@ -341,36 +327,22 @@ class TestAgentCoreMemorySessionManager:
 
     def test_list_messages_returns_values_in_correct_reverse_order(self, session_manager, mock_memory_client):
         """Test listing messages."""
-        mock_memory_client.list_events.return_value = [
-            {
-                "eventId": "event-1",
-                "eventTimestamp": "2024-01-01T12:00:00Z",
-                "payload": [
-                    {
-                        "conversational": {
-                            "content": {
-                                "text": '{"message": {"role": "user", "content": [{"text": "Hello"}]}, "message_id": 1}'
-                            },
-                            "role": "USER",
-                        }
-                    }
-                ],
-            },
-            {
-                "eventId": "event-2",
-                "eventTimestamp": "2024-01-01T12:00:00Z",
-                "payload": [
-                    {
-                        "conversational": {
-                            "content": {
-                                "text": '{"message": {"role": "assistant", "content": [{"text": "Hi there"}]}, "message_id": 2}'  # noqa E501
-                            },
-                            "role": "ASSISTANT",
-                        }
-                    }
-                ],
-            },
-        ]
+        user_text = '{"message": {"role": "user", "content": [{"text": "Hello"}]}, "message_id": 1}'
+        asst_text = '{"message": {"role": "assistant", "content": [{"text": "Hi there"}]}, "message_id": 2}'
+        session_manager.memory_client.gmdp_client.list_events.return_value = {
+            "events": [
+                {
+                    "eventId": "event-1",
+                    "eventTimestamp": "2024-01-01T12:00:00Z",
+                    "payload": [{"conversational": {"content": {"text": user_text}, "role": "USER"}}],
+                },
+                {
+                    "eventId": "event-2",
+                    "eventTimestamp": "2024-01-01T12:00:00Z",
+                    "payload": [{"conversational": {"content": {"text": asst_text}, "role": "ASSISTANT"}}],
+                },
+            ]
+        }
 
         messages = session_manager.list_messages("test-session-456", "test-agent-123")
 
@@ -508,37 +480,39 @@ class TestAgentCoreMemorySessionManager:
 
     def test_list_messages_with_limit(self, session_manager, mock_memory_client):
         """Test listing messages with limit."""
-        mock_memory_client.list_events.return_value = [
-            {
-                "eventId": "event-1",
-                "eventTimestamp": "2024-01-01T12:00:00Z",
-                "payload": [
-                    {
-                        "conversational": {
-                            "content": {
-                                "text": '{"message": {"role": "user", '
-                                '"content": [{"text": "Message 1"}]}, "message_id": 1}'
-                            },
-                            "role": "USER",
+        session_manager.memory_client.gmdp_client.list_events.return_value = {
+            "events": [
+                {
+                    "eventId": "event-1",
+                    "eventTimestamp": "2024-01-01T12:00:00Z",
+                    "payload": [
+                        {
+                            "conversational": {
+                                "content": {
+                                    "text": '{"message": {"role": "user", '
+                                    '"content": [{"text": "Message 1"}]}, "message_id": 1}'
+                                },
+                                "role": "USER",
+                            }
                         }
-                    }
-                ],
-            },
-            {
-                "eventId": "event-2",
-                "eventTimestamp": "2024-01-01T12:00:00Z",
-                "payload": [
-                    {
-                        "conversational": {
-                            "content": {
-                                "text": '{"message": {"role": "assistant", "content": [{"text": "Message 2"}]}, "message_id": 2}'  # noqa E501
-                            },
-                            "role": "ASSISTANT",
+                    ],
+                },
+                {
+                    "eventId": "event-2",
+                    "eventTimestamp": "2024-01-01T12:00:00Z",
+                    "payload": [
+                        {
+                            "conversational": {
+                                "content": {
+                                    "text": '{"message": {"role": "assistant", "content": [{"text": "Message 2"}]}, "message_id": 2}'  # noqa E501
+                                },
+                                "role": "ASSISTANT",
+                            }
                         }
-                    }
-                ],
-            },
-        ]
+                    ],
+                },
+            ]
+        }
 
         messages = session_manager.list_messages("test-session-456", "test-agent-123", limit=1, offset=1)
 
@@ -552,7 +526,7 @@ class TestAgentCoreMemorySessionManager:
 
     def test_list_messages_exception(self, session_manager, mock_memory_client):
         """Test listing messages when exception occurs."""
-        mock_memory_client.list_events.side_effect = Exception("API Error")
+        session_manager.memory_client.gmdp_client.list_events.side_effect = Exception("API Error")
 
         messages = session_manager.list_messages("test-session-456", "test-agent-123")
 
@@ -1189,25 +1163,90 @@ class TestAgentCoreMemorySessionManager:
                     assert "Low relevance 1" not in injected_context
                     assert "Low relevance 2" not in injected_context
 
-    def test_list_messages_default_max_results(self, session_manager, mock_memory_client):
-        """Test listing messages without limit uses default max_results=10000."""
-        mock_memory_client.list_events.return_value = []
+    def test_list_messages_with_limit_skips_state_events(self, session_manager, mock_memory_client):
+        """list_messages with limit returns exactly limit messages even when state events are mixed in.
 
-        session_manager.list_messages("test-session-456", "test-agent-123")
+        State events (session/agent blobs) share the same actorId as conversational events
+        after the metadata-based identification change. If list_messages counts raw events
+        toward the limit, state events consume slots and the caller gets fewer messages
+        than requested.
+        """
 
-        mock_memory_client.list_events.assert_called_once()
-        call_kwargs = mock_memory_client.list_events.call_args[1]
-        assert call_kwargs["max_results"] == 10000
+        def _conv_event(eid, text, role):
+            return {
+                "eventId": eid,
+                "payload": [
+                    {
+                        "conversational": {
+                            "content": {
+                                "text": f'{{"message": {{"role": "{role}", '
+                                f'"content": [{{"text": "{text}"}}]}}, "message_id": {eid}}}'
+                            },
+                            "role": role.upper(),
+                        }
+                    }
+                ],
+            }
 
-    def test_list_messages_with_limit_calculates_max_results(self, session_manager, mock_memory_client):
-        """Test listing messages with limit calculates max_results correctly."""
-        mock_memory_client.list_events.return_value = []
+        def _state_event(eid):
+            return {
+                "eventId": eid,
+                "payload": [{"blob": '{"session_id": "s", "session_type": "AGENT"}'}],
+                "metadata": {"stateType": {"stringValue": "SESSION"}},
+            }
 
-        session_manager.list_messages("test-session-456", "test-agent-123", limit=500, offset=50)
+        # Page 1: 2 state + 3 conversational (5 raw events, only 3 convert to messages)
+        # Page 2: 3 more conversational
+        page1 = [
+            _state_event("s1"),
+            _conv_event(1, "Hello", "user"),
+            _conv_event(2, "Hi", "assistant"),
+            _state_event("s2"),
+            _conv_event(3, "How are you?", "user"),
+        ]
+        page2 = [
+            _conv_event(4, "Good", "assistant"),
+            _conv_event(5, "Great", "user"),
+            _conv_event(6, "Thanks", "assistant"),
+        ]
 
-        mock_memory_client.list_events.assert_called_once()
-        call_kwargs = mock_memory_client.list_events.call_args[1]
-        assert call_kwargs["max_results"] == 550  # limit + offset
+        mock_gmdp = session_manager.memory_client.gmdp_client
+        mock_gmdp.list_events.side_effect = [
+            {"events": page1, "nextToken": "tok"},
+            {"events": page2},
+        ]
+
+        messages = session_manager.list_messages("test-session-456", "test-agent-123", limit=5)
+
+        assert len(messages) == 5
+
+    def test_list_messages_with_limit_returns_fewer_when_not_enough(self, session_manager, mock_memory_client):
+        """list_messages returns all available messages when fewer than limit exist."""
+
+        def _conv_event(eid, text, role):
+            return {
+                "eventId": eid,
+                "payload": [
+                    {
+                        "conversational": {
+                            "content": {
+                                "text": f'{{"message": {{"role": "{role}", '
+                                f'"content": [{{"text": "{text}"}}]}}, "message_id": {eid}}}'
+                            },
+                            "role": role.upper(),
+                        }
+                    }
+                ],
+            }
+
+        mock_gmdp = session_manager.memory_client.gmdp_client
+        mock_gmdp.list_events.return_value = {
+            "events": [_conv_event(1, "Hello", "user"), _conv_event(2, "Hi", "assistant")]
+        }
+
+        messages = session_manager.list_messages("test-session-456", "test-agent-123", limit=10)
+
+        assert len(messages) == 2
 
     def test_append_message_handles_none_from_create_message(self, session_manager, test_agent):
         """Test that append_message gracefully handles None return from create_message."""

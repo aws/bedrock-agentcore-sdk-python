@@ -19,6 +19,7 @@ from strands.types.exceptions import SessionException
 from strands.types.session import Session, SessionAgent, SessionMessage
 from typing_extensions import override
 
+from bedrock_agentcore._utils.pagination import DEFAULT_PAGE_SIZE, paginate_for_n_results
 from bedrock_agentcore.memory.client import MemoryClient
 from bedrock_agentcore.memory.models.filters import (
     EventMetadataFilter,
@@ -596,15 +597,24 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session_id}")
 
         try:
-            max_results = (limit + offset) if limit else MAX_FETCH_ALL_RESULTS
+            target = (limit + offset) if limit else MAX_FETCH_ALL_RESULTS
 
-            events = self.memory_client.list_events(
-                memory_id=self.config.memory_id,
-                actor_id=self.config.actor_id,
-                session_id=session_id,
-                max_results=max_results,
+            def fetch_page(params: dict) -> tuple[list, str | None]:
+                response = self.memory_client.gmdp_client.list_events(**params)
+                return response.get("events", []), response.get("nextToken")
+
+            messages = paginate_for_n_results(
+                fetch_page=fetch_page,
+                initial_params={
+                    "memoryId": self.config.memory_id,
+                    "actorId": self.config.actor_id,
+                    "sessionId": session_id,
+                    "maxResults": DEFAULT_PAGE_SIZE,
+                    "includePayloads": True,
+                },
+                converter=self.converter.events_to_messages,
+                target_count=target,
             )
-            messages = self.converter.events_to_messages(events)
             if self.config.filter_restored_tool_context:
                 messages = self._filter_restored_tool_context(messages)
             if limit is not None:
