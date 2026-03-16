@@ -257,14 +257,17 @@ config = AgentCoreMemoryConfig(
     session_id=SESSION_ID,
     actor_id=ACTOR_ID,
     default_metadata={
-        "project": {"stringValue": "atlas"},
-        "env": {"stringValue": "production"},
+        "project": "atlas",
+        "env": "production",
     },
 )
 session_manager = AgentCoreMemorySessionManager(config, region_name='us-east-1')
 agent = Agent(session_manager=session_manager)
 agent("Hello!")  # This event will have project=atlas and env=production metadata
 ```
+
+> Plain strings are auto-wrapped to `{"stringValue": "..."}`. The explicit form
+> `{"project": {"stringValue": "atlas"}}` also works.
 
 ### Dynamic Metadata (metadata_provider)
 
@@ -275,7 +278,7 @@ a callable invoked at each event creation:
 from langfuse.decorators import langfuse_context
 
 def get_trace_metadata():
-    return {"traceId": {"stringValue": langfuse_context.get_current_trace_id() or ""}}
+    return {"traceId": langfuse_context.get_current_trace_id() or ""}
 
 config = AgentCoreMemoryConfig(
     memory_id=MEM_ID,
@@ -296,7 +299,7 @@ with `default_metadata` and `metadata_provider` (per-call values override both f
 ```python
 session_manager.create_message(
     session_id, agent_id, message,
-    metadata={"priority": {"stringValue": "high"}},
+    metadata={"priority": "high"},
 )
 ```
 

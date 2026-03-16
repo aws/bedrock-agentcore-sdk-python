@@ -2,6 +2,7 @@
 
 import logging
 import time
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 import pytest
@@ -1680,8 +1681,6 @@ class TestBatchingFlush:
         so all messages go to one session. This test verifies the internal grouping logic
         by directly manipulating the buffer.
         """
-        from datetime import datetime, timezone
-
         calls_by_session = {}
 
         def track_create_event(**kwargs):
@@ -1749,8 +1748,6 @@ class TestBatchingFlush:
         # The combined event should use the latest timestamp (12:10:00)
         assert len(captured_timestamps) == 1
         # The timestamp should be the latest one (12:10:00)
-        from datetime import datetime, timezone
-
         expected_latest = datetime(2024, 1, 1, 12, 10, 0, tzinfo=timezone.utc)
         # Account for monotonic timestamp adjustment (may add microseconds)
         assert captured_timestamps[0] >= expected_latest
@@ -1762,7 +1759,6 @@ class TestBatchingFlush:
 
         Note: Tests internal grouping logic by directly manipulating buffer.
         """
-        from datetime import datetime, timezone
 
         def fail_on_second_session(**kwargs):
             session_id = kwargs.get("sessionId")
@@ -1830,8 +1826,6 @@ class TestBatchingFlush:
 
         Note: Tests internal grouping logic by directly manipulating buffer.
         """
-        from datetime import datetime, timezone
-
         calls_by_session = {}
 
         def track_create_event(**kwargs):
@@ -2543,7 +2537,12 @@ class TestAfterInvocationHook:
         # Add messages to buffer
         with batching_session_manager._message_lock:
             batching_session_manager._message_buffer.append(
-                BufferedMessage("test-session", [("user", "test message")], False, batching_session_manager._get_monotonic_timestamp())
+                BufferedMessage(
+                    "test-session",
+                    [("user", "test message")],
+                    False,
+                    batching_session_manager._get_monotonic_timestamp(),
+                )
             )
 
         assert batching_session_manager.pending_message_count() == 1
@@ -2766,7 +2765,9 @@ class TestIntervalFlush:
             # Add messages to buffer
             with manager._message_lock:
                 manager._message_buffer.append(
-                    BufferedMessage("test-session", [("user", "test message")], False, manager._get_monotonic_timestamp())
+                    BufferedMessage(
+                        "test-session", [("user", "test message")], False, manager._get_monotonic_timestamp()
+                    )
                 )
 
             assert manager.pending_message_count() == 1
@@ -2921,7 +2922,9 @@ class TestIntervalFlush:
             # Add both messages and agent state to buffers
             with manager._message_lock:
                 manager._message_buffer.append(
-                    BufferedMessage("test-session", [("user", "test message")], False, manager._get_monotonic_timestamp())
+                    BufferedMessage(
+                        "test-session", [("user", "test message")], False, manager._get_monotonic_timestamp()
+                    )
                 )
 
             from strands.types.session import SessionAgent
@@ -3079,8 +3082,6 @@ class TestMetadataSupport:
 
     def test_batched_messages_include_metadata(self, mock_memory_client):
         """Metadata flows through the batching path and appears in the flushed event."""
-        from datetime import datetime, timezone
-
         config = AgentCoreMemoryConfig(
             memory_id="test-memory-123",
             session_id="test-session-456",
@@ -3199,3 +3200,37 @@ class TestMetadataSupport:
         msg = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
         with pytest.raises(ValueError, match="reserved"):
             manager.create_message("test-session-456", "agent-1", msg)
+
+    def test_metadata_provider_plain_strings_normalized(self, mock_memory_client):
+        """metadata_provider returning plain strings gets auto-normalized."""
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            metadata_provider=lambda: {"traceId": "trace-abc"},
+        )
+        manager = _create_session_manager(config, mock_memory_client)
+        mock_memory_client.create_event.return_value = {"eventId": "evt_1"}
+
+        msg = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
+        manager.create_message("test-session-456", "agent-1", msg)
+
+        kwargs = mock_memory_client.create_event.call_args[1]
+        assert kwargs["metadata"]["traceId"] == {"stringValue": "trace-abc"}
+
+    def test_default_metadata_plain_strings_normalized(self, mock_memory_client):
+        """default_metadata with plain strings gets auto-normalized at config time."""
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            default_metadata={"project": "atlas"},
+        )
+        manager = _create_session_manager(config, mock_memory_client)
+        mock_memory_client.create_event.return_value = {"eventId": "evt_1"}
+
+        msg = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
+        manager.create_message("test-session-456", "agent-1", msg)
+
+        kwargs = mock_memory_client.create_event.call_args[1]
+        assert kwargs["metadata"]["project"] == {"stringValue": "atlas"}

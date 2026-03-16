@@ -29,7 +29,7 @@ from bedrock_agentcore.memory.models.filters import (
 )
 
 from .bedrock_converter import AgentCoreMemoryConverter
-from .config import AgentCoreMemoryConfig, RetrievalConfig
+from .config import AgentCoreMemoryConfig, RetrievalConfig, normalize_metadata
 from .converters import MemoryConverter
 
 if TYPE_CHECKING:
@@ -215,7 +215,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             merged.update(self.config.default_metadata)
 
         if self.config.metadata_provider:
-            merged.update(self.config.metadata_provider())
+            merged.update(normalize_metadata(self.config.metadata_provider()))
 
         if per_call_metadata:
             merged.update(per_call_metadata)
@@ -224,17 +224,14 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         user_reserved = RESERVED_METADATA_KEYS & merged.keys()
         if user_reserved:
             raise ValueError(
-                f"Metadata keys {user_reserved} are reserved for internal use. "
-                f"Reserved keys: {RESERVED_METADATA_KEYS}"
+                f"Metadata keys {user_reserved} are reserved for internal use. Reserved keys: {RESERVED_METADATA_KEYS}"
             )
 
         if internal_metadata:
             merged.update(internal_metadata)
 
         if len(merged) > MAX_METADATA_KEYS:
-            raise ValueError(
-                f"Combined metadata has {len(merged)} keys, exceeding the maximum of {MAX_METADATA_KEYS}."
-            )
+            raise ValueError(f"Combined metadata has {len(merged)} keys, exceeding the maximum of {MAX_METADATA_KEYS}.")
 
         return merged or None
 

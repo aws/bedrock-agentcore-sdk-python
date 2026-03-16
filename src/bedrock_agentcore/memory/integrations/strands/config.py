@@ -2,7 +2,12 @@
 
 from typing import Any, Callable, Dict, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+def normalize_metadata(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize metadata values: plain strings become {"stringValue": value}."""
+    return {k: {"stringValue": v} if isinstance(v, str) else v for k, v in raw.items()}
 
 
 class RetrievalConfig(BaseModel):
@@ -40,10 +45,12 @@ class AgentCoreMemoryConfig(BaseModel):
             restored messages before loading them into Strands runtime memory. Default is False.
         default_metadata: Optional default metadata key-value pairs to attach to every message event.
             Merged with any per-call metadata. Maximum 15 total keys per event (including internal keys).
-            Example: {"location": {"stringValue": "NYC"}}
+            Accepts plain strings (auto-wrapped) or explicit MetadataValue dicts.
+            Example: {"location": "NYC"} or {"location": {"stringValue": "NYC"}}
         metadata_provider: Optional callable that returns metadata key-value pairs. Called at each
             event creation, so it can return dynamic values (e.g. current traceId). The returned
             dict is merged after default_metadata but before per-call metadata.
+            Accepts plain strings (auto-wrapped) or explicit MetadataValue dicts.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -58,3 +65,10 @@ class AgentCoreMemoryConfig(BaseModel):
     filter_restored_tool_context: bool = Field(default=False)
     default_metadata: Optional[Dict[str, Any]] = None
     metadata_provider: Optional[Callable[[], Dict[str, Any]]] = None
+
+    @field_validator("default_metadata", mode="before")
+    @classmethod
+    def _normalize_default_metadata(cls, v: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if v is None:
+            return None
+        return normalize_metadata(v)
