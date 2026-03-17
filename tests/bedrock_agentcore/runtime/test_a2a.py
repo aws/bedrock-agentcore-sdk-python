@@ -2,16 +2,17 @@ import contextvars
 import uuid
 from unittest.mock import patch
 
+from starlette.testclient import TestClient
+
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill, Part, TextPart
 from a2a.utils import new_task
-from starlette.testclient import TestClient
-
 from bedrock_agentcore.runtime.a2a import (
     BedrockCallContextBuilder,
     build_a2a_app,
+    build_runtime_url,
     serve_a2a,
 )
 from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
@@ -371,3 +372,25 @@ class TestServeA2A:
         with patch("os.path.exists", return_value=False):
             serve_a2a(_EchoExecutor())
         mock_uvicorn_run.assert_called_once()
+
+
+class TestBuildRuntimeUrl:
+    def test_builds_url_from_arn(self):
+        arn = "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/my-agent-abc123"
+        url = build_runtime_url(arn)
+        assert url == (
+            "https://bedrock-agentcore.us-east-1.amazonaws.com"
+            "/runtimes/arn%3Aaws%3Abedrock-agentcore%3Aus-east-1%3A123456789012%3Aruntime%2Fmy-agent-abc123"
+            "/invocations"
+        )
+
+    def test_region_override(self):
+        arn = "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/my-agent"
+        url = build_runtime_url(arn, region="eu-west-1")
+        assert "bedrock-agentcore.eu-west-1.amazonaws.com" in url
+
+    def test_invalid_arn_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="Cannot extract region"):
+            build_runtime_url("not-an-arn")

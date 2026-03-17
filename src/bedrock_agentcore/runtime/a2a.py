@@ -62,6 +62,31 @@ def _build_agent_card(executor: Any, url: str) -> Any:
     )
 
 
+def build_runtime_url(agent_arn: str, region: Optional[str] = None) -> str:
+    """Build the Bedrock AgentCore runtime invocation URL from an agent ARN.
+
+    Args:
+        agent_arn: The agent runtime ARN, e.g.
+            ``arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/my-agent-abc123``.
+        region: AWS region override. If ``None``, extracted from the ARN.
+
+    Returns:
+        The full invocation URL with the ARN properly URL-encoded.
+    """
+    from urllib.parse import quote
+
+    if region is None:
+        # ARN format: arn:aws:bedrock-agentcore:<region>:<account>:runtime/<id>
+        parts = agent_arn.split(":")
+        if len(parts) >= 4:
+            region = parts[3]
+        else:
+            raise ValueError(f"Cannot extract region from ARN: {agent_arn}")
+
+    encoded_arn = quote(agent_arn, safe="")
+    return f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{encoded_arn}/invocations"
+
+
 class BedrockCallContextBuilder:
     """Extracts Bedrock runtime headers and propagates them into BedrockAgentCoreContext.
 
@@ -152,12 +177,13 @@ def build_a2a_app(
 
     _check_a2a_sdk()
 
-    from a2a.server.apps import A2AStarletteApplication
-    from a2a.server.request_handlers import DefaultRequestHandler
-    from a2a.server.tasks import InMemoryTaskStore
     from starlette.applications import Starlette
     from starlette.responses import JSONResponse
     from starlette.routing import Route
+
+    from a2a.server.apps import A2AStarletteApplication
+    from a2a.server.request_handlers import DefaultRequestHandler
+    from a2a.server.tasks import InMemoryTaskStore
 
     runtime_url = os.environ.get(AGENTCORE_RUNTIME_URL_ENV, "http://localhost:9000/")
 
