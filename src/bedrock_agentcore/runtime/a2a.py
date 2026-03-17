@@ -155,6 +155,7 @@ def build_a2a_app(
     from a2a.server.apps import A2AStarletteApplication
     from a2a.server.request_handlers import DefaultRequestHandler
     from a2a.server.tasks import InMemoryTaskStore
+    from starlette.applications import Starlette
     from starlette.responses import JSONResponse
     from starlette.routing import Route
 
@@ -181,8 +182,6 @@ def build_a2a_app(
         context_builder=context_builder,
     )
 
-    app = a2a_app.build()
-
     last_status_update_time = time.time()
 
     def _handle_ping(request: Any) -> JSONResponse:
@@ -198,7 +197,10 @@ def build_a2a_app(
             status = PingStatus.HEALTHY
         return JSONResponse({"status": status.value, "time_of_last_update": int(last_status_update_time)})
 
-    app.routes.append(Route("/ping", _handle_ping, methods=["GET"]))
+    # Build the Starlette app with /ping included upfront, then add A2A routes,
+    # so we don't depend on mutating app.routes after build().
+    app = Starlette(routes=[Route("/ping", _handle_ping, methods=["GET"])])
+    a2a_app.add_routes_to_app(app)
 
     return app
 
