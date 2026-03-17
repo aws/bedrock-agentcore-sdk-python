@@ -79,6 +79,24 @@ app.run()  # Ready to run on Bedrock AgentCore
 
 **Production:** [AWS CDK](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_bedrockagentcore-readme.html).
 
+## A2A Protocol Support
+
+Serve your agent using the [A2A (Agent-to-Agent) protocol](https://google.github.io/A2A/) on Bedrock AgentCore Runtime. Works with any framework that provides an a2a-sdk `AgentExecutor` (Strands, LangGraph, Google ADK, or custom).
+
+```bash
+pip install "bedrock-agentcore[a2a]"
+```
+
+```python
+from strands import Agent
+from strands.a2a import StrandsA2AExecutor
+from bedrock_agentcore.runtime import serve_a2a
+
+agent = Agent(model="us.anthropic.claude-sonnet-4-20250514", system_prompt="You are a helpful assistant.")
+serve_a2a(StrandsA2AExecutor(agent))
+```
+
+See [A2A Protocol Examples](docs/examples/a2a_protocol_examples.md) for LangGraph, Google ADK, and advanced usage.
 
 ## 📝 License & Contributing
 
