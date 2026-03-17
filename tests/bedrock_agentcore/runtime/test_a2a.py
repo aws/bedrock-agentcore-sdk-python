@@ -2,13 +2,13 @@ import contextvars
 import uuid
 from unittest.mock import patch
 
-from starlette.testclient import TestClient
-
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill, Part, TextPart
 from a2a.utils import new_task
+from starlette.testclient import TestClient
+
 from bedrock_agentcore.runtime.a2a import (
     BedrockCallContextBuilder,
     build_a2a_app,
