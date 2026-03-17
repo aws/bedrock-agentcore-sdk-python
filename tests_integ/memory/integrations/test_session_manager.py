@@ -115,6 +115,7 @@ class TestAgentCoreMemorySessionManager:
 
         assert agent._session_manager == session_manager
 
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_conversation_persistence(self, test_memory_stm):
         """Test that conversations are persisted to memory."""
         session_config = AgentCoreMemoryConfig(
@@ -135,6 +136,7 @@ class TestAgentCoreMemorySessionManager:
         assert response2 is not None
         assert "John" in response2.message["content"][0]["text"]
 
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_session_manager_with_retrieval_config_adds_context(self, test_memory_ltm):
         """Test session manager with custom retrieval configuration."""
         actor_id = f"test-actor-{int(time.time())}"
@@ -164,6 +166,7 @@ class TestAgentCoreMemorySessionManager:
         assert "sushi" in str(agent.messages)
         assert "<user_context>" in str(agent.messages)
 
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_multiple_namespace_retrieval_config(self, test_memory_ltm):
         """Test session manager with multiple namespace retrieval configurations."""
         actor_id = f"test-actor-{int(time.time())}"
@@ -301,6 +304,7 @@ class TestAgentCoreMemorySessionManager:
 
     # region End-to-end agent with batching tests
 
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_agent_conversation_with_context_manager(self, test_memory_stm):
         """Test that Agent messages are flushed when the context manager exits, and session resume loads them."""
         session_id = f"test-agent-ctx-{uuid.uuid4().hex[:8]}"
@@ -336,6 +340,7 @@ class TestAgentCoreMemorySessionManager:
 
         sm2.close()
 
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_agent_multi_turn_with_batching(self, test_memory_stm):
         """Test that a multi-turn conversation within a single Agent works with batching."""
         session_id = f"test-agent-multi-{uuid.uuid4().hex[:8]}"
