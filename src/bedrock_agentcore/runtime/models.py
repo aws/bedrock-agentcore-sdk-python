@@ -20,6 +20,7 @@ ACCESS_TOKEN_HEADER = "WorkloadAccessToken"  # nosec
 OAUTH2_CALLBACK_URL_HEADER = "OAuth2CallbackUrl"
 AUTHORIZATION_HEADER = "Authorization"
 CUSTOM_HEADER_PREFIX = "X-Amzn-Bedrock-AgentCore-Runtime-Custom-"
+AGENTCORE_RUNTIME_URL_ENV = "AGENTCORE_RUNTIME_URL"
 
 # Task action constants
 TASK_ACTION_PING_STATUS = "ping_status"

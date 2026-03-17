@@ -86,6 +86,9 @@ select = [
 "!src/**/*.py" = ["D"]
 "src/bedrock_agentcore/memory/metadata-workflow.ipynb" = ["E501"]
 
+[tool.ruff.lint.isort]
+known-third-party = ["a2a"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
@@ -150,9 +153,11 @@ dev = [
     "wheel>=0.45.1",
     "strands-agents>=1.18.0",
     "strands-agents-evals>=0.1.0",
+    "a2a-sdk[http-server]>=0.3",
 ]
 
 [project.optional-dependencies]
+a2a = ["a2a-sdk[http-server]>=0.3"]
 strands-agents = [
     "strands-agents>=1.1.0"
 ]
