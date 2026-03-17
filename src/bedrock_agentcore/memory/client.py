@@ -69,7 +69,6 @@ class MemoryClient:
         "list_memories",
         "update_memory",
         "delete_memory",
-        "list_memory_strategies",
     }
 
     def __init__(
