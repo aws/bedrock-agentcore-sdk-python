@@ -155,10 +155,12 @@ dev = [
     "strands-agents>=1.18.0",
     "strands-agents-evals>=0.1.0",
     "a2a-sdk[http-server]>=0.3",
+    "ag-ui-protocol>=0.1.10",
 ]
 
 [project.optional-dependencies]
 a2a = ["a2a-sdk[http-server]>=0.3"]
+ag-ui = ["ag-ui-protocol>=0.1.10"]
 strands-agents = [
     "strands-agents>=1.1.0"
 ]

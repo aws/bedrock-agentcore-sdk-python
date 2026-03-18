@@ -71,6 +71,38 @@ app.run()
 - 📊 **Observability** - OpenTelemetry tracing: **[Observability Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability-get-started.html)**
 - 🔐 **Identity** - AWS & third-party auth: **[Identity Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/identity-getting-started-cognito.html)**
 
+## AG-UI Protocol Support
+
+Deploy agents using the [AG-UI protocol](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-agui.html) with zero boilerplate. A single `entrypoint` handler is served over both SSE (`POST /invocations`) and WebSocket (`/ws`).
+
+```python
+from bedrock_agentcore.runtime import serve_ag_ui
+
+# Framework agent with a .run() method — one line
+serve_ag_ui(agui_agent)
+```
+
+Or write a custom agent with the decorator form:
+
+```python
+from bedrock_agentcore.runtime import AGUIApp
+from ag_ui.core import RunAgentInput, RunStartedEvent, RunFinishedEvent
+
+app = AGUIApp()
+
+@app.entrypoint
+async def my_agent(input_data: RunAgentInput):
+    yield RunStartedEvent(thread_id=input_data.thread_id, run_id=input_data.run_id)
+    # ... your agent logic, yield AG-UI events ...
+    yield RunFinishedEvent(thread_id=input_data.thread_id, run_id=input_data.run_id)
+
+app.run()
+```
+
+Install with: `pip install "bedrock-agentcore[ag-ui]"`
+
+See the [AG-UI protocol contract](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-agui-protocol-contract.html) for full details.
+
 ## 🏗️ Deployment
 
 **Quick Start:** Use the [Bedrock AgentCore Starter Toolkit](https://github.com/aws/bedrock-agentcore-starter-toolkit) for rapid prototyping.

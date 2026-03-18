@@ -30,6 +30,18 @@ http-server = [
 ]
 
 [[package]]
+name = "ag-ui-protocol"
+version = "0.1.13"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/04/b5/fc0b65b561d00d88811c8a7d98ee735833f81554be244340950e7b65820c/ag_ui_protocol-0.1.13.tar.gz", hash = "sha256:811d7d7dcce4783dec252918f40b717ebfa559399bf6b071c4ba47c0c1e21bcb", size = 5671, upload-time = "2026-02-19T18:40:38.602Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cd/9f/b833c1ab1999da35ebad54841ae85d2c2764c931da9a6f52d8541b6901b2/ag_ui_protocol-0.1.13-py3-none-any.whl", hash = "sha256:1393fa894c1e8416efe184168a50689e760d05b32f4646eebb8ff423dddf8e8f", size = 8053, upload-time = "2026-02-19T18:40:37.27Z" },
+]
+
+[[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -275,6 +287,9 @@ dependencies = [
 a2a = [
     { name = "a2a-sdk", extra = ["http-server"] },
 ]
+ag-ui = [
+    { name = "ag-ui-protocol" },
+]
 strands-agents = [
     { name = "strands-agents" },
 ]
@@ -285,6 +300,7 @@ strands-agents-evals = [
 [package.dev-dependencies]
 dev = [
     { name = "a2a-sdk", extra = ["http-server"] },
+    { name = "ag-ui-protocol" },
     { name = "httpx" },
     { name = "moto" },
     { name = "mypy" },
@@ -303,6 +319,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "a2a-sdk", extras = ["http-server"], marker = "extra == 'a2a'", specifier = ">=0.3" },
+    { name = "ag-ui-protocol", marker = "extra == 'ag-ui'", specifier = ">=0.1.10" },
     { name = "boto3", specifier = ">=1.42.63" },
     { name = "botocore", specifier = ">=1.42.63" },
     { name = "pydantic", specifier = ">=2.0.0,<2.41.3" },
@@ -314,11 +331,12 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.34.2" },
     { name = "websockets", specifier = ">=12.0" },
 ]
-provides-extras = ["a2a", "strands-agents", "strands-agents-evals"]
+provides-extras = ["a2a", "ag-ui", "strands-agents", "strands-agents-evals"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "a2a-sdk", extras = ["http-server"], specifier = ">=0.3" },
+    { name = "ag-ui-protocol", specifier = ">=0.1.10" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "moto", specifier = ">=5.1.6" },
     { name = "mypy", specifier = ">=1.16.1" },
