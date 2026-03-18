@@ -360,11 +360,20 @@ class TestSessionManager:
             manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
 
             # Test accessing an allowed method
-            mock_method = MagicMock()
+            mock_method = MagicMock(return_value={"records": []})
             mock_client_instance.retrieve_memory_records = mock_method
 
             result = manager.retrieve_memory_records
-            assert result == mock_method
+            assert callable(result)
+
+            # camelCase works (backward compat)
+            result(memoryId="mem-1", namespace="ns/")
+            mock_method.assert_called_once_with(memoryId="mem-1", namespace="ns/")
+
+            # snake_case is converted to camelCase
+            mock_method.reset_mock()
+            result(memory_id="mem-1", namespace="ns/")
+            mock_method.assert_called_once_with(memoryId="mem-1", namespace="ns/")
 
     def test_getattr_disallowed_method(self):
         """Test __getattr__ raises AttributeError for disallowed methods."""
@@ -3652,7 +3661,7 @@ class TestAddTurnsWithDataClasses:
             manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
 
             # Mock an allowed method
-            mock_method = MagicMock()
+            mock_method = MagicMock(return_value={"records": []})
             mock_client_instance.retrieve_memory_records = mock_method
 
             with patch("bedrock_agentcore.memory.session.logger") as mock_logger:
@@ -3662,7 +3671,9 @@ class TestAddTurnsWithDataClasses:
                 mock_logger.debug.assert_called_once_with(
                     "Forwarding method '%s' to _data_plane_client", "retrieve_memory_records"
                 )
-                assert result == mock_method
+                assert callable(result)
+                result(memoryId="mem-1")
+                mock_method.assert_called_once_with(memoryId="mem-1")
 
     def test_process_turn_with_llm_no_retrieval_namespace(self):
         """Test process_turn_with_llm without retrieval_config (no memory retrieval)."""
