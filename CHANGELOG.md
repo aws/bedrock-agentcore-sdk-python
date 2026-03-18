@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.4.7] - 2026-03-18
+
+### Added
+- feat: add AG-UI protocol support via serve_ag_ui and AGUIApp (#350) (e799792)
+- feat: add missing data plane passthroughs and integration tests (#352) (530f203)
+- feat: add A2A protocol support via serve_a2a (#349) (be1be55)
+- feat: add ResourcePolicyClient for resource-based policy management (#328) (51e26c7)
+- feat: add data plane, extraction, and lifecycle integ tests to TestMemoryClient (#334) (62fdc9a)
+
+### Fixed
+- fix: normalize snake_case/camelCase in passthrough methods for consistent SDK API (#348) (137479c)
+- fix: add retries for flaky integ tests that depend on LLM responses (#351) (8424c7a)
+- fix: add missing agentId metadata to batched agent state flush (#331) (11e2ac5)
+- fix: use separate ports for runtime integ tests to avoid parallel conflicts (#332) (03b599a)
+
+### Other Changes
+- ci(deps): bump actions/github-script from 7 to 8 (#80) (0dd49c0)
+- chore(deps): bump pyasn1 from 0.6.2 to 0.6.3 (#353) (d3213c0)
+- ci(deps): bump actions/checkout from 5 to 6 (#165) (82869c8)
+- Revise agent deployment instructions in README (#130) (bb49c2e)
+- ci(deps): bump aws-actions/configure-aws-credentials from 5 to 6 (#345) (d508c24)
+- feat(strands-memory): add event metadata support to AgentCoreMemorySessionManager (#339) (cd2f2a0)
+- chore(deps): bump pyjwt from 2.10.1 to 2.12.0 (#341) (2f4f297)
+- ci(deps): bump slackapi/slack-github-action from 2.0.0 to 3.0.1 (#344) (f8710fa)
+- ci(deps): bump trufflesecurity/trufflehog from 3.90.6 to 3.93.8 (#343) (d4d1892)
+- chore: remove manual_test_memory_client.py (#337) (3dbb793)
+
 ## [1.4.6] - 2026-03-12
 
 ### Added
