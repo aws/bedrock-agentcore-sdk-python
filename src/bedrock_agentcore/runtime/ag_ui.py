@@ -226,7 +226,7 @@ class AGUIApp(Starlette):
                     yield encoder.encode(event)
             except Exception as e:
                 logger.exception("Error during AG-UI event streaming")
-                yield encoder.encode(RunErrorEvent(message=str(e)))
+                yield encoder.encode(RunErrorEvent(message=str(e), code="INTERNAL_ERROR"))
 
         return StreamingResponse(event_generator(), media_type=encoder.get_content_type())
 
@@ -280,7 +280,7 @@ class AGUIApp(Starlette):
         except Exception as e:
             logger.exception("Error during AG-UI WebSocket streaming")
             try:
-                await websocket.send_text(encoder.encode(RunErrorEvent(message=str(e))))
+                await websocket.send_text(encoder.encode(RunErrorEvent(message=str(e), code="INTERNAL_ERROR")))
             except Exception:
                 pass
 
