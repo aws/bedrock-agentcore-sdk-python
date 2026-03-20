@@ -316,7 +316,7 @@ class AgentCoreRuntimeClient:
             raise RuntimeError("Failed to generate presigned URL")
 
         # Convert back to wss:// for WebSocket connection
-        presigned_url = request.url.replace("https://", "wss://")
+        presigned_url: str = request.url.replace("https://", "wss://")
 
         self.logger.info("✓ Presigned URL generated (expires in %s seconds, Session: %s)", expires, session_id)
         return presigned_url

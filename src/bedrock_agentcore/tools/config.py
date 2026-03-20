@@ -5,7 +5,7 @@ browser and code interpreter configurations.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -37,7 +37,7 @@ class NetworkConfiguration:
     network_mode: str = "PUBLIC"
     vpc_config: Optional[VpcConfig] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration."""
         if self.network_mode not in ["PUBLIC", "VPC"]:
             raise ValueError(f"network_mode must be 'PUBLIC' or 'VPC', got '{self.network_mode}'")
@@ -47,7 +47,7 @@ class NetworkConfiguration:
 
     def to_dict(self) -> Dict:
         """Convert to API-compatible dictionary."""
-        config = {"networkMode": self.network_mode}
+        config: Dict[str, Any] = {"networkMode": self.network_mode}
         if self.vpc_config:
             config["vpcConfig"] = self.vpc_config.to_dict()
         return config
@@ -105,7 +105,7 @@ class RecordingConfiguration:
 
     def to_dict(self) -> Dict:
         """Convert to API-compatible dictionary."""
-        config = {"enabled": self.enabled}
+        config: Dict[str, Any] = {"enabled": self.enabled}
         if self.s3_location:
             config["s3Location"] = self.s3_location.to_dict()
         return config
@@ -275,7 +275,7 @@ class ProxyConfiguration:
 
     def to_dict(self) -> Dict:
         """Convert to API-compatible dictionary."""
-        config = {"proxies": [p.to_dict() for p in self.proxies]}
+        config: Dict[str, Any] = {"proxies": [p.to_dict() for p in self.proxies]}
         if self.bypass_patterns:
             config["bypass"] = {"domainPatterns": self.bypass_patterns}
         return config
@@ -356,7 +356,7 @@ class SessionConfiguration:
 
     def to_dict(self) -> Dict:
         """Convert to API-compatible dictionary."""
-        config = {}
+        config: Dict[str, Any] = {}
         if self.name is not None:
             config["name"] = self.name
         if self.viewport:
@@ -396,7 +396,7 @@ class BrowserConfiguration:
 
     def to_dict(self) -> Dict:
         """Convert to API-compatible dictionary for create_browser."""
-        config = {
+        config: Dict[str, Any] = {
             "name": self.name,
             "executionRoleArn": self.execution_role_arn,
             "networkConfiguration": self.network_configuration.to_dict(),
@@ -437,7 +437,7 @@ class CodeInterpreterConfiguration:
 
     def to_dict(self) -> Dict:
         """Convert to API-compatible dictionary for create_code_interpreter."""
-        config = {
+        config: Dict[str, Any] = {
             "name": self.name,
             "executionRoleArn": self.execution_role_arn,
             "networkConfiguration": self.network_configuration.to_dict(),

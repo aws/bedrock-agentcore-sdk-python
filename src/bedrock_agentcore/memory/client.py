@@ -105,7 +105,7 @@ class MemoryClient:
             self.gmdp_client.meta.region_name,
         )
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         """Dynamically forward method calls to the appropriate boto3 client.
 
         This method enables access to all boto3 client methods without explicitly
@@ -210,7 +210,7 @@ class MemoryClient:
         try:
             memory = self.create_memory_and_wait(
                 name=name,
-                strategies=strategies,
+                strategies=strategies,  # type: ignore[arg-type]
                 description=description,
                 event_expiry_days=event_expiry_days,
                 memory_execution_role_arn=memory_execution_role_arn,
@@ -220,7 +220,7 @@ class MemoryClient:
         except ClientError as e:
             if e.response["Error"]["Code"] == "ValidationException" and "already exists" in str(e):
                 memories = self.list_memories()
-                memory = next((m for m in memories if m["id"].startswith(name)), None)
+                memory = next((m for m in memories if m["id"].startswith(name)), None)  # type: ignore[arg-type]
                 logger.info("Memory already exists. Using existing memory ID: %s", memory["id"])
                 return memory
             else:
@@ -345,7 +345,7 @@ class MemoryClient:
                 memoryId=memory_id, namespace=namespace, searchCriteria={"searchQuery": query, "topK": top_k}
             )
 
-            memories = response.get("memoryRecordSummaries", [])
+            memories: list[Dict[str, Any]] = response.get("memoryRecordSummaries", [])
             logger.info("Retrieved %d memories from namespace: %s", len(memories), namespace)
             return memories
 
@@ -480,7 +480,7 @@ class MemoryClient:
 
             response = self.gmdp_client.create_event(**params)
 
-            event = response["event"]
+            event: Dict[str, Any] = response["event"]
             logger.info("Created event: %s", event["eventId"])
 
             return event
@@ -546,7 +546,7 @@ class MemoryClient:
 
             response = self.gmdp_client.create_event(**params)
 
-            event = response["event"]
+            event: Dict[str, Any] = response["event"]
             logger.info("Created blob event: %s", event["eventId"])
 
             return event
@@ -642,7 +642,7 @@ class MemoryClient:
 
             response = self.gmdp_client.create_event(**params)
 
-            event = response["event"]
+            event: Dict[str, Any] = response["event"]
             logger.info("Created event: %s", event["eventId"])
 
             return event
@@ -784,7 +784,7 @@ class MemoryClient:
             )
         """
         try:
-            all_events = []
+            all_events: List[Dict[str, Any]] = []
             next_token = None
 
             while len(all_events) < max_results:
@@ -800,7 +800,7 @@ class MemoryClient:
                     params["nextToken"] = next_token
 
                 # Build filter map
-                filter_map = {}
+                filter_map: Dict[str, Any] = {}
 
                 # Add branch filter if specified (but not for "main")
                 if branch_name and branch_name != "main":
@@ -944,7 +944,7 @@ class MemoryClient:
                 params["filter"] = {"branch": {"name": branch_name, "includeParentBranches": include_parent_branches}}
 
             response = self.gmdp_client.list_events(**params)
-            events = response.get("events", [])
+            events: list[Dict[str, Any]] = response.get("events", [])
 
             # Handle pagination
             next_token = response.get("nextToken")
@@ -999,7 +999,11 @@ class MemoryClient:
                     break
 
             # Build tree structure
-            tree = {"session_id": session_id, "actor_id": actor_id, "main_branch": {"events": [], "branches": {}}}
+            tree: Dict[str, Any] = {
+                "session_id": session_id,
+                "actor_id": actor_id,
+                "main_branch": {"events": [], "branches": {}},
+            }
 
             # Group events by branch
             for event in all_events:
@@ -1101,7 +1105,7 @@ class MemoryClient:
         Returns:
             List of turns, where each turn is a list of message dictionaries
         """
-        base_params = {
+        base_params: Dict[str, Any] = {
             "memoryId": memory_id,
             "actorId": actor_id,
             "sessionId": session_id,
@@ -1229,7 +1233,7 @@ class MemoryClient:
         """Get current memory status."""
         try:
             response = self.gmcp_client.get_memory(memoryId=memory_id)  # Input uses old field name
-            return response["memory"]["status"]
+            return response["memory"]["status"]  # type: ignore[no-any-return]
         except ClientError as e:
             logger.error("Failed to get memory status: %s", e)
             raise
@@ -1272,7 +1276,7 @@ class MemoryClient:
     def delete_memory(self, memory_id: str) -> Dict[str, Any]:
         """Delete a memory resource."""
         try:
-            response = self.gmcp_client.delete_memory(
+            response: Dict[str, Any] = self.gmcp_client.delete_memory(
                 memoryId=memory_id, clientToken=str(uuid.uuid4())
             )  # Input uses old field name
             logger.info("Deleted memory: %s", memory_id)

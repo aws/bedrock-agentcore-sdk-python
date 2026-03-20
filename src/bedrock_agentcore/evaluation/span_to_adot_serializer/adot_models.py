@@ -77,7 +77,7 @@ class SpanParser:
     """
 
     @staticmethod
-    def extract_metadata(span) -> SpanMetadata:
+    def extract_metadata(span: Any) -> SpanMetadata:
         """Extract core span metadata."""
         if not hasattr(span, "context") or not span.context:
             raise ValueError(f"Span '{getattr(span, 'name', 'unknown')}' missing required context")
@@ -96,7 +96,7 @@ class SpanParser:
         )
 
     @staticmethod
-    def extract_resource_info(span) -> ResourceInfo:
+    def extract_resource_info(span: Any) -> ResourceInfo:
         """Extract resource and scope information."""
         resource_attrs = {}
         if hasattr(span, "resource") and span.resource and hasattr(span.resource, "attributes"):
@@ -115,7 +115,7 @@ class SpanParser:
         )
 
     @staticmethod
-    def get_span_attributes(span) -> Dict[str, Any]:
+    def get_span_attributes(span: Any) -> Dict[str, Any]:
         """Safely extract span attributes."""
         return dict(span.attributes) if hasattr(span, "attributes") and span.attributes else {}
 

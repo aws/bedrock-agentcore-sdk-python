@@ -16,7 +16,7 @@ def convert_complex_objects(obj: Any, _depth: int = 0) -> Any:
 
     # Handle dataclasses (like AgentResult)
     elif is_dataclass(obj):
-        return asdict(obj)
+        return asdict(obj)  # type: ignore[arg-type]
 
     # Handle dictionaries recursively
     elif isinstance(obj, dict):

@@ -83,19 +83,19 @@ class IdentityClient:
         )
         self.logger = logging.getLogger("bedrock_agentcore.identity_client")
 
-    def create_oauth2_credential_provider(self, req):
+    def create_oauth2_credential_provider(self, req: Dict[str, Any]) -> dict[Any, Any]:
         """Create an OAuth2 credential provider."""
         self.logger.info("Creating OAuth2 credential provider...")
-        return self.cp_client.create_oauth2_credential_provider(**req)
+        return self.cp_client.create_oauth2_credential_provider(**req)  # type: ignore[no-any-return]
 
-    def create_api_key_credential_provider(self, req):
+    def create_api_key_credential_provider(self, req: Dict[str, Any]) -> dict[Any, Any]:
         """Create an API key credential provider."""
         self.logger.info("Creating API key credential provider...")
-        return self.cp_client.create_api_key_credential_provider(**req)
+        return self.cp_client.create_api_key_credential_provider(**req)  # type: ignore[no-any-return]
 
     def get_workload_access_token(
         self, workload_name: str, user_token: Optional[str] = None, user_id: Optional[str] = None
-    ) -> Dict:
+    ) -> Dict[str, Any]:
         """Get a workload access token using workload name and optionally user token."""
         if user_token:
             if user_id is not None:
@@ -110,36 +110,36 @@ class IdentityClient:
             resp = self.dp_client.get_workload_access_token(workloadName=workload_name)
 
         self.logger.info("Successfully retrieved workload access token")
-        return resp
+        return resp  # type: ignore[no-any-return]
 
     def create_workload_identity(
         self, name: Optional[str] = None, allowed_resource_oauth_2_return_urls: Optional[list[str]] = None
-    ) -> Dict:
+    ) -> Dict[str, Any]:
         """Create workload identity with optional name."""
         self.logger.info("Creating workload identity...")
         if not name:
             name = f"workload-{uuid.uuid4().hex[:8]}"
-        return self.cp_client.create_workload_identity(
+        return self.cp_client.create_workload_identity(  # type: ignore[no-any-return]
             name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls or []
         )
 
-    def update_workload_identity(self, name: str, allowed_resource_oauth_2_return_urls: list[str]) -> Dict:
+    def update_workload_identity(self, name: str, allowed_resource_oauth_2_return_urls: list[str]) -> Dict[str, Any]:
         """Update an existing workload identity with allowed resource OAuth2 callback urls."""
         self.logger.info(
             "Updating workload identity '%s' with callback urls: %s", name, allowed_resource_oauth_2_return_urls
         )
-        return self.cp_client.update_workload_identity(
+        return self.cp_client.update_workload_identity(  # type: ignore[no-any-return]
             name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls
         )
 
-    def get_workload_identity(self, name: str) -> Dict:
+    def get_workload_identity(self, name: str) -> Dict[str, Any]:
         """Retrieves information about a workload identity."""
         self.logger.info("Fetching workload identity '%s'", name)
-        return self.cp_client.get_workload_identity(name=name)
+        return self.cp_client.get_workload_identity(name=name)  # type: ignore[no-any-return]
 
     def complete_resource_token_auth(
         self, session_uri: str, user_identifier: Union[UserTokenIdentifier, UserIdIdentifier]
-    ):
+    ) -> dict[Any, Any]:
         """Confirms the user authentication session for obtaining OAuth2.0 tokens for a resource."""
         self.logger.info("Completing 3LO OAuth2 flow...")
 
@@ -151,7 +151,7 @@ class IdentityClient:
         else:
             raise ValueError(f"Unexpected UserIdentifier: {user_identifier}")
 
-        return self.dp_client.complete_resource_token_auth(userIdentifier=user_identifier_value, sessionUri=session_uri)
+        return self.dp_client.complete_resource_token_auth(userIdentifier=user_identifier_value, sessionUri=session_uri)  # type: ignore[no-any-return]
 
     async def get_token(
         self,
@@ -192,7 +192,7 @@ class IdentityClient:
         self.logger.info("Getting OAuth2 token...")
 
         # Build parameters
-        req = {
+        req: Dict[str, Any] = {
             "resourceCredentialProviderName": provider_name,
             "scopes": scopes,
             "oauth2Flow": auth_flow,
@@ -213,7 +213,7 @@ class IdentityClient:
 
         # If we got a token directly, return it
         if "accessToken" in response:
-            return response["accessToken"]
+            return response["accessToken"]  # type: ignore[no-any-return]
 
         # If we got an authorization URL, handle the OAuth flow
         if "authorizationUrl" in response:
@@ -245,4 +245,4 @@ class IdentityClient:
         self.logger.info("Getting API key...")
         req = {"resourceCredentialProviderName": provider_name, "workloadIdentityToken": agent_identity_token}
 
-        return self.dp_client.get_resource_api_key(**req)["apiKey"]
+        return self.dp_client.get_resource_api_key(**req)["apiKey"]  # type: ignore[no-any-return]

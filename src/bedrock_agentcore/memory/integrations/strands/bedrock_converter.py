@@ -79,7 +79,7 @@ class AgentCoreMemoryConverter:
                 if "conversational" in payload_item:
                     conv = payload_item["conversational"]
                     session_msg = SessionMessage.from_dict(json.loads(conv["content"]["text"]))
-                    session_msg.message = AgentCoreMemoryConverter._filter_empty_text(session_msg.message)
+                    session_msg.message = AgentCoreMemoryConverter._filter_empty_text(session_msg.message)  # type: ignore[assignment, arg-type]
                     if session_msg.message.get("content"):
                         messages.append(session_msg)
                 elif "blob" in payload_item:
@@ -88,7 +88,7 @@ class AgentCoreMemoryConverter:
                         if isinstance(blob_data, (tuple, list)) and len(blob_data) == 2:
                             try:
                                 session_msg = SessionMessage.from_dict(json.loads(blob_data[0]))
-                                session_msg.message = AgentCoreMemoryConverter._filter_empty_text(session_msg.message)
+                                session_msg.message = AgentCoreMemoryConverter._filter_empty_text(session_msg.message)  # type: ignore[assignment, arg-type]
                                 if session_msg.message.get("content"):
                                     messages.append(session_msg)
                             except (json.JSONDecodeError, ValueError):

@@ -70,7 +70,7 @@ def _restore_context(ctx: contextvars.Context) -> None:
 class RequestContextFormatter(logging.Formatter):
     """Formatter including request and session IDs."""
 
-    def format(self, record):
+    def format(self, record: Any) -> str:
         """Format log record as AWS Lambda JSON."""
         import json
         from datetime import datetime
@@ -154,7 +154,7 @@ class BedrockAgentCoreApp(Starlette):
             The decorated function with added serve method
         """
         self.handlers["main"] = func
-        func.run = lambda port=8080, host=None: self.run(port, host)
+        func.run = lambda port=8080, host=None: self.run(port, host)  # type: ignore[attr-defined]
         return func
 
     def ping(self, func: Callable) -> Callable:
@@ -197,7 +197,7 @@ class BedrockAgentCoreApp(Starlette):
         if not _is_async_callable(func):
             raise ValueError("@async_task can only be applied to async functions")
 
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             task_id = self.add_async_task(func.__name__)
 
             try:
@@ -237,17 +237,17 @@ class BedrockAgentCoreApp(Starlette):
 
         if current_status is None:
             current_status = PingStatus.HEALTHY_BUSY if self._active_tasks else PingStatus.HEALTHY
-        if not hasattr(self, "_last_known_status") or self._last_known_status != current_status:
+        if not hasattr(self, "_last_known_status") or self._last_known_status != current_status:  # type: ignore[has-type]
             self._last_known_status = current_status
             self._last_status_update_time = time.time()
 
         return current_status
 
-    def force_ping_status(self, status: PingStatus):
+    def force_ping_status(self, status: PingStatus) -> None:
         """Force ping status to a specific value."""
         self._forced_ping_status = status
 
-    def clear_forced_ping_status(self):
+    def clear_forced_ping_status(self) -> None:
         """Clear forced status and resume automatic."""
         self._forced_ping_status = None
 
@@ -327,7 +327,7 @@ class BedrockAgentCoreApp(Starlette):
                 self.logger.warning("Attempted to complete unknown task ID: %s", task_id)
                 return False
 
-    def _build_request_context(self, request) -> RequestContext:
+    def _build_request_context(self, request: Any) -> RequestContext:
         """Build request context and setup all context variables."""
         try:
             headers = request.headers
@@ -375,7 +375,7 @@ class BedrockAgentCoreApp(Starlette):
             self.logger.warning("Failed to build request context: %s: %s", type(e).__name__, e)
             request_id = str(uuid.uuid4())
             BedrockAgentCoreContext.set_request_context(request_id, None)
-            return RequestContext(session_id=None, request=None)
+            return RequestContext(session_id=None, request=None)  # type: ignore[call-arg]
 
     def _takes_context(self, handler: Callable) -> bool:
         try:
@@ -384,7 +384,7 @@ class BedrockAgentCoreApp(Starlette):
         except Exception:
             return False
 
-    async def _handle_invocation(self, request):
+    async def _handle_invocation(self, request: Any) -> Response:
         request_context = self._build_request_context(request)
 
         start_time = time.time()
@@ -459,7 +459,7 @@ class BedrockAgentCoreApp(Starlette):
             self.logger.exception("Invocation failed (%.3fs)", duration)
             return JSONResponse({"error": str(e)}, status_code=500)
 
-    def _handle_ping(self, request):
+    def _handle_ping(self, request: Any) -> JSONResponse:
         try:
             status = self.get_current_ping_status()
             self.logger.debug("Ping request - status: %s", status.value)
@@ -468,7 +468,7 @@ class BedrockAgentCoreApp(Starlette):
             self.logger.exception("Ping endpoint failed")
             return JSONResponse({"status": PingStatus.HEALTHY.value, "time_of_last_update": int(time.time())})
 
-    async def _handle_websocket(self, websocket: WebSocket):
+    async def _handle_websocket(self, websocket: WebSocket) -> None:
         """Handle WebSocket connections."""
         request_context = self._build_request_context(websocket)
 
@@ -491,7 +491,7 @@ class BedrockAgentCoreApp(Starlette):
             except Exception:
                 pass
 
-    def run(self, port: int = 8080, host: Optional[str] = None, **kwargs):
+    def run(self, port: int = 8080, host: Optional[str] = None, **kwargs: Any) -> None:
         """Start the Bedrock AgentCore server.
 
         Args:
@@ -518,7 +518,7 @@ class BedrockAgentCoreApp(Starlette):
         }
         uvicorn_params.update(kwargs)
 
-        uvicorn.run(self, **uvicorn_params)
+        uvicorn.run(self, **uvicorn_params)  # type: ignore[arg-type]
 
     def _ensure_worker_loop(self) -> asyncio.AbstractEventLoop:
         """Lazily create and start a dedicated worker event loop in a background thread.
@@ -542,7 +542,7 @@ class BedrockAgentCoreApp(Starlette):
     def _run_worker_loop(self) -> None:
         """Entry point for the worker loop background thread."""
         asyncio.set_event_loop(self._worker_loop)
-        self._worker_loop.run_forever()
+        self._worker_loop.run_forever()  # type: ignore[union-attr]
 
     @staticmethod
     async def _run_with_context(coro: Any, ctx: contextvars.Context) -> Any:
@@ -629,18 +629,18 @@ class BedrockAgentCoreApp(Starlette):
                 ),
                 TASK_ACTION_JOB_STATUS: lambda: JSONResponse(self.get_async_task_info()),
                 TASK_ACTION_FORCE_HEALTHY: lambda: (
-                    self.force_ping_status(PingStatus.HEALTHY),
-                    self.logger.info("Ping status forced to Healthy"),
+                    self.force_ping_status(PingStatus.HEALTHY),  # type: ignore[func-returns-value]
+                    self.logger.info("Ping status forced to Healthy"),  # type: ignore[func-returns-value]
                     JSONResponse({"forced_status": "Healthy"}),
                 )[2],
                 TASK_ACTION_FORCE_BUSY: lambda: (
-                    self.force_ping_status(PingStatus.HEALTHY_BUSY),
-                    self.logger.info("Ping status forced to HealthyBusy"),
+                    self.force_ping_status(PingStatus.HEALTHY_BUSY),  # type: ignore[func-returns-value]
+                    self.logger.info("Ping status forced to HealthyBusy"),  # type: ignore[func-returns-value]
                     JSONResponse({"forced_status": "HealthyBusy"}),
                 )[2],
                 TASK_ACTION_CLEAR_FORCED_STATUS: lambda: (
-                    self.clear_forced_ping_status(),
-                    self.logger.info("Forced ping status cleared"),
+                    self.clear_forced_ping_status(),  # type: ignore[func-returns-value]
+                    self.logger.info("Forced ping status cleared"),  # type: ignore[func-returns-value]
                     JSONResponse({"forced_status": "Cleared"}),
                 )[2],
             }
@@ -657,7 +657,7 @@ class BedrockAgentCoreApp(Starlette):
             self.logger.exception("Debug action '%s' failed", action)
             return JSONResponse({"error": "Debug action failed", "details": str(e)}, status_code=500)
 
-    async def _stream_with_error_handling(self, generator):
+    async def _stream_with_error_handling(self, generator: Any) -> Any:
         """Wrap async generator to handle errors and convert to SSE format."""
         try:
             async for value in generator:
@@ -671,7 +671,7 @@ class BedrockAgentCoreApp(Starlette):
             }
             yield self._convert_to_sse(error_event)
 
-    def _safe_serialize_to_json_string(self, obj):
+    def _safe_serialize_to_json_string(self, obj: Any) -> str:
         """Safely serialize object directly to JSON string with progressive fallback handling.
 
         This method eliminates double JSON encoding by returning the JSON string directly,
@@ -699,7 +699,7 @@ class BedrockAgentCoreApp(Starlette):
                     error_obj = {"error": "Serialization failed", "original_type": type(obj).__name__}
                     return json.dumps(error_obj, ensure_ascii=False)
 
-    def _convert_to_sse(self, obj) -> bytes:
+    def _convert_to_sse(self, obj: Any) -> bytes:
         """Convert object to Server-Sent Events format using safe serialization.
 
         Args:
@@ -712,7 +712,7 @@ class BedrockAgentCoreApp(Starlette):
         sse_data = f"data: {json_string}\n\n"
         return sse_data.encode("utf-8")
 
-    def _sync_stream_with_error_handling(self, generator):
+    def _sync_stream_with_error_handling(self, generator: Any) -> Any:
         """Wrap sync generator to handle errors and convert to SSE format."""
         try:
             for value in generator:

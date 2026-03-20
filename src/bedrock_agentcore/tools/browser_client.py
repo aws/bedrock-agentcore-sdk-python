@@ -25,9 +25,9 @@ from .._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoi
 from .config import BrowserExtension, ProfileConfiguration, ProxyConfiguration, ViewportConfiguration
 
 
-def _to_dict(value):
+def _to_dict(value: Any) -> Dict[str, Any]:
     """Convert a dataclass or dict to a dict. Passes dicts through unchanged."""
-    return value.to_dict() if hasattr(value, "to_dict") else value
+    return value.to_dict() if hasattr(value, "to_dict") else value  # type: ignore[no-any-return]
 
 
 DEFAULT_IDENTIFIER = "aws.browser.v1"
@@ -85,8 +85,8 @@ class BrowserClient:
             config=client_config,
         )
 
-        self._identifier = None
-        self._session_id = None
+        self._identifier: Optional[str] = None
+        self._session_id: Optional[str] = None
 
     @property
     def identifier(self) -> Optional[str]:
@@ -94,7 +94,7 @@ class BrowserClient:
         return self._identifier
 
     @identifier.setter
-    def identifier(self, value: Optional[str]):
+    def identifier(self, value: Optional[str]) -> None:
         """Set the browser identifier."""
         self._identifier = value
 
@@ -104,7 +104,7 @@ class BrowserClient:
         return self._session_id
 
     @session_id.setter
-    def session_id(self, value: Optional[str]):
+    def session_id(self, value: Optional[str]) -> None:
         """Set the session ID."""
         self._session_id = value
 
@@ -178,7 +178,7 @@ class BrowserClient:
         """
         self.logger.info("Creating browser: %s", name)
 
-        request_params = {
+        request_params: Dict[str, Any] = {
             "name": name,
             "executionRoleArn": execution_role_arn,
             "networkConfiguration": network_configuration or {"networkMode": "PUBLIC"},
@@ -201,7 +201,7 @@ class BrowserClient:
             request_params["clientToken"] = client_token
 
         response = self.control_plane_client.create_browser(**request_params)
-        return response
+        return response  # type: ignore[no-any-return]
 
     def delete_browser(self, browser_id: str, client_token: Optional[str] = None) -> Dict:
         """Delete a custom browser.
@@ -221,12 +221,12 @@ class BrowserClient:
         """
         self.logger.info("Deleting browser: %s", browser_id)
 
-        request_params = {"browserId": browser_id}
+        request_params: Dict[str, Any] = {"browserId": browser_id}
         if client_token:
             request_params["clientToken"] = client_token
 
         response = self.control_plane_client.delete_browser(**request_params)
-        return response
+        return response  # type: ignore[no-any-return]
 
     def get_browser(self, browser_id: str) -> Dict:
         """Get detailed information about a browser.
@@ -253,7 +253,7 @@ class BrowserClient:
         """
         self.logger.info("Getting browser: %s", browser_id)
         response = self.control_plane_client.get_browser(browserId=browser_id)
-        return response
+        return response  # type: ignore[no-any-return]
 
     def list_browsers(
         self,
@@ -281,14 +281,14 @@ class BrowserClient:
         """
         self.logger.info("Listing browsers (type=%s)", browser_type)
 
-        request_params = {"maxResults": max_results}
+        request_params: Dict[str, Any] = {"maxResults": max_results}
         if browser_type:
             request_params["type"] = browser_type
         if next_token:
             request_params["nextToken"] = next_token
 
         response = self.control_plane_client.list_browsers(**request_params)
-        return response
+        return response  # type: ignore[no-any-return]
 
     def start(
         self,
@@ -355,7 +355,7 @@ class BrowserClient:
         """
         self.logger.info("Starting browser session...")
 
-        request_params = {
+        request_params: Dict[str, Any] = {
             "browserIdentifier": identifier,
             "name": name or f"browser-session-{uuid.uuid4().hex[:8]}",
             "sessionTimeoutSeconds": session_timeout_seconds,
@@ -431,7 +431,7 @@ class BrowserClient:
         self.logger.info("Getting session: %s", session_id)
 
         response = self.data_plane_client.get_browser_session(browserIdentifier=browser_id, sessionId=session_id)
-        return response
+        return response  # type: ignore[no-any-return]
 
     def list_sessions(
         self,
@@ -465,14 +465,14 @@ class BrowserClient:
 
         self.logger.info("Listing sessions for browser: %s", browser_id)
 
-        request_params = {"browserIdentifier": browser_id, "maxResults": max_results}
+        request_params: Dict[str, Any] = {"browserIdentifier": browser_id, "maxResults": max_results}
         if status:
             request_params["status"] = status
         if next_token:
             request_params["nextToken"] = next_token
 
         response = self.data_plane_client.list_browser_sessions(**request_params)
-        return response
+        return response  # type: ignore[no-any-return]
 
     def update_stream(
         self,
@@ -599,9 +599,9 @@ class BrowserClient:
         if not request.url:
             raise RuntimeError("Failed to generate live view url")
 
-        return request.url
+        return request.url  # type: ignore[no-any-return]
 
-    def take_control(self):
+    def take_control(self) -> None:
         """Take control of the browser by disabling automation stream."""
         self.logger.info("Taking control of browser session...")
 
@@ -613,7 +613,7 @@ class BrowserClient:
 
         self.update_stream("DISABLED")
 
-    def release_control(self):
+    def release_control(self) -> None:
         """Release control by enabling automation stream."""
         self.logger.info("Releasing control of browser session...")
 
@@ -674,7 +674,7 @@ def browser_session(
         ...     ws_url, headers = client.generate_ws_headers()
     """
     client = BrowserClient(region)
-    start_kwargs = {}
+    start_kwargs: Dict[str, Any] = {}
     if viewport is not None:
         start_kwargs["viewport"] = viewport
     if identifier is not None:

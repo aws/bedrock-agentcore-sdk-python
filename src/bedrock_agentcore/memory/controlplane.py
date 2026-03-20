@@ -92,7 +92,7 @@ class MemoryControlPlaneClient:
 
         try:
             response = self.client.create_memory(**params)
-            memory = response["memory"]
+            memory: Dict[str, Any] = response["memory"]
             memory_id = memory["id"]
 
             logger.info("Created memory: %s", memory_id)
@@ -118,7 +118,7 @@ class MemoryControlPlaneClient:
         """
         try:
             response = self.client.get_memory(memoryId=memory_id)
-            memory = response["memory"]
+            memory: Dict[str, Any] = response["memory"]
 
             # Add strategy count
             strategies = memory.get("strategies", [])
@@ -144,7 +144,7 @@ class MemoryControlPlaneClient:
             List of memory summaries
         """
         try:
-            memories = []
+            memories: List[Dict[str, Any]] = []
             next_token = None
 
             while len(memories) < max_results:
@@ -239,7 +239,7 @@ class MemoryControlPlaneClient:
 
         try:
             response = self.client.update_memory(**params)
-            memory = response["memory"]
+            memory: Dict[str, Any] = response["memory"]
             logger.info("Updated memory: %s", memory_id)
 
             if wait_for_active:
@@ -300,7 +300,7 @@ class MemoryControlPlaneClient:
                     logger.warning("Error waiting for strategies to become ACTIVE: %s", e)
 
             # Now delete the memory
-            response = self.client.delete_memory(memoryId=memory_id, clientToken=str(uuid.uuid4()))
+            response: Dict[str, Any] = self.client.delete_memory(memoryId=memory_id, clientToken=str(uuid.uuid4()))
 
             logger.info("Initiated deletion of memory: %s", memory_id)
 
@@ -399,7 +399,8 @@ class MemoryControlPlaneClient:
 
             for strategy in strategies:
                 if strategy.get("strategyId") == strategy_id:
-                    return strategy
+                    result: Dict[str, Any] = strategy
+                    return result
 
             raise ValueError(f"Strategy {strategy_id} not found in memory {memory_id}")
 
@@ -567,7 +568,7 @@ class MemoryControlPlaneClient:
 
         start_time = time.time()
         last_memory_status = None
-        strategy_statuses = {}
+        strategy_statuses: Dict[str, str] = {}
 
         while time.time() - start_time < max_wait:
             try:

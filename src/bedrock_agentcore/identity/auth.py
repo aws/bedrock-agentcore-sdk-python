@@ -187,7 +187,7 @@ def requires_iam_access_token(
         try:
             response = sts_client.get_web_identity_token(**params)
             logger.info("Successfully obtained AWS IAM JWT token")
-            return response["WebIdentityToken"]
+            return response["WebIdentityToken"]  # type: ignore[no-any-return]
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "")
             if error_code in ["FeatureDisabledException", "FeatureDisabled"]:
@@ -231,7 +231,7 @@ def requires_api_key(*, provider_name: str, into: str = "api_key") -> Callable:
     def decorator(func: Callable) -> Callable:
         client = IdentityClient(_get_region())
 
-        async def _get_api_key():
+        async def _get_api_key() -> str:
             return await client.get_api_key(
                 provider_name=provider_name,
                 agent_identity_token=await _get_workload_access_token(client),
@@ -268,7 +268,7 @@ def requires_api_key(*, provider_name: str, into: str = "api_key") -> Callable:
     return decorator
 
 
-def _get_oauth2_callback_url(user_provided_oauth2_callback_url: Optional[str]):
+def _get_oauth2_callback_url(user_provided_oauth2_callback_url: Optional[str]) -> Optional[str]:
     if user_provided_oauth2_callback_url:
         return user_provided_oauth2_callback_url
 
@@ -298,7 +298,7 @@ async def _set_up_local_auth(client: IdentityClient) -> str:
 
     config_path = Path(".agentcore.json")
     workload_identity_name = None
-    config = {}
+    config: dict[str, str] = {}
     if config_path.exists():
         try:
             with open(config_path, "r", encoding="utf-8") as file:
@@ -327,7 +327,7 @@ async def _set_up_local_auth(client: IdentityClient) -> str:
     except Exception:
         print("Warning: could not write the created workload identity to file")
 
-    return client.get_workload_access_token(workload_identity_name, user_id=user_id)["workloadAccessToken"]
+    return client.get_workload_access_token(workload_identity_name, user_id=user_id)["workloadAccessToken"]  # type: ignore[no-any-return]
 
 
 def _get_region() -> str:

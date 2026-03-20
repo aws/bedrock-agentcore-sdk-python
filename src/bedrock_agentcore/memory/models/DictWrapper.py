@@ -1,6 +1,7 @@
 """Dictionary wrapper module for bedrock-agentcore memory models."""
 
-from typing import Any, Dict
+from collections.abc import ItemsView, KeysView, ValuesView
+from typing import Any, Dict, List
 
 
 class DictWrapper:
@@ -30,26 +31,26 @@ class DictWrapper:
         """Support 'in' operator for checking if key exists."""
         return key in self._data
 
-    def keys(self):
+    def keys(self) -> KeysView[str]:
         """Return keys from the underlying dictionary."""
         return self._data.keys()
 
-    def values(self):
+    def values(self) -> ValuesView[Any]:
         """Return values from the underlying dictionary."""
         return self._data.values()
 
-    def items(self):
+    def items(self) -> ItemsView[str, Any]:
         """Return items from the underlying dictionary."""
         return self._data.items()
 
-    def __dir__(self):
+    def __dir__(self) -> List[str]:
         """Enable tab completion and introspection of available attributes."""
         return list(self._data.keys()) + ["get"]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a JSON-formatted string representation of the data."""
         return self._data.__repr__()
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Return a JSON-formatted string representation of the data."""
         return self.__repr__()

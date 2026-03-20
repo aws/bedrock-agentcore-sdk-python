@@ -287,10 +287,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         # 1. Try new approach (metadata filter)
         event_metadata = [
-            EventMetadataFilter.build_expression(
-                left_operand=LeftExpression.build(STATE_TYPE_KEY),
+            EventMetadataFilter.build_expression(  # type: ignore[attr-defined]
+                left_operand=LeftExpression.build(STATE_TYPE_KEY),  # type: ignore[attr-defined]
                 operator=OperatorType.EQUALS_TO,
-                right_operand=RightExpression.build(StateType.SESSION.value),
+                right_operand=RightExpression.build(StateType.SESSION.value),  # type: ignore[attr-defined]
             )
         ]
 
@@ -362,7 +362,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         # Cache the created_at timestamp to avoid re-fetching on updates
         if session_agent.created_at:
-            self._agent_created_at_cache[session_agent.agent_id] = session_agent.created_at
+            self._agent_created_at_cache[session_agent.agent_id] = session_agent.created_at  # type: ignore[assignment]
 
         if self.config.batch_size > 1:
             # Buffer the agent state events
@@ -421,15 +421,15 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         try:
             # 1. Try new approach (metadata filter)
             event_metadata = [
-                EventMetadataFilter.build_expression(
-                    left_operand=LeftExpression.build(STATE_TYPE_KEY),
+                EventMetadataFilter.build_expression(  # type: ignore[attr-defined]
+                    left_operand=LeftExpression.build(STATE_TYPE_KEY),  # type: ignore[attr-defined]
                     operator=OperatorType.EQUALS_TO,
-                    right_operand=RightExpression.build(StateType.AGENT.value),
+                    right_operand=RightExpression.build(StateType.AGENT.value),  # type: ignore[attr-defined]
                 ),
-                EventMetadataFilter.build_expression(
-                    left_operand=LeftExpression.build(AGENT_ID_KEY),
+                EventMetadataFilter.build_expression(  # type: ignore[attr-defined]
+                    left_operand=LeftExpression.build(AGENT_ID_KEY),  # type: ignore[attr-defined]
                     operator=OperatorType.EQUALS_TO,
-                    right_operand=RightExpression.build(agent_id),
+                    right_operand=RightExpression.build(agent_id),  # type: ignore[attr-defined]
                 ),
             ]
 
@@ -446,7 +446,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 agent = SessionAgent.from_dict(agent_data)
                 # Cache the created_at timestamp to avoid re-fetching on updates
                 if agent.created_at:
-                    self._agent_created_at_cache[agent_id] = agent.created_at
+                    self._agent_created_at_cache[agent_id] = agent.created_at  # type: ignore[assignment]
                 return agent
 
             # 2. Fallback: check for legacy event and migrate
@@ -497,13 +497,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 raise SessionException(f"Agent {agent_id} in session {session_id} does not exist")
 
         # Set created_at from cache before creating the update event
-        session_agent.created_at = self._agent_created_at_cache[agent_id]
+        session_agent.created_at = self._agent_created_at_cache[agent_id]  # type: ignore[assignment]
 
         # Create a new agent event (AgentCore Memory is immutable)
         # create_agent will handle batching and caching appropriately
         self.create_agent(session_id, session_agent)
 
-    def create_message(
+    def create_message(  # type: ignore[override]
         self, session_id: str, agent_id: str, session_message: SessionMessage, **kwargs: Any
     ) -> Optional[dict[str, Any]]:
         """Create a new message in AgentCore Memory.
@@ -737,7 +737,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         created_message = self.create_message(self.session_id, agent.agent_id, SessionMessage.from_message(message, 0))
         if created_message is None:
             return
-        session_message = SessionMessage.from_message(message, created_message.get("eventId"))
+        session_message = SessionMessage.from_message(message, created_message.get("eventId"))  # type: ignore[arg-type]
         self._latest_agent_message[agent.agent_id] = session_message
 
     def retrieve_customer_context(self, event: MessageAddedEvent) -> None:
@@ -747,7 +747,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             event (MessageAddedEvent): The message added event containing the agent and message data.
         """
         messages = event.agent.messages
-        if not messages or messages[-1].get("role") != "user" or "toolResult" in messages[-1].get("content")[0]:
+        if not messages or messages[-1].get("role") != "user" or "toolResult" in messages[-1].get("content")[0]:  # type: ignore[index]
             return None
         if not self.config.retrieval_config:
             # Only retrieve LTM
@@ -755,7 +755,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         user_query = messages[-1]["content"][0]["text"]
 
-        def retrieve_for_namespace(namespace: str, retrieval_config: RetrievalConfig):
+        def retrieve_for_namespace(namespace: str, retrieval_config: RetrievalConfig) -> list[str]:
             """Helper function to retrieve memories for a single namespace."""
             resolved_namespace = namespace.format(
                 actorId=self.config.actor_id,
@@ -818,7 +818,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             logger.error("Failed to retrieve customer context: %s", e)
 
     @override
-    def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
+    def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         """Register additional hooks.
 
         Args:
@@ -830,7 +830,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         # Only register AfterInvocationEvent hook when batching is enabled
         if self.config.batch_size > 1:
-            registry.add_callback(AfterInvocationEvent, lambda event: self._flush_messages())
+            registry.add_callback(AfterInvocationEvent, lambda event: self._flush_messages())  # type: ignore[arg-type]
 
     @override
     def initialize(self, agent: "Agent", **kwargs: Any) -> None:
@@ -1073,7 +1073,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
             # Schedule next flush
             self._flush_timer = threading.Timer(
-                self.config.flush_interval_seconds,
+                self.config.flush_interval_seconds,  # type: ignore[arg-type]
                 self._interval_flush_callback,
             )
             self._flush_timer.daemon = True

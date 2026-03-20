@@ -128,7 +128,7 @@ class ConversationalMessage:
     text: str
     role: MessageRole
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate message fields after initialization."""
         if not isinstance(self.text, str):
             raise ValueError("ConversationalMessage.text must be a string")

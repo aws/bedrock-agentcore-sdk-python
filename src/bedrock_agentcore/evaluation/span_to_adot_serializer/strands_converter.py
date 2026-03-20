@@ -120,13 +120,13 @@ class StrandsEventParser:
 class StrandsToADOTConverter:
     """Convert Strands OTel spans to ADOT format."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize converter with parsers and builder."""
         self.span_parser = SpanParser()
         self.event_parser = StrandsEventParser()
         self.doc_builder = ADOTDocumentBuilder()
 
-    def convert_span(self, span) -> List[Dict[str, Any]]:
+    def convert_span(self, span: Any) -> List[Dict[str, Any]]:
         """Convert a single span to ADOT documents."""
         documents = []
 

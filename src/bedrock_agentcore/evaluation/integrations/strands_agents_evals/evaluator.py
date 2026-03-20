@@ -31,7 +31,7 @@ def _is_valid_adot_document(item: Any) -> bool:
     return isinstance(item, dict) and "scope" in item and "traceId" in item and "spanId" in item
 
 
-def _validate_spans(spans):
+def _validate_spans(spans: Any) -> bool:
     """Validate spans are OpenTelemetry Span objects."""
     if not spans:
         return False
@@ -127,14 +127,14 @@ class StrandsEvalsAgentCoreEvaluator(Evaluator[str, str]):
             ]
 
         # Check if spans are already in ADOT format or need conversion
-        if _is_adot_format(evaluation_case.actual_trajectory):
+        if _is_adot_format(evaluation_case.actual_trajectory):  # type: ignore[arg-type]
             # Already in ADOT format (fetched from CloudWatch), use as-is
             spans = evaluation_case.actual_trajectory
         else:
             # Raw OTel spans from in-memory exporter, validate and convert
             if not _validate_spans(evaluation_case.actual_trajectory):
                 return [EvaluationOutput(score=0.0, test_pass=False, reason="Invalid span objects")]
-            spans = convert_strands_to_adot(evaluation_case.actual_trajectory)
+            spans = convert_strands_to_adot(evaluation_case.actual_trajectory)  # type: ignore[arg-type]
 
         request_payload = {"evaluatorId": self.evaluator_id, "evaluationInput": {"sessionSpans": spans}}
 
@@ -165,7 +165,7 @@ class StrandsEvalsAgentCoreEvaluator(Evaluator[str, str]):
         return await asyncio.to_thread(self.evaluate, evaluation_case)
 
 
-def create_strands_evaluator(evaluator_id: str, **kwargs) -> StrandsEvalsAgentCoreEvaluator:
+def create_strands_evaluator(evaluator_id: str, **kwargs: Any) -> StrandsEvalsAgentCoreEvaluator:
     """Create Strands-compatible evaluator backed by AgentCore Evaluation API.
 
     Args:
