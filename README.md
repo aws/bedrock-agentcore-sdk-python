@@ -20,6 +20,7 @@
     <a href="https://github.com/aws/bedrock-agentcore-sdk-python/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/aws/bedrock-agentcore-sdk-python"/></a>
     <a href="https://pypi.org/project/bedrock-agentcore"><img alt="PyPI version" src="https://img.shields.io/pypi/v/bedrock-agentcore"/></a>
     <a href="https://python.org"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/bedrock-agentcore"/></a>
+    <a href="https://codecov.io/gh/aws/bedrock-agentcore-sdk-python"><img alt="codecov" src="https://codecov.io/gh/aws/bedrock-agentcore-sdk-python/branch/main/graph/badge.svg"/></a>
   </div>
 
   <p>
