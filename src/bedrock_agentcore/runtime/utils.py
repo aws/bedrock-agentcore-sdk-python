@@ -33,3 +33,8 @@ def convert_complex_objects(obj: Any, _depth: int = 0) -> Any:
     # Return primitives as-is
     else:
         return obj
+
+
+def is_valid_partition(partition: str) -> bool:
+    """Returns if parsed-arn partition is valid."""
+    return partition in ("aws", "aws-us-gov")
