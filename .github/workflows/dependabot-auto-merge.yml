@@ -1,0 +1,68 @@
+# .github/workflows/dependabot-auto-merge.yml
+#
+# Automatically enables auto-merge on Dependabot PRs for minor and patch
+# version bumps. GitHub holds the actual merge until all required status
+# checks in the 'main-status-checks' Ruleset pass.
+#
+# Major version bumps are explicitly skipped and require human review
+# from the aws/bedrock-agentcore-maintainers team.
+#
+# PREREQUISITES (already completed):
+#   ✅ Ruleset 'main-status-checks' — CI must pass, no bypass for anyone
+#   ✅ Ruleset 'main' — approval requirement, Dependabot bypass added
+#   ✅ Settings → General → Allow auto-merge enabled
+
+name: Dependabot Auto-merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write      # required to execute the squash merge
+  pull-requests: write # required to enable auto-merge
+
+jobs:
+  dependabot-auto-merge:
+    name: Auto-merge minor/patch PRs
+    runs-on: ubuntu-latest
+
+    # Only act on PRs opened by the Dependabot bot.
+    # The correct login is 'dependabot[bot]' — the bare string 'dependabot'
+    # never matches and would silently skip all runs.
+    if: github.actor == 'dependabot[bot]'
+
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # patch and minor bumps: enable auto-merge.
+      # GitHub holds the merge until all required status checks pass.
+      # If CI fails the PR stays open — no merge happens.
+      - name: Enable auto-merge for minor/patch bumps
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge --auto --squash "$PR_URL"
+          echo "✓ Auto-merge enabled: ${{ steps.metadata.outputs.dependency-names }} \
+          (${{ steps.metadata.outputs.previous-version }} → \
+          ${{ steps.metadata.outputs.new-version }}, \
+          ${{ steps.metadata.outputs.update-type }})"
+
+      # major bumps: log clearly and do nothing.
+      # The PR stays open and is assigned to aws/bedrock-agentcore-maintainers
+      # via dependabot.yml for human review.
+      - name: Skip major bumps — human review required
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        run: |
+          echo "⏭ Skipped: ${{ steps.metadata.outputs.dependency-names }} \
+          is a major bump (${{ steps.metadata.outputs.previous-version }} → \
+          ${{ steps.metadata.outputs.new-version }}). \
+          Requires review from aws/bedrock-agentcore-maintainers."
