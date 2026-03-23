@@ -1,0 +1,138 @@
+name: Integration Tests (Previous Version)
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Specific version to test (e.g. 1.4.6). Leave empty for latest published.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-version:
+    name: Resolve Previous Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: Resolve version to test
+        id: resolve
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then
+            echo "Using manually specified version: $INPUT_VERSION"
+            echo "version=$INPUT_VERSION" >> $GITHUB_OUTPUT
+          else
+            # Get the current version from pyproject.toml
+            CURRENT_VERSION=$(grep -m1 -oP '^version = "\K[^"]+' pyproject.toml)
+            echo "Current source version: $CURRENT_VERSION"
+
+            # Get the latest published version from PyPI
+            PYPI_VERSION=$(pip index versions bedrock-agentcore 2>/dev/null | head -1 | grep -oP '\([\d.]+\)' | tr -d '()')
+
+            if [ -z "$PYPI_VERSION" ]; then
+              echo "❌ Could not determine latest PyPI version"
+              exit 1
+            fi
+
+            echo "Latest PyPI version: $PYPI_VERSION"
+            echo "version=$PYPI_VERSION" >> $GITHUB_OUTPUT
+          fi
+
+  integ-test-previous:
+    name: Test (${{ matrix.group }}) v${{ needs.resolve-version.outputs.version }}
+    runs-on: ubuntu-latest
+    needs: resolve-version
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: runtime
+            path: tests_integ/runtime
+            timeout: 10
+            extra-deps: ""
+          - group: memory
+            path: tests_integ/memory/test_controlplane.py tests_integ/memory/test_memory_client.py tests_integ/memory/integrations/test_session_manager.py
+            timeout: 10
+            extra-deps: ""
+          - group: evaluation
+            path: tests_integ/evaluation
+            timeout: 15
+            extra-deps: "strands-agents-evals"
+          - group: services
+            path: tests_integ/services
+            timeout: 5
+            extra-deps: ""
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AGENTCORE_INTEG_TEST_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+
+      # For PRs: checkout the PR's test code
+      # For manual: checkout main
+      - name: Checkout test code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: Install previous version from PyPI
+        env:
+          PREV_VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          echo "Installing bedrock-agentcore==$PREV_VERSION from PyPI"
+          pip install "bedrock-agentcore==$PREV_VERSION"
+          pip install --no-cache-dir pytest pytest-xdist pytest-order requests strands-agents uvicorn httpx starlette websockets ${{ matrix.extra-deps }}
+
+          # Verify installed version
+          INSTALLED=$(pip show bedrock-agentcore | grep Version | awk '{print $2}')
+          echo "Installed version: $INSTALLED"
+          if [ "$INSTALLED" != "$PREV_VERSION" ]; then
+            echo "❌ Version mismatch: expected $PREV_VERSION, got $INSTALLED"
+            exit 1
+          fi
+          echo "✓ Verified version $PREV_VERSION installed"
+
+      - name: Run integration tests
+        env:
+          AWS_REGION: us-west-2
+          PYTHONUNBUFFERED: 1
+          MEMORY_KINESIS_ARN: ${{ secrets.MEMORY_KINESIS_ARN }}
+          MEMORY_ROLE_ARN: ${{ secrets.MEMORY_ROLE_ARN }}
+          MEMORY_PREPOPULATED_ID: ${{ secrets.MEMORY_PREPOPULATED_ID }}
+          RESOURCE_POLICY_TEST_ARN: ${{ secrets.RESOURCE_POLICY_TEST_ARN }}
+          RESOURCE_POLICY_TEST_PRINCIPAL: ${{ secrets.RESOURCE_POLICY_TEST_PRINCIPAL }}
+          TESTED_VERSION: ${{ needs.resolve-version.outputs.version }}
+        id: tests
+        timeout-minutes: ${{ matrix.timeout }}
+        run: |
+          echo "============================================="
+          echo "Running integ tests against v$TESTED_VERSION"
+          echo "============================================="
+          pytest ${{ matrix.path }} -n auto --dist=loadscope -s --log-cli-level=INFO || echo "::warning::Integration tests failed against v$TESTED_VERSION (${{ matrix.group }})"
