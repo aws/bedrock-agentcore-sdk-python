@@ -28,7 +28,7 @@ jobs:
 
       - name: Safety Check - Prevent Workflow Modification Attacks
         id: safety-check
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           result-encoding: string
           script: |
