@@ -80,6 +80,12 @@ jobs:
       name: pypi
       url: https://pypi.org/project/bedrock-agentcore/
 
+    # id-token: write is required for OIDC Trusted Publishing.
+    # This replaces the PYPI_API_TOKEN secret
+    permissions:
+      id-token: write
+      contents: write
+
     steps:
       - uses: actions/checkout@v6
         with:
@@ -91,30 +97,27 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Verify PyPI token exists
-        env:
-          PYPI_TOKEN_SET: ${{ secrets.PYPI_API_TOKEN != '' }}
-        run: |
-          if [ "$PYPI_TOKEN_SET" != "true" ]; then
-            echo "❌ ERROR: PYPI_API_TOKEN not configured!"
-            exit 1
-          fi
-          echo "✓ PyPI token is configured"
-
-      - name: Check if version exists on PyPI
+      # Uses the PyPI JSON API — stable and versioned.
+      # pip index versions output format is not guaranteed stable across
+      # pip versions and should not be used in CI.
+      - name: Check if version already exists on PyPI
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          if pip index versions bedrock-agentcore | grep -q "^Available versions.*$VERSION"; then
+          PYPI_VERSIONS=$(curl -sf https://pypi.org/pypi/bedrock-agentcore/json \
+            | python3 -c "import sys, json; releases = json.load(sys.stdin)['releases']; print('\n'.join(releases.keys()))")
+
+          if echo "$PYPI_VERSIONS" | grep -qx "$VERSION"; then
             echo "❌ ERROR: Version $VERSION already exists on PyPI!"
             exit 1
           fi
           echo "✓ Version $VERSION is not on PyPI, safe to publish"
 
+      # automatically detects and uses Trusted Publishing via OIDC when
+      # no token is provided and id-token: write permission is set.
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: false
           verbose: true
 
@@ -124,7 +127,9 @@ jobs:
         run: |
           echo "Waiting for package to be available on PyPI..."
           for i in {1..10}; do
-            if pip index versions bedrock-agentcore | grep -q "$VERSION"; then
+            PYPI_VERSIONS=$(curl -sf https://pypi.org/pypi/bedrock-agentcore/json \
+              | python3 -c "import sys, json; releases = json.load(sys.stdin)['releases']; print('\n'.join(releases.keys()))" 2>/dev/null)
+            if echo "$PYPI_VERSIONS" | grep -qx "$VERSION"; then
               echo "✓ Package version $VERSION is now available on PyPI"
               break
             fi
