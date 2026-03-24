@@ -384,6 +384,60 @@ class BedrockAgentCoreApp(Starlette):
         except Exception:
             return False
 
+    def _emit_invocation_otel_attributes(self, payload: Any, result: Any) -> None:
+        """Emit OTEL span attributes with the invocation input and output.
+
+        These attributes provide a canonical, framework-agnostic source of the
+        user's prompt and the agent's response for AgentCore Evaluation. They
+        enable evaluation of agents that use custom state schemas (e.g. workflow
+        agents with TypedDict states) where the default MessagesState-based
+        extraction in the evaluation mapper would fail.
+
+        The attributes are set on the current active span (typically the root
+        POST /invocations span created by ADOT auto-instrumentation).
+        """
+        try:
+            from opentelemetry import trace as otel_trace
+
+            span = otel_trace.get_current_span()
+            if not span or not span.is_recording():
+                return
+
+            # Extract user prompt from payload
+            user_prompt = None
+            if isinstance(payload, dict):
+                for key in ("prompt", "input", "query", "message", "question", "user_input"):
+                    if key in payload and isinstance(payload[key], str):
+                        user_prompt = payload[key]
+                        break
+                if user_prompt is None:
+                    user_prompt = json.dumps(payload, ensure_ascii=False, default=str)
+            elif isinstance(payload, str):
+                user_prompt = payload
+            else:
+                user_prompt = str(payload)
+
+            # Extract agent response from result
+            agent_response = None
+            if isinstance(result, str):
+                agent_response = result
+            elif isinstance(result, Response):
+                return  # Skip for streaming/custom responses — cannot capture full output
+            elif result is not None:
+                try:
+                    agent_response = json.dumps(result, ensure_ascii=False, default=str)
+                except Exception:
+                    agent_response = str(result)
+
+            if user_prompt:
+                span.set_attribute("agentcore.invocation.user_prompt", user_prompt[:16384])
+            if agent_response:
+                span.set_attribute("agentcore.invocation.agent_response", agent_response[:16384])
+        except ImportError:
+            pass  # OpenTelemetry not installed — silently skip
+        except Exception:
+            self.logger.debug("Failed to emit invocation OTEL attributes", exc_info=True)
+
     async def _handle_invocation(self, request):
         request_context = self._build_request_context(request)
 
@@ -410,6 +464,8 @@ class BedrockAgentCoreApp(Starlette):
             handler_name = handler.__name__ if hasattr(handler, "__name__") else "unknown"
             self.logger.debug("Invoking handler: %s", handler_name)
             result = await self._invoke_handler(handler, request_context, takes_context, payload)
+
+            self._emit_invocation_otel_attributes(payload, result)
 
             duration = time.time() - start_time
             if inspect.isgenerator(result):
