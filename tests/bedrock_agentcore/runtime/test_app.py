@@ -2821,12 +2821,10 @@ class TestEmitInvocationOtelAttributes:
         with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
             app._emit_invocation_otel_attributes("prompt", {"answer": "42"})
 
-        mock_span.set_attribute.assert_any_call(
-            "agentcore.invocation.agent_response", json.dumps({"answer": "42"})
-        )
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.agent_response", json.dumps({"answer": "42"}))
 
-    def test_response_object_skips_emission(self):
-        """Starlette Response result causes early return (no agent_response set)."""
+    def test_response_object_skips_agent_response_but_emits_user_prompt(self):
+        """Starlette Response result skips agent_response but still emits user_prompt."""
         from starlette.responses import Response as StarletteResponse
 
         app = self._make_app()
@@ -2834,10 +2832,11 @@ class TestEmitInvocationOtelAttributes:
         mock_span.is_recording.return_value = True
 
         with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
-            app._emit_invocation_otel_attributes("prompt", StarletteResponse(content="streaming"))
+            app._emit_invocation_otel_attributes("my prompt", StarletteResponse(content="streaming"))
 
         attr_names = [c[0][0] for c in mock_span.set_attribute.call_args_list]
         assert "agentcore.invocation.agent_response" not in attr_names
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.user_prompt", "my prompt")
 
     def test_none_result_skips_agent_response(self):
         """None result does not set agent_response attribute."""
@@ -2910,47 +2909,89 @@ class TestEmitInvocationOtelAttributes:
         assert call_args[0] == {"prompt": "test"}
         assert call_args[1] == {"result": "ok"}
 
-    def test_does_not_override_existing_user_prompt(self):
-        """If user_prompt attribute is already set on the span, it should not be overridden."""
+    def test_prompt_key_extracts_specified_key(self):
+        """When prompt_key is configured, that specific key is used."""
         app = self._make_app()
+        app._prompt_key = "user_input"
         mock_span = MagicMock()
         mock_span.is_recording.return_value = True
-        mock_span.attributes = {"agentcore.invocation.user_prompt": "custom prompt"}
 
         with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
-            app._emit_invocation_otel_attributes({"prompt": "auto-extracted"}, "response text")
+            app._emit_invocation_otel_attributes(
+                {"input": "file.txt", "user_input": "What is the weather?"},
+                "Sunny",
+            )
 
-        # user_prompt should NOT be set (already exists), but agent_response should be set
-        attr_names = [c[0][0] for c in mock_span.set_attribute.call_args_list]
-        assert "agentcore.invocation.user_prompt" not in attr_names
-        mock_span.set_attribute.assert_any_call("agentcore.invocation.agent_response", "response text")
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.user_prompt", "What is the weather?")
 
-    def test_does_not_override_existing_agent_response(self):
-        """If agent_response attribute is already set on the span, it should not be overridden."""
+    def test_prompt_key_falls_back_to_json_when_key_missing(self):
+        """When prompt_key is configured but missing from payload, falls back to JSON."""
         app = self._make_app()
+        app._prompt_key = "user_input"
         mock_span = MagicMock()
         mock_span.is_recording.return_value = True
-        mock_span.attributes = {"agentcore.invocation.agent_response": "custom response"}
 
         with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
-            app._emit_invocation_otel_attributes({"prompt": "hello"}, "auto-extracted response")
+            app._emit_invocation_otel_attributes({"input": "file.txt"}, "resp")
 
-        # agent_response should NOT be set (already exists), but user_prompt should be set
-        attr_names = [c[0][0] for c in mock_span.set_attribute.call_args_list]
-        assert "agentcore.invocation.agent_response" not in attr_names
-        mock_span.set_attribute.assert_any_call("agentcore.invocation.user_prompt", "hello")
+        calls = {c[0][0]: c[0][1] for c in mock_span.set_attribute.call_args_list}
+        assert calls["agentcore.invocation.user_prompt"] == json.dumps({"input": "file.txt"})
 
-    def test_does_not_override_when_both_already_set(self):
-        """If both attributes are already set on the span, neither should be overridden."""
+    def test_response_key_extracts_specified_key(self):
+        """When response_key is configured, that specific key is used from dict result."""
         app = self._make_app()
+        app._response_key = "answer"
         mock_span = MagicMock()
         mock_span.is_recording.return_value = True
-        mock_span.attributes = {
-            "agentcore.invocation.user_prompt": "custom prompt",
-            "agentcore.invocation.agent_response": "custom response",
-        }
 
         with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
-            app._emit_invocation_otel_attributes({"prompt": "auto"}, "auto resp")
+            app._emit_invocation_otel_attributes("prompt", {"answer": "42", "debug": "info"})
 
-        mock_span.set_attribute.assert_not_called()
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.agent_response", "42")
+
+    def test_response_key_ignored_for_string_result(self):
+        """When response_key is configured but result is a string, string is used directly."""
+        app = self._make_app()
+        app._response_key = "answer"
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes("prompt", "plain response")
+
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.agent_response", "plain response")
+
+    def test_entrypoint_with_prompt_key(self):
+        """@app.entrypoint(prompt_key=...) stores the key on the app."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint(prompt_key="user_input")
+        def handler(payload):
+            return "ok"
+
+        assert app._prompt_key == "user_input"
+        assert app._response_key is None
+        assert app.handlers["main"] is handler
+
+    def test_entrypoint_with_prompt_and_response_key(self):
+        """@app.entrypoint(prompt_key=..., response_key=...) stores both keys."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint(prompt_key="user_input", response_key="answer")
+        def handler(payload):
+            return {"answer": "42"}
+
+        assert app._prompt_key == "user_input"
+        assert app._response_key == "answer"
+
+    def test_entrypoint_without_args_still_works(self):
+        """@app.entrypoint without arguments still works as before."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            return "ok"
+
+        assert app._prompt_key is None
+        assert app._response_key is None
+        assert app.handlers["main"] is handler

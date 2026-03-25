@@ -120,6 +120,8 @@ class BedrockAgentCoreApp(Starlette):
         self.handlers: Dict[str, Callable] = {}
         self._ping_handler: Optional[Callable] = None
         self._websocket_handler: Optional[Callable] = None
+        self._prompt_key: Optional[str] = None
+        self._response_key: Optional[str] = None
         self._active_tasks: Dict[int, Dict[str, Any]] = {}
         self._task_counter_lock: threading.Lock = threading.Lock()
         self._forced_ping_status: Optional[PingStatus] = None
@@ -144,18 +146,44 @@ class BedrockAgentCoreApp(Starlette):
             self.logger.addHandler(handler)
             self.logger.setLevel(logging.DEBUG if self.debug else logging.INFO)
 
-    def entrypoint(self, func: Callable) -> Callable:
+    def entrypoint(
+        self, func: Callable = None, *, prompt_key: Optional[str] = None, response_key: Optional[str] = None
+    ) -> Callable:
         """Decorator to register a function as the main entrypoint.
 
         Args:
             func: The function to register as entrypoint
+            prompt_key: Optional key to extract user prompt from the payload dict.
+                If not specified, tries common keys in order (prompt, input, query,
+                message, question, user_input) then falls back to JSON serialization.
+            response_key: Optional key to extract agent response from the result dict.
+                If not specified, the full result is used.
 
         Returns:
             The decorated function with added serve method
+
+        Examples:
+            @app.entrypoint
+            def handler(payload):
+                ...
+
+            @app.entrypoint(prompt_key="user_input")
+            def handler(payload):
+                ...
         """
-        self.handlers["main"] = func
-        func.run = lambda port=8080, host=None: self.run(port, host)
-        return func
+
+        def decorator(f: Callable) -> Callable:
+            self.handlers["main"] = f
+            self._prompt_key = prompt_key
+            self._response_key = response_key
+            f.run = lambda port=8080, host=None: self.run(port, host)
+            return f
+
+        if func is not None:
+            # Called as @app.entrypoint without arguments
+            return decorator(func)
+        # Called as @app.entrypoint(...) with arguments
+        return decorator
 
     def ping(self, func: Callable) -> Callable:
         """Decorator to register a custom ping status handler.
@@ -395,6 +423,10 @@ class BedrockAgentCoreApp(Starlette):
 
         The attributes are set on the current active span (typically the root
         POST /invocations span created by ADOT auto-instrumentation).
+
+        When prompt_key or response_key is configured via @app.entrypoint(),
+        those specific keys are used to extract from dict payloads/results.
+        Otherwise, a heuristic tries common keys in priority order.
         """
         try:
             from opentelemetry import trace as otel_trace
@@ -406,10 +438,15 @@ class BedrockAgentCoreApp(Starlette):
             # Extract user prompt from payload
             user_prompt = None
             if isinstance(payload, dict):
-                for key in ("prompt", "input", "query", "message", "question", "user_input"):
-                    if key in payload and isinstance(payload[key], str):
-                        user_prompt = payload[key]
-                        break
+                if self._prompt_key is not None:
+                    value = payload.get(self._prompt_key)
+                    if isinstance(value, str):
+                        user_prompt = value
+                else:
+                    for key in ("prompt", "input", "query", "message", "question", "user_input"):
+                        if key in payload and isinstance(payload[key], str):
+                            user_prompt = payload[key]
+                            break
                 if user_prompt is None:
                     user_prompt = json.dumps(payload, ensure_ascii=False, default=str)
             elif isinstance(payload, str):
@@ -422,17 +459,25 @@ class BedrockAgentCoreApp(Starlette):
             if isinstance(result, str):
                 agent_response = result
             elif isinstance(result, Response):
-                return  # Skip for streaming/custom responses — cannot capture full output
+                pass  # Skip for streaming/custom responses — cannot capture full output
+            elif isinstance(result, dict) and self._response_key is not None:
+                value = result.get(self._response_key)
+                if isinstance(value, str):
+                    agent_response = value
+                elif value is not None:
+                    try:
+                        agent_response = json.dumps(value, ensure_ascii=False, default=str)
+                    except Exception:
+                        agent_response = str(value)
             elif result is not None:
                 try:
                     agent_response = json.dumps(result, ensure_ascii=False, default=str)
                 except Exception:
                     agent_response = str(result)
 
-            existing_attrs = span.attributes if hasattr(span, "attributes") and span.attributes else {}
-            if user_prompt and "agentcore.invocation.user_prompt" not in existing_attrs:
+            if user_prompt:
                 span.set_attribute("agentcore.invocation.user_prompt", user_prompt[:16384])
-            if agent_response and "agentcore.invocation.agent_response" not in existing_attrs:
+            if agent_response:
                 span.set_attribute("agentcore.invocation.agent_response", agent_response[:16384])
         except ImportError:
             pass  # OpenTelemetry not installed — silently skip
