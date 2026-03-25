@@ -2909,3 +2909,48 @@ class TestEmitInvocationOtelAttributes:
         call_args = mock_emit.call_args[0]
         assert call_args[0] == {"prompt": "test"}
         assert call_args[1] == {"result": "ok"}
+
+    def test_does_not_override_existing_user_prompt(self):
+        """If user_prompt attribute is already set on the span, it should not be overridden."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+        mock_span.attributes = {"agentcore.invocation.user_prompt": "custom prompt"}
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes({"prompt": "auto-extracted"}, "response text")
+
+        # user_prompt should NOT be set (already exists), but agent_response should be set
+        attr_names = [c[0][0] for c in mock_span.set_attribute.call_args_list]
+        assert "agentcore.invocation.user_prompt" not in attr_names
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.agent_response", "response text")
+
+    def test_does_not_override_existing_agent_response(self):
+        """If agent_response attribute is already set on the span, it should not be overridden."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+        mock_span.attributes = {"agentcore.invocation.agent_response": "custom response"}
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes({"prompt": "hello"}, "auto-extracted response")
+
+        # agent_response should NOT be set (already exists), but user_prompt should be set
+        attr_names = [c[0][0] for c in mock_span.set_attribute.call_args_list]
+        assert "agentcore.invocation.agent_response" not in attr_names
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.user_prompt", "hello")
+
+    def test_does_not_override_when_both_already_set(self):
+        """If both attributes are already set on the span, neither should be overridden."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+        mock_span.attributes = {
+            "agentcore.invocation.user_prompt": "custom prompt",
+            "agentcore.invocation.agent_response": "custom response",
+        }
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes({"prompt": "auto"}, "auto resp")
+
+        mock_span.set_attribute.assert_not_called()

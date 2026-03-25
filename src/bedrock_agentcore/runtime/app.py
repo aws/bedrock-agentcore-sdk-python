@@ -429,9 +429,10 @@ class BedrockAgentCoreApp(Starlette):
                 except Exception:
                     agent_response = str(result)
 
-            if user_prompt:
+            existing_attrs = span.attributes if hasattr(span, "attributes") and span.attributes else {}
+            if user_prompt and "agentcore.invocation.user_prompt" not in existing_attrs:
                 span.set_attribute("agentcore.invocation.user_prompt", user_prompt[:16384])
-            if agent_response:
+            if agent_response and "agentcore.invocation.agent_response" not in existing_attrs:
                 span.set_attribute("agentcore.invocation.agent_response", agent_response[:16384])
         except ImportError:
             pass  # OpenTelemetry not installed — silently skip
