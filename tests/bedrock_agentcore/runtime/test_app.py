@@ -2715,3 +2715,283 @@ class TestWorkerLoopInvocation:
         content = response.content.decode("utf-8")
         assert 'data: {"chunk": "a"}' in content
         assert 'data: {"chunk": "b"}' in content
+
+
+class TestEmitInvocationOtelAttributes:
+    """Tests for _emit_invocation_otel_attributes OTEL evaluation support."""
+
+    def _make_app(self):
+        return BedrockAgentCoreApp()
+
+    def test_dict_payload_extracts_prompt_key(self):
+        """Dict payload with 'prompt' key is extracted as user_prompt."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes({"prompt": "hello world"}, "response text")
+
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.user_prompt", "hello world")
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.agent_response", "response text")
+
+    def test_dict_payload_extracts_user_input_key(self):
+        """Dict payload with 'user_input' key (workflow pattern) is extracted."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes(
+                {"user_input": "What is the weather?", "intent": ""},
+                "The weather is sunny.",
+            )
+
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.user_prompt", "What is the weather?")
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.agent_response", "The weather is sunny.")
+
+    def test_dict_payload_key_priority_order(self):
+        """First matching key in priority order wins."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes(
+                {"user_input": "last", "prompt": "first", "query": "middle"},
+                "resp",
+            )
+
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.user_prompt", "first")
+
+    def test_dict_payload_no_standard_key_falls_back_to_json(self):
+        """Dict payload without standard keys falls back to full JSON serialization."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes({"custom_field": "value"}, "resp")
+
+        calls = {c[0][0]: c[0][1] for c in mock_span.set_attribute.call_args_list}
+        assert calls["agentcore.invocation.user_prompt"] == json.dumps({"custom_field": "value"})
+
+    def test_dict_payload_skips_non_string_values(self):
+        """Dict payload with non-string value for a standard key falls through to next key."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes(
+                {"prompt": 123, "input": "actual text"},
+                "resp",
+            )
+
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.user_prompt", "actual text")
+
+    def test_string_payload(self):
+        """String payload is used directly as user_prompt."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes("plain text prompt", "response")
+
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.user_prompt", "plain text prompt")
+
+    def test_non_string_non_dict_payload(self):
+        """Non-string, non-dict payload is str()-ified."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes(42, "response")
+
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.user_prompt", "42")
+
+    def test_dict_result_serialized_as_json(self):
+        """Dict result is serialized as JSON for agent_response."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes("prompt", {"answer": "42"})
+
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.agent_response", json.dumps({"answer": "42"}))
+
+    def test_response_object_skips_agent_response_but_emits_user_prompt(self):
+        """Starlette Response result skips agent_response but still emits user_prompt."""
+        from starlette.responses import Response as StarletteResponse
+
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes("my prompt", StarletteResponse(content="streaming"))
+
+        attr_names = [c[0][0] for c in mock_span.set_attribute.call_args_list]
+        assert "agentcore.invocation.agent_response" not in attr_names
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.user_prompt", "my prompt")
+
+    def test_none_result_skips_agent_response(self):
+        """None result does not set agent_response attribute."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes("prompt", None)
+
+        attr_names = [c[0][0] for c in mock_span.set_attribute.call_args_list]
+        assert "agentcore.invocation.user_prompt" in attr_names
+        assert "agentcore.invocation.agent_response" not in attr_names
+
+    def test_truncation_at_16384(self):
+        """Attributes are truncated to 16384 characters."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        long_prompt = "x" * 20000
+        long_response = "y" * 20000
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes(long_prompt, long_response)
+
+        calls = {c[0][0]: c[0][1] for c in mock_span.set_attribute.call_args_list}
+        assert len(calls["agentcore.invocation.user_prompt"]) == 16384
+        assert len(calls["agentcore.invocation.agent_response"]) == 16384
+
+    def test_non_recording_span_skips(self):
+        """Non-recording span causes early return with no attributes set."""
+        app = self._make_app()
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = False
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes("prompt", "response")
+
+        mock_span.set_attribute.assert_not_called()
+
+    def test_no_span_skips(self):
+        """None span causes early return with no attributes set."""
+        app = self._make_app()
+
+        with patch("opentelemetry.trace.get_current_span", return_value=None):
+            app._emit_invocation_otel_attributes("prompt", "response")
+
+    def test_otel_import_error_silently_skipped(self):
+        """ImportError for opentelemetry is silently caught."""
+        app = self._make_app()
+
+        with patch.dict("sys.modules", {"opentelemetry": None, "opentelemetry.trace": None}):
+            app._emit_invocation_otel_attributes("prompt", "response")
+
+    def test_called_during_invocation(self):
+        """Verify _emit_invocation_otel_attributes is called during POST /invocations."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            return {"result": "ok"}
+
+        with patch.object(app, "_emit_invocation_otel_attributes") as mock_emit:
+            client = TestClient(app)
+            client.post("/invocations", json={"prompt": "test"})
+
+        mock_emit.assert_called_once()
+        call_args = mock_emit.call_args[0]
+        assert call_args[0] == {"prompt": "test"}
+        assert call_args[1] == {"result": "ok"}
+
+    def test_prompt_key_extracts_specified_key(self):
+        """When prompt_key is configured, that specific key is used."""
+        app = self._make_app()
+        app._prompt_key = "user_input"
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes(
+                {"input": "file.txt", "user_input": "What is the weather?"},
+                "Sunny",
+            )
+
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.user_prompt", "What is the weather?")
+
+    def test_prompt_key_falls_back_to_json_when_key_missing(self):
+        """When prompt_key is configured but missing from payload, falls back to JSON."""
+        app = self._make_app()
+        app._prompt_key = "user_input"
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes({"input": "file.txt"}, "resp")
+
+        calls = {c[0][0]: c[0][1] for c in mock_span.set_attribute.call_args_list}
+        assert calls["agentcore.invocation.user_prompt"] == json.dumps({"input": "file.txt"})
+
+    def test_response_key_extracts_specified_key(self):
+        """When response_key is configured, that specific key is used from dict result."""
+        app = self._make_app()
+        app._response_key = "answer"
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes("prompt", {"answer": "42", "debug": "info"})
+
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.agent_response", "42")
+
+    def test_response_key_ignored_for_string_result(self):
+        """When response_key is configured but result is a string, string is used directly."""
+        app = self._make_app()
+        app._response_key = "answer"
+        mock_span = MagicMock()
+        mock_span.is_recording.return_value = True
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            app._emit_invocation_otel_attributes("prompt", "plain response")
+
+        mock_span.set_attribute.assert_any_call("agentcore.invocation.agent_response", "plain response")
+
+    def test_entrypoint_with_prompt_key(self):
+        """@app.entrypoint(prompt_key=...) stores the key on the app."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint(prompt_key="user_input")
+        def handler(payload):
+            return "ok"
+
+        assert app._prompt_key == "user_input"
+        assert app._response_key is None
+        assert app.handlers["main"] is handler
+
+    def test_entrypoint_with_prompt_and_response_key(self):
+        """@app.entrypoint(prompt_key=..., response_key=...) stores both keys."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint(prompt_key="user_input", response_key="answer")
+        def handler(payload):
+            return {"answer": "42"}
+
+        assert app._prompt_key == "user_input"
+        assert app._response_key == "answer"
+
+    def test_entrypoint_without_args_still_works(self):
+        """@app.entrypoint without arguments still works as before."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            return "ok"
+
+        assert app._prompt_key is None
+        assert app._response_key is None
+        assert app.handlers["main"] is handler
