@@ -6,7 +6,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional
 
 import boto3
 from botocore.config import Config as BotocoreConfig
@@ -23,12 +23,13 @@ from bedrock_agentcore.memory.client import MemoryClient
 from bedrock_agentcore.memory.models.filters import (
     EventMetadataFilter,
     LeftExpression,
+    MetadataValue,
     OperatorType,
     RightExpression,
 )
 
 from .bedrock_converter import AgentCoreMemoryConverter
-from .config import AgentCoreMemoryConfig, RetrievalConfig
+from .config import AgentCoreMemoryConfig, RetrievalConfig, normalize_metadata
 from .converters import MemoryConverter
 
 if TYPE_CHECKING:
@@ -45,6 +46,22 @@ LEGACY_AGENT_PREFIX = "agent_"
 # Metadata keys for event identification
 STATE_TYPE_KEY = "stateType"
 AGENT_ID_KEY = "agentId"
+
+# Maximum metadata key-value pairs per event (API limit)
+MAX_METADATA_KEYS = 15
+
+# Reserved internal metadata keys that users cannot override
+RESERVED_METADATA_KEYS = frozenset({STATE_TYPE_KEY, AGENT_ID_KEY})
+
+
+class BufferedMessage(NamedTuple):
+    """A pre-processed message waiting to be flushed to AgentCore Memory."""
+
+    session_id: str
+    messages: list[tuple[str, str]]
+    is_blob: bool
+    timestamp: datetime
+    metadata: Optional[Dict[str, MetadataValue]] = None
 
 
 class StateType(Enum):
@@ -129,8 +146,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         session = boto_session or boto3.Session(region_name=region_name)
         self.has_existing_agent = False
 
-        # Batching support - stores pre-processed messages: (session_id, messages, is_blob, timestamp)
-        self._message_buffer: list[tuple[str, list[tuple[str, str]], bool, datetime]] = []
+        # Batching support - stores pre-processed messages
+        self._message_buffer: list[BufferedMessage] = []
         self._message_lock = threading.Lock()
 
         # Agent state buffering - stores all agent state updates: (session_id, agent)
@@ -168,6 +185,55 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         # Start interval-based flush timer if configured
         if self.config.flush_interval_seconds:
             self._start_flush_timer()
+
+    def _build_metadata(
+        self,
+        internal_metadata: Optional[Dict[str, MetadataValue]] = None,
+        per_call_metadata: Optional[Dict[str, MetadataValue]] = None,
+    ) -> Optional[Dict[str, MetadataValue]]:
+        """Build merged metadata from config defaults, provider, per-call overrides, and internal keys.
+
+        Merge precedence (highest wins):
+            1. internal_metadata (stateType, agentId) — always wins
+            2. per_call_metadata (passed via **kwargs)
+            3. metadata_provider() (called at event creation time for dynamic values)
+            4. self.config.default_metadata (set at config construction time)
+
+        Args:
+            internal_metadata: System-reserved metadata (e.g. stateType, agentId).
+            per_call_metadata: Caller-supplied metadata for a single operation.
+
+        Returns:
+            Merged metadata dict, or None if empty.
+
+        Raises:
+            ValueError: If user metadata contains reserved keys or total keys exceed MAX_METADATA_KEYS.
+        """
+        merged: Dict[str, MetadataValue] = {}
+
+        if self.config.default_metadata:
+            merged.update(self.config.default_metadata)
+
+        if self.config.metadata_provider:
+            merged.update(normalize_metadata(self.config.metadata_provider()))
+
+        if per_call_metadata:
+            merged.update(per_call_metadata)
+
+        # Validate user-supplied keys before merging internal keys
+        user_reserved = RESERVED_METADATA_KEYS & merged.keys()
+        if user_reserved:
+            raise ValueError(
+                f"Metadata keys {user_reserved} are reserved for internal use. Reserved keys: {RESERVED_METADATA_KEYS}"
+            )
+
+        if internal_metadata:
+            merged.update(internal_metadata)
+
+        if len(merged) > MAX_METADATA_KEYS:
+            raise ValueError(f"Combined metadata has {len(merged)} keys, exceeding the maximum of {MAX_METADATA_KEYS}.")
+
+        return merged or None
 
     # region SessionRepository interface implementation
     def create_session(self, session: Session, **kwargs: Any) -> Session:
@@ -482,6 +548,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         is_blob = self.converter.exceeds_conversational_limit(messages[0])
 
+        # Build merged metadata from config defaults + per-call overrides
+        merged_metadata = self._build_metadata(per_call_metadata=kwargs.get("metadata"))
+
         # Parse the original timestamp and use it as desired timestamp
         original_timestamp = datetime.fromisoformat(session_message.created_at.replace("Z", "+00:00"))
         monotonic_timestamp = self._get_monotonic_timestamp(original_timestamp)
@@ -490,7 +559,15 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             # Buffer the pre-processed message
             should_flush = False
             with self._message_lock:
-                self._message_buffer.append((session_id, messages, is_blob, monotonic_timestamp))
+                self._message_buffer.append(
+                    BufferedMessage(
+                        session_id=session_id,
+                        messages=messages,
+                        is_blob=is_blob,
+                        timestamp=monotonic_timestamp,
+                        metadata=merged_metadata,
+                    )
+                )
                 should_flush = len(self._message_buffer) >= self.config.batch_size
 
             # Flush only messages outside the lock to prevent deadlock
@@ -508,17 +585,19 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                     session_id=session_id,
                     messages=messages,
                     event_timestamp=monotonic_timestamp,
+                    metadata=merged_metadata,
                 )
             else:
-                event = self.memory_client.gmdp_client.create_event(
-                    memoryId=self.config.memory_id,
-                    actorId=self.config.actor_id,
-                    sessionId=session_id,
-                    payload=[
-                        {"blob": json.dumps(messages[0])},
-                    ],
-                    eventTimestamp=monotonic_timestamp,
-                )
+                create_event_kwargs: dict[str, Any] = {
+                    "memoryId": self.config.memory_id,
+                    "actorId": self.config.actor_id,
+                    "sessionId": session_id,
+                    "payload": [{"blob": json.dumps(messages[0])}],
+                    "eventTimestamp": monotonic_timestamp,
+                }
+                if merged_metadata:
+                    create_event_kwargs["metadata"] = merged_metadata
+                event = self.memory_client.gmdp_client.create_event(**create_event_kwargs)
             logger.debug("Created event: %s for message: %s", event.get("eventId"), session_message.message_id)
             return event
         except Exception as e:
@@ -668,7 +747,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             event (MessageAddedEvent): The message added event containing the agent and message data.
         """
         messages = event.agent.messages
-        if not messages or messages[-1].get("role") != "user" or "toolResult" in messages[-1].get("content")[0]:
+        if not messages or messages[-1].get("role") != "user" or "text" not in messages[-1].get("content")[0]:
             return None
         if not self.config.retrieval_config:
             # Only retrieve LTM
@@ -790,39 +869,45 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             return []
 
         # Group all messages by session_id, combining conversational and blob messages
-        # Structure: {session_id: {"payload": [...], "timestamp": latest_timestamp}}
+        # Structure: {session_id: {"payload": [...], "timestamp": latest_timestamp, "metadata": {...}}}
         session_groups: dict[str, dict[str, Any]] = {}
 
-        for session_id, messages, is_blob, monotonic_timestamp in messages_to_send:
-            if session_id not in session_groups:
-                session_groups[session_id] = {"payload": [], "timestamp": monotonic_timestamp}
+        for buffered_msg in messages_to_send:
+            sid = buffered_msg.session_id
+            if sid not in session_groups:
+                session_groups[sid] = {"payload": [], "timestamp": buffered_msg.timestamp, "metadata": {}}
 
-            if is_blob:
-                # Add blob messages to payload
-                for msg in messages:
-                    session_groups[session_id]["payload"].append({"blob": json.dumps(msg)})
+            if buffered_msg.is_blob:
+                for msg in buffered_msg.messages:
+                    session_groups[sid]["payload"].append({"blob": json.dumps(msg)})
             else:
-                # Add conversational messages to payload
-                for text, role in messages:
-                    session_groups[session_id]["payload"].append(
+                for text, role in buffered_msg.messages:
+                    session_groups[sid]["payload"].append(
                         {"conversational": {"content": {"text": text}, "role": role.upper()}}
                     )
 
             # Use the latest timestamp for the combined event
-            if monotonic_timestamp > session_groups[session_id]["timestamp"]:
-                session_groups[session_id]["timestamp"] = monotonic_timestamp
+            if buffered_msg.timestamp > session_groups[sid]["timestamp"]:
+                session_groups[sid]["timestamp"] = buffered_msg.timestamp
+
+            # Merge metadata (later entries override earlier for same key)
+            if buffered_msg.metadata:
+                session_groups[sid]["metadata"].update(buffered_msg.metadata)
 
         results = []
         try:
             # Send one create_event per session_id with all messages (conversational + blob)
             for session_id, group in session_groups.items():
-                event = self.memory_client.gmdp_client.create_event(
-                    memoryId=self.config.memory_id,
-                    actorId=self.config.actor_id,
-                    sessionId=session_id,
-                    payload=group["payload"],
-                    eventTimestamp=group["timestamp"],
-                )
+                create_event_kwargs: dict[str, Any] = {
+                    "memoryId": self.config.memory_id,
+                    "actorId": self.config.actor_id,
+                    "sessionId": session_id,
+                    "payload": group["payload"],
+                    "eventTimestamp": group["timestamp"],
+                }
+                if group["metadata"]:
+                    create_event_kwargs["metadata"] = group["metadata"]
+                event = self.memory_client.gmdp_client.create_event(**create_event_kwargs)
                 results.append(event)
                 logger.debug(
                     "Flushed batched event for session %s with %d messages: %s",

@@ -87,3 +87,39 @@ class TestAgentCoreMemoryConfig:
             memory_id="mem-123", session_id="sess-456", actor_id="actor-789", retrieval_config={"namespace1": retrieval}
         )
         assert config.retrieval_config["namespace1"].top_k == 5
+
+    def test_default_metadata_plain_strings_normalized(self):
+        """Plain string values are auto-wrapped to {"stringValue": ...}."""
+        config = AgentCoreMemoryConfig(
+            memory_id="mem-123",
+            session_id="sess-456",
+            actor_id="actor-789",
+            default_metadata={"project": "atlas", "env": "prod"},
+        )
+        assert config.default_metadata == {
+            "project": {"stringValue": "atlas"},
+            "env": {"stringValue": "prod"},
+        }
+
+    def test_default_metadata_explicit_format_unchanged(self):
+        """Explicit {"stringValue": ...} dicts pass through unchanged."""
+        config = AgentCoreMemoryConfig(
+            memory_id="mem-123",
+            session_id="sess-456",
+            actor_id="actor-789",
+            default_metadata={"project": {"stringValue": "atlas"}},
+        )
+        assert config.default_metadata == {"project": {"stringValue": "atlas"}}
+
+    def test_default_metadata_mixed_formats(self):
+        """Mixed plain strings and explicit dicts both work."""
+        config = AgentCoreMemoryConfig(
+            memory_id="mem-123",
+            session_id="sess-456",
+            actor_id="actor-789",
+            default_metadata={"project": "atlas", "env": {"stringValue": "prod"}},
+        )
+        assert config.default_metadata == {
+            "project": {"stringValue": "atlas"},
+            "env": {"stringValue": "prod"},
+        }

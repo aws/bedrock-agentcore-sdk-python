@@ -22,13 +22,13 @@ jobs:
       should-run: ${{ steps.safety-check.outputs.result }}
     steps:
       - name: Checkout base branch for safety check
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.base.sha }}
 
       - name: Safety Check - Prevent Workflow Modification Attacks
         id: safety-check
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           result-encoding: string
           script: |
@@ -65,7 +65,7 @@ jobs:
             return 'true';
 
       - name: Collaborator Check
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         id: collab-check
         with:
           result-encoding: string
@@ -135,14 +135,14 @@ jobs:
             ignore: ""
     steps:
       - name: Configure Credentials
-        uses: aws-actions/configure-aws-credentials@v5
+        uses: aws-actions/configure-aws-credentials@v6
         with:
          role-to-assume: ${{ secrets.AGENTCORE_INTEG_TEST_ROLE }}
          aws-region: us-west-2
          mask-aws-account-id: true
 
       - name: Checkout PR head commit
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}

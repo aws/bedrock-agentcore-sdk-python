@@ -39,27 +39,25 @@ Amazon Bedrock AgentCore enables you to deploy and operate highly effective agen
 ## 🚀 From Local Development to Bedrock AgentCore
 
 ```python
-# Your existing agent (any framework)
-from strands import Agent
-# or LangGraph, CrewAI, Autogen, custom logic - doesn't matter
-
-def my_local_agent(query):
-    # Your carefully crafted agent logic
-    return agent.process(query)
-
-# Deploy to Bedrock AgentCore
 from bedrock_agentcore import BedrockAgentCoreApp
 app = BedrockAgentCoreApp()
 
-@app.entrypoint
-def production_agent(request):
-    return my_local_agent(request.get("prompt"))  # Same logic, enterprise platform
+from strands import Agent # or bring your agent.
 
-app.run()  # Ready to run on Bedrock AgentCore
+@app.entrypoint
+async def handler(request):
+    prompt = request.get("prompt")
+
+    agent = Agent()
+
+    async for event in agent.stream_async(prompt):
+        yield (event)
+
+app.run()
 ```
 
 **What you get with Bedrock AgentCore:**
-- ✅ **Keep your agent logic** - Works with Strands, LangGraph, CrewAI, Autogen, custom frameworks
+- ✅ **Keep your agent logic** - Works with Strands, LangGraph, CrewAI, Autogen, or custom frameworks
 - ✅ **Zero infrastructure management** - No servers, containers, or scaling concerns
 - ✅ **Enterprise-grade platform** - Built-in auth, memory, observability, security
 - ✅ **Production-ready deployment** - Reliable, scalable, compliant hosting
@@ -73,12 +71,62 @@ app.run()  # Ready to run on Bedrock AgentCore
 - 📊 **Observability** - OpenTelemetry tracing: **[Observability Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability-get-started.html)**
 - 🔐 **Identity** - AWS & third-party auth: **[Identity Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/identity-getting-started-cognito.html)**
 
+## AG-UI Protocol Support
+
+Deploy agents using the [AG-UI protocol](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-agui.html) with zero boilerplate. A single `entrypoint` handler is served over both SSE (`POST /invocations`) and WebSocket (`/ws`).
+
+```python
+from bedrock_agentcore.runtime import serve_ag_ui
+
+# Framework agent with a .run() method — one line
+serve_ag_ui(agui_agent)
+```
+
+Or write a custom agent with the decorator form:
+
+```python
+from bedrock_agentcore.runtime import AGUIApp
+from ag_ui.core import RunAgentInput, RunStartedEvent, RunFinishedEvent
+
+app = AGUIApp()
+
+@app.entrypoint
+async def my_agent(input_data: RunAgentInput):
+    yield RunStartedEvent(thread_id=input_data.thread_id, run_id=input_data.run_id)
+    # ... your agent logic, yield AG-UI events ...
+    yield RunFinishedEvent(thread_id=input_data.thread_id, run_id=input_data.run_id)
+
+app.run()
+```
+
+Install with: `pip install "bedrock-agentcore[ag-ui]"`
+
+See the [AG-UI protocol contract](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-agui-protocol-contract.html) for full details.
+
 ## 🏗️ Deployment
 
 **Quick Start:** Use the [Bedrock AgentCore Starter Toolkit](https://github.com/aws/bedrock-agentcore-starter-toolkit) for rapid prototyping.
 
 **Production:** [AWS CDK](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_bedrockagentcore-readme.html).
 
+## A2A Protocol Support
+
+Serve your agent using the [A2A (Agent-to-Agent) protocol](https://google.github.io/A2A/) on Bedrock AgentCore Runtime. Works with any framework that provides an a2a-sdk `AgentExecutor` (Strands, LangGraph, Google ADK, or custom).
+
+```bash
+pip install "bedrock-agentcore[a2a]"
+```
+
+```python
+from strands import Agent
+from strands.a2a import StrandsA2AExecutor
+from bedrock_agentcore.runtime import serve_a2a
+
+agent = Agent(model="us.anthropic.claude-sonnet-4-20250514", system_prompt="You are a helpful assistant.")
+serve_a2a(StrandsA2AExecutor(agent))
+```
+
+See [A2A Protocol Examples](docs/examples/a2a_protocol_examples.md) for LangGraph, Google ADK, and advanced usage.
 
 ## 📝 License & Contributing
 
