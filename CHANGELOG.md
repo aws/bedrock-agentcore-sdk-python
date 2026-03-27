@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.8] - 2026-03-26
+
+### Added
+- feat: Emit OTEL attributes for AgentCore Evaluation support (#368) (8bae410)
+
+### Fixed
+- fix: lazy import strands-agents-evals to avoid ImportError when not installed (#367) (2c4911d)
+
+### Other Changes
+- ci: migrate PyPI publishing to OIDC Trusted Publishing (#363) (5bdf009)
+- ci(deps): bump trufflesecurity/trufflehog from 3.93.8 to 3.94.0 (#360) (cd86ebd)
+- ci(deps): bump actions/github-script from 7 to 8 (#359) (64db2f0)
+- Skip LTM retrieval when content has no text (#299) (a49db7d)
+
 ## [1.4.7] - 2026-03-18
 
 ### Added
