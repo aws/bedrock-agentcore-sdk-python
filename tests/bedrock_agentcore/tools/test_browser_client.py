@@ -11,11 +11,15 @@ from bedrock_agentcore.tools.browser_client import (
 from bedrock_agentcore.tools.config import (
     BasicAuth,
     BrowserExtension,
+    Certificate,
+    EnterprisePolicy,
+    EnterprisePolicyS3Location,
     ExtensionS3Location,
     ExternalProxy,
     ProfileConfiguration,
     ProxyConfiguration,
     ProxyCredentials,
+    ResourceLocation,
     SessionConfiguration,
     ViewportConfiguration,
 )
@@ -1444,3 +1448,220 @@ class TestBrowserClient:
             "name": "test-session",
             "viewport": {"width": 1920, "height": 1080},
         }
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_enterprise_policies(
+        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_browser_session.return_value = mock_response
+
+        policies = [{"location": {"bucket": "my-policies", "prefix": "prefs.json"}, "type": "RECOMMENDED"}]
+
+        # Act
+        session_id = client.start(enterprise_policies=policies)
+
+        # Assert
+        client.data_plane_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+            enterprisePolicies=policies,
+        )
+        assert session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_certificates(self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_browser_session.return_value = mock_response
+
+        certs = [{"location": {"secretsManager": {"secretArn": "arn:aws:secretsmanager:us-west-2:123:secret:cert"}}}]
+
+        # Act
+        session_id = client.start(certificates=certs)
+
+        # Assert
+        client.data_plane_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+            certificates=certs,
+        )
+        assert session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_enterprise_policies_dataclass(
+        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_browser_session.return_value = mock_response
+
+        policies = [
+            EnterprisePolicy(
+                location=ResourceLocation(s3=EnterprisePolicyS3Location(bucket="my-policies", prefix="prefs.json")),
+                type="RECOMMENDED",
+            )
+        ]
+
+        # Act
+        session_id = client.start(enterprise_policies=policies)
+
+        # Assert
+        client.data_plane_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+            enterprisePolicies=[
+                {"location": {"s3": {"bucket": "my-policies", "prefix": "prefs.json"}}, "type": "RECOMMENDED"}
+            ],
+        )
+        assert session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
+    def test_start_with_certificates_dataclass(
+        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+        mock_uuid4.return_value.hex = "12345678abcdef"
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserIdentifier": "aws.browser.v1", "sessionId": "session-123"}
+        client.data_plane_client.start_browser_session.return_value = mock_response
+
+        certs = [Certificate.from_secret_arn("arn:aws:secretsmanager:us-west-2:123:secret:cert")]
+
+        # Act
+        session_id = client.start(certificates=certs)
+
+        # Assert
+        client.data_plane_client.start_browser_session.assert_called_once_with(
+            browserIdentifier="aws.browser.v1",
+            name="browser-session-12345678",
+            sessionTimeoutSeconds=3600,
+            certificates=[
+                {"location": {"secretsManager": {"secretArn": "arn:aws:secretsmanager:us-west-2:123:secret:cert"}}}
+            ],
+        )
+        assert session_id == "session-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    def test_create_browser_with_enterprise_policies(
+        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserId": "browser-123", "browserArn": "arn:...", "status": "CREATING"}
+        client.control_plane_client.create_browser.return_value = mock_response
+
+        policies = [{"location": {"bucket": "my-policies", "prefix": "security.json"}, "type": "MANAGED"}]
+
+        # Act
+        response = client.create_browser(
+            name="test_browser",
+            execution_role_arn="arn:aws:iam::123456789012:role/BrowserRole",
+            enterprise_policies=policies,
+        )
+
+        # Assert
+        client.control_plane_client.create_browser.assert_called_once_with(
+            name="test_browser",
+            executionRoleArn="arn:aws:iam::123456789012:role/BrowserRole",
+            networkConfiguration={"networkMode": "PUBLIC"},
+            enterprisePolicies=policies,
+        )
+        assert response["browserId"] == "browser-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.browser_client.boto3")
+    def test_create_browser_with_certificates(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+        # Arrange
+        mock_boto3.client.return_value = MagicMock()
+
+        client = BrowserClient("us-west-2")
+        mock_response = {"browserId": "browser-123", "browserArn": "arn:...", "status": "CREATING"}
+        client.control_plane_client.create_browser.return_value = mock_response
+
+        certs = [Certificate.from_secret_arn("arn:aws:secretsmanager:us-west-2:123:secret:cert")]
+
+        # Act
+        response = client.create_browser(
+            name="test_browser",
+            execution_role_arn="arn:aws:iam::123456789012:role/BrowserRole",
+            certificates=certs,
+        )
+
+        # Assert
+        client.control_plane_client.create_browser.assert_called_once_with(
+            name="test_browser",
+            executionRoleArn="arn:aws:iam::123456789012:role/BrowserRole",
+            networkConfiguration={"networkMode": "PUBLIC"},
+            certificates=[
+                {"location": {"secretsManager": {"secretArn": "arn:aws:secretsmanager:us-west-2:123:secret:cert"}}}
+            ],
+        )
+        assert response["browserId"] == "browser-123"
+
+    @patch("bedrock_agentcore.tools.browser_client.BrowserClient")
+    def test_browser_session_context_manager_with_enterprise_policies(self, mock_client_class):
+        # Arrange
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        policies = [{"location": {"bucket": "my-policies", "prefix": "prefs.json"}, "type": "RECOMMENDED"}]
+
+        # Act
+        with browser_session("us-west-2", enterprise_policies=policies):
+            pass
+
+        # Assert
+        mock_client.start.assert_called_once_with(enterprise_policies=policies)
+        mock_client.stop.assert_called_once()
+
+    @patch("bedrock_agentcore.tools.browser_client.BrowserClient")
+    def test_browser_session_context_manager_with_certificates(self, mock_client_class):
+        # Arrange
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        certs = [{"location": {"secretsManager": {"secretArn": "arn:aws:secretsmanager:us-west-2:123:secret:cert"}}}]
+
+        # Act
+        with browser_session("us-west-2", certificates=certs):
+            pass
+
+        # Assert
+        mock_client.start.assert_called_once_with(certificates=certs)
+        mock_client.stop.assert_called_once()
