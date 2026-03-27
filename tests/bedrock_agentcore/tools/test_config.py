@@ -5,7 +5,11 @@ from bedrock_agentcore.tools.config import (
     BrowserConfiguration,
     BrowserExtension,
     BrowserSigningConfiguration,
+    Certificate,
+    CertificateLocation,
     CodeInterpreterConfiguration,
+    EnterprisePolicy,
+    EnterprisePolicyS3Location,
     ExtensionS3Location,
     ExternalProxy,
     NetworkConfiguration,
@@ -13,7 +17,9 @@ from bedrock_agentcore.tools.config import (
     ProxyConfiguration,
     ProxyCredentials,
     RecordingConfiguration,
+    ResourceLocation,
     S3Location,
+    SecretsManagerLocation,
     SessionConfiguration,
     ViewportConfiguration,
     VpcConfig,
@@ -592,3 +598,98 @@ class TestProfileConfiguration:
     def test_to_dict(self):
         config = ProfileConfiguration(profile_identifier="my-profile-id")
         assert config.to_dict() == {"profileIdentifier": "my-profile-id"}
+
+
+class TestEnterprisePolicyS3Location:
+    def test_minimal_to_dict(self):
+        location = EnterprisePolicyS3Location(bucket="my-policies", prefix="security-baseline.json")
+        assert location.to_dict() == {"bucket": "my-policies", "prefix": "security-baseline.json"}
+
+    def test_with_version_id(self):
+        location = EnterprisePolicyS3Location(bucket="my-policies", prefix="policy.json", version_id="v1")
+        assert location.to_dict() == {"bucket": "my-policies", "prefix": "policy.json", "versionId": "v1"}
+
+
+class TestResourceLocation:
+    def test_s3_to_dict(self):
+        loc = ResourceLocation(s3=EnterprisePolicyS3Location(bucket="b", prefix="k.json"))
+        assert loc.to_dict() == {"s3": {"bucket": "b", "prefix": "k.json"}}
+
+    def test_empty_raises(self):
+        with pytest.raises(ValueError, match="must have one location type set"):
+            ResourceLocation().to_dict()
+
+
+class TestEnterprisePolicy:
+    def test_managed_to_dict(self):
+        policy = EnterprisePolicy(
+            location=ResourceLocation(
+                s3=EnterprisePolicyS3Location(bucket="my-policies", prefix="security-baseline.json")
+            ),
+            type="MANAGED",
+        )
+        assert policy.to_dict() == {
+            "location": {"s3": {"bucket": "my-policies", "prefix": "security-baseline.json"}},
+            "type": "MANAGED",
+        }
+
+    def test_recommended_to_dict(self):
+        policy = EnterprisePolicy(
+            location=ResourceLocation(s3=EnterprisePolicyS3Location(bucket="user-prefs", prefix="prefs.json")),
+            type="RECOMMENDED",
+        )
+        assert policy.to_dict() == {
+            "location": {"s3": {"bucket": "user-prefs", "prefix": "prefs.json"}},
+            "type": "RECOMMENDED",
+        }
+
+    def test_with_version_id(self):
+        policy = EnterprisePolicy(
+            location=ResourceLocation(
+                s3=EnterprisePolicyS3Location(bucket="my-policies", prefix="policy.json", version_id="v1")
+            ),
+            type="MANAGED",
+        )
+        assert policy.to_dict() == {
+            "location": {"s3": {"bucket": "my-policies", "prefix": "policy.json", "versionId": "v1"}},
+            "type": "MANAGED",
+        }
+
+    def test_invalid_type_raises(self):
+        with pytest.raises(ValueError, match="type must be 'MANAGED' or 'RECOMMENDED'"):
+            EnterprisePolicy(
+                location=ResourceLocation(s3=EnterprisePolicyS3Location(bucket="b", prefix="k")),
+                type="INVALID",
+            )
+
+
+class TestSecretsManagerLocation:
+    def test_to_dict(self):
+        loc = SecretsManagerLocation(secret_arn="arn:aws:secretsmanager:us-west-2:123456789012:secret:my-cert")
+        assert loc.to_dict() == {"secretArn": "arn:aws:secretsmanager:us-west-2:123456789012:secret:my-cert"}
+
+
+class TestCertificateLocation:
+    def test_to_dict(self):
+        loc = CertificateLocation(
+            secrets_manager=SecretsManagerLocation(secret_arn="arn:aws:secretsmanager:us-west-2:123:secret:cert")
+        )
+        assert loc.to_dict() == {"secretsManager": {"secretArn": "arn:aws:secretsmanager:us-west-2:123:secret:cert"}}
+
+
+class TestCertificate:
+    def test_to_dict(self):
+        cert = Certificate(
+            location=CertificateLocation(
+                secrets_manager=SecretsManagerLocation(secret_arn="arn:aws:secretsmanager:us-west-2:123:secret:cert")
+            )
+        )
+        assert cert.to_dict() == {
+            "location": {"secretsManager": {"secretArn": "arn:aws:secretsmanager:us-west-2:123:secret:cert"}}
+        }
+
+    def test_from_secret_arn(self):
+        cert = Certificate.from_secret_arn("arn:aws:secretsmanager:us-west-2:123:secret:my-cert")
+        assert cert.to_dict() == {
+            "location": {"secretsManager": {"secretArn": "arn:aws:secretsmanager:us-west-2:123:secret:my-cert"}}
+        }
