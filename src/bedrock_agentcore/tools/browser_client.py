@@ -22,7 +22,14 @@ from botocore.config import Config
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
 from .._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
-from .config import BrowserExtension, ProfileConfiguration, ProxyConfiguration, ViewportConfiguration
+from .config import (
+    BrowserExtension,
+    Certificate,
+    EnterprisePolicy,
+    ProfileConfiguration,
+    ProxyConfiguration,
+    ViewportConfiguration,
+)
 
 
 def _to_dict(value):
@@ -116,6 +123,8 @@ class BrowserClient:
         description: Optional[str] = None,
         recording: Optional[Dict] = None,
         browser_signing: Optional[Dict] = None,
+        enterprise_policies: Optional[List[Union[EnterprisePolicy, Dict[str, Any]]]] = None,
+        certificates: Optional[List[Union[Certificate, Dict[str, Any]]]] = None,
         tags: Optional[Dict[str, str]] = None,
         client_token: Optional[str] = None,
     ) -> Dict:
@@ -148,6 +157,11 @@ class BrowserClient:
                 {
                     "enabled": True
                 }
+            enterprise_policies (Optional[List[Union[EnterprisePolicy, Dict]]]): Chromium
+                enterprise policies at managed enforcement level. Up to 10 policy files,
+                each .json and max 5MB, from a same-region S3 bucket.
+            certificates (Optional[List[Union[Certificate, Dict]]]): Root CA certificates
+                from Secrets Manager for the browser to trust.
             tags (Optional[Dict[str, str]]): Tags for the browser
             client_token (Optional[str]): Idempotency token
 
@@ -193,6 +207,12 @@ class BrowserClient:
         if browser_signing:
             request_params["browserSigning"] = browser_signing
             self.logger.info("🔐 Web Bot Auth (browserSigning) enabled")
+
+        if enterprise_policies:
+            request_params["enterprisePolicies"] = [_to_dict(p) for p in enterprise_policies]
+
+        if certificates:
+            request_params["certificates"] = [_to_dict(c) for c in certificates]
 
         if tags:
             request_params["tags"] = tags
@@ -299,6 +319,8 @@ class BrowserClient:
         proxy_configuration: Optional[Union[ProxyConfiguration, Dict[str, Any]]] = None,
         extensions: Optional[List[Union[BrowserExtension, Dict[str, Any]]]] = None,
         profile_configuration: Optional[Union[ProfileConfiguration, Dict[str, Any]]] = None,
+        enterprise_policies: Optional[List[Union[EnterprisePolicy, Dict[str, Any]]]] = None,
+        certificates: Optional[List[Union[Certificate, Dict[str, Any]]]] = None,
     ) -> str:
         """Start a browser sandbox session.
 
@@ -324,6 +346,11 @@ class BrowserClient:
                 configuration for persisting browser state across sessions. Can be a
                 ProfileConfiguration dataclass or a plain dict:
                 {"profileIdentifier": "my-profile-id"}
+            enterprise_policies (Optional[List[Union[EnterprisePolicy, Dict]]]): Chromium
+                enterprise policies at recommended enforcement level. Up to 10 policy files,
+                each .json and max 5MB, from a same-region S3 bucket.
+            certificates (Optional[List[Union[Certificate, Dict]]]): Root CA certificates
+                from Secrets Manager for the browser session to trust.
 
         Returns:
             str: The session ID of the newly created session.
@@ -372,6 +399,12 @@ class BrowserClient:
 
         if profile_configuration is not None:
             request_params["profileConfiguration"] = _to_dict(profile_configuration)
+
+        if enterprise_policies is not None:
+            request_params["enterprisePolicies"] = [_to_dict(p) for p in enterprise_policies]
+
+        if certificates is not None:
+            request_params["certificates"] = [_to_dict(c) for c in certificates]
 
         response = self.data_plane_client.start_browser_session(**request_params)
 
@@ -633,6 +666,8 @@ def browser_session(
     proxy_configuration: Optional[Union[ProxyConfiguration, Dict[str, Any]]] = None,
     extensions: Optional[List[Union[BrowserExtension, Dict[str, Any]]]] = None,
     profile_configuration: Optional[Union[ProfileConfiguration, Dict[str, Any]]] = None,
+    enterprise_policies: Optional[List[Union[EnterprisePolicy, Dict[str, Any]]]] = None,
+    certificates: Optional[List[Union[Certificate, Dict[str, Any]]]] = None,
 ) -> Generator[BrowserClient, None, None]:
     """Context manager for creating and managing a browser sandbox session.
 
@@ -648,6 +683,10 @@ def browser_session(
             extensions. Each element can be a BrowserExtension dataclass or a plain dict.
         profile_configuration (Optional[Union[ProfileConfiguration, Dict[str, Any]]]): Profile
             configuration. Can be a ProfileConfiguration dataclass or a plain dict.
+        enterprise_policies (Optional[List[Union[EnterprisePolicy, Dict[str, Any]]]]): Chromium
+            enterprise policies. Each element can be an EnterprisePolicy dataclass or a plain dict.
+        certificates (Optional[List[Union[Certificate, Dict[str, Any]]]]): Root CA certificates.
+            Each element can be a Certificate dataclass or a plain dict.
 
     Yields:
         BrowserClient: An initialized and started browser client.
@@ -687,6 +726,10 @@ def browser_session(
         start_kwargs["extensions"] = extensions
     if profile_configuration is not None:
         start_kwargs["profile_configuration"] = profile_configuration
+    if enterprise_policies is not None:
+        start_kwargs["enterprise_policies"] = enterprise_policies
+    if certificates is not None:
+        start_kwargs["certificates"] = certificates
 
     client.start(**start_kwargs)
 

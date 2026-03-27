@@ -452,6 +452,124 @@ class CodeInterpreterConfiguration:
         return config
 
 
+@dataclass
+class EnterprisePolicyS3Location:
+    """S3 location of a browser enterprise policy JSON file.
+
+    Attributes:
+        bucket: S3 bucket name (must be in the same region as the API call)
+        prefix: S3 object key for the policy JSON file
+        version_id: Optional S3 object version ID
+    """
+
+    bucket: str
+    prefix: str
+    version_id: Optional[str] = None
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        location = {"bucket": self.bucket, "prefix": self.prefix}
+        if self.version_id:
+            location["versionId"] = self.version_id
+        return location
+
+
+@dataclass
+class ResourceLocation:
+    """Location of a resource. Currently supports S3.
+
+    Attributes:
+        s3: S3 location of the resource
+    """
+
+    s3: Optional[EnterprisePolicyS3Location] = None
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        if self.s3:
+            return {"s3": self.s3.to_dict()}
+        raise ValueError("ResourceLocation must have one location type set")
+
+
+@dataclass
+class EnterprisePolicy:
+    """Browser enterprise policy.
+
+    Attributes:
+        location: Location of the enterprise policy file
+        type: "MANAGED" for CreateBrowser or "RECOMMENDED" for StartBrowserSession
+    """
+
+    location: ResourceLocation
+    type: str
+
+    def __post_init__(self):
+        """Validate enterprise policy type."""
+        if self.type not in ["MANAGED", "RECOMMENDED"]:
+            raise ValueError(f"type must be 'MANAGED' or 'RECOMMENDED', got '{self.type}'")
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        return {
+            "location": self.location.to_dict(),
+            "type": self.type,
+        }
+
+
+@dataclass
+class SecretsManagerLocation:
+    """Secrets Manager location for a certificate.
+
+    Attributes:
+        secret_arn: ARN of the Secrets Manager secret containing the certificate
+    """
+
+    secret_arn: str
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        return {"secretArn": self.secret_arn}
+
+
+@dataclass
+class CertificateLocation:
+    """Location from which to retrieve a certificate.
+
+    Attributes:
+        secrets_manager: Secrets Manager location containing the certificate
+    """
+
+    secrets_manager: SecretsManagerLocation
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        return {"secretsManager": self.secrets_manager.to_dict()}
+
+
+@dataclass
+class Certificate:
+    """Root CA certificate for browser or code interpreter.
+
+    Attributes:
+        location: Location of the certificate
+    """
+
+    location: CertificateLocation
+
+    def to_dict(self) -> Dict:
+        """Convert to API-compatible dictionary."""
+        return {"location": self.location.to_dict()}
+
+    @classmethod
+    def from_secret_arn(cls, secret_arn: str) -> "Certificate":
+        """Create a Certificate from a Secrets Manager ARN.
+
+        Args:
+            secret_arn: ARN of the secret containing the certificate
+        """
+        return cls(location=CertificateLocation(secrets_manager=SecretsManagerLocation(secret_arn=secret_arn)))
+
+
 def create_browser_config(
     name: str,
     execution_role_arn: str,
