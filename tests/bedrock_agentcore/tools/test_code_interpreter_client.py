@@ -1500,3 +1500,127 @@ class TestCodeInterpreterClient:
         # Assert
         client.data_plane_client.start_code_interpreter_session.assert_called_once()
         client.data_plane_client.invoke_code_interpreter.assert_called_once()
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_create_code_interpreter_with_certificates(
+        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_session = MagicMock()
+        mock_control_client = MagicMock()
+        mock_data_client = MagicMock()
+        mock_session.client.side_effect = [mock_control_client, mock_data_client]
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+
+        mock_response = {
+            "codeInterpreterArn": "arn:aws:bedrock-agentcore:us-west-2:123456789012:code-interpreter/test-interp",
+            "codeInterpreterId": "test-interp-123",
+            "createdAt": datetime.datetime.now(),
+            "status": "CREATING",
+        }
+        client.control_plane_client.create_code_interpreter.return_value = mock_response
+
+        certificates = [
+            {
+                "location": {
+                    "secretsManager": {"secretArn": "arn:aws:secretsmanager:us-west-2:123456789012:secret:my-ca"}
+                }
+            }
+        ]
+
+        # Act
+        result = client.create_code_interpreter(
+            name="test_interpreter_with_certs",
+            execution_role_arn="arn:aws:iam::123456789012:role/InterpreterRole",
+            certificates=certificates,
+            description="Interpreter with custom root CA",
+        )
+
+        # Assert
+        client.control_plane_client.create_code_interpreter.assert_called_once_with(
+            name="test_interpreter_with_certs",
+            executionRoleArn="arn:aws:iam::123456789012:role/InterpreterRole",
+            networkConfiguration={"networkMode": "PUBLIC"},
+            description="Interpreter with custom root CA",
+            certificates=certificates,
+        )
+        assert result == mock_response
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_create_code_interpreter_with_certificate_dataclass(
+        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        # Arrange
+        mock_session = MagicMock()
+        mock_control_client = MagicMock()
+        mock_data_client = MagicMock()
+        mock_session.client.side_effect = [mock_control_client, mock_data_client]
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+
+        mock_response = {
+            "codeInterpreterArn": "arn:aws:bedrock-agentcore:us-west-2:123456789012:code-interpreter/test-interp",
+            "codeInterpreterId": "test-interp-123",
+            "createdAt": datetime.datetime.now(),
+            "status": "CREATING",
+        }
+        client.control_plane_client.create_code_interpreter.return_value = mock_response
+
+        # Use a mock Certificate dataclass with to_dict method
+        mock_cert = MagicMock()
+        mock_cert.to_dict.return_value = {
+            "location": {"secretsManager": {"secretArn": "arn:aws:secretsmanager:us-west-2:123456789012:secret:my-ca"}}
+        }
+
+        # Act
+        result = client.create_code_interpreter(
+            name="test_interpreter_with_certs",
+            execution_role_arn="arn:aws:iam::123456789012:role/InterpreterRole",
+            certificates=[mock_cert],
+        )
+
+        # Assert
+        mock_cert.to_dict.assert_called_once()
+        client.control_plane_client.create_code_interpreter.assert_called_once_with(
+            name="test_interpreter_with_certs",
+            executionRoleArn="arn:aws:iam::123456789012:role/InterpreterRole",
+            networkConfiguration={"networkMode": "PUBLIC"},
+            certificates=[mock_cert.to_dict.return_value],
+        )
+        assert result == mock_response
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_create_code_interpreter_without_certificates(
+        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
+    ):
+        """Verify that omitting certificates does not include it in the API call (backward compatibility)."""
+        # Arrange
+        mock_session = MagicMock()
+        mock_control_client = MagicMock()
+        mock_data_client = MagicMock()
+        mock_session.client.side_effect = [mock_control_client, mock_data_client]
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+
+        mock_response = {
+            "codeInterpreterId": "test-interp-123",
+            "status": "CREATING",
+        }
+        client.control_plane_client.create_code_interpreter.return_value = mock_response
+
+        # Act
+        client.create_code_interpreter(
+            name="test_interpreter_no_certs",
+            execution_role_arn="arn:aws:iam::123456789012:role/InterpreterRole",
+        )
+
+        # Assert — certificates key should NOT be in the call
+        call_kwargs = client.control_plane_client.create_code_interpreter.call_args[1]
+        assert "certificates" not in call_kwargs
