@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
-from bedrock_agentcore.runtime.utils import convert_complex_objects
+from bedrock_agentcore.runtime.utils import convert_complex_objects, is_valid_partition
 
 
 class TestConvertComplexObjects:
@@ -335,3 +335,10 @@ class TestConvertComplexObjects:
         assert isinstance(result["address"], dict)
         assert result["address"]["street"] == "456 Oak St"
         assert result["address"]["city"] == "Somewhere"
+
+    def test_valid_partitions(self):
+        """Test valid partitions for arn parsing"""
+
+        assert is_valid_partition("aws")
+        assert is_valid_partition("aws-us-gov")
+        assert not is_valid_partition("aws-iso")
