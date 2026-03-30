@@ -122,6 +122,7 @@ class CloudWatchAgentSpanCollector(AgentSpanCollector):
         )
 
         all_data = aws_spans + event_spans
+        all_data.sort(key=lambda s: s.get("endTimeUnixNano", 0))
 
         logger.info("Fetched %d span items from CloudWatch", len(all_data))
         return all_data

@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from bedrock_agentcore.evaluation._agent_span_collector import (
+from bedrock_agentcore.evaluation.agent_span_collector import (
     AgentSpanCollector,
     CloudWatchAgentSpanCollector,
 )
@@ -28,8 +28,8 @@ SAMPLE_SPANS = [
 START_TIME = datetime(2024, 1, 1, tzinfo=timezone.utc)
 END_TIME = datetime(2024, 1, 1, 0, 10, tzinfo=timezone.utc)
 WIDENED_END_TIME = END_TIME + timedelta(seconds=60)
-HELPER_PATCH = "bedrock_agentcore.evaluation._agent_span_collector.agent_span_collector.CloudWatchSpanHelper"
-TIME_PATCH = "bedrock_agentcore.evaluation._agent_span_collector.agent_span_collector.time.monotonic"
+HELPER_PATCH = "bedrock_agentcore.evaluation.agent_span_collector.agent_span_collector.CloudWatchSpanHelper"
+TIME_PATCH = "bedrock_agentcore.evaluation.agent_span_collector.agent_span_collector.time.monotonic"
 
 
 @pytest.fixture
@@ -47,7 +47,7 @@ def collector():
 
 
 class TestCloudWatchAgentSpanCollector:
-    def test_is_agent_span_collector(self):
+    def test_isagent_span_collector(self):
         with patch(HELPER_PATCH):
             c = CloudWatchAgentSpanCollector(log_group_name="/logs", region="us-west-2")
             assert isinstance(c, AgentSpanCollector)
