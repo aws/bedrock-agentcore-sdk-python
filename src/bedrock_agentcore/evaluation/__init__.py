@@ -1,6 +1,35 @@
-"""AgentCore Evaluation: EvaluationClient and Strands integration."""
+"""AgentCore Evaluation: EvaluationClient, OnDemandEvaluationDatasetRunner, and Strands integration."""
 
-from bedrock_agentcore.evaluation.client import EvaluationClient
+from bedrock_agentcore.evaluation.client import EvaluationClient, ReferenceInputs
+from bedrock_agentcore.evaluation.runner.dataset_providers import (
+    DatasetProvider,
+    FileDatasetProvider,
+)
+from bedrock_agentcore.evaluation.runner.dataset_types import (
+    Dataset,
+    Input,
+    PredefinedScenario,
+    Scenario,
+    Turn,
+)
+from bedrock_agentcore.evaluation.runner.invoker_types import (
+    AgentInvokerFn,
+    AgentInvokerInput,
+    AgentInvokerOutput,
+)
+from bedrock_agentcore.evaluation.runner.on_demand import (
+    AgentSpanCollector,
+    CloudWatchAgentSpanCollector,
+    EvaluationResult,
+    EvaluationRunConfig,
+    EvaluatorConfig,
+    EvaluatorResult,
+    OnDemandEvaluationDatasetRunner,
+    PredefinedScenarioExecutor,
+    ScenarioExecutionResult,
+    ScenarioExecutor,
+    ScenarioResult,
+)
 from bedrock_agentcore.evaluation.span_to_adot_serializer import (
     convert_strands_to_adot,
 )
@@ -9,8 +38,30 @@ from bedrock_agentcore.evaluation.utils.cloudwatch_span_helper import (
 )
 
 __all__ = [
+    "AgentInvokerFn",
+    "AgentInvokerInput",
+    "AgentInvokerOutput",
+    "CloudWatchAgentSpanCollector",
+    "Dataset",
+    "DatasetProvider",
     "EvaluationClient",
+    "EvaluationResult",
+    "EvaluationRunConfig",
+    "OnDemandEvaluationDatasetRunner",
+    "EvaluatorConfig",
+    "EvaluatorResult",
+    "FileDatasetProvider",
+    "Input",
+    "ReferenceInputs",
+    "Scenario",
+    "ScenarioExecutionResult",
+    "ScenarioExecutor",
+    "ScenarioResult",
+    "AgentSpanCollector",
     "StrandsEvalsAgentCoreEvaluator",
+    "Turn",
+    "PredefinedScenario",
+    "PredefinedScenarioExecutor",
     "convert_strands_to_adot",
     "create_strands_evaluator",
     "fetch_spans_from_cloudwatch",
