@@ -2,19 +2,35 @@
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import boto3
 from botocore.config import Config
+from pydantic import BaseModel
 
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
-from bedrock_agentcore.evaluation._agent_span_collector import CloudWatchAgentSpanCollector
+from bedrock_agentcore.evaluation.agent_span_collector import CloudWatchAgentSpanCollector
 
 logger = logging.getLogger(__name__)
 
 MAX_TARGET_IDS_PER_REQUEST = 10
 QUERY_TIMEOUT_SECONDS = 60
 POLL_INTERVAL_SECONDS = 2
+
+
+class ReferenceInputs(BaseModel):
+    """Ground truth inputs for evaluation.
+
+    Attributes:
+        assertions: Natural language assertions about expected behavior (session-level).
+        expected_trajectory: Expected tool names in order (session-level).
+        expected_response: Expected response text. A plain string applies to the
+            last trace. A ``{trace_id: response}`` dict targets specific traces.
+    """
+
+    assertions: Optional[List[str]] = None
+    expected_trajectory: Optional[List[str]] = None
+    expected_response: Optional[Union[str, Dict[str, str]]] = None
 
 
 class EvaluationClient:
@@ -83,6 +99,8 @@ class EvaluationClient:
         agent_id: Optional[str] = None,
         look_back_time: timedelta = timedelta(days=7),
         log_group_name: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        reference_inputs: Optional[ReferenceInputs] = None,
     ) -> List[Dict[str, Any]]:
         """Evaluate an agent session end-to-end.
 
@@ -104,6 +122,8 @@ class EvaluationClient:
             look_back_time: How far back to search for spans (default: 7 days).
             log_group_name: CloudWatch log group name. If provided, ``agent_id``
                 is not required.
+            trace_id: Optional trace ID to narrow evaluation to a single trace.
+            reference_inputs: Optional ground truth for evaluation.
 
         Returns:
             List of evaluation result dicts from all evaluators.
@@ -146,14 +166,23 @@ class EvaluationClient:
             logger.warning("No spans found for session %s", session_id)
             return []
 
-        base_input = {"evaluationInput": {"sessionSpans": spans}}
+        base_input: Dict[str, Any] = {"evaluationInput": {"sessionSpans": spans}}
+
+        # Add reference inputs (ground truth) if provided
+        if reference_inputs:
+            all_trace_ids = self._extract_trace_ids(spans)
+            ref_inputs = self._build_reference_inputs(
+                session_id, reference_inputs, all_trace_ids, target_trace_id=trace_id
+            )
+            if ref_inputs:
+                base_input["evaluationReferenceInputs"] = ref_inputs
 
         # Steps 2-4: For each evaluator, look up level, build targets, call API
-        all_results = []
+        all_results: List[Dict[str, Any]] = []
         for evaluator_id in evaluator_ids:
             level = self._get_evaluator_level(evaluator_id)
             logger.info("Evaluating with %s (level=%s)", evaluator_id, level)
-            requests = self._build_requests_for_level(evaluator_id, level, base_input, spans)
+            requests = self._build_requests_for_level(evaluator_id, level, base_input, spans, trace_id)
             if len(requests) > 1:
                 logger.debug("Split into %d batched request(s) for evaluator %s", len(requests), evaluator_id)
             for request in requests:
@@ -188,26 +217,36 @@ class EvaluationClient:
         level: str,
         base_input: dict,
         spans: list,
+        trace_id: Optional[str] = None,
     ) -> List[dict]:
-        """Build one or more evaluate request payloads based on evaluator level."""
+        """Build one or more evaluate request payloads based on evaluator level.
+
+        When ``trace_id`` is provided, TRACE-level evaluators target only that
+        trace and TOOL_CALL-level evaluators are filtered to tool spans within
+        that trace.
+        """
         if level == "SESSION":
             return [base_input]
 
         if level == "TRACE":
+            if trace_id:
+                return [{**base_input, "evaluationTarget": {"traceIds": [trace_id]}}]
             trace_ids = self._extract_trace_ids(spans)
             logger.debug("Extracted %d unique trace ID(s) for evaluator %s", len(trace_ids), evaluator_id)
             if not trace_ids:
-                raise ValueError(f"No trace IDs found for trace-level evaluator {evaluator_id}")
+                logger.warning("No trace IDs found for trace-level evaluator %s, skipping", evaluator_id)
+                return []
             return [
                 {**base_input, "evaluationTarget": {"traceIds": trace_ids[i : i + MAX_TARGET_IDS_PER_REQUEST]}}
                 for i in range(0, len(trace_ids), MAX_TARGET_IDS_PER_REQUEST)
             ]
 
         if level == "TOOL_CALL":
-            tool_span_ids = self._extract_tool_span_ids(spans)
+            tool_span_ids = self._extract_tool_span_ids(spans, trace_id=trace_id)
             logger.debug("Extracted %d tool span ID(s) for evaluator %s", len(tool_span_ids), evaluator_id)
             if not tool_span_ids:
-                raise ValueError(f"No tool span IDs found for tool-level evaluator {evaluator_id}")
+                logger.warning("No tool span IDs found for tool-level evaluator %s, skipping", evaluator_id)
+                return []
             return [
                 {**base_input, "evaluationTarget": {"spanIds": tool_span_ids[i : i + MAX_TARGET_IDS_PER_REQUEST]}}
                 for i in range(0, len(tool_span_ids), MAX_TARGET_IDS_PER_REQUEST)
@@ -221,14 +260,92 @@ class EvaluationClient:
         return list(dict.fromkeys(span.get("traceId") for span in spans if span.get("traceId")))
 
     @staticmethod
-    def _extract_tool_span_ids(spans: list) -> List[str]:
-        """Extract span IDs for tool execution spans."""
+    def _is_tool_span(span: dict) -> bool:
+        """Check if a span represents a tool execution (supports Strands, LangGraph, and Traceloop)."""
+        attrs = span.get("attributes", {})
+        if not isinstance(attrs, dict):
+            return False
+        return (
+            attrs.get("gen_ai.operation.name") == "execute_tool"
+            or attrs.get("openinference.span.kind") == "TOOL"
+            or attrs.get("traceloop.span.kind") == "tool"
+        )
+
+    @staticmethod
+    def _extract_tool_span_ids(spans: list, trace_id: Optional[str] = None) -> List[str]:
+        """Extract span IDs for tool execution spans.
+
+        Args:
+            spans: List of span dicts.
+            trace_id: If provided, only include tool spans with this trace ID.
+        """
         tool_span_ids: List[str] = []
         for span in spans:
-            name = span.get("name", "")
-            kind = span.get("kind")
-            if kind == "SPAN_KIND_INTERNAL" and name.startswith("Tool:"):
+            if EvaluationClient._is_tool_span(span):
+                if trace_id and span.get("traceId") != trace_id:
+                    continue
                 span_id = span.get("spanId")
                 if span_id:
                     tool_span_ids.append(span_id)
         return tool_span_ids
+
+    @staticmethod
+    def _build_reference_inputs(
+        session_id: str,
+        reference_inputs: "ReferenceInputs",
+        trace_ids: List[str],
+        target_trace_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Build evaluationReferenceInputs from ReferenceInputs.
+
+        Returns a list of reference input dicts scoped by spanContext:
+        - Session-level entry for assertions and/or expected_trajectory.
+        - Per-trace entries for expected_response.
+
+        Args:
+            session_id: The session ID for span context.
+            reference_inputs: Ground truth inputs for evaluation.
+            trace_ids: All trace IDs extracted from spans.
+            target_trace_id: When provided and expected_response is a string,
+                targets this trace instead of the last trace.
+        """
+        result: List[Dict[str, Any]] = []
+
+        # Session-level: assertions and/or expected_trajectory
+        session_ref: Dict[str, Any] = {"context": {"spanContext": {"sessionId": session_id}}}
+        has_session_ref = False
+
+        if reference_inputs.assertions:
+            session_ref["assertions"] = [{"text": a} for a in reference_inputs.assertions]
+            has_session_ref = True
+
+        if reference_inputs.expected_trajectory:
+            session_ref["expectedTrajectory"] = {"toolNames": reference_inputs.expected_trajectory}
+            has_session_ref = True
+
+        if has_session_ref:
+            result.append(session_ref)
+
+        # Trace-level: expected_response
+        if reference_inputs.expected_response is not None:
+            if isinstance(reference_inputs.expected_response, str):
+                # Use explicit target_trace_id if provided, otherwise fall back to the last trace
+                resolved_trace_id = target_trace_id if target_trace_id else (trace_ids[-1] if trace_ids else None)
+                if resolved_trace_id:
+                    result.append(
+                        {
+                            "context": {"spanContext": {"sessionId": session_id, "traceId": resolved_trace_id}},
+                            "expectedResponse": {"text": reference_inputs.expected_response},
+                        }
+                    )
+            elif isinstance(reference_inputs.expected_response, dict):
+                # Dict maps trace_id -> response
+                for tid, response_text in reference_inputs.expected_response.items():
+                    result.append(
+                        {
+                            "context": {"spanContext": {"sessionId": session_id, "traceId": tid}},
+                            "expectedResponse": {"text": response_text},
+                        }
+                    )
+
+        return result

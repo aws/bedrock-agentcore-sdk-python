@@ -4,7 +4,13 @@ Note: These tests require valid AWS credentials and may incur costs.
 To run: pytest tests_integ/tools/test_code.py -v
 """
 
-from bedrock_agentcore.tools.code_interpreter_client import code_session
+import os
+import time
+
+import boto3
+
+from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint
+from bedrock_agentcore.tools.code_interpreter_client import CodeInterpreter, code_session
 
 # Test 1: Basic code execution with system interpreter
 print("Test 1: Basic code execution using execute_code()")
@@ -223,6 +229,94 @@ print("Plot saved to sine_wave.png")
         print(event["result"]["content"])
 print("✅ Test 10 passed\n")
 
+# Test 11: Create code interpreter with custom root CA certificate
+print("Test 11: Code interpreter with custom root CA certificate")
+
+REGION = "us-west-2"
+secret_arn = os.environ.get("TEST_ROOT_CA_SECRET_ARN")
+execution_role_arn = os.environ.get("TEST_EXECUTION_ROLE_ARN")
+
+if secret_arn and execution_role_arn:
+    cp_client = boto3.client(
+        "bedrock-agentcore-control",
+        region_name=REGION,
+        endpoint_url=get_control_plane_endpoint(REGION),
+    )
+
+    # Create interpreter with root CA
+    import time
+
+    response = cp_client.create_code_interpreter(
+        name=f"integ_test_rootca_{int(time.time())}",
+        executionRoleArn=execution_role_arn,
+        networkConfiguration={"networkMode": "PUBLIC"},
+        certificates=[{"location": {"secretsManager": {"secretArn": secret_arn}}}],
+        description="Integration test: code interpreter with custom root CA",
+    )
+    interpreter_id = response["codeInterpreterId"]
+    print(f"  Created interpreter: {interpreter_id}")
+
+    # Wait for ready
+    ci_client = CodeInterpreter(REGION)
+    for _ in range(40):
+        info = ci_client.get_code_interpreter(interpreter_id)
+        if info["status"] == "READY":
+            break
+        elif info["status"] == "CREATE_FAILED":
+            raise RuntimeError(f"Interpreter creation failed: {info.get('failureReason')}")
+        time.sleep(3)
+
+    print(f"  Interpreter status: {info['status']}")
+
+    # Start session and test SSL connection to untrusted-root.badssl.com
+    ci_client.start(identifier=interpreter_id)
+    print(f"  Session started: {ci_client.session_id}")
+
+    result = ci_client.invoke(
+        "executeCode",
+        {
+            "code": (
+                "import urllib.request\n"
+                "response = urllib.request.urlopen("
+                '"https://untrusted-root.badssl.com")\n'
+                'print(f"Status: {response.status}")'
+            ),
+            "language": "python",
+        },
+    )
+
+    success = False
+    for event in result.get("stream", []):
+        if "result" in event:
+            structured = event["result"].get("structuredContent", {})
+            stdout = structured.get("stdout", "")
+            if "200" in stdout:
+                success = True
+                print(f"  SSL connection succeeded: {stdout.strip()}")
+
+    ci_client.stop()
+
+    # Cleanup - delete interpreter
+    sessions = ci_client.list_sessions(interpreter_id=interpreter_id, status="READY")
+    for s in sessions.get("items", []):
+        try:
+            ci_client.data_plane_client.stop_code_interpreter_session(
+                codeInterpreterIdentifier=interpreter_id, sessionId=s["sessionId"]
+            )
+        except Exception:
+            pass
+    time.sleep(5)
+    cp_client.delete_code_interpreter(codeInterpreterId=interpreter_id)
+    print(f"  Cleaned up interpreter: {interpreter_id}")
+
+    assert success, "SSL connection to untrusted-root.badssl.com should succeed with custom root CA"
+    print("✅ Test 11 passed\n")
+else:
+    print("  ⏭️ Skipped (set TEST_ROOT_CA_SECRET_ARN and TEST_EXECUTION_ROLE_ARN env vars to enable)")
+    print("  Example:")
+    print("    export TEST_ROOT_CA_SECRET_ARN=arn:aws:secretsmanager:us-west-2:123456789012:secret:badssl-root-ca")
+    print("    export TEST_EXECUTION_ROLE_ARN=arn:aws:iam::123456789012:role/AgentCoreRole")
+    print("✅ Test 11 skipped\n")
 
 print("=" * 50)
 print("All integration tests passed! ✅")
