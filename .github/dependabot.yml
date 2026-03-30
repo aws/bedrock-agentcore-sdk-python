@@ -30,7 +30,6 @@ updates:
       - "aws/bedrock-agentcore-maintainers"
     labels:
       - "dependencies"
-      - "github-actions"
     commit-message:
       prefix: "ci"
       include: "scope"
