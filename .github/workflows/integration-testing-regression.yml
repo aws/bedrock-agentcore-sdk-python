@@ -1,0 +1,263 @@
+# .github/workflows/integration-testing-compat.yml
+#
+# Backward-compatibility regression check.
+#
+# ┌─────────────────────────────────────────────────────────────────┐
+# │  Library under test  │  PR branch source (built from source)    │
+# │  Test suite          │  Previous release tag (e.g. v1.4.5)      │
+# └─────────────────────────────────────────────────────────────────┘
+#
+# Question: "Does our new code silently break contracts that the
+# previous release's tests defined?"
+#
+# If a test that passed in v1.4.5 now fails against the PR branch,
+# that is a real regression — the new code broke an established contract.
+#
+# SECURITY MODEL (simplified):
+#   Only runs on PRs from within the same repository (not forks).
+#   This avoids the full collaborator-check + environment-approval gate
+#   from integration-testing.yml while keeping AWS OIDC credentials safe —
+#   fork PRs never have access to repo secrets or OIDC tokens on
+#   pull_request triggers, so the fork check is the only guard needed.
+#
+#   For fork contributors, a maintainer can trigger this manually via
+#   workflow_dispatch after reviewing the PR.
+#
+# RESULTS:
+#   Jobs are continue-on-error: true — failures are informational, not
+#   blocking. A failure means the new code broke a previously-passing
+#   test and warrants investigation before merge.
+
+name: Integration Tests (Backward Compat)
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to use as the test suite baseline (e.g. v1.4.5). Leave empty for latest tag.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Guard: skip fork PRs ────────────────────────────────────────────────────
+  # Fork PRs cannot access repo secrets or OIDC tokens on pull_request triggers,
+  # so they would fail at the AWS credentials step anyway. Failing fast here
+  # gives a clearer signal than a cryptic credentials error.
+  preflight:
+    name: Preflight Check
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.fork-check.outputs.result }}
+    steps:
+      - name: Check for fork PR
+        id: fork-check
+        uses: actions/github-script@v8
+        with:
+          result-encoding: string
+          script: |
+            if (!context.payload.pull_request) {
+              // workflow_dispatch — always run
+              return 'true';
+            }
+            const isFork =
+              context.payload.pull_request.head.repo.full_name !== context.repo.owner + '/' + context.repo.repo;
+            if (isFork) {
+              console.log(
+                'Fork PR detected. Skipping compat tests. ' +
+                'A maintainer can trigger these manually via workflow_dispatch.'
+              );
+              return 'false';
+            }
+            console.log('✓ Internal PR — proceeding.');
+            return 'true';
+
+  # ── Resolve the baseline tag ────────────────────────────────────────────────
+  # Finds the most recent semver release tag in the repository.
+  # For a PR in progress, the latest tag IS the previous release —
+  # the current changes have not been tagged yet.
+  resolve-tag:
+    name: Resolve Baseline Tag
+    runs-on: ubuntu-latest
+    needs: preflight
+    if: needs.preflight.outputs.should-run == 'true'
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Checkout (for tag resolution)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0   # full history needed to see all tags
+          fetch-tags: true
+
+      - name: Resolve tag
+        id: resolve
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            echo "Using manually specified tag: $INPUT_TAG"
+            # Verify the tag actually exists
+            if ! git rev-parse "$INPUT_TAG" > /dev/null 2>&1; then
+              echo "❌ Tag '$INPUT_TAG' does not exist in this repository"
+              exit 1
+            fi
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          else
+            # Latest semver tag — this is the previous published release.
+            # --sort=-version:refname sorts tags as semantic versions descending.
+            LATEST_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            if [ -z "$LATEST_TAG" ]; then
+              echo "❌ No semver release tags found (expected format: vX.Y.Z)"
+              exit 1
+            fi
+            echo "Resolved baseline tag: $LATEST_TAG"
+            echo "tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── Compatibility tests ─────────────────────────────────────────────────────
+  integ-test-compat:
+    name: Compat (${{ matrix.group }}) — new code vs ${{ needs.resolve-tag.outputs.tag }} tests
+    runs-on: ubuntu-latest
+    needs: [preflight, resolve-tag]
+    if: needs.preflight.outputs.should-run == 'true'
+
+    # Informational — failures mean regressions worth investigating,
+    # not hard blockers. Shows as a yellow warning icon in the Actions UI.
+    continue-on-error: true
+
+    permissions:
+      id-token: write  # Required for AWS OIDC
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: runtime
+            path: tests_integ/runtime
+            timeout: 10
+            extra-deps: ""
+          - group: memory
+            path: >-
+              tests_integ/memory/test_controlplane.py
+              tests_integ/memory/test_memory_client.py
+              tests_integ/memory/integrations/test_session_manager.py
+            timeout: 10
+            extra-deps: ""
+          - group: evaluation
+            path: tests_integ/evaluation
+            timeout: 15
+            extra-deps: "strands-agents-evals"
+          - group: services
+            path: tests_integ/services
+            timeout: 5
+            extra-deps: ""
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AGENTCORE_INTEG_TEST_ROLE }}
+          aws-region: us-west-2
+          mask-aws-account-id: true
+
+      # Check out the PR branch — we need the full source to build the library.
+      - name: Checkout PR branch (library source)
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      # Build and install the library from the PR branch source.
+      # This is the "new code" under test.
+      - name: Build and install library from PR branch
+        run: |
+          pip install build
+          python -m build --wheel --outdir dist/
+          WHEEL=$(ls dist/*.whl | head -1)
+          echo "Installing wheel: $WHEEL"
+          pip install "$WHEEL"
+
+          INSTALLED=$(pip show bedrock-agentcore | grep '^Version' | awk '{print $2}')
+          echo "✓ Installed bedrock-agentcore==$INSTALLED from PR branch source"
+
+      # Extract the test suite from the previous release tag using git archive.
+      # We get exactly what shipped in that release — no drift, no local edits.
+      # Only tests_integ/ is extracted to keep the working directory clean.
+      - name: Extract test suite from ${{ needs.resolve-tag.outputs.tag }}
+        env:
+          BASELINE_TAG: ${{ needs.resolve-tag.outputs.tag }}
+        run: |
+          mkdir -p /tmp/baseline-tests
+          echo "Extracting tests_integ/ from $BASELINE_TAG..."
+          git archive "$BASELINE_TAG" tests_integ/ | tar -x -C /tmp/baseline-tests/
+
+          if [ ! -d "/tmp/baseline-tests/tests_integ" ]; then
+            echo "❌ tests_integ/ not found in tag $BASELINE_TAG"
+            echo "Verify the tag contains this directory: git ls-tree $BASELINE_TAG tests_integ/"
+            exit 1
+          fi
+
+          echo "✓ Extracted test suite from $BASELINE_TAG"
+          echo "Test files found:"
+          find /tmp/baseline-tests/tests_integ -name "*.py" | head -20
+
+      # Install test dependencies only — NOT the library (already installed above).
+      - name: Install test dependencies
+        run: |
+          pip install --no-cache-dir \
+            pytest pytest-xdist pytest-order \
+            requests strands-agents uvicorn httpx starlette websockets \
+            ${{ matrix.extra-deps }}
+
+      # Run the old test suite against the new library.
+      # A failure here means a test that passed in the previous release
+      # now fails against the PR branch code — a genuine regression.
+      - name: Run ${{ needs.resolve-tag.outputs.tag }} tests against PR branch code
+        env:
+          AWS_REGION: us-west-2
+          PYTHONUNBUFFERED: "1"
+          MEMORY_KINESIS_ARN: ${{ secrets.MEMORY_KINESIS_ARN }}
+          MEMORY_ROLE_ARN: ${{ secrets.MEMORY_ROLE_ARN }}
+          MEMORY_PREPOPULATED_ID: ${{ secrets.MEMORY_PREPOPULATED_ID }}
+          RESOURCE_POLICY_TEST_ARN: ${{ secrets.RESOURCE_POLICY_TEST_ARN }}
+          RESOURCE_POLICY_TEST_PRINCIPAL: ${{ secrets.RESOURCE_POLICY_TEST_PRINCIPAL }}
+          BASELINE_TAG: ${{ needs.resolve-tag.outputs.tag }}
+        timeout-minutes: ${{ matrix.timeout }}
+        working-directory: /tmp/baseline-tests
+        run: |
+          echo "================================================"
+          echo "Library:    bedrock-agentcore (PR branch source)"
+          echo "Test suite: $BASELINE_TAG tests_integ/${{ matrix.group }}"
+          echo "================================================"
+          pytest ${{ matrix.path }} \
+            -n auto --dist=loadscope \
+            -s --log-cli-level=INFO
+
+  # ── Skip notice for fork PRs ────────────────────────────────────────────────
+  fork-skip-notice:
+    name: Compat tests skipped (fork PR)
+    runs-on: ubuntu-latest
+    needs: preflight
+    if: needs.preflight.outputs.should-run == 'false'
+    permissions: {}
+    steps:
+      - name: Explain skip
+        run: |
+          echo "ℹ️  Backward-compat integration tests were skipped for this fork PR."
+          echo ""
+          echo "AWS credentials are not available to fork PRs for security reasons."
+          echo "A maintainer can run these tests manually via:"
+          echo "  Actions → Integration Tests (Backward Compat) → Run workflow"
