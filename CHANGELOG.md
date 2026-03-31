@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0] - 2026-03-30
+
+### Added
+- feat: add ground truth support to EvaluationClient and OnDemandEvaluationDatasetRunner (#376) (29b0115)
+- feat: Add certificates to create_code_interpreter() (#373) (bc95735)
+- feat: add support for policies and certificates (#371) (88c5101)
+
+### Other Changes
+- chore: Modify arn parsing in runtime client to allow for different (#362) (a10c0fd)
+- ci: add breaking change detection workflow for pull requests (#358) (9341468)
+- ci: add backward compatibility integration test workflow (#357) (50654c1)
+- ci: add Dependabot auto-merge workflow (#361) (38425ec)
+
 ## [1.4.8] - 2026-03-26
 
 ### Added
