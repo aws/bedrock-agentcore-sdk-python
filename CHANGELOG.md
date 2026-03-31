@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.1] - 2026-03-31
+
+### Other Changes
+- Revert "feat: Emit OTEL attributes for AgentCore Evaluation support (#368)" (#380) (a516260)
+
 ## [1.5.0] - 2026-03-30
 
 ### Added
