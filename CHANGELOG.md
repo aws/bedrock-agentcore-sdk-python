@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.6.0] - 2026-03-31
+
+### Added
+- feat: add custom code-based evaluator decorator and typed models (#383) (09f45f3)
+
 ## [1.5.1] - 2026-03-31
 
 ### Other Changes
