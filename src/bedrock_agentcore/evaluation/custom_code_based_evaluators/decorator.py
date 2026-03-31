@@ -46,9 +46,7 @@ def custom_code_based_evaluator():
             result = fn(evaluator_input, context)
 
             if not isinstance(result, EvaluatorOutput):
-                raise TypeError(
-                    f"Evaluator must return an EvaluatorOutput, got {type(result).__name__}"
-                )
+                raise TypeError(f"Evaluator must return an EvaluatorOutput, got {type(result).__name__}")
 
             return result.model_dump()
 
