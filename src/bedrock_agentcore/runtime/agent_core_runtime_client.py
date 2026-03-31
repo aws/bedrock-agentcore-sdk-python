@@ -17,6 +17,7 @@ from botocore.auth import SigV4Auth, SigV4QueryAuth
 from botocore.awsrequest import AWSRequest
 
 from .._utils.endpoints import get_data_plane_endpoint
+from .utils import is_valid_partition
 
 DEFAULT_PRESIGNED_URL_TIMEOUT = 300
 MAX_PRESIGNED_URL_TIMEOUT = 300
@@ -68,7 +69,7 @@ class AgentCoreRuntimeClient:
         if len(parts) != 6:
             raise ValueError(f"Invalid runtime ARN format: {runtime_arn}")
 
-        if parts[0] != "arn" or parts[1] != "aws" or parts[2] != "bedrock-agentcore":
+        if parts[0] != "arn" or not is_valid_partition(parts[1]) or parts[2] != "bedrock-agentcore":
             raise ValueError(f"Invalid runtime ARN format: {runtime_arn}")
 
         # Parse the resource part (runtime/{runtime_id})

@@ -36,6 +36,25 @@ class TestParseRuntimeArn:
         assert result["account_id"] == "123456789012"
         assert result["runtime_id"] == "my-runtime-abc123"
 
+    def test_parse_valid_gov_arn(self):
+        """Test parsing a valid govcloud runtime ARN."""
+        client = AgentCoreRuntimeClient(region="us-gov-west-1")
+        arn = "arn:aws-us-gov:bedrock-agentcore:us-gov-west-1:123456789012:runtime/my-runtime-abc123"
+
+        result = client._parse_runtime_arn(arn)
+
+        assert result["region"] == "us-gov-west-1"
+        assert result["account_id"] == "123456789012"
+        assert result["runtime_id"] == "my-runtime-abc123"
+
+    def test_parse_invalid_arn_partition(self):
+        """Test parsing an invalid runtime ARN."""
+        client = AgentCoreRuntimeClient(region="us-iso-east-1")
+        invalid_arn = "arn:aws-iso:bedrock-agentcore:us-iso-east-1:123456789012:runtime/my-runtime-abc123"
+
+        with pytest.raises(ValueError, match="Invalid runtime ARN format"):
+            client._parse_runtime_arn(invalid_arn)
+
     def test_parse_invalid_arn_raises_error(self):
         """Test that invalid ARN format raises ValueError."""
         client = AgentCoreRuntimeClient(region="us-west-2")

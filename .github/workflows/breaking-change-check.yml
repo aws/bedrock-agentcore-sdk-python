@@ -1,0 +1,192 @@
+# .github/workflows/breaking-change-check.yml
+#
+# Analyzes every PR that touches src/bedrock_agentcore/ for public API
+# breaking changes and posts a comment on the PR with the results.
+#
+# Uses griffe (https://mkdocstrings.github.io/griffe/) — the standard Python
+# library for static API analysis, used by mkdocstrings, Rye, and others.
+# It understands __all__, class hierarchies, decorators, multi-line signatures,
+# and parameter kind changes — far beyond what git-diff heuristics can detect.
+#
+# This workflow is INFORMATIONAL ONLY. It never blocks a merge.
+# Intended use: reviewer awareness for breaking changes that may need a
+# CHANGELOG entry or a deprecation notice before removal.
+#
+
+name: Breaking Change Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/bedrock_agentcore/**'
+
+permissions:
+  contents: read       # checkout
+  pull-requests: write # post/update PR comment
+
+jobs:
+  check-breaking-changes:
+    name: Detect Breaking Changes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v6
+        with:
+          # Full history needed so griffe can create a worktree at the base ref.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: Install griffe
+        run: pip install griffe
+
+      # Fetch the base branch so the ref is available for griffe's worktree.
+      - name: Fetch base branch
+        run: git fetch origin "${{ github.base_ref }}" --depth=1
+
+      # Run griffe using its Python API for stable, structured output.
+      # The Python API is used instead of the CLI to:
+      #   a) get markdown-formatted output for the PR comment
+      #   b) handle errors gracefully without failing the job
+      #   c) avoid relying on CLI flag stability across griffe versions
+      #
+      # Exit codes written to GITHUB_OUTPUT:
+      #   exit_code=0  → no breaking changes
+      #   exit_code=1  → breaking changes found
+      #   exit_code=2  → griffe itself errored (treated as a warning, not a failure)
+      - name: Run griffe analysis
+        id: griffe
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          python3 - <<'PYEOF'
+          import griffe, sys, os
+
+          search   = ["src"]
+          base_ref = f"origin/{os.environ['BASE_REF']}"
+
+          # Load the old API from the base branch via a temporary git worktree.
+          # Load the new API from the current working tree (the PR branch).
+          try:
+              old = griffe.load_git("bedrock_agentcore", ref=base_ref, search_paths=search)
+              new = griffe.load("bedrock_agentcore", search_paths=search)
+          except griffe.GitError as e:
+              print(f"::warning::griffe could not create worktree for {base_ref}: {e}")
+              print(f"::warning::Skipping breaking change analysis for this PR.")
+              # Write a neutral comment and exit cleanly — don't block the job.
+              with open("/tmp/breaking-changes.md", "w") as f:
+                  f.write(
+                      "## ℹ️ Breaking Change Analysis Skipped\n\n"
+                      "griffe could not load the base branch for comparison. "
+                      "This is usually a transient git issue. "
+                      "A maintainer can re-run this check manually."
+                  )
+              with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+                  out.write("exit_code=2\n")
+              sys.exit(0)
+          except Exception as e:
+              print(f"::warning::griffe analysis failed unexpectedly: {e}")
+              with open("/tmp/breaking-changes.md", "w") as f:
+                  f.write(
+                      "## ℹ️ Breaking Change Analysis Skipped\n\n"
+                      f"griffe encountered an unexpected error: `{e}`"
+                  )
+              with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+                  out.write("exit_code=2\n")
+              sys.exit(0)
+
+          breakages = list(griffe.find_breaking_changes(old, new))
+
+          if not breakages:
+              body = (
+                  "## ✅ No Breaking Changes Detected\n\n"
+                  "No public API breaking changes found in this PR."
+              )
+              with open("/tmp/breaking-changes.md", "w") as f:
+                  f.write(body)
+              with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+                  out.write("exit_code=0\n")
+              print("✓ No breaking changes detected.")
+              sys.exit(0)
+
+          # Format output as markdown for the PR comment.
+          lines = [
+              "## ⚠️ Breaking Change Warning",
+              "",
+              f"Found **{len(breakages)}** potential breaking change(s) in this PR:",
+              "",
+          ]
+          for b in breakages:
+              lines.append(b.explain(style=griffe.ExplanationStyle.markdown))
+
+          lines += [
+              "",
+              "---",
+              "> **Note:** This is an automated static analysis check. "
+              "Some flagged changes may be intentional.",
+              "> Please confirm each item is expected and, if so, add a migration note to `CHANGELOG.md`.",
+          ]
+
+          body = "\n".join(lines)
+          with open("/tmp/breaking-changes.md", "w") as f:
+              f.write(body)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write("exit_code=1\n")
+
+          print(f"⚠️  {len(breakages)} breaking change(s) found.")
+          # Exit 0 here — the job itself always succeeds (informational).
+          # The PR comment carries the signal; the job status does not block merge.
+          sys.exit(0)
+          PYEOF
+
+      # Post or update a single persistent comment on the PR.
+      # Uses a hidden HTML marker so subsequent pushes update the same comment
+      # rather than creating a new one per commit.
+      - name: Post or update PR comment
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('/tmp/breaking-changes.md', 'utf8');
+
+            // Marker that identifies the comment as ours for future updates.
+            const marker = '<!-- breaking-change-check -->';
+            const fullBody = `${marker}\n${body}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+
+            const existing = comments.find(c => c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: fullBody,
+              });
+              console.log(`Updated existing breaking change comment (id: ${existing.id})`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: fullBody,
+              });
+              console.log('Created new breaking change comment');
+            }
+
+            // Log summary to the Actions step output for visibility.
+            const exitCode = '${{ steps.griffe.outputs.exit_code }}';
+            if (exitCode === '1') {
+              core.warning('Breaking changes detected — see PR comment for details.');
+            }

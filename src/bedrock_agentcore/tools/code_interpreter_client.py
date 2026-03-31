@@ -16,8 +16,17 @@ from botocore.config import Config
 from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
+from .config import Certificate
+
 DEFAULT_IDENTIFIER = "aws.codeinterpreter.v1"
 DEFAULT_TIMEOUT = 900
+
+
+def _to_dict(obj):
+    """Convert an object to a dict, calling to_dict() if available."""
+    if hasattr(obj, "to_dict"):
+        return obj.to_dict()
+    return obj
 
 
 class CodeInterpreter:
@@ -134,6 +143,7 @@ class CodeInterpreter:
         execution_role_arn: str,
         network_configuration: Optional[Dict] = None,
         description: Optional[str] = None,
+        certificates: Optional[List[Union[Certificate, Dict[str, Any]]]] = None,
         tags: Optional[Dict[str, str]] = None,
         client_token: Optional[str] = None,
     ) -> Dict:
@@ -155,6 +165,8 @@ class CodeInterpreter:
                     }
                 }
             description (Optional[str]): Description of the interpreter (1-4096 chars)
+            certificates (Optional[List[Union[Certificate, Dict]]]): Root CA certificates
+                from Secrets Manager for the code interpreter to trust.
             tags (Optional[Dict[str, str]]): Tags for the interpreter
             client_token (Optional[str]): Idempotency token
 
@@ -192,6 +204,9 @@ class CodeInterpreter:
 
         if description:
             request_params["description"] = description
+
+        if certificates:
+            request_params["certificates"] = [_to_dict(c) for c in certificates]
 
         if tags:
             request_params["tags"] = tags
