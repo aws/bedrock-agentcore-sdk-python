@@ -128,7 +128,7 @@ serve_a2a(StrandsA2AExecutor(agent))
 
 See [A2A Protocol Examples](docs/examples/a2a_protocol_examples.md) for LangGraph, Google ADK, and advanced usage.
 
-## 📝 License & Contributing
+ ## 📝 License & Contributing
 
 - **License:** Apache 2.0 - see [LICENSE.txt](LICENSE.txt)
 - **Contributing:** See [CONTRIBUTING.md](CONTRIBUTING.md)
