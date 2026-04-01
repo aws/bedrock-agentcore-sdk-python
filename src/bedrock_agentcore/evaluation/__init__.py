@@ -1,6 +1,11 @@
 """AgentCore Evaluation: EvaluationClient, OnDemandEvaluationDatasetRunner, and Strands integration."""
 
 from bedrock_agentcore.evaluation.client import EvaluationClient, ReferenceInputs
+from bedrock_agentcore.evaluation.custom_code_based_evaluators import (
+    EvaluatorInput,
+    EvaluatorOutput,
+    custom_code_based_evaluator,
+)
 from bedrock_agentcore.evaluation.runner.dataset_providers import (
     DatasetProvider,
     FileDatasetProvider,
@@ -47,11 +52,13 @@ __all__ = [
     "EvaluationClient",
     "EvaluationResult",
     "EvaluationRunConfig",
-    "OnDemandEvaluationDatasetRunner",
     "EvaluatorConfig",
+    "EvaluatorInput",
+    "EvaluatorOutput",
     "EvaluatorResult",
     "FileDatasetProvider",
     "Input",
+    "OnDemandEvaluationDatasetRunner",
     "ReferenceInputs",
     "Scenario",
     "ScenarioExecutionResult",
@@ -62,6 +69,7 @@ __all__ = [
     "Turn",
     "PredefinedScenario",
     "PredefinedScenarioExecutor",
+    "custom_code_based_evaluator",
     "convert_strands_to_adot",
     "create_strands_evaluator",
     "fetch_spans_from_cloudwatch",
