@@ -17,6 +17,11 @@ jobs:
   authorization-check:
     permissions: read-all
     runs-on: ubuntu-latest
+    # Skip entirely for Dependabot PRs — they are not collaborators so they
+    # would always route to manual-approval, blocking auto-merge indefinitely.
+    # Dependabot PRs are validated by ci.yml (lint, test, build) which are
+    # the required status checks in the main-status-checks Ruleset.
+    if: github.actor != 'dependabot[bot]'
     outputs:
       approval-env: ${{ steps.collab-check.outputs.result }}
       should-run: ${{ steps.safety-check.outputs.result }}
