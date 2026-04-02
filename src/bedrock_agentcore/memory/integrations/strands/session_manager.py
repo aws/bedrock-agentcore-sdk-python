@@ -628,8 +628,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             Optional[SessionMessage]: The message if found, None otherwise.
 
         Note:
-            This should not be called as (as of now) only the `update_message` method calls this method and
-            updating messages is not supported in AgentCore Memory.
+            This is primarily used internally by the `update_message` method to read
+            the original event before replacing it.
         """
         result = self.memory_client.gmdp_client.get_event(
             memoryId=self.config.memory_id, actorId=self.config.actor_id, sessionId=session_id, eventId=message_id
@@ -637,27 +637,58 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         return SessionMessage.from_dict(result) if result else None
 
     def update_message(self, session_id: str, agent_id: str, session_message: SessionMessage, **kwargs: Any) -> None:
-        """Update message data.
+        """Update message data in AgentCore Memory.
 
-        Note: AgentCore Memory doesn't support updating events,
-        so this is primarily for validation and logging.
+        Since AgentCore Memory events are immutable, this method performs an update by
+        creating a new event with the updated content and deleting the old event.
+        This enables features like guardrail redaction via Strands' redact_latest_message().
+
+        If the message has not yet been persisted (e.g., still in the message buffer when
+        batch_size > 1), the buffered message is replaced in-place instead.
 
         Args:
             session_id (str): The session ID containing the message.
             agent_id (str): The agent ID associated with the message.
-            session_message (SessionMessage): The message to update.
+            session_message (SessionMessage): The message to update (with updated content
+                and the original message_id/eventId).
             **kwargs (Any): Additional keyword arguments.
 
         Raises:
-            SessionException: If session ID doesn't match configuration.
+            SessionException: If session ID doesn't match configuration or update fails.
         """
         if session_id != self.config.session_id:
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session_id}")
 
-        logger.debug(
-            "Message update requested for message: %s (AgentCore Memory doesn't support updates)",
-            {session_message.message_id},
-        )
+        old_message_id = session_message.message_id
+
+        # If message hasn't been persisted yet (still in buffer), update it there
+        if old_message_id is None:
+            if self._update_buffered_message(session_message):
+                logger.debug("Updated buffered message (not yet persisted to AgentCore Memory)")
+                return
+            logger.debug("Message has no event ID and was not found in buffer - skipping update")
+            return
+
+        try:
+            # Create a new event with the updated message content
+            updated_message = SessionMessage(
+                message=session_message.message,
+                message_id=0,
+                created_at=session_message.created_at,
+            )
+            self.create_message(session_id, agent_id, updated_message)
+
+            # Delete the old event
+            self.memory_client.gmdp_client.delete_event(
+                memoryId=self.config.memory_id,
+                actorId=self.config.actor_id,
+                sessionId=session_id,
+                eventId=old_message_id,
+            )
+            logger.info("Updated message in AgentCore Memory: replaced event %s", old_message_id)
+        except Exception as e:
+            logger.error("Failed to update message in AgentCore Memory: %s", e)
+            raise SessionException(f"Failed to update message: {e}") from e
 
     def list_messages(
         self,
@@ -856,6 +887,44 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     # endregion RepositorySessionManager overrides
 
     # region Batching support
+
+    def _update_buffered_message(self, session_message: SessionMessage) -> bool:
+        """Attempt to update a message that is still in the send buffer.
+
+        When batch_size > 1, messages may not yet be persisted to AgentCore Memory.
+        This method finds the most recent buffered message matching the session_message's
+        content role and replaces it with the updated content.
+
+        Args:
+            session_message (SessionMessage): The message with updated content.
+
+        Returns:
+            bool: True if a buffered message was found and updated, False otherwise.
+        """
+        updated_messages = self.converter.message_to_payload(session_message)
+        if not updated_messages:
+            return False
+
+        is_blob = self.converter.exceeds_conversational_limit(updated_messages[0])
+
+        with self._message_lock:
+            # Search from the end (most recent) to find the message to update
+            for i in range(len(self._message_buffer) - 1, -1, -1):
+                buf = self._message_buffer[i]
+                if buf.session_id == self.config.session_id and buf.messages:
+                    # Match by role - the most recent message with the same role
+                    existing_role = buf.messages[0][1] if not buf.is_blob else None
+                    new_role = updated_messages[0][1] if not is_blob else None
+                    if existing_role == new_role:
+                        self._message_buffer[i] = BufferedMessage(
+                            session_id=buf.session_id,
+                            messages=updated_messages,
+                            is_blob=is_blob,
+                            timestamp=buf.timestamp,
+                            metadata=buf.metadata,
+                        )
+                        return True
+        return False
 
     def _flush_messages_only(self) -> list[dict[str, Any]]:
         """Flush only buffered messages to AgentCore Memory.

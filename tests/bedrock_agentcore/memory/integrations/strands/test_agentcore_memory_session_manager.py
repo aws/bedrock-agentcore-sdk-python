@@ -496,12 +496,28 @@ class TestAgentCoreMemorySessionManager:
 
         assert result is None
 
-    def test_update_message(self, session_manager):
-        """Test updating a message."""
-        message = SessionMessage(message={"role": "user", "content": [{"text": "Hello"}]}, message_id=1)
+    def test_update_message(self, session_manager, mock_memory_client):
+        """Test updating a persisted message creates new event and deletes old one."""
+        mock_memory_client.create_event.return_value = {"eventId": "new_event_456"}
 
-        # Should not raise any exceptions
+        message = SessionMessage(
+            message={"role": "user", "content": [{"text": "redacted"}]},
+            message_id="old_event_123",
+            created_at="2024-01-01T12:00:00Z",
+        )
+
         session_manager.update_message("test-session-456", "test-agent-123", message)
+
+        # Verify new event was created
+        mock_memory_client.create_event.assert_called_once()
+
+        # Verify old event was deleted
+        mock_memory_client.gmdp_client.delete_event.assert_called_once()
+        delete_kwargs = mock_memory_client.gmdp_client.delete_event.call_args.kwargs
+        assert delete_kwargs["eventId"] == "old_event_123"
+        assert delete_kwargs["memoryId"] == "test-memory-123"
+        assert delete_kwargs["actorId"] == "test-actor-789"
+        assert delete_kwargs["sessionId"] == "test-session-456"
 
     def test_update_message_wrong_session(self, session_manager):
         """Test updating a message with wrong session ID."""
@@ -509,6 +525,44 @@ class TestAgentCoreMemorySessionManager:
 
         with pytest.raises(SessionException, match="Session ID mismatch"):
             session_manager.update_message("wrong-session-id", "test-agent-123", message)
+
+    def test_update_message_no_message_id(self, session_manager):
+        """Test updating a message with no message_id (not yet persisted) skips gracefully."""
+        message = SessionMessage(
+            message={"role": "user", "content": [{"text": "redacted"}]},
+            message_id=None,
+            created_at="2024-01-01T12:00:00Z",
+        )
+
+        # Should not raise - just skips since message isn't persisted and buffer is empty
+        session_manager.update_message("test-session-456", "test-agent-123", message)
+
+    def test_update_message_create_fails(self, session_manager, mock_memory_client):
+        """Test update_message raises SessionException when create fails."""
+        mock_memory_client.create_event.side_effect = Exception("API Error")
+
+        message = SessionMessage(
+            message={"role": "user", "content": [{"text": "redacted"}]},
+            message_id="old_event_123",
+            created_at="2024-01-01T12:00:00Z",
+        )
+
+        with pytest.raises(SessionException, match="Failed to update message"):
+            session_manager.update_message("test-session-456", "test-agent-123", message)
+
+    def test_update_message_delete_fails(self, session_manager, mock_memory_client):
+        """Test update_message raises SessionException when delete fails."""
+        mock_memory_client.create_event.return_value = {"eventId": "new_event_456"}
+        mock_memory_client.gmdp_client.delete_event.side_effect = Exception("Delete failed")
+
+        message = SessionMessage(
+            message={"role": "user", "content": [{"text": "redacted"}]},
+            message_id="old_event_123",
+            created_at="2024-01-01T12:00:00Z",
+        )
+
+        with pytest.raises(SessionException, match="Failed to update message"):
+            session_manager.update_message("test-session-456", "test-agent-123", message)
 
     def test_list_messages_with_limit(self, session_manager, mock_memory_client):
         """Test listing messages with limit."""
@@ -1365,6 +1419,31 @@ class TestBatchingBufferManagement:
         assert batching_session_manager.pending_message_count() == 3
         # Verify no events were sent (still buffered)
         mock_memory_client.create_event.assert_not_called()
+
+    def test_update_buffered_message(self, batching_session_manager, mock_memory_client):
+        """Test update_message replaces a buffered message in-place when message_id is None."""
+        # Add a user message to buffer
+        message = SessionMessage(
+            message={"role": "user", "content": [{"text": "offensive content"}]},
+            message_id=0,
+            created_at="2024-01-01T12:00:00Z",
+        )
+        batching_session_manager.create_message("test-session-456", "test-agent", message)
+        assert batching_session_manager.pending_message_count() == 1
+
+        # Update with redacted content (message_id=None simulates unbatched message)
+        redacted = SessionMessage(
+            message={"role": "user", "content": [{"text": "Message redacted by guardrail"}]},
+            message_id=None,
+            created_at="2024-01-01T12:00:00Z",
+        )
+        batching_session_manager.update_message("test-session-456", "test-agent", redacted)
+
+        # Buffer should still have 1 message but with updated content
+        assert batching_session_manager.pending_message_count() == 1
+        # No API calls should have been made (still buffered)
+        mock_memory_client.create_event.assert_not_called()
+        mock_memory_client.gmdp_client.delete_event.assert_not_called()
 
     def test_buffer_auto_flushes_at_batch_size(self, batching_session_manager, mock_memory_client):
         """Test buffer automatically flushes when reaching batch_size."""
