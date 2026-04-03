@@ -29,7 +29,7 @@ from bedrock_agentcore.memory.models.filters import (
 )
 
 from .bedrock_converter import AgentCoreMemoryConverter
-from .config import AgentCoreMemoryConfig, RetrievalConfig, normalize_metadata
+from .config import AgentCoreMemoryConfig, PersistenceMode, RetrievalConfig, normalize_metadata
 from .converters import MemoryConverter
 
 if TYPE_CHECKING:
@@ -142,6 +142,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         """
         self.converter = converter or AgentCoreMemoryConverter
         self.config = agentcore_memory_config
+        self.read_only = agentcore_memory_config.persistence_mode is PersistenceMode.NONE
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
         self.has_existing_agent = False
@@ -255,17 +256,21 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if session.session_id != self.config.session_id:
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session.session_id}")
 
-        event = self.memory_client.gmdp_client.create_event(
-            memoryId=self.config.memory_id,
-            actorId=self.config.actor_id,
-            sessionId=self.session_id,
-            payload=[
-                {"blob": json.dumps(session.to_dict())},
-            ],
-            eventTimestamp=self._get_monotonic_timestamp(),
-            metadata={STATE_TYPE_KEY: {"stringValue": StateType.SESSION.value}},
-        )
-        logger.info("Created session: %s with event: %s", session.session_id, event.get("event", {}).get("eventId"))
+        if not self.read_only:
+            event = self.memory_client.gmdp_client.create_event(
+                memoryId=self.config.memory_id,
+                actorId=self.config.actor_id,
+                sessionId=self.session_id,
+                payload=[
+                    {"blob": json.dumps(session.to_dict())},
+                ],
+                eventTimestamp=self._get_monotonic_timestamp(),
+                metadata={STATE_TYPE_KEY: {"stringValue": StateType.SESSION.value}},
+            )
+            logger.info(
+                "Created session: %s with event: %s", session.session_id, event.get("event", {}).get("eventId")
+            )
+
         return session
 
     def read_session(self, session_id: str, **kwargs: Any) -> Optional[Session]:
@@ -318,14 +323,15 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             session_data = json.loads(old_event.get("payload", {})[0].get("blob"))
             session = Session.from_dict(session_data)
             # Migrate: create new event with metadata, delete old
-            self.create_session(session)
-            self.memory_client.gmdp_client.delete_event(
-                memoryId=self.config.memory_id,
-                actorId=legacy_actor_id,
-                sessionId=session_id,
-                eventId=old_event.get("eventId"),
-            )
-            logger.info("Migrated legacy session event for session: %s", session_id)
+            if not self.read_only:
+                self.create_session(session)
+                self.memory_client.gmdp_client.delete_event(
+                    memoryId=self.config.memory_id,
+                    actorId=legacy_actor_id,
+                    sessionId=session_id,
+                    eventId=old_event.get("eventId"),
+                )
+                logger.info("Migrated legacy session event for session: %s", session_id)
             return session
 
         return None
@@ -363,6 +369,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         # Cache the created_at timestamp to avoid re-fetching on updates
         if session_agent.created_at:
             self._agent_created_at_cache[session_agent.agent_id] = session_agent.created_at
+
+        if self.read_only:
+            return
 
         if self.config.batch_size > 1:
             # Buffer the agent state events
@@ -462,14 +471,15 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 agent_data = json.loads(old_event.get("payload", {})[0].get("blob"))
                 agent = SessionAgent.from_dict(agent_data)
                 # Migrate: create new event with metadata, delete old
-                self.create_agent(session_id, agent)
-                self.memory_client.gmdp_client.delete_event(
-                    memoryId=self.config.memory_id,
-                    actorId=legacy_actor_id,
-                    sessionId=session_id,
-                    eventId=old_event.get("eventId"),
-                )
-                logger.info("Migrated legacy agent event for agent: %s", agent_id)
+                if not self.read_only:
+                    self.create_agent(session_id, agent)
+                    self.memory_client.gmdp_client.delete_event(
+                        memoryId=self.config.memory_id,
+                        actorId=legacy_actor_id,
+                        sessionId=session_id,
+                        eventId=old_event.get("eventId"),
+                    )
+                    logger.info("Migrated legacy agent event for agent: %s", agent_id)
                 return agent
 
             return None
@@ -545,6 +555,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         messages = self.converter.message_to_payload(session_message)
         if not messages:
             return None
+
+        if self.read_only:
+            return {}
 
         is_blob = self.converter.exceeds_conversational_limit(messages[0])
 
@@ -862,6 +875,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         Raises:
             SessionException: If message creation fails. On failure, messages remain in the buffer.
         """
+        if self.read_only:
+            return []
+
         with self._message_lock:
             messages_to_send = list(self._message_buffer)
 
@@ -940,6 +956,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         Raises:
             SessionException: If agent state creation fails. On failure, agent states remain in the buffer.
         """
+        if self.read_only:
+            return []
+
         with self._agent_state_lock:
             agent_states_to_send = list(self._agent_state_buffer)
 
