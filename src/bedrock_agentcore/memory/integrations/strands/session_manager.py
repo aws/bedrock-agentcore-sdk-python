@@ -142,7 +142,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         """
         self.converter = converter or AgentCoreMemoryConverter
         self.config = agentcore_memory_config
-        self.read_only = agentcore_memory_config.persistence_mode is PersistenceMode.NONE
+        self.persistence_mode = agentcore_memory_config.persistence_mode
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
         self.has_existing_agent = False
@@ -256,7 +256,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if session.session_id != self.config.session_id:
             raise SessionException(f"Session ID mismatch: expected {self.config.session_id}, got {session.session_id}")
 
-        if not self.read_only:
+        if self.persistence_mode is not PersistenceMode.NONE:
             event = self.memory_client.gmdp_client.create_event(
                 memoryId=self.config.memory_id,
                 actorId=self.config.actor_id,
@@ -267,9 +267,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 eventTimestamp=self._get_monotonic_timestamp(),
                 metadata={STATE_TYPE_KEY: {"stringValue": StateType.SESSION.value}},
             )
-            logger.info(
-                "Created session: %s with event: %s", session.session_id, event.get("event", {}).get("eventId")
-            )
+            logger.info("Created session: %s with event: %s", session.session_id, event.get("event", {}).get("eventId"))
 
         return session
 
@@ -323,7 +321,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             session_data = json.loads(old_event.get("payload", {})[0].get("blob"))
             session = Session.from_dict(session_data)
             # Migrate: create new event with metadata, delete old
-            if not self.read_only:
+            if self.persistence_mode is not PersistenceMode.NONE:
                 self.create_session(session)
                 self.memory_client.gmdp_client.delete_event(
                     memoryId=self.config.memory_id,
@@ -370,7 +368,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if session_agent.created_at:
             self._agent_created_at_cache[session_agent.agent_id] = session_agent.created_at
 
-        if self.read_only:
+        if self.persistence_mode is PersistenceMode.NONE:
             return
 
         if self.config.batch_size > 1:
@@ -471,7 +469,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 agent_data = json.loads(old_event.get("payload", {})[0].get("blob"))
                 agent = SessionAgent.from_dict(agent_data)
                 # Migrate: create new event with metadata, delete old
-                if not self.read_only:
+                if self.persistence_mode is not PersistenceMode.NONE:
                     self.create_agent(session_id, agent)
                     self.memory_client.gmdp_client.delete_event(
                         memoryId=self.config.memory_id,
@@ -556,7 +554,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if not messages:
             return None
 
-        if self.read_only:
+        if self.persistence_mode is PersistenceMode.NONE:
             return {}
 
         is_blob = self.converter.exceeds_conversational_limit(messages[0])
@@ -875,7 +873,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         Raises:
             SessionException: If message creation fails. On failure, messages remain in the buffer.
         """
-        if self.read_only:
+        if self.persistence_mode is PersistenceMode.NONE:
             return []
 
         with self._message_lock:
@@ -956,7 +954,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         Raises:
             SessionException: If agent state creation fails. On failure, agent states remain in the buffer.
         """
-        if self.read_only:
+        if self.persistence_mode is PersistenceMode.NONE:
             return []
 
         with self._agent_state_lock:

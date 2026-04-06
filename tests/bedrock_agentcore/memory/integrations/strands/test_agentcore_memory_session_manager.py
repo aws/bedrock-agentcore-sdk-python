@@ -3259,7 +3259,9 @@ class TestPersistenceMode:
         assert config.persistence_mode is PersistenceMode.FULL
 
     def test_config_accepts_none_mode(self):
-        config = AgentCoreMemoryConfig(memory_id="m", session_id="s", actor_id="a", persistence_mode=PersistenceMode.NONE)
+        config = AgentCoreMemoryConfig(
+            memory_id="m", session_id="s", actor_id="a", persistence_mode=PersistenceMode.NONE
+        )
         assert config.persistence_mode is PersistenceMode.NONE
 
     def test_config_accepts_string_value(self):
@@ -3370,7 +3372,10 @@ class TestPersistenceMode:
 
     def test_read_agent_works(self, no_persist_manager, mock_memory_client):
         mock_memory_client.list_events.return_value = [
-            {"eventId": "e1", "payload": [{"blob": '{"agent_id": "a1", "state": {}, "conversation_manager_state": {}}'}]},
+            {
+                "eventId": "e1",
+                "payload": [{"blob": '{"agent_id": "a1", "state": {}, "conversation_manager_state": {}}'}],
+            },
         ]
         result = no_persist_manager.read_agent("test-session-456", "a1")
         assert result is not None
@@ -3381,7 +3386,16 @@ class TestPersistenceMode:
             {
                 "eventId": "e1",
                 "eventTimestamp": "2024-01-01T12:00:00Z",
-                "payload": [{"conversational": {"content": {"text": '{"message": {"role": "user", "content": [{"text": "Hello"}]}, "message_id": 1}'}, "role": "USER"}}],
+                "payload": [
+                    {
+                        "conversational": {
+                            "content": {
+                                "text": '{"message": {"role": "user", "content": [{"text": "Hello"}]}, "message_id": 1}'
+                            },
+                            "role": "USER",
+                        }
+                    }
+                ],
             },
         ]
         messages = no_persist_manager.list_messages("test-session-456", "a1")
@@ -3392,7 +3406,12 @@ class TestPersistenceMode:
     def test_legacy_session_migration_skipped(self, no_persist_manager, mock_memory_client):
         mock_memory_client.list_events.side_effect = [
             [],
-            [{"eventId": "legacy-1", "payload": [{"blob": '{"session_id": "test-session-456", "session_type": "AGENT"}'}]}],
+            [
+                {
+                    "eventId": "legacy-1",
+                    "payload": [{"blob": '{"session_id": "test-session-456", "session_type": "AGENT"}'}],
+                }
+            ],
         ]
         result = no_persist_manager.read_session("test-session-456")
         assert result is not None
@@ -3402,7 +3421,12 @@ class TestPersistenceMode:
     def test_legacy_agent_migration_skipped(self, no_persist_manager, mock_memory_client):
         mock_memory_client.list_events.side_effect = [
             [],
-            [{"eventId": "legacy-1", "payload": [{"blob": '{"agent_id": "a1", "state": {}, "conversation_manager_state": {}}'}]}],
+            [
+                {
+                    "eventId": "legacy-1",
+                    "payload": [{"blob": '{"agent_id": "a1", "state": {}, "conversation_manager_state": {}}'}],
+                }
+            ],
         ]
         result = no_persist_manager.read_agent("test-session-456", "a1")
         assert result is not None
