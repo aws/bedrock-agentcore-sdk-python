@@ -4,7 +4,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
-from typing import List
+from typing import Dict, List
 
 from bedrock_agentcore._utils.endpoints import DEFAULT_REGION
 from bedrock_agentcore.evaluation.utils.cloudwatch_span_helper import CloudWatchSpanHelper
@@ -19,7 +19,7 @@ class AgentSpanCollector(ABC):
 
     @abstractmethod
     def collect(self, session_id: str, start_time: datetime, end_time: datetime) -> List[dict]:
-        """Collect spans for a given session.
+        """Collect spans for a single session.
 
         Args:
             session_id: The session ID to collect spans for.
@@ -29,6 +29,27 @@ class AgentSpanCollector(ABC):
         Returns:
             List of span dictionaries.
         """
+
+    def collect_batch(
+        self,
+        session_ids: List[str],
+        start_time: datetime,
+        end_time: datetime,
+    ) -> Dict[str, List[dict]]:
+        """Collect spans for multiple sessions over a shared time window.
+
+        Default implementation calls ``collect()`` per session. Override to issue
+        a single batched query (e.g. one CloudWatch query for all session IDs).
+
+        Args:
+            session_ids: Session IDs to collect spans for.
+            start_time: Start of the time window covering all sessions.
+            end_time: End of the time window covering all sessions.
+
+        Returns:
+            Dict mapping session ID to its list of span dictionaries.
+        """
+        return {session_id: self.collect(session_id, start_time, end_time) for session_id in session_ids}
 
 
 class CloudWatchAgentSpanCollector(AgentSpanCollector):
@@ -98,6 +119,90 @@ class CloudWatchAgentSpanCollector(AgentSpanCollector):
 
             logger.info("No spans found yet, retrying in %ds...", self.poll_interval_seconds)
             time.sleep(self.poll_interval_seconds)
+
+    def collect_batch(
+        self,
+        session_ids: List[str],
+        start_time: datetime,
+        end_time: datetime,
+    ) -> Dict[str, List[dict]]:
+        """Collect spans for all sessions in a single pair of CloudWatch queries.
+
+        Issues one query per log group (aws/spans + the configured log group)
+        covering the full time window, then groups results by session ID.
+
+        Args:
+            session_ids: Session IDs to collect spans for.
+            start_time: Start of the time window covering all sessions.
+            end_time: End of the time window covering all sessions.
+
+        Returns:
+            Dict mapping session ID to its list of span dictionaries.
+        """
+        if not session_ids:
+            return {}
+
+        # Widen the query window so spans ingested shortly after the
+        # invocation ended are not excluded.
+        query_end_time = end_time + timedelta(seconds=60)
+        deadline = time.monotonic() + self.max_wait_seconds
+        grouped: Dict[str, List[dict]] = {sid: [] for sid in session_ids}
+        pending = list(session_ids)
+
+        while True:
+            session_list = "[" + ", ".join(f'"{sid}"' for sid in pending) + "]"
+            query_string = (
+                f"fields @timestamp, @message"
+                f"\n| filter attributes.session.id in {session_list}"
+                f"\n| filter ispresent(scope.name)"
+                f"\n| filter ispresent(traceId)"
+                f"\n| filter ispresent(spanId)"
+                f"\n| sort @timestamp asc"
+            )
+            aws_spans = self._helper.query_log_group(
+                AWS_SPANS_LOG_GROUP, "batch", start_time, query_end_time, query_string=query_string
+            )
+            event_spans = self._helper.query_log_group(
+                self.log_group_name, "batch", start_time, query_end_time, query_string=query_string
+            )
+
+            for span in aws_spans + event_spans:
+                attrs = span.get("attributes", {})
+                sid = attrs.get("session.id") if isinstance(attrs, dict) else None
+                if sid and sid in grouped:
+                    grouped[sid].append(span)
+
+            for sid in grouped:
+                grouped[sid].sort(key=lambda s: s.get("endTimeUnixNano", 0))
+
+            pending = [sid for sid in pending if not grouped[sid]]
+            if not pending:
+                break
+
+            if time.monotonic() + self.poll_interval_seconds > deadline:
+                logger.warning(
+                    "Batch span collection timed out after %ds; %d/%d sessions have no spans: %s",
+                    self.max_wait_seconds,
+                    len(pending),
+                    len(session_ids),
+                    pending,
+                )
+                break
+
+            logger.info(
+                "%d/%d sessions missing spans, retrying in %ds...",
+                len(pending),
+                len(session_ids),
+                self.poll_interval_seconds,
+            )
+            time.sleep(self.poll_interval_seconds)
+
+        logger.info(
+            "Batch span collection complete: %d sessions, %d total spans",
+            len(session_ids),
+            sum(len(v) for v in grouped.values()),
+        )
+        return grouped
 
     def _fetch_spans(self, session_id: str, start_time: datetime, end_time: datetime) -> List[dict]:
         """Fetch spans from both aws/spans and the configured log group.

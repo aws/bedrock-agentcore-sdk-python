@@ -6,6 +6,22 @@ from bedrock_agentcore.evaluation.custom_code_based_evaluators import (
     EvaluatorOutput,
     custom_code_based_evaluator,
 )
+from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
+    BatchEvaluationResult,
+    BatchEvaluationRunConfig,
+    BatchEvaluationSummary,
+    BatchEvaluatorConfig,
+    CloudWatchOutputDataConfig,
+    CloudWatchSessionSourceConfig,
+    EvaluatorStatistics,
+    EvaluatorSummary,
+    FailedScenario,
+    TokenUsageSummary,
+)
+
+from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_runner import (
+    BatchEvaluationRunner,
+)
 from bedrock_agentcore.evaluation.runner.dataset_providers import (
     DatasetProvider,
     FileDatasetProvider,
@@ -44,6 +60,18 @@ from bedrock_agentcore.evaluation.utils.cloudwatch_span_helper import (
 
 __all__ = [
     "AgentInvokerFn",
+    "BatchEvaluationRunner",
+    "BatchEvaluationResult",
+
+    "BatchEvaluationRunConfig",
+    "CloudWatchOutputDataConfig",
+    "CloudWatchSessionSourceConfig",
+    "BatchEvaluatorConfig",
+    "BatchEvaluationSummary",
+    "EvaluatorStatistics",
+    "EvaluatorSummary",
+    "FailedScenario",
+    "TokenUsageSummary",
     "AgentInvokerInput",
     "AgentInvokerOutput",
     "CloudWatchAgentSpanCollector",
