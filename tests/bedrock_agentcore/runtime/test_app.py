@@ -11,7 +11,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from starlette.testclient import TestClient
 
+import bedrock_agentcore.runtime.app as _app_module
+from bedrock_agentcore.config_bundle.bundle import ConfigBundleRef
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
+from bedrock_agentcore.runtime.app import _parse_runtime_arn
+from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
 
 
 class TestBedrockAgentCoreApp:
@@ -2715,3 +2719,217 @@ class TestWorkerLoopInvocation:
         content = response.content.decode("utf-8")
         assert 'data: {"chunk": "a"}' in content
         assert 'data: {"chunk": "b"}' in content
+
+
+class TestConfigBundleBaggageParsing:
+    """Tests that the app parses OTEL baggage and populates config bundle refs."""
+
+    ARN = "arn:aws:bedrock-agentcore:us-west-2:123456789012:bundle/my-agent"
+
+    def test_baggage_header_populates_bundle_ref(self):
+        captured_refs = []
+
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            ref = BedrockAgentCoreContext.get_config_bundle_ref()
+            if ref is not None:
+                captured_refs.append(ref)
+            return {}
+
+        client = TestClient(app)
+        client.post(
+            "/invocations",
+            json={},
+            headers={"baggage": f"aws.agentcore.configbundle_arn={self.ARN},aws.agentcore.configbundle_version=2"},
+        )
+
+        assert len(captured_refs) == 1
+        assert captured_refs[0] == ConfigBundleRef(bundle_arn=self.ARN, bundle_version="2")
+
+    def test_no_baggage_header_leaves_ref_none(self):
+        captured = []
+
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            captured.append(BedrockAgentCoreContext.get_config_bundle_ref())
+            return {}
+
+        client = TestClient(app)
+        client.post("/invocations", json={})
+
+        assert captured == [None]
+
+    def test_custom_config_client_is_used(self, monkeypatch):
+        runtime_arn = "arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/MyRuntime"
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", f"cloud.resource_id={runtime_arn}")
+
+        mock_client = MagicMock()
+        mock_client.get_configuration_bundle_version.return_value = {
+            "components": {runtime_arn: {"configuration": {"model_id": "claude-3"}}}
+        }
+
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            return BedrockAgentCoreContext.get_bundle_config()
+
+        with patch.object(app, "_config_client", mock_client):
+            client = TestClient(app)
+            response = client.post(
+                "/invocations",
+                json={},
+                headers={"baggage": f"aws.agentcore.configbundle_arn={self.ARN},aws.agentcore.configbundle_version=2"},
+            )
+
+            assert response.status_code == 200
+            mock_client.get_configuration_bundle_version.assert_called_once_with(bundleId="my-agent", versionId="2")
+
+
+# ---------------------------------------------------------------------------
+# Constants shared by TestParseRuntimeArn and TestResolveBundleConfig
+# ---------------------------------------------------------------------------
+RUNTIME_ARN = "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/MyRuntime-a1b2c3d4"
+ENDPOINT_ARN = f"{RUNTIME_ARN}/runtime-endpoint/DEFAULT"
+ENDPOINT_ARN_WITH_QUALIFIER = f"{ENDPOINT_ARN}:DEFAULT"
+BUNDLE_ARN = "arn:aws:bedrock-agentcore:us-east-1:123456789012:bundle/my-bundle"
+COMPONENTS = {RUNTIME_ARN: {"configuration": {"model_id": "claude-3-5-sonnet", "temperature": 0.7}}}
+
+
+@pytest.fixture(autouse=False)
+def reset_arn_cache(monkeypatch):
+    """Reset the module-level _runtime_arn_cache sentinel before each test that requests it."""
+    monkeypatch.setattr(_app_module, "_runtime_arn_cache", _app_module._UNRESOLVED)
+
+
+class TestParseRuntimeArn:
+    """Unit tests for the _parse_runtime_arn() helper in app.py."""
+
+    def test_returns_none_when_env_var_absent(self, monkeypatch, reset_arn_cache):
+        monkeypatch.delenv("OTEL_RESOURCE_ATTRIBUTES", raising=False)
+        assert _parse_runtime_arn() is None
+
+    def test_returns_none_when_cloud_resource_id_missing(self, monkeypatch, reset_arn_cache):
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", "service.name=my-agent,deployment.environment=prod")
+        assert _parse_runtime_arn() is None
+
+    def test_returns_plain_runtime_arn(self, monkeypatch, reset_arn_cache):
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", f"cloud.resource_id={RUNTIME_ARN}")
+        assert _parse_runtime_arn() == RUNTIME_ARN
+
+    def test_normalises_endpoint_arn_to_runtime_arn(self, monkeypatch, reset_arn_cache):
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", f"cloud.resource_id={ENDPOINT_ARN}")
+        assert _parse_runtime_arn() == RUNTIME_ARN
+
+    def test_normalises_endpoint_arn_with_qualifier(self, monkeypatch, reset_arn_cache):
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", f"cloud.resource_id={ENDPOINT_ARN_WITH_QUALIFIER}")
+        assert _parse_runtime_arn() == RUNTIME_ARN
+
+    def test_ignores_other_attributes_before_cloud_resource_id(self, monkeypatch, reset_arn_cache):
+        otel = f"service.name=agent, deployment.environment=prod, cloud.resource_id={RUNTIME_ARN}"
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", otel)
+        assert _parse_runtime_arn() == RUNTIME_ARN
+
+    def test_result_is_cached_across_calls(self, monkeypatch, reset_arn_cache):
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", f"cloud.resource_id={RUNTIME_ARN}")
+        first = _parse_runtime_arn()
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", "service.name=other")
+        second = _parse_runtime_arn()
+        assert first == second == RUNTIME_ARN
+
+    def test_none_result_is_also_cached(self, monkeypatch, reset_arn_cache):
+        monkeypatch.delenv("OTEL_RESOURCE_ATTRIBUTES", raising=False)
+        first = _parse_runtime_arn()
+        assert first is None
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", f"cloud.resource_id={RUNTIME_ARN}")
+        second = _parse_runtime_arn()
+        assert second is None
+
+
+class TestResolveBundleConfig:
+    """Unit tests for BedrockAgentCoreApp._resolve_bundle_config()."""
+
+    def _make_app_with_mock_client(self, components=None):
+        app = BedrockAgentCoreApp()
+        mock_client = MagicMock()
+        mock_client.get_configuration_bundle_version.return_value = {"components": components or {}}
+        app._config_client = mock_client
+        return app, mock_client
+
+    def test_returns_empty_when_otel_env_absent(self, monkeypatch, reset_arn_cache):
+        monkeypatch.delenv("OTEL_RESOURCE_ATTRIBUTES", raising=False)
+        app, _ = self._make_app_with_mock_client(COMPONENTS)
+        ref = ConfigBundleRef(bundle_arn=BUNDLE_ARN, bundle_version="1")
+
+        result = app._resolve_bundle_config(ref)
+        assert result == {}
+
+    def test_returns_empty_when_runtime_arn_not_in_components(self, monkeypatch, reset_arn_cache):
+        other_arn = "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/OtherRuntime"
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", f"cloud.resource_id={other_arn}")
+        app, _ = self._make_app_with_mock_client(COMPONENTS)
+        ref = ConfigBundleRef(bundle_arn=BUNDLE_ARN, bundle_version="1")
+
+        result = app._resolve_bundle_config(ref)
+        assert result == {}
+
+    def test_returns_configuration_for_matching_runtime_arn(self, monkeypatch, reset_arn_cache):
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", f"cloud.resource_id={RUNTIME_ARN}")
+        app, _ = self._make_app_with_mock_client(COMPONENTS)
+        ref = ConfigBundleRef(bundle_arn=BUNDLE_ARN, bundle_version="1")
+
+        result = app._resolve_bundle_config(ref)
+        assert result == {"model_id": "claude-3-5-sonnet", "temperature": 0.7}
+
+    def test_normalises_endpoint_arn_for_component_lookup(self, monkeypatch, reset_arn_cache):
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", f"cloud.resource_id={ENDPOINT_ARN_WITH_QUALIFIER}")
+        app, _ = self._make_app_with_mock_client(COMPONENTS)
+        ref = ConfigBundleRef(bundle_arn=BUNDLE_ARN, bundle_version="1")
+
+        result = app._resolve_bundle_config(ref)
+        assert result == {"model_id": "claude-3-5-sonnet", "temperature": 0.7}
+
+    def test_returns_empty_dict_when_configuration_key_missing(self, monkeypatch, reset_arn_cache):
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", f"cloud.resource_id={RUNTIME_ARN}")
+        app, _ = self._make_app_with_mock_client({RUNTIME_ARN: {}})
+        ref = ConfigBundleRef(bundle_arn=BUNDLE_ARN, bundle_version="1")
+
+        result = app._resolve_bundle_config(ref)
+        assert result == {}
+
+    def test_raises_on_api_error(self, monkeypatch, reset_arn_cache):
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", f"cloud.resource_id={RUNTIME_ARN}")
+        app = BedrockAgentCoreApp()
+        mock_client = MagicMock()
+        mock_client.get_configuration_bundle_version.side_effect = RuntimeError("API error")
+        app._config_client = mock_client
+        ref = ConfigBundleRef(bundle_arn=BUNDLE_ARN, bundle_version="1")
+
+        with pytest.raises(RuntimeError, match="API error"):
+            app._resolve_bundle_config(ref)
+
+    def test_same_ref_fetched_only_once_across_calls(self, monkeypatch, reset_arn_cache):
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", f"cloud.resource_id={RUNTIME_ARN}")
+        app, mock_client = self._make_app_with_mock_client(COMPONENTS)
+        ref = ConfigBundleRef(bundle_arn=BUNDLE_ARN, bundle_version="1")
+
+        result1 = app._resolve_bundle_config(ref)
+        result2 = app._resolve_bundle_config(ref)
+
+        assert result1 == result2 == {"model_id": "claude-3-5-sonnet", "temperature": 0.7}
+        mock_client.get_configuration_bundle_version.assert_called_once()
+
+    def test_different_versions_fetched_independently(self, monkeypatch, reset_arn_cache):
+        monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", f"cloud.resource_id={RUNTIME_ARN}")
+        app, mock_client = self._make_app_with_mock_client(COMPONENTS)
+        ref_v1 = ConfigBundleRef(bundle_arn=BUNDLE_ARN, bundle_version="1")
+        ref_v2 = ConfigBundleRef(bundle_arn=BUNDLE_ARN, bundle_version="2")
+
+        app._resolve_bundle_config(ref_v1)
+        app._resolve_bundle_config(ref_v2)
+
+        assert mock_client.get_configuration_bundle_version.call_count == 2

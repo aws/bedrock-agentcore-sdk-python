@@ -9,6 +9,7 @@ import functools
 import inspect
 import json
 import logging
+import os
 import queue
 import threading
 import time
@@ -25,6 +26,9 @@ from starlette.routing import Route, WebSocketRoute
 from starlette.types import Lifespan
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from ..config_bundle.baggage import _extract_baggage, _parse_config_bundle_baggage
+from ..config_bundle.bundle import ConfigBundleRef
+from ..config_bundle.client import ConfigBundleClient
 from .context import BedrockAgentCoreContext, RequestContext
 from .models import (
     ACCESS_TOKEN_HEADER,
@@ -41,6 +45,50 @@ from .models import (
     PingStatus,
 )
 from .utils import convert_complex_objects
+
+# Sentinel so we only parse OTEL_RESOURCE_ATTRIBUTES once per process.
+_UNRESOLVED = object()
+_runtime_arn_cache: object = _UNRESOLVED
+_runtime_arn_lock: threading.Lock = threading.Lock()
+
+
+def _parse_runtime_arn() -> Optional[str]:
+    """Return the runtime ARN for this process, derived from OTEL_RESOURCE_ATTRIBUTES.
+
+    Reads the ``cloud.resource_id`` attribute, which OTEL sets to either a
+    runtime ARN or a runtime-endpoint ARN.
+    Runtime-endpoint ARNs are normalised to a plain runtime ARN by stripping
+    the ``/runtime-endpoint/...`` suffix.
+
+    The result is cached after the first call — the env var does not change
+    during the process lifetime.
+
+    Returns ``None`` when the env var is absent or ``cloud.resource_id`` is
+    not present.
+    """
+    global _runtime_arn_cache
+    if _runtime_arn_cache is not _UNRESOLVED:
+        return _runtime_arn_cache  # type: ignore[return-value]
+
+    with _runtime_arn_lock:
+        if _runtime_arn_cache is not _UNRESOLVED:
+            return _runtime_arn_cache  # type: ignore[return-value]
+
+        result: Optional[str] = None
+        otel_attrs = os.environ.get("OTEL_RESOURCE_ATTRIBUTES", "")
+        for attr in otel_attrs.split(","):
+            attr = attr.strip()
+            if not attr.startswith("cloud.resource_id="):
+                continue
+            arn = attr[len("cloud.resource_id="):]
+            # Normalise runtime-endpoint ARN → runtime ARN.
+            if "/runtime-endpoint/" in arn:
+                arn = arn.split("/runtime-endpoint/")[0]
+            result = arn
+            break
+
+        _runtime_arn_cache = result
+        return result
 
 
 def _is_async_callable(obj: Any) -> bool:
@@ -127,6 +175,16 @@ class BedrockAgentCoreApp(Starlette):
         self._worker_loop: Optional[asyncio.AbstractEventLoop] = None
         self._worker_thread: Optional[threading.Thread] = None
         self._worker_loop_lock: threading.Lock = threading.Lock()
+
+        # Config bundle client — created lazily on first use.
+        # _resolve_bundle_config is wrapped with lru_cache(maxsize=30), keyed by
+        # ConfigBundleRef. The API is called at most once per unique ref across all
+        # requests on this app instance (one process = one microVM = one app instance).
+        self._config_client: Optional[ConfigBundleClient] = None
+        self._config_client_lock: threading.Lock = threading.Lock()
+        self._resolve_bundle_config = functools.lru_cache(maxsize=30)(  # type: ignore[method-assign]
+            self._resolve_bundle_config
+        )
 
         routes = [
             Route("/invocations", self._handle_invocation, methods=["POST"]),
@@ -363,6 +421,29 @@ class BedrockAgentCoreApp(Starlette):
             if request_headers:
                 BedrockAgentCoreContext.set_request_headers(request_headers)
 
+            # Extract config bundle reference from OTEL baggage
+            try:
+                bundle_ref = _parse_config_bundle_baggage(_extract_baggage(headers))
+            except Exception as e:
+                self.logger.warning(
+                    "Failed to parse config bundle baggage: %s: %s — raw baggage: %r",
+                    type(e).__name__,
+                    e,
+                    headers.get("baggage", ""),
+                )
+                bundle_ref = None
+
+            if bundle_ref is not None:
+                self.logger.info("Received config bundle ref: %s", bundle_ref.bundle_id)
+                BedrockAgentCoreContext.set_config_bundle_ref(bundle_ref)
+                BedrockAgentCoreContext._set_bundle_loader(
+                    fetcher=lambda: self._resolve_bundle_config(bundle_ref),
+                )
+            else:
+                self.logger.debug("No config bundle ref found in request baggage")
+                BedrockAgentCoreContext.set_config_bundle_ref(None)
+                BedrockAgentCoreContext._clear_bundle_loader()
+
             # Get the headers from context to pass to RequestContext
             req_headers = BedrockAgentCoreContext.get_request_headers()
 
@@ -376,6 +457,53 @@ class BedrockAgentCoreApp(Starlette):
             request_id = str(uuid.uuid4())
             BedrockAgentCoreContext.set_request_context(request_id, None)
             return RequestContext(session_id=None, request=None)
+
+    def _get_config_client(self) -> ConfigBundleClient:
+        """Return the config client, creating it lazily once per process."""
+        if self._config_client is None:
+            with self._config_client_lock:
+                if self._config_client is None:
+                    self._config_client = ConfigBundleClient()
+        return self._config_client
+
+    def _resolve_bundle_config(self, ref: ConfigBundleRef) -> Dict[str, Any]:
+        """Fetch bundle from API and return this runtime's config section.
+
+        Manages client lifecycle, API call, runtime ARN filtering.
+        Called by _DeferredBundleConfig.get() on a cache miss — at most once per
+        unique (bundle_id, bundle_version) across all requests.
+        """
+        self.logger.debug(
+            "Fetching config bundle %r version %r", ref.bundle_id, ref.bundle_version
+        )
+        try:
+            response = self._get_config_client().get_configuration_bundle_version(
+                bundleId=ref.bundle_id, versionId=ref.bundle_version
+            )
+        except Exception as e:
+            self.logger.error(
+                "Failed to fetch config bundle %r version %r: %s: %s",
+                ref.bundle_id, ref.bundle_version, type(e).__name__, e,
+            )
+            raise
+
+        components = response.get("components", {})
+        runtime_arn = _parse_runtime_arn()
+        if runtime_arn is None:
+            self.logger.warning(
+                "OTEL_RESOURCE_ATTRIBUTES not set — cannot select config component"
+            )
+            return {}
+
+        component = components.get(runtime_arn)
+        if component is None:
+            self.logger.warning(
+                "Runtime ARN %r not found in bundle %r — available: %s",
+                runtime_arn, ref.bundle_id, list(components.keys()),
+            )
+            return {}
+
+        return component.get("configuration", {})
 
     def _takes_context(self, handler: Callable) -> bool:
         try:

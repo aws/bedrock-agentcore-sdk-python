@@ -3,7 +3,10 @@
 import contextvars
 from unittest.mock import MagicMock
 
+from bedrock_agentcore.config_bundle.bundle import ConfigBundleRef
 from bedrock_agentcore.runtime.context import BedrockAgentCoreContext, RequestContext
+
+ARN = "arn:aws:bedrock-agentcore:us-west-2:123456789012:bundle/my-agent"
 
 
 class TestBedrockAgentCoreContext:
@@ -249,3 +252,85 @@ class TestRequestContext:
         context = RequestContext(request=mock_request)
 
         assert context.request is mock_request
+
+
+class TestBedrockAgentCoreContextConfigBundles:
+    """Tests for config bundle ContextVar methods on BedrockAgentCoreContext."""
+
+    def _fresh_context(self):
+        return contextvars.Context()
+
+    def test_get_config_bundle_ref_returns_none_when_unset(self):
+        result = self._fresh_context().run(BedrockAgentCoreContext.get_config_bundle_ref)
+        assert result is None
+
+    def test_set_and_get_config_bundle_ref(self):
+        ref = ConfigBundleRef(bundle_arn=ARN, bundle_version="2")
+
+        def run():
+            BedrockAgentCoreContext.set_config_bundle_ref(ref)
+            return BedrockAgentCoreContext.get_config_bundle_ref()
+
+        result = self._fresh_context().run(run)
+        assert result == ref
+
+    def test_config_bundle_ref_isolated_between_contexts(self):
+        ref1 = ConfigBundleRef(bundle_arn=ARN, bundle_version="1")
+        ref2 = ConfigBundleRef(bundle_arn=ARN, bundle_version="2")
+
+        def run_ctx1():
+            BedrockAgentCoreContext.set_config_bundle_ref(ref1)
+            return BedrockAgentCoreContext.get_config_bundle_ref()
+
+        def run_ctx2():
+            BedrockAgentCoreContext.set_config_bundle_ref(ref2)
+            return BedrockAgentCoreContext.get_config_bundle_ref()
+
+        result1 = self._fresh_context().run(run_ctx1)
+        result2 = self._fresh_context().run(run_ctx2)
+
+        assert result1 == ref1
+        assert result2 == ref2
+
+    def test_get_config_returns_empty_when_no_loader(self):
+        result = self._fresh_context().run(BedrockAgentCoreContext.get_bundle_config)
+        assert result == {}
+
+    def test_get_config_calls_fetcher(self):
+        config = {"model_id": "claude-3"}
+        fetcher = MagicMock(return_value=config)
+
+        def run():
+            BedrockAgentCoreContext._set_bundle_loader(fetcher)
+            return BedrockAgentCoreContext.get_bundle_config()
+
+        result = self._fresh_context().run(run)
+
+        assert result == config
+        fetcher.assert_called_once()
+
+    def test_get_config_calls_fetcher_each_request(self):
+        # The context layer calls the fetcher directly — caching is the fetcher's
+        # responsibility (lru_cache on app._resolve_bundle_config in production).
+        config = {"model_id": "claude-3"}
+        fetcher = MagicMock(return_value=config)
+
+        def run():
+            BedrockAgentCoreContext._set_bundle_loader(fetcher)
+            return BedrockAgentCoreContext.get_bundle_config()
+
+        result1 = self._fresh_context().run(run)
+        result2 = self._fresh_context().run(run)
+
+        assert result1 == config
+        assert result2 == config
+        assert fetcher.call_count == 2  # each request calls the fetcher independently
+
+    def test_clear_bundle_loader_returns_empty(self):
+        def run():
+            BedrockAgentCoreContext._clear_bundle_loader()
+            return BedrockAgentCoreContext.get_bundle_config()
+
+        result = self._fresh_context().run(run)
+        assert result == {}
+
