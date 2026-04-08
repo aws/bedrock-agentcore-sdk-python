@@ -14,6 +14,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 import boto3
 
 from bedrock_agentcore._utils.endpoints import DEFAULT_REGION, get_data_plane_endpoint
+from bedrock_agentcore._utils.boto3_loader import _inject_eval_dp_models
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     BatchEvaluationResult,
     BatchEvaluationRunConfig,
@@ -62,13 +63,15 @@ class BatchEvaluationRunner:
         Args:
             region: AWS region. Defaults to boto3 session region or DEFAULT_REGION.
         """
+
+        session = _inject_eval_dp_models()
         self.region = region or boto3.Session().region_name or DEFAULT_REGION
-        self.data_plane_client = boto3.client(
+        self.data_plane_client = session.client(
             "agentcore-evaluation-dataplane",
             region_name=self.region,
             endpoint_url=get_data_plane_endpoint(self.region),
         )
-        self._logs_client = boto3.client("logs", region_name=self.region)
+        self._logs_client = session.client("logs", region_name=self.region)
 
     @staticmethod
     def _get_boto3_error_code(e: Exception) -> Optional[str]:

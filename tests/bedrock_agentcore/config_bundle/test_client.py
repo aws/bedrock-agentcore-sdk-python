@@ -1,5 +1,6 @@
 """Tests for ConfigBundleClient."""
 
+import pytest
 from unittest.mock import MagicMock
 
 from bedrock_agentcore.config_bundle.client import ConfigBundleClient
@@ -16,11 +17,11 @@ class TestConfigBundleClient:
         # No boto3 client created yet
         mock_session.client.assert_not_called()
 
-        # Trigger lazy init via __getattr__
-        _ = client.some_method
+        # Trigger lazy init via __getattr__ with an allowed operation
+        _ = client.list_configuration_bundles
 
         mock_session.client.assert_called_once_with(
-            "bedrock-agentcore-control",
+            "agentcore-evaluation-controlplane",
             region_name="us-east-1",
             endpoint_url="https://bedrock-agentcore-control.us-east-1.amazonaws.com",
         )
@@ -31,8 +32,8 @@ class TestConfigBundleClient:
         mock_session.client.return_value = mock_boto_client
 
         client = ConfigBundleClient(region_name="us-east-1", boto3_session=mock_session)
-        _ = client.some_method
-        _ = client.some_method
+        _ = client.list_configuration_bundles
+        _ = client.list_configuration_bundles
 
         mock_session.client.assert_called_once()
 
@@ -45,3 +46,12 @@ class TestConfigBundleClient:
         client.list_configuration_bundles(maxResults=10)
 
         mock_boto_client.list_configuration_bundles.assert_called_once_with(maxResults=10)
+
+    def test_disallowed_operation_raises_attribute_error(self):
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+
+        client = ConfigBundleClient(region_name="us-east-1", boto3_session=mock_session)
+
+        with pytest.raises(AttributeError, match="does not expose operation 'create_evaluator'"):
+            _ = client.create_evaluator
