@@ -66,7 +66,6 @@ class BatchEvaluationRunner:
         self.data_plane_client = boto3.client(
             "agentcore-evaluation-dataplane",
             region_name=self.region,
-            endpoint_url=f"https://beta.{self.region}.elcapdp.genesis-primitives.aws.dev",
         )
         self._logs_client = boto3.client("logs", region_name=self.region)
 
