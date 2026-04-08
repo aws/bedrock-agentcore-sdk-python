@@ -669,26 +669,55 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             logger.debug("Message has no event ID and was not found in buffer - skipping update")
             return
 
+        # Create a new event with the updated message content
         try:
-            # Create a new event with the updated message content
             updated_message = SessionMessage(
                 message=session_message.message,
                 message_id=0,
                 created_at=session_message.created_at,
             )
-            self.create_message(session_id, agent_id, updated_message)
+            new_event = self.create_message(session_id, agent_id, updated_message)
+        except Exception as e:
+            logger.error("Failed to update message in AgentCore Memory: %s", e)
+            raise SessionException(f"Failed to update message: {e}") from e
 
-            # Delete the old event
+        # Delete the old event; if this fails, roll back the newly created event
+        try:
             self.memory_client.gmdp_client.delete_event(
                 memoryId=self.config.memory_id,
                 actorId=self.config.actor_id,
                 sessionId=session_id,
                 eventId=old_message_id,
             )
-            logger.info("Updated message in AgentCore Memory: replaced event %s", old_message_id)
-        except Exception as e:
-            logger.error("Failed to update message in AgentCore Memory: %s", e)
-            raise SessionException(f"Failed to update message: {e}") from e
+        except Exception as delete_error:
+            logger.warning(
+                "Failed to delete old event %s after creating replacement: %s. Attempting rollback.",
+                old_message_id,
+                delete_error,
+            )
+            new_event_id = new_event.get("eventId") if new_event else None
+            if new_event_id:
+                try:
+                    self.memory_client.gmdp_client.delete_event(
+                        memoryId=self.config.memory_id,
+                        actorId=self.config.actor_id,
+                        sessionId=session_id,
+                        eventId=new_event_id,
+                    )
+                    logger.info("Rolled back new event %s after failed delete of old event", new_event_id)
+                except Exception as rollback_error:
+                    logger.error(
+                        "Rollback failed: could not delete new event %s: %s. "
+                        "Both old (%s) and new events may exist.",
+                        new_event_id,
+                        rollback_error,
+                        old_message_id,
+                    )
+            raise SessionException(
+                f"Failed to update message: could not delete old event: {delete_error}"
+            ) from delete_error
+
+        logger.info("Updated message in AgentCore Memory: replaced event %s", old_message_id)
 
     def list_messages(
         self,
