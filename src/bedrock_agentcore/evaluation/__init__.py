@@ -18,7 +18,6 @@ from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     FailedScenario,
     TokenUsageSummary,
 )
-
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_runner import (
     BatchEvaluationRunner,
 )
@@ -62,7 +61,6 @@ __all__ = [
     "AgentInvokerFn",
     "BatchEvaluationRunner",
     "BatchEvaluationResult",
-
     "BatchEvaluationRunConfig",
     "CloudWatchOutputDataConfig",
     "CloudWatchSessionSourceConfig",

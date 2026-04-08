@@ -60,7 +60,6 @@ def _make_config(source=None):
     )
 
 
-
 def _make_start_response(batch_evaluate_id="eval-001"):
     return {
         "batchEvaluateId": batch_evaluate_id,
@@ -202,9 +201,16 @@ def test_run_empty_dataset_raises():
 
 def test_run_all_scenarios_fail_raises():
     runner = _make_runner()
-    with patch.object(runner, "_execute_scenarios_parallel", return_value=([], [
-        MagicMock(scenario_id="s1"),
-    ])):
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [],
+            [
+                MagicMock(scenario_id="s1"),
+            ],
+        ),
+    ):
         with pytest.raises(ValueError, match="All 1 scenarios failed"):
             runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
 
@@ -214,15 +220,22 @@ def test_run_happy_path_returns_result():
     runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
     runner.data_plane_client.get_batch_evaluation.return_value = _make_completed_response()
 
-    with patch.object(runner, "_execute_scenarios_parallel", return_value=([
-        MagicMock(
-            scenario_id="s1",
-            session_id="s1-session-abc",
-            start_time=_T0,
-            end_time=_T1,
-            ground_truth=None,
-        )
-    ], [])):
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [
+                MagicMock(
+                    scenario_id="s1",
+                    session_id="s1-session-abc",
+                    start_time=_T0,
+                    end_time=_T1,
+                    ground_truth=None,
+                )
+            ],
+            [],
+        ),
+    ):
         result = runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
 
     assert result.batch_evaluate_id == "eval-001"
@@ -239,9 +252,14 @@ def test_run_partial_failure_included_in_result():
 
     failed = FailedScenario(scenario_id="s2", error_message="timeout")
 
-    with patch.object(runner, "_execute_scenarios_parallel", return_value=([
-        MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)
-    ], [failed])):
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [failed],
+        ),
+    ):
         result = runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
 
     assert len(result.agent_invocation_failures) == 1
@@ -253,9 +271,14 @@ def test_run_parses_output_data_config():
     runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
     runner.data_plane_client.get_batch_evaluation.return_value = _make_completed_response(with_output_data=True)
 
-    with patch.object(runner, "_execute_scenarios_parallel", return_value=([
-        MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)
-    ], [])):
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [],
+        ),
+    ):
         result = runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
 
     assert result.output_data_config is not None
@@ -268,9 +291,14 @@ def test_run_parses_evaluation_results():
     runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
     runner.data_plane_client.get_batch_evaluation.return_value = _make_completed_response(with_eval_results=True)
 
-    with patch.object(runner, "_execute_scenarios_parallel", return_value=([
-        MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)
-    ], [])):
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [],
+        ),
+    ):
         result = runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
 
     assert result.evaluation_results is not None
@@ -287,9 +315,14 @@ def test_run_start_batch_evaluation_failure_raises_runtime_error():
     runner = _make_runner()
     runner.data_plane_client.start_batch_evaluation.side_effect = Exception("service unavailable")
 
-    with patch.object(runner, "_execute_scenarios_parallel", return_value=([
-        MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)
-    ], [])):
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [],
+        ),
+    ):
         with pytest.raises(RuntimeError, match="StartBatchEvaluation failed"):
             runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
 
@@ -303,9 +336,14 @@ def test_run_polling_failed_status_raises_runtime_error():
         "errorDetails": ["Internal error"],
     }
 
-    with patch.object(runner, "_execute_scenarios_parallel", return_value=([
-        MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)
-    ], [])):
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [],
+        ),
+    ):
         with pytest.raises(RuntimeError, match="failed"):
             runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
 
@@ -318,9 +356,14 @@ def test_run_polling_stopped_status_raises_runtime_error():
         "status": "STOPPED",
     }
 
-    with patch.object(runner, "_execute_scenarios_parallel", return_value=([
-        MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)
-    ], [])):
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [],
+        ),
+    ):
         with pytest.raises(RuntimeError, match="stopped"):
             runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
 
@@ -335,6 +378,7 @@ def test_poll_for_results_timeout_raises_timeout_error():
     }
 
     _call_count = 0
+
     def _time():
         nonlocal _call_count
         _call_count += 1
@@ -352,9 +396,14 @@ def test_run_cloudwatch_source_passes_session_ids():
     runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
     runner.data_plane_client.get_batch_evaluation.return_value = _make_completed_response()
 
-    with patch.object(runner, "_execute_scenarios_parallel", return_value=([
-        MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)
-    ], [])):
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [],
+        ),
+    ):
         runner.run_dataset_evaluation(
             config=_make_config(source=_make_cw_source()), dataset=_DATASET, agent_invoker=_make_invoker()
         )
@@ -362,8 +411,6 @@ def test_run_cloudwatch_source_passes_session_ids():
     call_kwargs = runner.data_plane_client.start_batch_evaluation.call_args.kwargs
     session_input = call_kwargs["sessionSource"]["cloudWatchSource"]["sessionInput"]
     assert session_input == {"sessionIds": ["s1-session-abc"]}
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -406,6 +453,7 @@ def test_fetch_evaluation_events_returns_parsed_events():
 def test_transform_ground_truth_returns_none_when_no_fields():
     # Use base Scenario (no turns/expected_trajectory fields) with no assertions
     from bedrock_agentcore.evaluation.runner.dataset_types import Scenario
+
     runner = _make_runner()
     scenario = Scenario(scenario_id="s1")
     assert runner._transform_ground_truth(scenario) is None
@@ -413,6 +461,7 @@ def test_transform_ground_truth_returns_none_when_no_fields():
 
 def test_transform_ground_truth_assertions_only():
     from bedrock_agentcore.evaluation.runner.dataset_types import Scenario
+
     runner = _make_runner()
     scenario = Scenario(scenario_id="s1", assertions=["Be concise", "Be helpful"])
     gt = runner._transform_ground_truth(scenario)
@@ -437,9 +486,7 @@ def test_transform_ground_truth_turns_with_expected_response():
         turns=[Turn(input="hi", expected_response="hello")],
     )
     gt = runner._transform_ground_truth(scenario)
-    assert gt["turns"] == [
-        {"input": {"prompt": "hi"}, "expectedResponse": {"text": "hello"}}
-    ]
+    assert gt["turns"] == [{"input": {"prompt": "hi"}, "expectedResponse": {"text": "hello"}}]
 
 
 def test_transform_ground_truth_turns_without_expected_response():

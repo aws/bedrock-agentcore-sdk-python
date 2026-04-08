@@ -13,6 +13,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 import boto3
 
+from bedrock_agentcore._utils.endpoints import DEFAULT_REGION, get_data_plane_endpoint
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     BatchEvaluationResult,
     BatchEvaluationRunConfig,
@@ -59,13 +60,13 @@ class BatchEvaluationRunner:
         """Initialize the batch evaluation runner.
 
         Args:
-            region: AWS region. Defaults to boto3 session region or "us-west-2".
+            region: AWS region. Defaults to boto3 session region or DEFAULT_REGION.
         """
-        self.region = region or boto3.Session().region_name or "us-west-2"
-        # TODO: replace with production endpoint before mainline merge
+        self.region = region or boto3.Session().region_name or DEFAULT_REGION
         self.data_plane_client = boto3.client(
             "agentcore-evaluation-dataplane",
             region_name=self.region,
+            endpoint_url=get_data_plane_endpoint(self.region),
         )
         self._logs_client = boto3.client("logs", region_name=self.region)
 
@@ -80,7 +81,7 @@ class BatchEvaluationRunner:
     def _transform_ground_truth(self, scenario: Scenario) -> Optional[dict]:
         """Transform scenario ground truth into InlineGroundTruth format.
 
-        Includes turns, assertions, expectedTrajectory when present. 
+        Includes turns, assertions, expectedTrajectory when present.
 
         Args:
             scenario: Scenario with optional ground truth fields.
@@ -305,7 +306,7 @@ class BatchEvaluationRunner:
     ) -> BatchEvaluationResult:
         """Run a batch evaluation on a Dataset.
 
-        Executes all scenarios in parallel via ``agent_invoker``, transforms ground 
+        Executes all scenarios in parallel via ``agent_invoker``, transforms ground
         truth data, submits the collected sessions to ``StartBatchEvaluation``,
         and polls until the job reaches a terminal state.
 

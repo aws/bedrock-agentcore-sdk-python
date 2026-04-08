@@ -333,4 +333,3 @@ class TestBedrockAgentCoreContextConfigBundles:
 
         result = self._fresh_context().run(run)
         assert result == {}
-

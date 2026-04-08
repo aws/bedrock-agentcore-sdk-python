@@ -14,7 +14,6 @@ from ..config_bundle.bundle import ConfigBundleRef
 logger = logging.getLogger(__name__)
 
 
-
 class RequestContext(BaseModel):
     """Request context containing metadata from HTTP requests."""
 
@@ -32,19 +31,17 @@ class BedrockAgentCoreContext:
     """Unified context manager for Bedrock AgentCore."""
 
     _workload_access_token: ContextVar[Optional[str]] = ContextVar("workload_access_token")
-    _oauth2_callback_url:   ContextVar[Optional[str]] = ContextVar("oauth2_callback_url")
-    _request_id:            ContextVar[Optional[str]] = ContextVar("request_id")
-    _session_id:            ContextVar[Optional[str]] = ContextVar("session_id")
-    _request_headers:       ContextVar[Optional[Dict[str, str]]] = ContextVar("request_headers")
+    _oauth2_callback_url: ContextVar[Optional[str]] = ContextVar("oauth2_callback_url")
+    _request_id: ContextVar[Optional[str]] = ContextVar("request_id")
+    _session_id: ContextVar[Optional[str]] = ContextVar("session_id")
+    _request_headers: ContextVar[Optional[Dict[str, str]]] = ContextVar("request_headers")
 
     # Config bundle — ref identifies the bundle for this request.
     # _bundle_fetcher is the lru_cache-wrapped app._resolve_bundle_config(ref),
     # set per-request by the app. Calling it fetches from the API on first use
     # for a given bundle version, then returns the cached result on subsequent calls.
     _config_bundle_ref: ContextVar[Optional[ConfigBundleRef]] = ContextVar("config_bundle_ref", default=None)
-    _bundle_fetcher: ContextVar[Optional[Callable[[], Dict[str, Any]]]] = ContextVar(
-        "bundle_fetcher", default=None
-    )
+    _bundle_fetcher: ContextVar[Optional[Callable[[], Dict[str, Any]]]] = ContextVar("bundle_fetcher", default=None)
 
     @classmethod
     def set_workload_access_token(cls, token: str):

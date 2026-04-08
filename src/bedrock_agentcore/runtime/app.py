@@ -80,7 +80,7 @@ def _parse_runtime_arn() -> Optional[str]:
             attr = attr.strip()
             if not attr.startswith("cloud.resource_id="):
                 continue
-            arn = attr[len("cloud.resource_id="):]
+            arn = attr[len("cloud.resource_id=") :]
             # Normalise runtime-endpoint ARN → runtime ARN.
             if "/runtime-endpoint/" in arn:
                 arn = arn.split("/runtime-endpoint/")[0]
@@ -473,9 +473,7 @@ class BedrockAgentCoreApp(Starlette):
         Called by _DeferredBundleConfig.get() on a cache miss — at most once per
         unique (bundle_id, bundle_version) across all requests.
         """
-        self.logger.debug(
-            "Fetching config bundle %r version %r", ref.bundle_id, ref.bundle_version
-        )
+        self.logger.debug("Fetching config bundle %r version %r", ref.bundle_id, ref.bundle_version)
         try:
             response = self._get_config_client().get_configuration_bundle_version(
                 bundleId=ref.bundle_id, versionId=ref.bundle_version
@@ -483,23 +481,26 @@ class BedrockAgentCoreApp(Starlette):
         except Exception as e:
             self.logger.error(
                 "Failed to fetch config bundle %r version %r: %s: %s",
-                ref.bundle_id, ref.bundle_version, type(e).__name__, e,
+                ref.bundle_id,
+                ref.bundle_version,
+                type(e).__name__,
+                e,
             )
             raise
 
         components = response.get("components", {})
         runtime_arn = _parse_runtime_arn()
         if runtime_arn is None:
-            self.logger.warning(
-                "OTEL_RESOURCE_ATTRIBUTES not set — cannot select config component"
-            )
+            self.logger.warning("OTEL_RESOURCE_ATTRIBUTES not set — cannot select config component")
             return {}
 
         component = components.get(runtime_arn)
         if component is None:
             self.logger.warning(
                 "Runtime ARN %r not found in bundle %r — available: %s",
-                runtime_arn, ref.bundle_id, list(components.keys()),
+                runtime_arn,
+                ref.bundle_id,
+                list(components.keys()),
             )
             return {}
 

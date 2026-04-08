@@ -283,4 +283,3 @@ class BatchEvaluationRunConfig(BaseModel):
         if self.max_concurrent_scenarios <= 0:
             raise ValueError("max_concurrent_scenarios must be > 0")
         return self
-

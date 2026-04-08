@@ -30,6 +30,7 @@ class AgentSpanCollector(ABC):
             List of span dictionaries.
         """
 
+
 class CloudWatchAgentSpanCollector(AgentSpanCollector):
     """Collects spans from CloudWatch using precise attributes.session.id filtering."""
 
