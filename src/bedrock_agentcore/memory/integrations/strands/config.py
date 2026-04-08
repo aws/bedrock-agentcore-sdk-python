@@ -1,5 +1,6 @@
 """Configuration for AgentCore Memory Session Manager."""
 
+from enum import Enum
 from typing import Any, Callable, Dict, Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -8,6 +9,19 @@ from pydantic import BaseModel, Field, field_validator
 def normalize_metadata(raw: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize metadata values: plain strings become {"stringValue": value}."""
     return {k: {"stringValue": v} if isinstance(v, str) else v for k, v in raw.items()}
+
+
+class PersistenceMode(str, Enum):
+    """Controls what gets persisted to AgentCore Memory.
+
+    Attributes:
+        FULL: Persist everything (session, agent state, messages) to AgentCore Memory. Default behavior.
+        NONE: Disable all persistence. Local session/agent state management and memory injection
+            (LTM retrieval) still work, but no create_event calls are made to AgentCore Memory.
+    """
+
+    FULL = "FULL"
+    NONE = "NONE"
 
 
 class RetrievalConfig(BaseModel):
@@ -51,6 +65,9 @@ class AgentCoreMemoryConfig(BaseModel):
             event creation, so it can return dynamic values (e.g. current traceId). The returned
             dict is merged after default_metadata but before per-call metadata.
             Accepts plain strings (auto-wrapped) or explicit MetadataValue dicts.
+        persistence_mode: Controls what gets persisted to AgentCore Memory.
+            FULL (default): persist everything. NONE: disable all persistence while keeping
+            local state management and memory injection working.
     """
 
     memory_id: str = Field(min_length=1)
@@ -63,6 +80,7 @@ class AgentCoreMemoryConfig(BaseModel):
     filter_restored_tool_context: bool = Field(default=False)
     default_metadata: Optional[Dict[str, Any]] = None
     metadata_provider: Optional[Callable[[], Dict[str, Any]]] = None
+    persistence_mode: PersistenceMode = Field(default=PersistenceMode.FULL)
 
     @field_validator("default_metadata", mode="before")
     @classmethod

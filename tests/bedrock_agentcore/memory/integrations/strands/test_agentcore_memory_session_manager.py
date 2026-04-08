@@ -18,7 +18,7 @@ from bedrock_agentcore.memory.integrations.strands.bedrock_converter import (
     CONVERSATIONAL_MAX_SIZE,
     AgentCoreMemoryConverter,
 )
-from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
+from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, PersistenceMode, RetrievalConfig
 from bedrock_agentcore.memory.integrations.strands.session_manager import (
     AgentCoreMemorySessionManager,
     BufferedMessage,
@@ -3234,3 +3234,224 @@ class TestMetadataSupport:
 
         kwargs = mock_memory_client.create_event.call_args[1]
         assert kwargs["metadata"]["project"] == {"stringValue": "atlas"}
+
+
+class TestPersistenceMode:
+    """Test persistence_mode=NONE disables ACM persistence but keeps local state management and LTM retrieval."""
+
+    @pytest.fixture
+    def no_persist_config(self):
+        return AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            persistence_mode=PersistenceMode.NONE,
+        )
+
+    @pytest.fixture
+    def no_persist_manager(self, no_persist_config, mock_memory_client):
+        return _create_session_manager(no_persist_config, mock_memory_client)
+
+    # --- Config ---
+
+    def test_config_defaults_to_full(self):
+        config = AgentCoreMemoryConfig(memory_id="m", session_id="s", actor_id="a")
+        assert config.persistence_mode is PersistenceMode.FULL
+
+    def test_config_accepts_none_mode(self):
+        config = AgentCoreMemoryConfig(
+            memory_id="m", session_id="s", actor_id="a", persistence_mode=PersistenceMode.NONE
+        )
+        assert config.persistence_mode is PersistenceMode.NONE
+
+    def test_config_accepts_string_value(self):
+        config = AgentCoreMemoryConfig(memory_id="m", session_id="s", actor_id="a", persistence_mode="NONE")
+        assert config.persistence_mode is PersistenceMode.NONE
+
+    # --- create_session: local state works, no ACM write ---
+
+    def test_create_session_returns_session(self, no_persist_manager, mock_memory_client):
+        session = Session(session_id="test-session-456", session_type=SessionType.AGENT)
+        result = no_persist_manager.create_session(session)
+        assert result.session_id == "test-session-456"
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+
+    def test_create_session_still_validates(self, no_persist_manager):
+        session = Session(session_id="wrong-id", session_type=SessionType.AGENT)
+        with pytest.raises(SessionException, match="Session ID mismatch"):
+            no_persist_manager.create_session(session)
+
+    # --- create_agent: local cache works, no ACM write ---
+
+    def test_create_agent_caches_timestamp(self, no_persist_manager, mock_memory_client):
+        agent = SessionAgent(agent_id="a1", state={}, conversation_manager_state={})
+        no_persist_manager.create_agent("test-session-456", agent)
+        assert "a1" in no_persist_manager._agent_created_at_cache
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+
+    def test_create_agent_still_validates(self, no_persist_manager):
+        agent = SessionAgent(agent_id="a1", state={}, conversation_manager_state={})
+        with pytest.raises(SessionException, match="Session ID mismatch"):
+            no_persist_manager.create_agent("wrong-id", agent)
+
+    # --- update_agent: local cache works, no ACM write ---
+
+    def test_update_agent_no_acm_write(self, no_persist_manager, mock_memory_client):
+        no_persist_manager._agent_created_at_cache["a1"] = "2024-01-01T00:00:00+00:00"
+        agent = SessionAgent(agent_id="a1", state={"k": "v"}, conversation_manager_state={})
+        no_persist_manager.update_agent("test-session-456", agent)
+        assert agent.created_at == "2024-01-01T00:00:00+00:00"
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+
+    # --- create_message: validation works, returns non-None for append_message, no ACM write ---
+
+    def test_create_message_returns_empty_dict(self, no_persist_manager, mock_memory_client):
+        msg = SessionMessage(
+            message={"role": "user", "content": [{"text": "hi"}]},
+            message_id=1,
+            created_at="2024-01-01T12:00:00Z",
+        )
+        result = no_persist_manager.create_message("test-session-456", "a1", msg)
+        assert result == {}
+        mock_memory_client.create_event.assert_not_called()
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+
+    def test_create_message_still_validates(self, no_persist_manager):
+        msg = SessionMessage(
+            message={"role": "user", "content": [{"text": "hi"}]},
+            message_id=1,
+            created_at="2024-01-01T12:00:00Z",
+        )
+        with pytest.raises(SessionException, match="Session ID mismatch"):
+            no_persist_manager.create_message("wrong-id", "a1", msg)
+
+    def test_create_message_returns_none_for_empty_payload(self, no_persist_manager):
+        msg = SessionMessage(
+            message={"role": "user", "content": []},
+            message_id=1,
+            created_at="2024-01-01T12:00:00Z",
+        )
+        result = no_persist_manager.create_message("test-session-456", "a1", msg)
+        assert result is None
+
+    # --- append_message: local state tracking works ---
+
+    def test_append_message_tracks_local_state(self, no_persist_manager, mock_memory_client):
+        no_persist_manager._latest_agent_message = {}
+        mock_agent = Mock()
+        mock_agent.agent_id = "a1"
+        message = {"role": "user", "content": [{"text": "hello"}]}
+        no_persist_manager.append_message(message, mock_agent)
+        assert "a1" in no_persist_manager._latest_agent_message
+        mock_memory_client.create_event.assert_not_called()
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+
+    # --- flush: no-ops ---
+
+    def test_flush_messages_only_noop(self, no_persist_manager, mock_memory_client):
+        assert no_persist_manager._flush_messages_only() == []
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+
+    def test_flush_agent_states_only_noop(self, no_persist_manager, mock_memory_client):
+        assert no_persist_manager._flush_agent_states_only() == []
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+
+    def test_close_no_acm_writes(self, no_persist_manager, mock_memory_client):
+        no_persist_manager.close()
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+
+    # --- reads still work ---
+
+    def test_read_session_works(self, no_persist_manager, mock_memory_client):
+        mock_memory_client.list_events.return_value = [
+            {"eventId": "e1", "payload": [{"blob": '{"session_id": "test-session-456", "session_type": "AGENT"}'}]},
+        ]
+        result = no_persist_manager.read_session("test-session-456")
+        assert result is not None
+        assert result.session_id == "test-session-456"
+
+    def test_read_agent_works(self, no_persist_manager, mock_memory_client):
+        mock_memory_client.list_events.return_value = [
+            {
+                "eventId": "e1",
+                "payload": [{"blob": '{"agent_id": "a1", "state": {}, "conversation_manager_state": {}}'}],
+            },
+        ]
+        result = no_persist_manager.read_agent("test-session-456", "a1")
+        assert result is not None
+        assert result.agent_id == "a1"
+
+    def test_list_messages_works(self, no_persist_manager, mock_memory_client):
+        mock_memory_client.list_events.return_value = [
+            {
+                "eventId": "e1",
+                "eventTimestamp": "2024-01-01T12:00:00Z",
+                "payload": [
+                    {
+                        "conversational": {
+                            "content": {
+                                "text": '{"message": {"role": "user", "content": [{"text": "Hello"}]}, "message_id": 1}'
+                            },
+                            "role": "USER",
+                        }
+                    }
+                ],
+            },
+        ]
+        messages = no_persist_manager.list_messages("test-session-456", "a1")
+        assert len(messages) == 1
+
+    # --- legacy migration skipped ---
+
+    def test_legacy_session_migration_skipped(self, no_persist_manager, mock_memory_client):
+        mock_memory_client.list_events.side_effect = [
+            [],
+            [
+                {
+                    "eventId": "legacy-1",
+                    "payload": [{"blob": '{"session_id": "test-session-456", "session_type": "AGENT"}'}],
+                }
+            ],
+        ]
+        result = no_persist_manager.read_session("test-session-456")
+        assert result is not None
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+        mock_memory_client.gmdp_client.delete_event.assert_not_called()
+
+    def test_legacy_agent_migration_skipped(self, no_persist_manager, mock_memory_client):
+        mock_memory_client.list_events.side_effect = [
+            [],
+            [
+                {
+                    "eventId": "legacy-1",
+                    "payload": [{"blob": '{"agent_id": "a1", "state": {}, "conversation_manager_state": {}}'}],
+                }
+            ],
+        ]
+        result = no_persist_manager.read_agent("test-session-456", "a1")
+        assert result is not None
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+        mock_memory_client.gmdp_client.delete_event.assert_not_called()
+
+    # --- LTM retrieval still works ---
+
+    def test_retrieve_customer_context_works(self, mock_memory_client):
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            persistence_mode=PersistenceMode.NONE,
+            retrieval_config={"ns/": RetrievalConfig(top_k=5, relevance_score=0.3)},
+        )
+        manager = _create_session_manager(config, mock_memory_client)
+        mock_memory_client.retrieve_memories.return_value = [
+            {"content": {"text": "remembered fact"}},
+        ]
+
+        mock_agent = Mock()
+        mock_agent.messages = [{"role": "user", "content": [{"text": "query"}]}]
+        event = MessageAddedEvent(agent=mock_agent, message={"role": "user", "content": [{"text": "query"}]})
+        manager.retrieve_customer_context(event)
+
+        mock_memory_client.retrieve_memories.assert_called_once()
+        assert "<user_context>" in mock_agent.messages[0]["content"][0]["text"]
