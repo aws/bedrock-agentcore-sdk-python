@@ -125,7 +125,7 @@ jobs:
           # TODO: expand to full tests_integ/memory once test stability is addressed
           - group: memory
             path: tests_integ/memory/test_controlplane.py tests_integ/memory/test_memory_client.py tests_integ/memory/integrations/test_session_manager.py
-            timeout: 10
+            timeout: 15
             extra-deps: ""
             ignore: ""
           - group: evaluation
