@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.6.1] - 2026-04-10
+
+### Added
+- feat: add read_only flag to AgentCoreMemorySessionManager to disable ACM persistence (#389) (215b5bd)
+
+### Fixed
+- fix: replace blocklist with allowlist for install_packages() package validation (#403) (ed953b5)
+- fix: skip integration tests for Dependabot and remove missing label (#382) (4ebfdcb)
+- fix: pin griffe version and fix ExplanationStyle attribute error (#381) (2bdb9f1)
+
+### Other Changes
+- chore(deps): bump boto3 and botocore minimum to 1.42.86 (#399) (df9a21d)
+- fix(ci): add pytest-rerunfailures to integration test dependencies (#400) (5ccb283)
+
 ## [1.6.0] - 2026-03-31
 
 ### Added
