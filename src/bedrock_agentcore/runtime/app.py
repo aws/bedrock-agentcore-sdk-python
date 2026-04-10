@@ -530,19 +530,37 @@ class BedrockAgentCoreApp(Starlette):
             return self._worker_loop
         with self._worker_loop_lock:
             if self._worker_loop is None or not self._worker_loop.is_running():
-                self._worker_loop = asyncio.new_event_loop()
+                ready = threading.Event()
                 self._worker_thread = threading.Thread(
                     target=self._run_worker_loop,
+                    args=(ready,),
                     daemon=True,
                     name="agentcore-worker-loop",
                 )
                 self._worker_thread.start()
+                if not ready.wait(timeout=10):
+                    raise RuntimeError("agentcore-worker-loop failed to start")
         return self._worker_loop
 
-    def _run_worker_loop(self) -> None:
-        """Entry point for the worker loop background thread."""
-        asyncio.set_event_loop(self._worker_loop)
-        self._worker_loop.run_forever()
+    def _run_worker_loop(self, ready: threading.Event) -> None:
+        """Entry point for the worker loop background thread.
+
+        The event loop is created here (inside the worker thread) rather than in
+        the parent thread to avoid conflicts with OpenTelemetry's threading
+        instrumentation, which propagates context from the parent thread and can
+        cause ``RuntimeError: Cannot run the event loop while another loop is
+        running``.
+        """
+        # Clear any running-loop state that leaked from the parent thread
+        # (e.g. via OpenTelemetry's threading instrumentation context propagation).
+        # Without this, run_forever() raises RuntimeError because
+        # asyncio._get_running_loop() still returns the parent's loop.
+        asyncio._set_running_loop(None)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        self._worker_loop = loop
+        loop.call_soon(ready.set)
+        loop.run_forever()
 
     @staticmethod
     async def _run_with_context(coro: Any, ctx: contextvars.Context) -> Any:
