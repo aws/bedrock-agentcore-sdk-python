@@ -2748,7 +2748,5 @@ class TestWorkerLoopInvocation:
         assert app._worker_loop.is_running()
 
         # Verify the loop can actually execute work
-        future = asyncio.run_coroutine_threadsafe(
-            asyncio.sleep(0, result="otel_ok"), app._worker_loop
-        )
+        future = asyncio.run_coroutine_threadsafe(asyncio.sleep(0, result="otel_ok"), app._worker_loop)
         assert future.result(timeout=5) == "otel_ok"
