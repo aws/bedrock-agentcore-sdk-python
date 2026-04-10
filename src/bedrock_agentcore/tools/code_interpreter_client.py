@@ -6,6 +6,7 @@ applications to start, stop, and invoke code execution in a managed sandbox envi
 
 import base64
 import logging
+import re
 import uuid
 from contextlib import contextmanager
 from typing import Any, Dict, Generator, List, Optional, Union
@@ -19,6 +20,10 @@ from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 from .config import Certificate
 
 DEFAULT_IDENTIFIER = "aws.codeinterpreter.v1"
+
+VALID_PACKAGE_NAME = re.compile(
+    r"^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?(\[.*\])?(==|>=|<=|!=|~=|>|<)?[a-zA-Z0-9.*]*$"
+)
 DEFAULT_TIMEOUT = 900
 
 
@@ -600,10 +605,10 @@ class CodeInterpreter:
         if not packages:
             raise ValueError("At least one package name must be provided")
 
-        # Sanitize package names (basic validation)
+        # Validate package names against allowlist pattern
         for pkg in packages:
-            if any(char in pkg for char in [";", "&", "|", "`", "$"]):
-                raise ValueError(f"Invalid characters in package name: {pkg}")
+            if not VALID_PACKAGE_NAME.match(pkg):
+                raise ValueError(f"Invalid package name: {pkg}")
 
         packages_str = " ".join(packages)
         upgrade_flag = "--upgrade " if upgrade else ""
