@@ -717,6 +717,18 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 f"Failed to update message: could not delete old event: {delete_error}"
             ) from delete_error
 
+        # Update _latest_agent_message so it doesn't hold a stale eventId
+        new_event_id = new_event.get("eventId") if new_event else None
+        latest_messages = getattr(self, "_latest_agent_message", None)
+        if new_event_id and latest_messages and agent_id in latest_messages:
+            old_latest = latest_messages[agent_id]
+            if old_latest.message_id == old_message_id:
+                self._latest_agent_message[agent_id] = SessionMessage(
+                    message=session_message.message,
+                    message_id=new_event_id,
+                    created_at=session_message.created_at,
+                )
+
         logger.info("Updated message in AgentCore Memory: replaced event %s", old_message_id)
 
     def list_messages(
