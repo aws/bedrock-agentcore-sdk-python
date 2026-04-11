@@ -161,7 +161,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e .
-          pip install --no-cache-dir pytest pytest-xdist pytest-order requests strands-agents uvicorn httpx starlette websockets ${{ matrix.extra-deps }}
+          pip install --no-cache-dir pytest pytest-xdist pytest-order pytest-rerunfailures requests strands-agents uvicorn httpx starlette websockets ${{ matrix.extra-deps }}
 
       - name: Run integration tests
         env:
