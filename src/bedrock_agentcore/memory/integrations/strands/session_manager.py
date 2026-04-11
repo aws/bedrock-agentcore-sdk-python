@@ -707,8 +707,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                     logger.info("Rolled back new event %s after failed delete of old event", new_event_id)
                 except Exception as rollback_error:
                     logger.error(
-                        "Rollback failed: could not delete new event %s: %s. "
-                        "Both old (%s) and new events may exist.",
+                        "Rollback failed: could not delete new event %s: %s. Both old (%s) and new events may exist.",
                         new_event_id,
                         rollback_error,
                         old_message_id,
