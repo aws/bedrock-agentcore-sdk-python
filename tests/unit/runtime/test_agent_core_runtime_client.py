@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 from urllib.parse import quote
 
 import pytest
+from botocore.exceptions import ClientError
 
 from bedrock_agentcore.runtime.agent_core_runtime_client import AgentCoreRuntimeClient
 
@@ -20,6 +21,300 @@ class TestAgentCoreRuntimeClientInit:
         """Test that initialization creates a logger."""
         client = AgentCoreRuntimeClient(region="us-west-2")
         assert client.logger is not None
+
+    def test_init_default_region(self):
+        """Test that region defaults to session region or us-west-2."""
+        mock_session = Mock()
+        mock_session.region_name = "eu-west-1"
+        client = AgentCoreRuntimeClient(session=mock_session)
+        assert client.region == "eu-west-1"
+
+    def test_init_default_region_fallback(self):
+        """Test that region falls back to us-west-2 when session has no region."""
+        mock_session = Mock()
+        mock_session.region_name = None
+        client = AgentCoreRuntimeClient(session=mock_session)
+        assert client.region == "us-west-2"
+
+    def test_init_creates_boto3_clients(self):
+        """Test that initialization creates cp_client and dp_client."""
+        mock_session = Mock()
+        mock_session.region_name = "us-west-2"
+        AgentCoreRuntimeClient(region="us-west-2", session=mock_session)
+
+        assert mock_session.client.call_count == 2
+        call_args = [call[0][0] for call in mock_session.client.call_args_list]
+        assert "bedrock-agentcore-control" in call_args
+        assert "bedrock-agentcore" in call_args
+
+    def test_init_with_integration_source(self):
+        """Test that integration_source is stored and passed to config."""
+        mock_session = Mock()
+        mock_session.region_name = "us-west-2"
+        client = AgentCoreRuntimeClient(region="us-west-2", session=mock_session, integration_source="langchain")
+        assert client.integration_source == "langchain"
+
+
+class TestAgentCoreRuntimeClientPassthrough:
+    """Tests for __getattr__ passthrough to boto3 clients."""
+
+    def _make_client(self):
+        mock_session = Mock()
+        mock_session.region_name = "us-west-2"
+        client = AgentCoreRuntimeClient(region="us-west-2", session=mock_session)
+        client.cp_client = Mock()
+        client.dp_client = Mock()
+        return client
+
+    def test_cp_method_forwarded(self):
+        """Test that allowlisted CP methods forward to cp_client."""
+        client = self._make_client()
+        client.cp_client.get_agent_runtime.return_value = {"agentRuntimeId": "rt-123"}
+
+        result = client.get_agent_runtime(agentRuntimeId="rt-123")
+
+        client.cp_client.get_agent_runtime.assert_called_once_with(agentRuntimeId="rt-123")
+        assert result["agentRuntimeId"] == "rt-123"
+
+    def test_dp_method_forwarded(self):
+        """Test that allowlisted DP methods forward to dp_client."""
+        client = self._make_client()
+        client.dp_client.invoke_agent_runtime.return_value = {"response": "ok"}
+
+        result = client.invoke_agent_runtime(agentRuntimeArn="arn:test")
+
+        client.dp_client.invoke_agent_runtime.assert_called_once_with(agentRuntimeArn="arn:test")
+        assert result["response"] == "ok"
+
+    def test_snake_case_kwargs_converted(self):
+        """Test that snake_case kwargs are converted to camelCase."""
+        client = self._make_client()
+        client.cp_client.get_agent_runtime.return_value = {"agentRuntimeId": "rt-123"}
+
+        client.get_agent_runtime(agent_runtime_id="rt-123")
+
+        client.cp_client.get_agent_runtime.assert_called_once_with(agentRuntimeId="rt-123")
+
+    def test_non_allowlisted_method_raises_attribute_error(self):
+        """Test that non-allowlisted methods raise AttributeError."""
+        client = self._make_client()
+
+        with pytest.raises(AttributeError, match="has no attribute 'not_a_real_method'"):
+            client.not_a_real_method()
+
+    def test_all_cp_methods_in_allowlist(self):
+        """Test all expected CP methods are in the allowlist."""
+        expected = {
+            "create_agent_runtime",
+            "update_agent_runtime",
+            "get_agent_runtime",
+            "get_agent_runtime_endpoint",
+            "delete_agent_runtime",
+            "delete_agent_runtime_endpoint",
+        }
+        assert expected == AgentCoreRuntimeClient._ALLOWED_CP_METHODS
+
+    def test_all_dp_methods_in_allowlist(self):
+        """Test all expected DP methods are in the allowlist."""
+        expected = {
+            "invoke_agent_runtime",
+            "stop_runtime_session",
+        }
+        assert expected == AgentCoreRuntimeClient._ALLOWED_DP_METHODS
+
+
+class TestAgentCoreRuntimeClientHighLevel:
+    """Tests for higher-level abstraction methods."""
+
+    def _make_client(self):
+        mock_session = Mock()
+        mock_session.region_name = "us-west-2"
+        client = AgentCoreRuntimeClient(region="us-west-2", session=mock_session)
+        client.cp_client = Mock()
+        client.dp_client = Mock()
+        return client
+
+    def test_wait_for_endpoint_ready_immediate(self):
+        """Test wait_for_endpoint_ready when endpoint is already READY."""
+        client = self._make_client()
+        client.cp_client.get_agent_runtime_endpoint.return_value = {
+            "status": "READY",
+            "agentRuntimeEndpointArn": "arn:test",
+        }
+
+        result = client.wait_for_endpoint_ready("rt-123")
+
+        assert result["status"] == "READY"
+        client.cp_client.get_agent_runtime_endpoint.assert_called_once_with(
+            agentRuntimeId="rt-123", endpointName="DEFAULT"
+        )
+
+    def test_wait_for_runtime_ready_immediate(self):
+        """Test wait_for_runtime_ready when runtime is already READY."""
+        client = self._make_client()
+        client.cp_client.get_agent_runtime.return_value = {
+            "status": "READY",
+            "agentRuntimeId": "rt-123",
+        }
+
+        result = client.wait_for_runtime_ready("rt-123")
+
+        assert result["status"] == "READY"
+        client.cp_client.get_agent_runtime.assert_called_once_with(agentRuntimeId="rt-123")
+
+    @patch("time.sleep")
+    @patch("time.time", side_effect=[0, 0, 0, 1, 1])
+    def test_wait_for_runtime_ready_after_creating(self, _mock_time, _mock_sleep):
+        """Test wait_for_runtime_ready polls through CREATING status."""
+        client = self._make_client()
+        client.cp_client.get_agent_runtime.side_effect = [
+            {"status": "CREATING"},
+            {"status": "READY", "agentRuntimeId": "rt-123"},
+        ]
+
+        result = client.wait_for_runtime_ready("rt-123")
+
+        assert result["status"] == "READY"
+        assert client.cp_client.get_agent_runtime.call_count == 2
+
+    def test_wait_for_runtime_ready_create_failed(self):
+        """Test wait_for_runtime_ready raises on CREATE_FAILED."""
+        client = self._make_client()
+        client.cp_client.get_agent_runtime.return_value = {
+            "status": "CREATE_FAILED",
+            "failureReason": "Bad config",
+        }
+
+        with pytest.raises(RuntimeError, match="Bad config"):
+            client.wait_for_runtime_ready("rt-123")
+
+    @patch("time.sleep")
+    @patch("time.time", side_effect=[0, 0, 0, 301])
+    def test_wait_for_runtime_ready_timeout(self, _mock_time, _mock_sleep):
+        """Test wait_for_runtime_ready raises TimeoutError."""
+        client = self._make_client()
+        client.cp_client.get_agent_runtime.return_value = {"status": "CREATING"}
+
+        with pytest.raises(TimeoutError, match="did not become READY"):
+            client.wait_for_runtime_ready("rt-123", max_wait=300)
+
+    @patch("time.sleep")
+    @patch("time.time", side_effect=[0, 0, 0, 1, 1])
+    def test_wait_for_endpoint_ready_after_creating(self, _mock_time, _mock_sleep):
+        """Test wait_for_endpoint_ready polls through CREATING status."""
+        client = self._make_client()
+        client.cp_client.get_agent_runtime_endpoint.side_effect = [
+            {"status": "CREATING"},
+            {"status": "READY", "agentRuntimeEndpointArn": "arn:test"},
+        ]
+
+        result = client.wait_for_endpoint_ready("rt-123")
+
+        assert result["status"] == "READY"
+        assert client.cp_client.get_agent_runtime_endpoint.call_count == 2
+
+    def test_wait_for_endpoint_ready_create_failed(self):
+        """Test wait_for_endpoint_ready raises on CREATE_FAILED."""
+        client = self._make_client()
+        client.cp_client.get_agent_runtime_endpoint.return_value = {
+            "status": "CREATE_FAILED",
+            "failureReason": "Bad config",
+        }
+
+        with pytest.raises(RuntimeError, match="Bad config"):
+            client.wait_for_endpoint_ready("rt-123")
+
+    @patch("time.sleep")
+    @patch("time.time", side_effect=[0, 0, 0, 121])
+    def test_wait_for_endpoint_ready_timeout(self, _mock_time, _mock_sleep):
+        """Test wait_for_endpoint_ready raises TimeoutError."""
+        client = self._make_client()
+        client.cp_client.get_agent_runtime_endpoint.return_value = {"status": "CREATING"}
+
+        with pytest.raises(TimeoutError, match="did not become READY"):
+            client.wait_for_endpoint_ready("rt-123", max_wait=120)
+
+    @patch("time.sleep")
+    @patch("time.time", side_effect=[0, 0, 0, 1, 1])
+    def test_wait_for_endpoint_ready_not_found_then_ready(self, _mock_time, _mock_sleep):
+        """Test wait_for_endpoint_ready handles ResourceNotFoundException during polling."""
+        client = self._make_client()
+        not_found = ClientError(
+            {"Error": {"Code": "ResourceNotFoundException", "Message": "Not found"}},
+            "GetAgentRuntimeEndpoint",
+        )
+        client.cp_client.get_agent_runtime_endpoint.side_effect = [
+            not_found,
+            {"status": "READY", "agentRuntimeEndpointArn": "arn:test"},
+        ]
+
+        result = client.wait_for_endpoint_ready("rt-123")
+
+        assert result["status"] == "READY"
+
+    def test_get_aggregated_status_success(self):
+        """Test get_aggregated_status returns both runtime and endpoint."""
+        client = self._make_client()
+        client.cp_client.get_agent_runtime.return_value = {"status": "ACTIVE"}
+        client.cp_client.get_agent_runtime_endpoint.return_value = {"status": "READY"}
+
+        result = client.get_aggregated_status("rt-123")
+
+        assert result["runtime"]["status"] == "ACTIVE"
+        assert result["endpoint"]["status"] == "READY"
+
+    def test_get_aggregated_status_partial_failure(self):
+        """Test get_aggregated_status captures errors without raising."""
+        client = self._make_client()
+        client.cp_client.get_agent_runtime.return_value = {"status": "ACTIVE"}
+        client.cp_client.get_agent_runtime_endpoint.side_effect = ClientError(
+            {"Error": {"Code": "ResourceNotFoundException", "Message": "Not found"}},
+            "GetAgentRuntimeEndpoint",
+        )
+
+        result = client.get_aggregated_status("rt-123")
+
+        assert result["runtime"]["status"] == "ACTIVE"
+        assert "error" in result["endpoint"]
+
+    def test_teardown_deletes_endpoint_then_runtime(self):
+        """Test teardown deletes in correct order."""
+        client = self._make_client()
+
+        client.teardown("rt-123")
+
+        # Verify order: endpoint first, then runtime
+        calls = client.cp_client.method_calls
+        assert calls[0] == (
+            "delete_agent_runtime_endpoint",
+            (),
+            {"agentRuntimeId": "rt-123", "endpointName": "DEFAULT"},
+        )
+        assert calls[1] == ("delete_agent_runtime", (), {"agentRuntimeId": "rt-123"})
+
+    def test_teardown_endpoint_not_found_continues(self):
+        """Test teardown continues if endpoint already deleted."""
+        client = self._make_client()
+        client.cp_client.delete_agent_runtime_endpoint.side_effect = ClientError(
+            {"Error": {"Code": "ResourceNotFoundException", "Message": "Not found"}},
+            "DeleteAgentRuntimeEndpoint",
+        )
+
+        client.teardown("rt-123")
+
+        # Should still delete runtime
+        client.cp_client.delete_agent_runtime.assert_called_once_with(agentRuntimeId="rt-123")
+
+    def test_teardown_runtime_not_found_continues(self):
+        """Test teardown doesn't raise if runtime already deleted."""
+        client = self._make_client()
+        client.cp_client.delete_agent_runtime.side_effect = ClientError(
+            {"Error": {"Code": "ResourceNotFoundException", "Message": "Not found"}},
+            "DeleteAgentRuntime",
+        )
+
+        # Should not raise
+        client.teardown("rt-123")
 
 
 class TestParseRuntimeArn:

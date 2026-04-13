@@ -8,15 +8,20 @@ import base64
 import datetime
 import logging
 import secrets
+import time
 import uuid
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from urllib.parse import quote, urlencode, urlparse
 
 import boto3
 from botocore.auth import SigV4Auth, SigV4QueryAuth
 from botocore.awsrequest import AWSRequest
+from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from .._utils.endpoints import get_data_plane_endpoint
+from .._utils.snake_case import accept_snake_case_kwargs
+from .._utils.user_agent import build_user_agent_suffix
 from .utils import is_valid_partition
 
 DEFAULT_PRESIGNED_URL_TIMEOUT = 300
@@ -35,21 +40,224 @@ class AgentCoreRuntimeClient:
         session (boto3.Session): The boto3 session for AWS credentials.
     """
 
-    def __init__(self, region: str, session: Optional[boto3.Session] = None) -> None:
+    _ALLOWED_DP_METHODS = {
+        "invoke_agent_runtime",
+        "stop_runtime_session",
+    }
+
+    _ALLOWED_CP_METHODS = {
+        "create_agent_runtime",
+        "update_agent_runtime",
+        "get_agent_runtime",
+        "get_agent_runtime_endpoint",
+        "delete_agent_runtime",
+        "delete_agent_runtime_endpoint",
+    }
+
+    def __init__(
+        self,
+        region: Optional[str] = None,
+        session: Optional[boto3.Session] = None,
+        integration_source: Optional[str] = None,
+    ) -> None:
         """Initialize an AgentCoreRuntime client for the specified AWS region.
 
         Args:
-            region (str): The AWS region to use for the AgentCore Runtime service.
-            session (Optional[boto3.Session]): Optional boto3 session. If not provided,
-                a new session will be created using default credentials.
+            region: AWS region name. If not provided, uses the session's region or "us-west-2".
+            session: Optional boto3 Session to use. If not provided, a default session is created
+            integration_source: Optional integration source for user-agent telemetry.
         """
-        self.region = region
-        self.logger = logging.getLogger(__name__)
-
-        if session is None:
-            session = boto3.Session()
-
+        session = session if session else boto3.Session()
+        self.region = region or session.region_name or "us-west-2"
         self.session = session
+        self.logger = logging.getLogger(__name__)
+        self.integration_source = integration_source
+
+        user_agent_extra = build_user_agent_suffix(integration_source)
+        client_config = Config(user_agent_extra=user_agent_extra)
+
+        self.cp_client = session.client("bedrock-agentcore-control", region_name=self.region, config=client_config)
+        self.dp_client = session.client("bedrock-agentcore", region_name=self.region, config=client_config)
+        self.logger.info(
+            "Initialized AgentCoreRuntimeClient for control plane: %s, data plane: %s",
+            self.cp_client.meta.region_name,
+            self.dp_client.meta.region_name,
+        )
+
+    def __getattr__(self, name: str):
+        """Dynamically forward allowlisted method calls to the appropriate boto3 client.
+
+        Methods are looked up in the following order:
+        1. dp_client (bedrock-agentcore) - for data plane operations
+        2. cp_client (bedrock-agentcore-control) - for control plane operations
+        """
+        if name in self._ALLOWED_DP_METHODS and hasattr(self.dp_client, name):
+            method = getattr(self.dp_client, name)
+            self.logger.debug("Forwarding method '%s' to dp_client", name)
+            return accept_snake_case_kwargs(method)
+
+        if name in self._ALLOWED_CP_METHODS and hasattr(self.cp_client, name):
+            method = getattr(self.cp_client, name)
+            self.logger.debug("Forwarding method '%s' to cp_client", name)
+            return accept_snake_case_kwargs(method)
+
+        raise AttributeError(
+            f"'{self.__class__.__name__}' object has no attribute '{name}'. "
+            f"Method not found on dp_client or cp_client. "
+            f"Available methods can be found in the boto3 documentation for "
+            f"'bedrock-agentcore' and 'bedrock-agentcore-control' services."
+        )
+
+    def wait_for_runtime_ready(
+        self,
+        agent_runtime_id: str,
+        max_wait: int = 300,
+        poll_interval: int = 5,
+    ) -> Dict[str, Any]:
+        """Wait for an agent runtime to reach READY status.
+
+        Args:
+            agent_runtime_id: The agent runtime ID.
+            max_wait: Maximum seconds to wait (default: 300).
+            poll_interval: Seconds between status checks (default: 5).
+
+        Returns:
+            Runtime response dict when READY.
+
+        Raises:
+            RuntimeError: If the runtime reaches a failed state.
+            TimeoutError: If the runtime doesn't become READY within max_wait.
+        """
+        start_time = time.time()
+        while time.time() - start_time < max_wait:
+            try:
+                resp = self.cp_client.get_agent_runtime(agentRuntimeId=agent_runtime_id)
+                status = resp.get("status", "UNKNOWN")
+
+                if status == "READY":
+                    self.logger.info("Runtime %s is READY", agent_runtime_id)
+                    return resp
+                elif status in ("CREATE_FAILED", "UPDATE_FAILED", "FAILED"):
+                    raise RuntimeError(
+                        "Runtime %s: %s" % (status.lower().replace("_", " "), resp.get("failureReason", "Unknown"))
+                    )
+            except ClientError as e:
+                if e.response["Error"]["Code"] != "ResourceNotFoundException":
+                    raise
+            time.sleep(poll_interval)
+
+        raise TimeoutError("Runtime %s did not become READY within %d seconds" % (agent_runtime_id, max_wait))
+
+    def wait_for_endpoint_ready(
+        self,
+        agent_runtime_id: str,
+        endpoint_name: str = "DEFAULT",
+        max_wait: int = 120,
+        poll_interval: int = 1,
+    ) -> Dict[str, Any]:
+        """Wait for an agent runtime endpoint to reach READY status.
+
+        Args:
+            agent_runtime_id: The agent runtime ID.
+            endpoint_name: Endpoint name (default: "DEFAULT").
+            max_wait: Maximum seconds to wait (default: 120).
+            poll_interval: Seconds between status checks (default: 1).
+
+        Returns:
+            Endpoint response dict when READY.
+
+        Raises:
+            RuntimeError: If the endpoint reaches a failed state.
+            TimeoutError: If the endpoint doesn't become READY within max_wait.
+        """
+        start_time = time.time()
+        while time.time() - start_time < max_wait:
+            try:
+                resp = self.cp_client.get_agent_runtime_endpoint(
+                    agentRuntimeId=agent_runtime_id,
+                    endpointName=endpoint_name,
+                )
+                status = resp.get("status", "UNKNOWN")
+
+                if status == "READY":
+                    self.logger.info("Endpoint '%s' is READY", endpoint_name)
+                    return resp
+                elif status in ("CREATE_FAILED", "UPDATE_FAILED"):
+                    raise RuntimeError(
+                        "Endpoint %s: %s" % (status.lower().replace("_", " "), resp.get("failureReason", "Unknown"))
+                    )
+            except ClientError as e:
+                if e.response["Error"]["Code"] != "ResourceNotFoundException":
+                    raise
+            time.sleep(poll_interval)
+
+        raise TimeoutError("Endpoint '%s' did not become READY within %d seconds" % (endpoint_name, max_wait))
+
+    def get_aggregated_status(
+        self,
+        agent_runtime_id: str,
+        endpoint_name: str = "DEFAULT",
+    ) -> Dict[str, Any]:
+        """Get aggregated status of runtime and endpoint.
+
+        Args:
+            agent_runtime_id: The agent runtime ID.
+            endpoint_name: Endpoint name (default: "DEFAULT").
+
+        Returns:
+            Dict with 'runtime' and 'endpoint' status details.
+        """
+        result: Dict[str, Any] = {"runtime": None, "endpoint": None}
+
+        try:
+            result["runtime"] = self.cp_client.get_agent_runtime(agentRuntimeId=agent_runtime_id)
+        except ClientError as e:
+            result["runtime"] = {"error": str(e)}
+
+        try:
+            result["endpoint"] = self.cp_client.get_agent_runtime_endpoint(
+                agentRuntimeId=agent_runtime_id,
+                endpointName=endpoint_name,
+            )
+        except ClientError as e:
+            result["endpoint"] = {"error": str(e)}
+
+        return result
+
+    def teardown(
+        self,
+        agent_runtime_id: str,
+        endpoint_name: str = "DEFAULT",
+    ) -> None:
+        """Delete endpoint then runtime in correct order.
+
+        Silently ignores ResourceNotFoundException for either resource
+        (already deleted).
+
+        Args:
+            agent_runtime_id: The agent runtime ID.
+            endpoint_name: Endpoint name (default: "DEFAULT").
+        """
+        # Delete endpoint
+        try:
+            self.cp_client.delete_agent_runtime_endpoint(
+                agentRuntimeId=agent_runtime_id,
+                endpointName=endpoint_name,
+            )
+            self.logger.info("Deleted endpoint '%s' for runtime %s", endpoint_name, agent_runtime_id)
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "ResourceNotFoundException":
+                raise
+            self.logger.info("Endpoint '%s' not found, skipping", endpoint_name)
+
+        # Delete runtime
+        try:
+            self.cp_client.delete_agent_runtime(agentRuntimeId=agent_runtime_id)
+            self.logger.info("Deleted runtime %s", agent_runtime_id)
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "ResourceNotFoundException":
+                raise
+            self.logger.info("Runtime %s not found, skipping", agent_runtime_id)
 
     def _parse_runtime_arn(self, runtime_arn: str) -> Dict[str, str]:
         """Parse runtime ARN and extract components.
