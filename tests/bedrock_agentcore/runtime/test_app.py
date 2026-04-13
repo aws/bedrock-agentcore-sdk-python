@@ -2715,3 +2715,38 @@ class TestWorkerLoopInvocation:
         content = response.content.decode("utf-8")
         assert 'data: {"chunk": "a"}' in content
         assert 'data: {"chunk": "b"}' in content
+
+    @pytest.mark.asyncio
+    async def test_worker_loop_compatible_with_otel_threading_instrumentation(self):
+        """Worker loop starts even when a running loop leaks into the child thread.
+
+        OpenTelemetry's opentelemetry-instrumentation-threading wraps Thread.run()
+        to propagate trace context. This can leak the parent thread's running-loop
+        state into the child thread, causing:
+            RuntimeError: Cannot run the event loop while another loop is running
+
+        The fix clears leaked running-loop state at the top of _run_worker_loop.
+        """
+        app = BedrockAgentCoreApp()
+        ready = threading.Event()
+
+        def otel_simulated_target():
+            """Simulate OTEL wrapper leaking a running loop before _run_worker_loop."""
+            leak = asyncio.new_event_loop()
+            asyncio._set_running_loop(leak)
+            try:
+                app._run_worker_loop(ready)
+            finally:
+                asyncio._set_running_loop(None)
+                leak.close()
+
+        thread = threading.Thread(target=otel_simulated_target, daemon=True)
+        thread.start()
+        assert ready.wait(timeout=5), "Worker loop failed to start under OTEL-like wrapper"
+
+        assert app._worker_loop is not None
+        assert app._worker_loop.is_running()
+
+        # Verify the loop can actually execute work
+        future = asyncio.run_coroutine_threadsafe(asyncio.sleep(0, result="otel_ok"), app._worker_loop)
+        assert future.result(timeout=5) == "otel_ok"
