@@ -706,8 +706,8 @@ class TestAgentCoreMemorySessionManager:
     def test_retrieve_contextual_memories_all_namespaces(self, agentcore_config_with_retrieval, mock_memory_client):
         """Test contextual memory retrieval from all namespaces."""
         mock_memory_client.retrieve_memories.return_value = [
-            {"content": "Relevant memory", "relevanceScore": 0.8},
-            {"content": "Less relevant memory", "relevanceScore": 0.2},
+            {"content": "Relevant memory", "score": 0.8},
+            {"content": "Less relevant memory", "score": 0.2},
         ]
 
         with patch(
@@ -729,11 +729,11 @@ class TestAgentCoreMemorySessionManager:
                         return_value=[
                             {
                                 "namespace": "user_preferences/test-actor-789/",
-                                "memories": [{"content": "Relevant memory", "relevanceScore": 0.8}],
+                                "memories": [{"content": "Relevant memory", "score": 0.8}],
                             },
                             {
                                 "namespace": "session_context/test-session-456/",
-                                "memories": [{"content": "Less relevant memory", "relevanceScore": 0.2}],
+                                "memories": [{"content": "Less relevant memory", "score": 0.2}],
                             },
                         ]
                     )
@@ -746,9 +746,7 @@ class TestAgentCoreMemorySessionManager:
         self, agentcore_config_with_retrieval, mock_memory_client
     ):
         """Test contextual memory retrieval from specific namespaces."""
-        mock_memory_client.retrieve_memories.return_value = [
-            {"content": "User preference memory", "relevanceScore": 0.9}
-        ]
+        mock_memory_client.retrieve_memories.return_value = [{"content": "User preference memory", "score": 0.9}]
 
         with patch(
             "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
@@ -769,7 +767,7 @@ class TestAgentCoreMemorySessionManager:
                         return_value=[
                             {
                                 "namespace": "user_preferences/test-actor-789/",
-                                "memories": [{"content": "User preference memory", "relevanceScore": 0.9}],
+                                "memories": [{"content": "User preference memory", "score": 0.9}],
                             }
                         ]
                     )
@@ -814,8 +812,8 @@ class TestAgentCoreMemorySessionManager:
     def test_load_long_term_memories_with_config(self, agentcore_config_with_retrieval, mock_memory_client, test_agent):
         """Test loading long-term memories with retrieval config."""
         mock_memory_client.retrieve_memories.return_value = [
-            {"content": "User prefers morning meetings", "relevanceScore": 0.8},
-            {"content": "User is in Pacific timezone", "relevanceScore": 0.7},
+            {"content": "User prefers morning meetings", "score": 0.8},
+            {"content": "User is in Pacific timezone", "score": 0.7},
         ]
 
         with patch(
@@ -934,11 +932,11 @@ class TestAgentCoreMemorySessionManager:
             namespace = kwargs.get("namespace", "")
             if "preferences" in namespace:
                 return [
-                    {"content": "User prefers morning meetings", "relevanceScore": 0.8},
-                    {"content": "User likes coffee", "relevanceScore": 0.2},  # Below threshold
+                    {"content": "User prefers morning meetings", "score": 0.8},
+                    {"content": "User likes coffee", "score": 0.2},  # Below threshold
                 ]
             else:  # context namespace
-                return [{"content": "Previous conversation about project", "relevanceScore": 0.6}]
+                return [{"content": "Previous conversation about project", "score": 0.6}]
 
         mock_memory_client.retrieve_memories.side_effect = mock_retrieve_side_effect
 
@@ -986,9 +984,7 @@ class TestAgentCoreMemorySessionManager:
 
     def test_initialize_with_ltm_integration(self, agentcore_config_with_retrieval, mock_memory_client, test_agent):
         """Test initialize functionality with LTM integration enabled."""
-        mock_memory_client.retrieve_memories.return_value = [
-            {"content": "User prefers morning meetings", "relevanceScore": 0.8}
-        ]
+        mock_memory_client.retrieve_memories.return_value = [{"content": "User prefers morning meetings", "score": 0.8}]
 
         with patch(
             "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
@@ -1147,10 +1143,10 @@ class TestAgentCoreMemorySessionManager:
         """Test retrieve_customer_context filters memories below relevance_score threshold."""
         # Return memories with varying relevance scores
         mock_memory_client.retrieve_memories.return_value = [
-            {"content": {"text": "Low relevance 1"}, "relevanceScore": 0.1},
-            {"content": {"text": "Low relevance 2"}, "relevanceScore": 0.4},
-            {"content": {"text": "High relevance 1"}, "relevanceScore": 0.6},
-            {"content": {"text": "High relevance 2"}, "relevanceScore": 0.9},
+            {"content": {"text": "Low relevance 1"}, "score": 0.1},
+            {"content": {"text": "Low relevance 2"}, "score": 0.4},
+            {"content": {"text": "High relevance 1"}, "score": 0.6},
+            {"content": {"text": "High relevance 2"}, "score": 0.9},
         ]
 
         # Config with single namespace and relevance_score threshold of 0.5
@@ -2353,8 +2349,8 @@ class TestThinkingModeCompatibility:
     ):
         """Test retrieved memory is injected into the user message, not as a new assistant message."""
         mock_memory_client.retrieve_memories.return_value = [
-            {"content": {"text": "User prefers dark mode"}},
-            {"content": {"text": "User likes sushi"}},
+            {"content": {"text": "User prefers dark mode"}, "score": 0.8},
+            {"content": {"text": "User likes sushi"}, "score": 0.8},
         ]
 
         with patch(
@@ -2395,7 +2391,7 @@ class TestThinkingModeCompatibility:
     ):
         """Test memory injection keeps last message as user in a multi-turn conversation."""
         mock_memory_client.retrieve_memories.return_value = [
-            {"content": {"text": "User likes sushi"}},
+            {"content": {"text": "User likes sushi"}, "score": 0.8},
         ]
 
         with patch(
@@ -2446,7 +2442,7 @@ class TestThinkingModeCompatibility:
         )
 
         mock_memory_client.retrieve_memories.return_value = [
-            {"content": {"text": "User likes sushi"}},
+            {"content": {"text": "User likes sushi"}, "score": 0.8},
         ]
 
         with patch(
@@ -2486,7 +2482,7 @@ class TestThinkingModeCompatibility:
         )
 
         mock_memory_client.retrieve_memories.return_value = [
-            {"content": {"text": "User likes sushi"}},
+            {"content": {"text": "User likes sushi"}, "score": 0.8},
         ]
 
         with patch(
@@ -3445,7 +3441,7 @@ class TestPersistenceMode:
         )
         manager = _create_session_manager(config, mock_memory_client)
         mock_memory_client.retrieve_memories.return_value = [
-            {"content": {"text": "remembered fact"}},
+            {"content": {"text": "remembered fact"}, "score": 0.8},
         ]
 
         mock_agent = Mock()
