@@ -33,12 +33,13 @@ class MemoryControlPlaneClient:
         self.region_name = region_name
         self.environment = environment
 
-        self.endpoint = os.getenv(
-            "BEDROCK_AGENTCORE_CONTROL_ENDPOINT", f"https://bedrock-agentcore-control.{region_name}.amazonaws.com"
-        )
-
         service_name = os.getenv("BEDROCK_AGENTCORE_CONTROL_SERVICE", "bedrock-agentcore-control")
-        self.client = boto3.client(service_name, region_name=self.region_name, endpoint_url=self.endpoint)
+        cp_kwargs: dict = {"region_name": self.region_name}
+        control_endpoint = os.getenv("BEDROCK_AGENTCORE_CONTROL_ENDPOINT")
+        if control_endpoint:
+            cp_kwargs["endpoint_url"] = control_endpoint
+        self.client = boto3.client(service_name, **cp_kwargs)
+        self.endpoint = self.client.meta.endpoint_url
 
         logger.info("Initialized MemoryControlPlaneClient for %s in %s", environment, region_name)
 

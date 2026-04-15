@@ -29,7 +29,6 @@ class TestIdentityClient:
             mock_boto_client.assert_called_with(
                 "bedrock-agentcore",
                 region_name=region,
-                endpoint_url="https://bedrock-agentcore.us-east-1.amazonaws.com",
             )
 
     def test_create_oauth2_credential_provider(self):
