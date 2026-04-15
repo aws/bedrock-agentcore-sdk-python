@@ -75,6 +75,8 @@ def build_runtime_url(agent_arn: str, region: Optional[str] = None) -> str:
     """
     from urllib.parse import quote
 
+    from .._utils.endpoints import validate_region
+
     if region is None:
         # ARN format: arn:aws:bedrock-agentcore:<region>:<account>:runtime/<id>
         parts = agent_arn.split(":")
@@ -83,6 +85,7 @@ def build_runtime_url(agent_arn: str, region: Optional[str] = None) -> str:
         else:
             raise ValueError(f"Cannot extract region from ARN: {agent_arn}")
 
+    validate_region(region)
     encoded_arn = quote(agent_arn, safe="")
     return f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{encoded_arn}/invocations"
 

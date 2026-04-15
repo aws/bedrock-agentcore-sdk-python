@@ -17,7 +17,6 @@ class TestResourcePolicyClient:
             mock_boto.assert_called_once_with(
                 "bedrock-agentcore-control",
                 region_name=TEST_REGION,
-                endpoint_url=f"https://bedrock-agentcore-control.{TEST_REGION}.amazonaws.com",
             )
 
     def test_put_serializes_dict_to_json(self):
