@@ -155,8 +155,9 @@ class TestGeneratePolicy:
         assert result["generatedPolicies"] == [{"assetId": "asset-1"}]
         client.cp_client.list_policy_generation_assets.assert_called_once()
 
-    @patch("bedrock_agentcore.policy.client.time.sleep")
-    def test_generate_policy_polls_through_generating(self, _mock_sleep):
+    @patch("bedrock_agentcore._utils.polling.time.sleep")
+    @patch("bedrock_agentcore._utils.polling.time.time", side_effect=[0, 0, 1, 1])
+    def test_generate_policy_polls_through_generating(self, _mock_time, _mock_sleep):
         client = self._make_client()
         client.cp_client.start_policy_generation.return_value = {"policyGenerationId": "gen-123"}
         client.cp_client.get_policy_generation.side_effect = [
@@ -164,13 +165,12 @@ class TestGeneratePolicy:
             {"status": "GENERATED", "policyGenerationId": "gen-123"},
         ]
 
-        with patch("bedrock_agentcore.policy.client.time.time", return_value=0):
-            result = client.generate_policy(
-                policy_engine_id="pe-123",
-                name="test-gen",
-                resource={"arn": "arn:aws:test"},
-                content={"rawText": "allow refunds"},
-            )
+        result = client.generate_policy(
+            policy_engine_id="pe-123",
+            name="test-gen",
+            resource={"arn": "arn:aws:test"},
+            content={"rawText": "allow refunds"},
+        )
 
         assert result["status"] == "GENERATED"
         assert client.cp_client.get_policy_generation.call_count == 2
@@ -183,7 +183,7 @@ class TestGeneratePolicy:
             "statusReasons": ["Invalid input"],
         }
 
-        with pytest.raises(RuntimeError, match="Invalid input"):
+        with pytest.raises(RuntimeError, match="GENERATE_FAILED"):
             client.generate_policy(
                 policy_engine_id="pe-123",
                 name="test-gen",
@@ -191,20 +191,19 @@ class TestGeneratePolicy:
                 content={"rawText": "bad input"},
             )
 
-    @patch("bedrock_agentcore.policy.client.time.sleep")
-    @patch("bedrock_agentcore.policy.client.time.time", side_effect=[0, 0, 0, 121])
+    @patch("bedrock_agentcore._utils.polling.time.sleep")
+    @patch("bedrock_agentcore._utils.polling.time.time", side_effect=[0, 0, 0, 301])
     def test_generate_policy_timeout(self, _mock_time, _mock_sleep):
         client = self._make_client()
         client.cp_client.start_policy_generation.return_value = {"policyGenerationId": "gen-123"}
         client.cp_client.get_policy_generation.return_value = {"status": "GENERATING"}
 
-        with pytest.raises(TimeoutError, match="did not complete"):
+        with pytest.raises(TimeoutError):
             client.generate_policy(
                 policy_engine_id="pe-123",
                 name="test-gen",
                 resource={"arn": "arn:aws:test"},
                 content={"rawText": "allow refunds"},
-                max_wait=120,
             )
 
 
@@ -259,7 +258,7 @@ class TestCreatePolicyFromGenerationAsset:
 
 
 class TestWaitForActive:
-    """Tests for wait_for_policy_engine_active and wait_for_policy_active."""
+    """Tests for *_and_wait methods using shared wait_until."""
 
     def _make_client(self):
         mock_session = MagicMock()
@@ -268,72 +267,106 @@ class TestWaitForActive:
         client.cp_client = Mock()
         return client
 
-    def test_wait_for_engine_active_immediate(self):
+    def test_create_engine_and_wait_immediate(self):
         client = self._make_client()
+        client.cp_client.create_policy_engine.return_value = {"policyEngineId": "pe-123"}
         client.cp_client.get_policy_engine.return_value = {"status": "ACTIVE", "policyEngineId": "pe-123"}
 
-        result = client.wait_for_policy_engine_active("pe-123")
+        result = client.create_policy_engine_and_wait(name="test")
 
         assert result["status"] == "ACTIVE"
 
-    @patch("bedrock_agentcore.policy.client.time.sleep")
-    @patch("bedrock_agentcore.policy.client.time.time", side_effect=[0, 0, 0, 1, 1])
-    def test_wait_for_engine_active_polls(self, _mock_time, _mock_sleep):
+    @patch("bedrock_agentcore._utils.polling.time.sleep")
+    @patch("bedrock_agentcore._utils.polling.time.time", side_effect=[0, 0, 1, 1])
+    def test_create_engine_and_wait_polls(self, _mock_time, _mock_sleep):
         client = self._make_client()
+        client.cp_client.create_policy_engine.return_value = {"policyEngineId": "pe-123"}
         client.cp_client.get_policy_engine.side_effect = [
             {"status": "CREATING"},
             {"status": "ACTIVE", "policyEngineId": "pe-123"},
         ]
 
-        result = client.wait_for_policy_engine_active("pe-123")
+        result = client.create_policy_engine_and_wait(name="test")
 
         assert result["status"] == "ACTIVE"
         assert client.cp_client.get_policy_engine.call_count == 2
 
-    def test_wait_for_engine_active_unexpected_status(self):
+    def test_create_engine_and_wait_failed_status(self):
         client = self._make_client()
-        client.cp_client.get_policy_engine.return_value = {"status": "FAILED"}
+        client.cp_client.create_policy_engine.return_value = {"policyEngineId": "pe-123"}
+        client.cp_client.get_policy_engine.return_value = {
+            "status": "CREATE_FAILED",
+            "statusReasons": ["something broke"],
+        }
 
-        with pytest.raises(RuntimeError, match="unexpected status"):
-            client.wait_for_policy_engine_active("pe-123")
+        with pytest.raises(RuntimeError, match="CREATE_FAILED"):
+            client.create_policy_engine_and_wait(name="test")
 
-    @patch("bedrock_agentcore.policy.client.time.sleep")
-    @patch("bedrock_agentcore.policy.client.time.time", side_effect=[0, 0, 0, 301])
-    def test_wait_for_engine_active_timeout(self, _mock_time, _mock_sleep):
+    @patch("bedrock_agentcore._utils.polling.time.sleep")
+    @patch("bedrock_agentcore._utils.polling.time.time", side_effect=[0, 0, 0, 301])
+    def test_create_engine_and_wait_timeout(self, _mock_time, _mock_sleep):
         client = self._make_client()
+        client.cp_client.create_policy_engine.return_value = {"policyEngineId": "pe-123"}
         client.cp_client.get_policy_engine.return_value = {"status": "CREATING"}
 
-        with pytest.raises(TimeoutError, match="did not become ACTIVE"):
-            client.wait_for_policy_engine_active("pe-123", max_wait=300)
+        with pytest.raises(TimeoutError):
+            client.create_policy_engine_and_wait(name="test")
 
-    def test_wait_for_policy_active_immediate(self):
+    def test_create_policy_and_wait_immediate(self):
         client = self._make_client()
+        client.cp_client.create_policy.return_value = {
+            "policyEngineId": "pe-123",
+            "policyId": "pol-123",
+        }
         client.cp_client.get_policy.return_value = {"status": "ACTIVE", "policyId": "pol-123"}
 
-        result = client.wait_for_policy_active("pe-123", "pol-123")
+        result = client.create_policy_and_wait(
+            policyEngineId="pe-123",
+            name="test",
+            definition={"cedar": {"statement": "permit(principal, action, resource);"}},
+        )
 
         assert result["status"] == "ACTIVE"
 
-    @patch("bedrock_agentcore.policy.client.time.sleep")
-    @patch("bedrock_agentcore.policy.client.time.time", side_effect=[0, 0, 0, 1, 1])
-    def test_wait_for_policy_active_polls(self, _mock_time, _mock_sleep):
+    @patch("bedrock_agentcore._utils.polling.time.sleep")
+    @patch("bedrock_agentcore._utils.polling.time.time", side_effect=[0, 0, 1, 1])
+    def test_create_policy_and_wait_polls(self, _mock_time, _mock_sleep):
         client = self._make_client()
+        client.cp_client.create_policy.return_value = {
+            "policyEngineId": "pe-123",
+            "policyId": "pol-123",
+        }
         client.cp_client.get_policy.side_effect = [
             {"status": "CREATING"},
             {"status": "ACTIVE", "policyId": "pol-123"},
         ]
 
-        result = client.wait_for_policy_active("pe-123", "pol-123")
+        result = client.create_policy_and_wait(
+            policyEngineId="pe-123",
+            name="test",
+            definition={"cedar": {"statement": "permit(principal, action, resource);"}},
+        )
 
         assert result["status"] == "ACTIVE"
         assert client.cp_client.get_policy.call_count == 2
 
-    def test_wait_for_policy_active_unexpected_status(self):
+    def test_create_policy_and_wait_failed_status(self):
         client = self._make_client()
-        client.cp_client.get_policy.return_value = {"status": "FAILED"}
+        client.cp_client.create_policy.return_value = {
+            "policyEngineId": "pe-123",
+            "policyId": "pol-123",
+        }
+        client.cp_client.get_policy.return_value = {
+            "status": "CREATE_FAILED",
+            "statusReasons": ["something broke"],
+        }
 
-        with pytest.raises(RuntimeError, match="unexpected status"):
-            client.wait_for_policy_active("pe-123", "pol-123")
+        with pytest.raises(RuntimeError, match="CREATE_FAILED"):
+            client.create_policy_and_wait(
+                policyEngineId="pe-123",
+                name="test",
+                definition={"cedar": {"statement": "permit(principal, action, resource);"}},
+            )
 
 
 class TestCreateOrGet:
