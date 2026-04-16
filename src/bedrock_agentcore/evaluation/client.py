@@ -1,6 +1,7 @@
 """EvaluationClient for collecting spans and running evaluations."""
 
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union
 
@@ -8,6 +9,9 @@ import boto3
 from botocore.config import Config
 from pydantic import BaseModel
 
+from bedrock_agentcore._utils.config import ListConfig, WaitConfig
+from bedrock_agentcore._utils.pagination import list_all
+from bedrock_agentcore._utils.snake_case import accept_snake_case_kwargs
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 from bedrock_agentcore.evaluation.agent_span_collector import CloudWatchAgentSpanCollector
 
@@ -16,6 +20,9 @@ logger = logging.getLogger(__name__)
 MAX_TARGET_IDS_PER_REQUEST = 10
 QUERY_TIMEOUT_SECONDS = 60
 POLL_INTERVAL_SECONDS = 2
+
+_EVALUATOR_FAILED_STATUSES = {"CREATE_FAILED", "UPDATE_FAILED"}
+_ONLINE_EVAL_FAILED_STATUSES = {"CREATE_FAILED", "UPDATE_FAILED"}
 
 
 class ReferenceInputs(BaseModel):
@@ -91,6 +98,46 @@ class EvaluationClient:
         self._evaluator_level_cache: Dict[str, str] = {}
 
         logger.info("Initialized EvaluationClient in region %s", self.region_name)
+
+    # Pass-through
+    # -------------------------------------------------------------------------
+    _ALLOWED_DP_METHODS = {
+        "evaluate",
+    }
+
+    _ALLOWED_CP_METHODS = {
+        # Evaluator CRUD
+        "create_evaluator",
+        "get_evaluator",
+        "list_evaluators",
+        "update_evaluator",
+        "delete_evaluator",
+        # Online evaluation config CRUD
+        "create_online_evaluation_config",
+        "get_online_evaluation_config",
+        "list_online_evaluation_configs",
+        "update_online_evaluation_config",
+        "delete_online_evaluation_config",
+    }
+
+    def __getattr__(self, name: str):
+        """Dynamically forward allowlisted method calls to the appropriate boto3 client."""
+        if name in self._ALLOWED_DP_METHODS and hasattr(self._dp_client, name):
+            method = getattr(self._dp_client, name)
+            logger.debug("Forwarding method '%s' to _dp_client", name)
+            return accept_snake_case_kwargs(method)
+
+        if name in self._ALLOWED_CP_METHODS and hasattr(self._cp_client, name):
+            method = getattr(self._cp_client, name)
+            logger.debug("Forwarding method '%s' to _cp_client", name)
+            return accept_snake_case_kwargs(method)
+
+        raise AttributeError(
+            f"'{self.__class__.__name__}' object has no attribute '{name}'. "
+            f"Method not found on data plane or control plane client. "
+            f"Available methods can be found in the boto3 documentation for "
+            f"'bedrock-agentcore' and 'bedrock-agentcore-control' services."
+        )
 
     def run(
         self,
@@ -349,3 +396,195 @@ class EvaluationClient:
                     )
 
         return result
+
+    # list_all_* methods
+    # -------------------------------------------------------------------------
+    def list_all_evaluators(
+        self,
+        list_config: Optional[ListConfig] = None,
+        **kwargs,
+    ) -> List[Dict[str, Any]]:
+        """List all evaluators with automatic pagination.
+
+        Args:
+            list_config: Optional ListConfig to control max items returned (default: 100).
+            **kwargs: Additional arguments forwarded to the list_evaluators API.
+
+        Returns:
+            List of evaluator summaries.
+        """
+        return list_all(
+            self._cp_client,
+            "list_evaluators",
+            "evaluators",
+            list_config,
+            **kwargs,
+        )
+
+    def list_all_online_evaluation_configs(
+        self,
+        list_config: Optional[ListConfig] = None,
+        **kwargs,
+    ) -> List[Dict[str, Any]]:
+        """List all online evaluation configs with automatic pagination.
+
+        Args:
+            list_config: Optional ListConfig to control max items returned (default: 100).
+            **kwargs: Additional arguments forwarded to the list_online_evaluation_configs API.
+
+        Returns:
+            List of online evaluation config summaries.
+        """
+        return list_all(
+            self._cp_client,
+            "list_online_evaluation_configs",
+            "onlineEvaluationConfigs",
+            list_config,
+            **kwargs,
+        )
+
+    # *_and_wait methods
+    # -------------------------------------------------------------------------
+    def create_evaluator_and_wait(
+        self,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Create an evaluator and wait for it to reach ACTIVE status.
+
+        Args:
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Arguments forwarded to the create_evaluator API.
+
+        Returns:
+            Evaluator details when ACTIVE.
+
+        Raises:
+            RuntimeError: If the evaluator reaches a failed state.
+            TimeoutError: If the evaluator doesn't become ACTIVE within max_wait.
+        """
+        response = self._cp_client.create_evaluator(**kwargs)
+        return self._wait_for_evaluator_active(
+            response["evaluatorId"],
+            wait_config,
+        )
+
+    def update_evaluator_and_wait(
+        self,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Update an evaluator and wait for it to reach ACTIVE status.
+
+        Args:
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Arguments forwarded to the update_evaluator API.
+
+        Returns:
+            Evaluator details when ACTIVE.
+
+        Raises:
+            RuntimeError: If the evaluator reaches a failed state.
+            TimeoutError: If the evaluator doesn't become ACTIVE within max_wait.
+        """
+        response = self._cp_client.update_evaluator(**kwargs)
+        return self._wait_for_evaluator_active(
+            response["evaluatorId"],
+            wait_config,
+        )
+
+    def create_online_evaluation_config_and_wait(
+        self,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Create an online evaluation config and wait for ACTIVE status.
+
+        Args:
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Arguments forwarded to the create_online_evaluation_config API.
+
+        Returns:
+            Online evaluation config details when ACTIVE.
+
+        Raises:
+            RuntimeError: If the config reaches a failed state.
+            TimeoutError: If the config doesn't become ACTIVE within max_wait.
+        """
+        response = self._cp_client.create_online_evaluation_config(**kwargs)
+        return self._wait_for_online_eval_config_active(
+            response["onlineEvaluationConfigId"],
+            wait_config,
+        )
+
+    def update_online_evaluation_config_and_wait(
+        self,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Update an online evaluation config and wait for ACTIVE status.
+
+        Args:
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Arguments forwarded to the update_online_evaluation_config API.
+
+        Returns:
+            Online evaluation config details when ACTIVE.
+
+        Raises:
+            RuntimeError: If the config reaches a failed state.
+            TimeoutError: If the config doesn't become ACTIVE within max_wait.
+        """
+        response = self._cp_client.update_online_evaluation_config(**kwargs)
+        return self._wait_for_online_eval_config_active(
+            response["onlineEvaluationConfigId"],
+            wait_config,
+        )
+
+    # Private wait helpers
+    # -------------------------------------------------------------------------
+    def _wait_for_evaluator_active(
+        self,
+        evaluator_id: str,
+        wait_config: Optional[WaitConfig] = None,
+    ) -> Dict[str, Any]:
+        """Poll until an evaluator reaches ACTIVE status."""
+        wait = wait_config or WaitConfig()
+        start_time = time.time()
+        while time.time() - start_time < wait.max_wait:
+            resp = self._cp_client.get_evaluator(evaluatorId=evaluator_id)
+            status = resp.get("status")
+            if status == "ACTIVE":
+                logger.info("Evaluator %s is ACTIVE", evaluator_id)
+                return resp
+            if status in _EVALUATOR_FAILED_STATUSES:
+                raise RuntimeError("Evaluator %s reached %s" % (evaluator_id, status))
+            time.sleep(wait.poll_interval)
+        raise TimeoutError("Evaluator %s did not become ACTIVE within %d seconds" % (evaluator_id, wait.max_wait))
+
+    def _wait_for_online_eval_config_active(
+        self,
+        config_id: str,
+        wait_config: Optional[WaitConfig] = None,
+    ) -> Dict[str, Any]:
+        """Poll until an online evaluation config reaches ACTIVE status."""
+        wait = wait_config or WaitConfig()
+        start_time = time.time()
+        while time.time() - start_time < wait.max_wait:
+            resp = self._cp_client.get_online_evaluation_config(
+                onlineEvaluationConfigId=config_id,
+            )
+            status = resp.get("status")
+            if status == "ACTIVE":
+                logger.info(
+                    "Online evaluation config %s is ACTIVE",
+                    config_id,
+                )
+                return resp
+            if status in _ONLINE_EVAL_FAILED_STATUSES:
+                reason = resp.get("failureReason", "Unknown")
+                raise RuntimeError("Online evaluation config %s reached %s: %s" % (config_id, status, reason))
+            time.sleep(wait.poll_interval)
+        raise TimeoutError(
+            "Online evaluation config %s did not become ACTIVE within %d seconds" % (config_id, wait.max_wait)
+        )
