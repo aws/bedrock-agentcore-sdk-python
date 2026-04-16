@@ -9,6 +9,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from .._utils.config import ListConfig, WaitConfig
+from .._utils.pagination import list_all
 from .._utils.snake_case import accept_snake_case_kwargs
 from .._utils.user_agent import build_user_agent_suffix
 
@@ -110,7 +111,7 @@ class PolicyEngineClient:
         Returns:
             List of policy engine summaries.
         """
-        return self._list_all("list_policy_engines", "policyEngines", list_config, **kwargs)
+        return list_all(self.cp_client, "list_policy_engines", "policyEngines", list_config, **kwargs)
 
     def list_all_policies(self, list_config: Optional[ListConfig] = None, **kwargs) -> List[Dict[str, Any]]:
         """List all policies with automatic pagination.
@@ -123,7 +124,7 @@ class PolicyEngineClient:
         Returns:
             List of policy summaries.
         """
-        return self._list_all("list_policies", "policies", list_config, **kwargs)
+        return list_all(self.cp_client, "list_policies", "policies", list_config, **kwargs)
 
     def list_all_policy_generations(self, list_config: Optional[ListConfig] = None, **kwargs) -> List[Dict[str, Any]]:
         """List all policy generations with automatic pagination.
@@ -136,7 +137,7 @@ class PolicyEngineClient:
         Returns:
             List of policy generation summaries.
         """
-        return self._list_all("list_policy_generations", "policyGenerations", list_config, **kwargs)
+        return list_all(self.cp_client, "list_policy_generations", "policyGenerations", list_config, **kwargs)
 
     def list_all_policy_generation_assets(
         self, list_config: Optional[ListConfig] = None, **kwargs
@@ -151,7 +152,9 @@ class PolicyEngineClient:
         Returns:
             List of policy generation asset summaries.
         """
-        return self._list_all("list_policy_generation_assets", "policyGenerationAssets", list_config, **kwargs)
+        return list_all(
+            self.cp_client, "list_policy_generation_assets", "policyGenerationAssets", list_config, **kwargs
+        )
 
     # *_and_wait (create/update + poll until active)
     # -------------------------------------------------------------------------
@@ -433,22 +436,6 @@ class PolicyEngineClient:
 
     # Helper methods
     # -------------------------------------------------------------------------
-    def _list_all(
-        self, method_name: str, result_key: str, list_config: Optional[ListConfig] = None, **kwargs
-    ) -> List[Dict[str, Any]]:
-        """Generic auto-paginating list helper."""
-        config = list_config or ListConfig()
-        all_items: List[Dict[str, Any]] = []
-        kwargs.pop("nextToken", None)
-        method = getattr(self.cp_client, method_name)
-        while len(all_items) < config.total_items:
-            response = method(**kwargs)
-            all_items.extend(response.get(result_key, []))
-            if not response.get("nextToken"):
-                break
-            kwargs["nextToken"] = response["nextToken"]
-        return all_items[: config.total_items]
-
     def _wait_for_policy_engine_active(
         self, policy_engine_id: str, wait_config: Optional[WaitConfig] = None
     ) -> Dict[str, Any]:
