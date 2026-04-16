@@ -16,7 +16,7 @@ from bedrock_agentcore._utils.endpoints import (
     get_data_plane_endpoint,
 )
 from bedrock_agentcore._utils.pagination import list_all
-from bedrock_agentcore._utils.polling import wait_until
+from bedrock_agentcore._utils.polling import wait_until, wait_until_deleted
 from bedrock_agentcore._utils.snake_case import accept_snake_case_kwargs
 
 
@@ -352,5 +352,28 @@ class IdentityClient:
             "READY",
             _OAUTH2_FAILED_STATUSES,
             wait_config,
+            error_field="failureReason",
+        )
+
+    def delete_oauth2_credential_provider_and_wait(
+        self,
+        name: str,
+        wait_config: Optional[WaitConfig] = None,
+    ) -> None:
+        """Delete an OAuth2 credential provider and wait for deletion to complete.
+
+        Args:
+            name: Name of the OAuth2 credential provider to delete.
+            wait_config: Optional WaitConfig for polling behavior.
+
+        Raises:
+            RuntimeError: If the provider reaches DELETE_FAILED.
+            TimeoutError: If the provider isn't deleted within max_wait.
+        """
+        self.cp_client.delete_oauth2_credential_provider(name=name)
+        wait_until_deleted(
+            lambda: self.cp_client.get_oauth2_credential_provider(name=name),
+            failed=_OAUTH2_FAILED_STATUSES,
+            wait_config=wait_config,
             error_field="failureReason",
         )

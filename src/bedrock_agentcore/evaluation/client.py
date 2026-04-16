@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from bedrock_agentcore._utils.config import ListConfig, WaitConfig
 from bedrock_agentcore._utils.pagination import list_all
-from bedrock_agentcore._utils.polling import wait_until
+from bedrock_agentcore._utils.polling import wait_until, wait_until_deleted
 from bedrock_agentcore._utils.snake_case import accept_snake_case_kwargs
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 from bedrock_agentcore.evaluation.agent_span_collector import CloudWatchAgentSpanCollector
@@ -557,4 +557,48 @@ class EvaluationClient:
             _ONLINE_EVAL_FAILED_STATUSES,
             wait_config,
             error_field="failureReason",
+        )
+
+    def delete_evaluator_and_wait(
+        self,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> None:
+        """Delete an evaluator and wait for deletion to complete.
+
+        Args:
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Arguments forwarded to the delete_evaluator API.
+
+        Raises:
+            TimeoutError: If the evaluator isn't deleted within max_wait.
+        """
+        response = self._cp_client.delete_evaluator(**kwargs)
+        eid = response["evaluatorId"]
+        wait_until_deleted(
+            lambda: self._cp_client.get_evaluator(evaluatorId=eid),
+            wait_config=wait_config,
+        )
+
+    def delete_online_evaluation_config_and_wait(
+        self,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> None:
+        """Delete an online evaluation config and wait for deletion to complete.
+
+        Args:
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Arguments forwarded to the delete_online_evaluation_config API.
+
+        Raises:
+            TimeoutError: If the config isn't deleted within max_wait.
+        """
+        response = self._cp_client.delete_online_evaluation_config(**kwargs)
+        cid = response["onlineEvaluationConfigId"]
+        wait_until_deleted(
+            lambda: self._cp_client.get_online_evaluation_config(
+                onlineEvaluationConfigId=cid,
+            ),
+            wait_config=wait_config,
         )

@@ -8,7 +8,7 @@ from botocore.config import Config
 
 from .._utils.config import ListConfig, WaitConfig
 from .._utils.pagination import list_all
-from .._utils.polling import wait_until
+from .._utils.polling import wait_until, wait_until_deleted
 from .._utils.snake_case import accept_snake_case_kwargs
 from .._utils.user_agent import build_user_agent_suffix
 
@@ -222,6 +222,52 @@ class GatewayClient:
             "READY",
             _TARGET_FAILED_STATUSES,
             wait_config,
+        )
+
+    def delete_gateway_and_wait(
+        self,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> None:
+        """Delete a gateway and wait for deletion to complete.
+
+        Args:
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Arguments forwarded to the delete_gateway API.
+
+        Raises:
+            TimeoutError: If the gateway isn't deleted within max_wait.
+        """
+        response = self.cp_client.delete_gateway(**kwargs)
+        gw_id = response["gatewayId"]
+        wait_until_deleted(
+            lambda: self.cp_client.get_gateway(gatewayIdentifier=gw_id),
+            wait_config=wait_config,
+        )
+
+    def delete_gateway_target_and_wait(
+        self,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> None:
+        """Delete a gateway target and wait for deletion to complete.
+
+        Args:
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Arguments forwarded to the delete_gateway_target API.
+
+        Raises:
+            TimeoutError: If the target isn't deleted within max_wait.
+        """
+        response = self.cp_client.delete_gateway_target(**kwargs)
+        gw_arn = response["gatewayArn"]
+        target_id = response["targetId"]
+        wait_until_deleted(
+            lambda: self.cp_client.get_gateway_target(
+                gatewayIdentifier=gw_arn,
+                targetId=target_id,
+            ),
+            wait_config=wait_config,
         )
 
     # Name-based lookup

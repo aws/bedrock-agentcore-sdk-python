@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 
 from .._utils.config import ListConfig, WaitConfig
 from .._utils.pagination import list_all
-from .._utils.polling import wait_until
+from .._utils.polling import wait_until, wait_until_deleted
 from .._utils.snake_case import accept_snake_case_kwargs
 from .._utils.user_agent import build_user_agent_suffix
 
@@ -230,6 +230,59 @@ class PolicyEngineClient:
             "ACTIVE",
             _FAILED_STATUSES,
             wait_config,
+        )
+
+    def delete_policy_engine_and_wait(
+        self,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> None:
+        """Delete a policy engine and wait for deletion to complete.
+
+        Args:
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Arguments forwarded to the delete_policy_engine API.
+
+        Raises:
+            RuntimeError: If the engine reaches DELETE_FAILED.
+            TimeoutError: If the engine isn't deleted within max_wait.
+        """
+        response = self.cp_client.delete_policy_engine(**kwargs)
+        engine_id = response["policyEngineId"]
+        wait_until_deleted(
+            lambda: self.cp_client.get_policy_engine(
+                policyEngineId=engine_id,
+            ),
+            failed=_FAILED_STATUSES,
+            wait_config=wait_config,
+        )
+
+    def delete_policy_and_wait(
+        self,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> None:
+        """Delete a policy and wait for deletion to complete.
+
+        Args:
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Arguments forwarded to the delete_policy API.
+                Must include policyEngineId and policyId.
+
+        Raises:
+            RuntimeError: If the policy reaches DELETE_FAILED.
+            TimeoutError: If the policy isn't deleted within max_wait.
+        """
+        response = self.cp_client.delete_policy(**kwargs)
+        engine_id = response["policyEngineId"]
+        policy_id = response["policyId"]
+        wait_until_deleted(
+            lambda: self.cp_client.get_policy(
+                policyEngineId=engine_id,
+                policyId=policy_id,
+            ),
+            failed=_FAILED_STATUSES,
+            wait_config=wait_config,
         )
 
     # Higher-level orchestration methods

@@ -44,3 +44,43 @@ def wait_until(
             raise RuntimeError("Reached %s: %s" % (status, reason))
         time.sleep(wait.poll_interval)
     raise TimeoutError("Did not reach %s within %d seconds" % (target, wait.max_wait))
+
+
+def wait_until_deleted(
+    poll_fn: Callable[[], Dict[str, Any]],
+    not_found_code: str = "ResourceNotFoundException",
+    failed: Optional[Set[str]] = None,
+    wait_config: Optional[WaitConfig] = None,
+    error_field: str = "statusReasons",
+) -> None:
+    """Poll until a resource is deleted (raises not-found exception).
+
+    Args:
+        poll_fn: Zero-arg callable that calls the get API.
+        not_found_code: The error code indicating the resource is gone.
+        failed: Optional set of statuses that indicate deletion failed.
+        wait_config: Optional WaitConfig for polling behavior.
+        error_field: Response field containing error details.
+
+    Raises:
+        RuntimeError: If the resource reaches a failed status.
+        TimeoutError: If the resource is not deleted within max_wait.
+    """
+    from botocore.exceptions import ClientError
+
+    wait = wait_config or WaitConfig()
+    start_time = time.time()
+    while time.time() - start_time < wait.max_wait:
+        try:
+            resp = poll_fn()
+            if failed:
+                status = resp.get("status")
+                if status in failed:
+                    reason = resp.get(error_field, "Unknown")
+                    raise RuntimeError("Reached %s: %s" % (status, reason))
+        except ClientError as e:
+            if e.response["Error"]["Code"] == not_found_code:
+                return
+            raise
+        time.sleep(wait.poll_interval)
+    raise TimeoutError("Resource was not deleted within %d seconds" % wait.max_wait)
