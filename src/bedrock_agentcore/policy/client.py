@@ -1,7 +1,6 @@
 """AgentCore Policy Engine SDK - Client for Cedar policy engine operations."""
 
 import logging
-import time
 from typing import Any, Dict, List, Optional
 
 import boto3
@@ -10,6 +9,7 @@ from botocore.exceptions import ClientError
 
 from .._utils.config import ListConfig, WaitConfig
 from .._utils.pagination import list_all
+from .._utils.polling import wait_until
 from .._utils.snake_case import accept_snake_case_kwargs
 from .._utils.user_agent import build_user_agent_suffix
 
@@ -156,7 +156,7 @@ class PolicyEngineClient:
             self.cp_client, "list_policy_generation_assets", "policyGenerationAssets", list_config, **kwargs
         )
 
-    # *_and_wait (create/update + poll until active)
+    # *_and_wait methods
     # -------------------------------------------------------------------------
     def create_policy_engine_and_wait(self, wait_config: Optional[WaitConfig] = None, **kwargs) -> Dict[str, Any]:
         """Create a policy engine and wait for it to reach ACTIVE status.
@@ -173,7 +173,13 @@ class PolicyEngineClient:
             TimeoutError: If the engine doesn't become ACTIVE within max_wait.
         """
         response = self.cp_client.create_policy_engine(**kwargs)
-        return self._wait_for_policy_engine_active(response["policyEngineId"], wait_config)
+        engine_id = response["policyEngineId"]
+        return wait_until(
+            lambda: self.cp_client.get_policy_engine(policyEngineId=engine_id),
+            "ACTIVE",
+            _FAILED_STATUSES,
+            wait_config,
+        )
 
     def update_policy_engine_and_wait(self, wait_config: Optional[WaitConfig] = None, **kwargs) -> Dict[str, Any]:
         """Update a policy engine and wait for it to reach ACTIVE status.
@@ -190,7 +196,13 @@ class PolicyEngineClient:
             TimeoutError: If the engine doesn't become ACTIVE within max_wait.
         """
         response = self.cp_client.update_policy_engine(**kwargs)
-        return self._wait_for_policy_engine_active(response["policyEngineId"], wait_config)
+        engine_id = response["policyEngineId"]
+        return wait_until(
+            lambda: self.cp_client.get_policy_engine(policyEngineId=engine_id),
+            "ACTIVE",
+            _FAILED_STATUSES,
+            wait_config,
+        )
 
     def create_policy_and_wait(self, wait_config: Optional[WaitConfig] = None, **kwargs) -> Dict[str, Any]:
         """Create a policy and wait for it to reach ACTIVE status.
@@ -208,7 +220,17 @@ class PolicyEngineClient:
             TimeoutError: If the policy doesn't become ACTIVE within max_wait.
         """
         response = self.cp_client.create_policy(**kwargs)
-        return self._wait_for_policy_active(response["policyEngineId"], response["policyId"], wait_config)
+        engine_id = response["policyEngineId"]
+        policy_id = response["policyId"]
+        return wait_until(
+            lambda: self.cp_client.get_policy(
+                policyEngineId=engine_id,
+                policyId=policy_id,
+            ),
+            "ACTIVE",
+            _FAILED_STATUSES,
+            wait_config,
+        )
 
     # Higher-level orchestration methods
     # -------------------------------------------------------------------------
@@ -219,8 +241,7 @@ class PolicyEngineClient:
         resource: Dict[str, Any],
         content: Dict[str, Any],
         client_token: Optional[str] = None,
-        max_wait: int = 120,
-        poll_interval: int = 2,
+        wait_config: Optional[WaitConfig] = None,
         fetch_assets: bool = False,
     ) -> Dict[str, Any]:
         """Generate Cedar policies from natural language and wait for completion.
@@ -234,8 +255,7 @@ class PolicyEngineClient:
             resource: Resource for which policies will be generated (e.g., {"arn": "..."}).
             content: Natural language input (e.g., {"rawText": "allow refunds..."}).
             client_token: Optional idempotency token.
-            max_wait: Maximum seconds to wait (default: 120).
-            poll_interval: Seconds between status checks (default: 2).
+            wait_config: Optional WaitConfig for polling behavior.
             fetch_assets: If True, fetch generated policies and include in response.
 
         Returns:
@@ -258,32 +278,25 @@ class PolicyEngineClient:
         generation_id = generation["policyGenerationId"]
         logger.info("Started policy generation %s, waiting for completion...", generation_id)
 
-        start_time = time.time()
-        while time.time() - start_time < max_wait:
-            generation = self.cp_client.get_policy_generation(
+        _generation_failed = {"GENERATE_FAILED", "DELETE_FAILED"}
+        result = wait_until(
+            lambda: self.cp_client.get_policy_generation(
+                policyEngineId=policy_engine_id,
+                policyGenerationId=generation_id,
+            ),
+            "GENERATED",
+            _generation_failed,
+            wait_config,
+        )
+
+        if fetch_assets:
+            assets = self.cp_client.list_policy_generation_assets(
                 policyEngineId=policy_engine_id,
                 policyGenerationId=generation_id,
             )
-            status = generation.get("status")
+            result["generatedPolicies"] = assets.get("policyGenerationAssets", [])
 
-            if status == "GENERATED":
-                logger.info("Policy generation %s complete", generation_id)
-                if fetch_assets:
-                    assets = self.cp_client.list_policy_generation_assets(
-                        policyEngineId=policy_engine_id,
-                        policyGenerationId=generation_id,
-                    )
-                    generation["generatedPolicies"] = assets.get("policyGenerationAssets", [])
-                return generation
-            elif status == "GENERATING":
-                time.sleep(poll_interval)
-                continue
-            else:
-                reasons = generation.get("statusReasons", [])
-                reason_text = ", ".join(reasons) if reasons else "Unknown reason"
-                raise RuntimeError("Policy generation failed with status %s: %s" % (status, reason_text))
-
-        raise TimeoutError("Policy generation %s did not complete within %d seconds" % (generation_id, max_wait))
+        return result
 
     def create_policy_from_generation_asset(
         self,
@@ -379,7 +392,12 @@ class PolicyEngineClient:
             if not engine_id:
                 raise
 
-        return self._wait_for_policy_engine_active(engine_id, wait_config)
+        return wait_until(
+            lambda: self.cp_client.get_policy_engine(policyEngineId=engine_id),
+            "ACTIVE",
+            _FAILED_STATUSES,
+            wait_config,
+        )
 
     def create_or_get_policy(
         self,
@@ -432,48 +450,18 @@ class PolicyEngineClient:
             if not policy_id:
                 raise
 
-        return self._wait_for_policy_active(policy_engine_id, policy_id, wait_config)
+        return wait_until(
+            lambda: self.cp_client.get_policy(
+                policyEngineId=policy_engine_id,
+                policyId=policy_id,
+            ),
+            "ACTIVE",
+            _FAILED_STATUSES,
+            wait_config,
+        )
 
     # Helper methods
     # -------------------------------------------------------------------------
-    def _wait_for_policy_engine_active(
-        self, policy_engine_id: str, wait_config: Optional[WaitConfig] = None
-    ) -> Dict[str, Any]:
-        """Poll until a policy engine reaches ACTIVE status."""
-        wait = wait_config or WaitConfig()
-        start_time = time.time()
-        while time.time() - start_time < wait.max_wait:
-            resp = self.cp_client.get_policy_engine(policyEngineId=policy_engine_id)
-            status = resp.get("status")
-            if status == "ACTIVE":
-                logger.info("Policy engine %s is ACTIVE", policy_engine_id)
-                return resp
-            if status in _FAILED_STATUSES:
-                reasons = resp.get("statusReasons", [])
-                raise RuntimeError("Policy engine %s reached %s: %s" % (policy_engine_id, status, reasons))
-            time.sleep(wait.poll_interval)
-        raise TimeoutError(
-            "Policy engine %s did not become ACTIVE within %d seconds" % (policy_engine_id, wait.max_wait)
-        )
-
-    def _wait_for_policy_active(
-        self, policy_engine_id: str, policy_id: str, wait_config: Optional[WaitConfig] = None
-    ) -> Dict[str, Any]:
-        """Poll until a policy reaches ACTIVE status."""
-        wait = wait_config or WaitConfig()
-        start_time = time.time()
-        while time.time() - start_time < wait.max_wait:
-            resp = self.cp_client.get_policy(policyEngineId=policy_engine_id, policyId=policy_id)
-            status = resp.get("status")
-            if status == "ACTIVE":
-                logger.info("Policy %s is ACTIVE", policy_id)
-                return resp
-            if status in _FAILED_STATUSES:
-                reasons = resp.get("statusReasons", [])
-                raise RuntimeError("Policy %s reached %s: %s" % (policy_id, status, reasons))
-            time.sleep(wait.poll_interval)
-        raise TimeoutError("Policy %s did not become ACTIVE within %d seconds" % (policy_id, wait.max_wait))
-
     def _find_policy_engine_by_name(self, name: str) -> Optional[str]:
         """Find a policy engine ID by name. Returns None if not found."""
         next_token = None

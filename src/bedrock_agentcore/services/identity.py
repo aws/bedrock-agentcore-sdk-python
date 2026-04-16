@@ -16,6 +16,7 @@ from bedrock_agentcore._utils.endpoints import (
     get_data_plane_endpoint,
 )
 from bedrock_agentcore._utils.pagination import list_all
+from bedrock_agentcore._utils.polling import wait_until
 from bedrock_agentcore._utils.snake_case import accept_snake_case_kwargs
 
 
@@ -31,6 +32,8 @@ class TokenPoller(ABC):
 # Default configuration for the polling mechanism
 DEFAULT_POLLING_INTERVAL_SECONDS = 5
 DEFAULT_POLLING_TIMEOUT_SECONDS = 600
+
+_OAUTH2_FAILED_STATUSES = {"CREATE_FAILED", "UPDATE_FAILED", "DELETE_FAILED"}
 
 
 class _DefaultApiTokenPoller(TokenPoller):
@@ -343,35 +346,11 @@ class IdentityClient:
             TimeoutError: If the provider doesn't become READY within max_wait.
         """
         response = self.cp_client.create_oauth2_credential_provider(**kwargs)
-        return self._wait_for_oauth2_provider_ready(
-            response["name"],
+        name = response["name"]
+        return wait_until(
+            lambda: self.cp_client.get_oauth2_credential_provider(name=name),
+            "READY",
+            _OAUTH2_FAILED_STATUSES,
             wait_config,
-        )
-
-    # Private helpers
-    # -------------------------------------------------------------------------
-    def _wait_for_oauth2_provider_ready(
-        self,
-        name: str,
-        wait_config: Optional[WaitConfig] = None,
-    ) -> Dict[str, Any]:
-        """Poll until an OAuth2 credential provider reaches READY status."""
-        wait = wait_config or WaitConfig()
-        start_time = time.time()
-        failed = {"CREATE_FAILED", "UPDATE_FAILED", "DELETE_FAILED"}
-        while time.time() - start_time < wait.max_wait:
-            resp = self.cp_client.get_oauth2_credential_provider(name=name)
-            status = resp.get("status")
-            if status == "READY":
-                self.logger.info(
-                    "OAuth2 credential provider '%s' is READY",
-                    name,
-                )
-                return resp
-            if status in failed:
-                reason = resp.get("failureReason", "Unknown")
-                raise RuntimeError("OAuth2 credential provider '%s' reached %s: %s" % (name, status, reason))
-            time.sleep(wait.poll_interval)
-        raise TimeoutError(
-            "OAuth2 credential provider '%s' did not become READY within %d seconds" % (name, wait.max_wait)
+            error_field="failureReason",
         )

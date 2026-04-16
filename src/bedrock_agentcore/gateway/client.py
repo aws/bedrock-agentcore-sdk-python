@@ -1,7 +1,6 @@
 """AgentCore Gateway SDK - Client for MCP gateway and target operations."""
 
 import logging
-import time
 from typing import Any, Dict, List, Optional
 
 import boto3
@@ -9,6 +8,7 @@ from botocore.config import Config
 
 from .._utils.config import ListConfig, WaitConfig
 from .._utils.pagination import list_all
+from .._utils.polling import wait_until
 from .._utils.snake_case import accept_snake_case_kwargs
 from .._utils.user_agent import build_user_agent_suffix
 
@@ -137,7 +137,13 @@ class GatewayClient:
             TimeoutError: If the gateway doesn't become READY within max_wait.
         """
         response = self.cp_client.create_gateway(**kwargs)
-        return self._wait_for_gateway_ready(response["gatewayId"], wait_config)
+        gw_id = response["gatewayId"]
+        return wait_until(
+            lambda: self.cp_client.get_gateway(gatewayIdentifier=gw_id),
+            "READY",
+            _GATEWAY_FAILED_STATUSES,
+            wait_config,
+        )
 
     def update_gateway_and_wait(self, wait_config: Optional[WaitConfig] = None, **kwargs) -> Dict[str, Any]:
         """Update a gateway and wait for it to reach READY status.
@@ -154,7 +160,13 @@ class GatewayClient:
             TimeoutError: If the gateway doesn't become READY within max_wait.
         """
         response = self.cp_client.update_gateway(**kwargs)
-        return self._wait_for_gateway_ready(response["gatewayId"], wait_config)
+        gw_id = response["gatewayId"]
+        return wait_until(
+            lambda: self.cp_client.get_gateway(gatewayIdentifier=gw_id),
+            "READY",
+            _GATEWAY_FAILED_STATUSES,
+            wait_config,
+        )
 
     def create_gateway_target_and_wait(self, wait_config: Optional[WaitConfig] = None, **kwargs) -> Dict[str, Any]:
         """Create a gateway target and wait for it to reach READY status.
@@ -172,7 +184,17 @@ class GatewayClient:
             TimeoutError: If the target doesn't become READY within max_wait.
         """
         response = self.cp_client.create_gateway_target(**kwargs)
-        return self._wait_for_target_ready(response["gatewayArn"], response["targetId"], wait_config)
+        gw_arn = response["gatewayArn"]
+        target_id = response["targetId"]
+        return wait_until(
+            lambda: self.cp_client.get_gateway_target(
+                gatewayIdentifier=gw_arn,
+                targetId=target_id,
+            ),
+            "READY",
+            _TARGET_FAILED_STATUSES,
+            wait_config,
+        )
 
     def update_gateway_target_and_wait(self, wait_config: Optional[WaitConfig] = None, **kwargs) -> Dict[str, Any]:
         """Update a gateway target and wait for it to reach READY status.
@@ -190,7 +212,17 @@ class GatewayClient:
             TimeoutError: If the target doesn't become READY within max_wait.
         """
         response = self.cp_client.update_gateway_target(**kwargs)
-        return self._wait_for_target_ready(response["gatewayArn"], response["targetId"], wait_config)
+        gw_arn = response["gatewayArn"]
+        target_id = response["targetId"]
+        return wait_until(
+            lambda: self.cp_client.get_gateway_target(
+                gatewayIdentifier=gw_arn,
+                targetId=target_id,
+            ),
+            "READY",
+            _TARGET_FAILED_STATUSES,
+            wait_config,
+        )
 
     # Name-based lookup
     # -------------------------------------------------------------------------
@@ -233,39 +265,3 @@ class GatewayClient:
                     gatewayIdentifier=gateway_identifier, targetId=target["targetId"]
                 )
         return None
-
-    # Helper methods
-    # -------------------------------------------------------------------------
-    def _wait_for_gateway_ready(self, gateway_id: str, wait_config: Optional[WaitConfig] = None) -> Dict[str, Any]:
-        """Poll until a gateway reaches READY status."""
-        wait = wait_config or WaitConfig()
-        start_time = time.time()
-        while time.time() - start_time < wait.max_wait:
-            resp = self.cp_client.get_gateway(gatewayIdentifier=gateway_id)
-            status = resp.get("status")
-            if status == "READY":
-                logger.info("Gateway %s is READY", gateway_id)
-                return resp
-            if status in _GATEWAY_FAILED_STATUSES:
-                reasons = resp.get("statusReasons", [])
-                raise RuntimeError("Gateway %s reached %s: %s" % (gateway_id, status, reasons))
-            time.sleep(wait.poll_interval)
-        raise TimeoutError("Gateway %s did not become READY within %d seconds" % (gateway_id, wait.max_wait))
-
-    def _wait_for_target_ready(
-        self, gateway_arn: str, target_id: str, wait_config: Optional[WaitConfig] = None
-    ) -> Dict[str, Any]:
-        """Poll until a gateway target reaches READY status."""
-        wait = wait_config or WaitConfig()
-        start_time = time.time()
-        while time.time() - start_time < wait.max_wait:
-            resp = self.cp_client.get_gateway_target(gatewayIdentifier=gateway_arn, targetId=target_id)
-            status = resp.get("status")
-            if status == "READY":
-                logger.info("Gateway target %s is READY", target_id)
-                return resp
-            if status in _TARGET_FAILED_STATUSES:
-                reasons = resp.get("statusReasons", [])
-                raise RuntimeError("Gateway target %s reached %s: %s" % (target_id, status, reasons))
-            time.sleep(wait.poll_interval)
-        raise TimeoutError("Gateway target %s did not become READY within %d seconds" % (target_id, wait.max_wait))

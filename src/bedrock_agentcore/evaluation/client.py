@@ -1,7 +1,6 @@
 """EvaluationClient for collecting spans and running evaluations."""
 
 import logging
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union
 
@@ -11,6 +10,7 @@ from pydantic import BaseModel
 
 from bedrock_agentcore._utils.config import ListConfig, WaitConfig
 from bedrock_agentcore._utils.pagination import list_all
+from bedrock_agentcore._utils.polling import wait_until
 from bedrock_agentcore._utils.snake_case import accept_snake_case_kwargs
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 from bedrock_agentcore.evaluation.agent_span_collector import CloudWatchAgentSpanCollector
@@ -464,8 +464,11 @@ class EvaluationClient:
             TimeoutError: If the evaluator doesn't become ACTIVE within max_wait.
         """
         response = self._cp_client.create_evaluator(**kwargs)
-        return self._wait_for_evaluator_active(
-            response["evaluatorId"],
+        eid = response["evaluatorId"]
+        return wait_until(
+            lambda: self._cp_client.get_evaluator(evaluatorId=eid),
+            "ACTIVE",
+            _EVALUATOR_FAILED_STATUSES,
             wait_config,
         )
 
@@ -488,8 +491,11 @@ class EvaluationClient:
             TimeoutError: If the evaluator doesn't become ACTIVE within max_wait.
         """
         response = self._cp_client.update_evaluator(**kwargs)
-        return self._wait_for_evaluator_active(
-            response["evaluatorId"],
+        eid = response["evaluatorId"]
+        return wait_until(
+            lambda: self._cp_client.get_evaluator(evaluatorId=eid),
+            "ACTIVE",
+            _EVALUATOR_FAILED_STATUSES,
             wait_config,
         )
 
@@ -512,9 +518,15 @@ class EvaluationClient:
             TimeoutError: If the config doesn't become ACTIVE within max_wait.
         """
         response = self._cp_client.create_online_evaluation_config(**kwargs)
-        return self._wait_for_online_eval_config_active(
-            response["onlineEvaluationConfigId"],
+        cid = response["onlineEvaluationConfigId"]
+        return wait_until(
+            lambda: self._cp_client.get_online_evaluation_config(
+                onlineEvaluationConfigId=cid,
+            ),
+            "ACTIVE",
+            _ONLINE_EVAL_FAILED_STATUSES,
             wait_config,
+            error_field="failureReason",
         )
 
     def update_online_evaluation_config_and_wait(
@@ -536,55 +548,13 @@ class EvaluationClient:
             TimeoutError: If the config doesn't become ACTIVE within max_wait.
         """
         response = self._cp_client.update_online_evaluation_config(**kwargs)
-        return self._wait_for_online_eval_config_active(
-            response["onlineEvaluationConfigId"],
+        cid = response["onlineEvaluationConfigId"]
+        return wait_until(
+            lambda: self._cp_client.get_online_evaluation_config(
+                onlineEvaluationConfigId=cid,
+            ),
+            "ACTIVE",
+            _ONLINE_EVAL_FAILED_STATUSES,
             wait_config,
-        )
-
-    # Private wait helpers
-    # -------------------------------------------------------------------------
-    def _wait_for_evaluator_active(
-        self,
-        evaluator_id: str,
-        wait_config: Optional[WaitConfig] = None,
-    ) -> Dict[str, Any]:
-        """Poll until an evaluator reaches ACTIVE status."""
-        wait = wait_config or WaitConfig()
-        start_time = time.time()
-        while time.time() - start_time < wait.max_wait:
-            resp = self._cp_client.get_evaluator(evaluatorId=evaluator_id)
-            status = resp.get("status")
-            if status == "ACTIVE":
-                logger.info("Evaluator %s is ACTIVE", evaluator_id)
-                return resp
-            if status in _EVALUATOR_FAILED_STATUSES:
-                raise RuntimeError("Evaluator %s reached %s" % (evaluator_id, status))
-            time.sleep(wait.poll_interval)
-        raise TimeoutError("Evaluator %s did not become ACTIVE within %d seconds" % (evaluator_id, wait.max_wait))
-
-    def _wait_for_online_eval_config_active(
-        self,
-        config_id: str,
-        wait_config: Optional[WaitConfig] = None,
-    ) -> Dict[str, Any]:
-        """Poll until an online evaluation config reaches ACTIVE status."""
-        wait = wait_config or WaitConfig()
-        start_time = time.time()
-        while time.time() - start_time < wait.max_wait:
-            resp = self._cp_client.get_online_evaluation_config(
-                onlineEvaluationConfigId=config_id,
-            )
-            status = resp.get("status")
-            if status == "ACTIVE":
-                logger.info(
-                    "Online evaluation config %s is ACTIVE",
-                    config_id,
-                )
-                return resp
-            if status in _ONLINE_EVAL_FAILED_STATUSES:
-                reason = resp.get("failureReason", "Unknown")
-                raise RuntimeError("Online evaluation config %s reached %s: %s" % (config_id, status, reason))
-            time.sleep(wait.poll_interval)
-        raise TimeoutError(
-            "Online evaluation config %s did not become ACTIVE within %d seconds" % (config_id, wait.max_wait)
+            error_field="failureReason",
         )
