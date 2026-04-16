@@ -29,8 +29,6 @@ from .utils import is_valid_partition
 DEFAULT_PRESIGNED_URL_TIMEOUT = 300
 MAX_PRESIGNED_URL_TIMEOUT = 300
 
-logger = logging.getLogger(__name__)
-
 _RUNTIME_FAILED_STATUSES = {"CREATE_FAILED", "UPDATE_FAILED"}
 _ENDPOINT_FAILED_STATUSES = {"CREATE_FAILED", "UPDATE_FAILED", "DELETE_FAILED"}
 
@@ -87,6 +85,7 @@ class AgentCoreRuntimeClient:
         self.region = region or session.region_name or "us-west-2"
         self.session = session
         self.integration_source = integration_source
+        self.logger = logging.getLogger(__name__)
 
         user_agent_extra = build_user_agent_suffix(integration_source)
         client_config = Config(user_agent_extra=user_agent_extra)
@@ -101,7 +100,7 @@ class AgentCoreRuntimeClient:
             region_name=self.region,
             config=client_config,
         )
-        logger.info(
+        self.logger.info(
             "Initialized AgentCoreRuntimeClient for region: %s",
             self.region,
         )
@@ -112,12 +111,12 @@ class AgentCoreRuntimeClient:
         """Dynamically forward allowlisted method calls to the appropriate boto3 client."""
         if name in self._ALLOWED_DP_METHODS and hasattr(self.dp_client, name):
             method = getattr(self.dp_client, name)
-            logger.debug("Forwarding method '%s' to dp_client", name)
+            self.logger.debug("Forwarding method '%s' to dp_client", name)
             return accept_snake_case_kwargs(method)
 
         if name in self._ALLOWED_CP_METHODS and hasattr(self.cp_client, name):
             method = getattr(self.cp_client, name)
-            logger.debug("Forwarding method '%s' to cp_client", name)
+            self.logger.debug("Forwarding method '%s' to cp_client", name)
             return accept_snake_case_kwargs(method)
 
         raise AttributeError(
@@ -665,7 +664,7 @@ class AgentCoreRuntimeClient:
                 agentRuntimeId=agent_runtime_id,
                 endpointName=endpoint_name,
             )
-            logger.info(
+            self.logger.info(
                 "Deleted endpoint '%s' for runtime %s",
                 endpoint_name,
                 agent_runtime_id,
@@ -673,14 +672,14 @@ class AgentCoreRuntimeClient:
         except ClientError as e:
             if e.response["Error"]["Code"] != "ResourceNotFoundException":
                 raise
-            logger.info("Endpoint '%s' not found, skipping", endpoint_name)
+            self.logger.info("Endpoint '%s' not found, skipping", endpoint_name)
 
         try:
             self.cp_client.delete_agent_runtime(
                 agentRuntimeId=agent_runtime_id,
             )
-            logger.info("Deleted runtime %s", agent_runtime_id)
+            self.logger.info("Deleted runtime %s", agent_runtime_id)
         except ClientError as e:
             if e.response["Error"]["Code"] != "ResourceNotFoundException":
                 raise
-            logger.info("Runtime %s not found, skipping", agent_runtime_id)
+            self.logger.info("Runtime %s not found, skipping", agent_runtime_id)

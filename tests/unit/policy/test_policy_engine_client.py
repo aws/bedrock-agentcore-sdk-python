@@ -156,7 +156,7 @@ class TestGeneratePolicy:
         client.cp_client.list_policy_generation_assets.assert_called_once()
 
     @patch("bedrock_agentcore._utils.polling.time.sleep")
-    @patch("bedrock_agentcore._utils.polling.time.time", side_effect=[0, 0, 1, 1])
+    @patch("bedrock_agentcore._utils.polling.time.time", side_effect=[0, 0, 0, 1, 1])
     def test_generate_policy_polls_through_generating(self, _mock_time, _mock_sleep):
         client = self._make_client()
         client.cp_client.start_policy_generation.return_value = {"policyGenerationId": "gen-123"}
