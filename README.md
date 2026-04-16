@@ -123,7 +123,7 @@ from strands.a2a import StrandsA2AExecutor
 from bedrock_agentcore.runtime import serve_a2a
 
 agent = Agent(model="us.anthropic.claude-sonnet-4-20250514", system_prompt="You are a helpful assistant.")
-serve_a2a(StrandsA2AExecutor(agent))
+serve_a2a(StrandsA2AExecutor(agent)) 
 ```
 
 See [A2A Protocol Examples](docs/examples/a2a_protocol_examples.md) for LangGraph, Google ADK, and advanced usage.
