@@ -77,6 +77,7 @@ def _openai_to_bedrock(openai_msg: dict) -> dict:
     """Convert an OpenAI message dict to Strands-native message shape."""
     role = openai_msg.get("role", "user")
     content_items: list[dict[str, Any]] = []
+    reasoning_items: list[dict[str, Any]] = []
 
     if role == "tool":
         tool_result: dict[str, Any] = {
@@ -119,11 +120,13 @@ def _openai_to_bedrock(openai_msg: dict) -> dict:
 
     for rc in openai_msg.get("_strands_reasoning_content", []):
         if isinstance(rc, dict) and "reasoningContent" in rc:
-            content_items.append(rc)
+            reasoning_items.append(rc)
 
     bedrock_role = "assistant" if role == "assistant" else "user"
 
-    return {"role": bedrock_role, "content": content_items}
+    # Reasoning blocks MUST come first per Bedrock API:
+    # "If an assistant message contains any thinking blocks, the first block must be thinking."
+    return {"role": bedrock_role, "content": reasoning_items + content_items}
 
 
 class OpenAIConverseConverter:
