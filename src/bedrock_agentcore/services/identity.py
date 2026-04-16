@@ -10,7 +10,13 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Union
 import boto3
 from pydantic import BaseModel
 
-from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
+from bedrock_agentcore._utils.config import ListConfig, WaitConfig
+from bedrock_agentcore._utils.endpoints import (
+    get_control_plane_endpoint,
+    get_data_plane_endpoint,
+)
+from bedrock_agentcore._utils.pagination import list_all
+from bedrock_agentcore._utils.snake_case import accept_snake_case_kwargs
 
 
 class TokenPoller(ABC):
@@ -83,15 +89,49 @@ class IdentityClient:
         )
         self.logger = logging.getLogger("bedrock_agentcore.identity_client")
 
-    def create_oauth2_credential_provider(self, req):
-        """Create an OAuth2 credential provider."""
-        self.logger.info("Creating OAuth2 credential provider...")
-        return self.cp_client.create_oauth2_credential_provider(**req)
+    # Pass-through
+    # -------------------------------------------------------------------------
+    _ALLOWED_CP_METHODS = {
+        # OAuth2 credential provider CRUD
+        "create_oauth2_credential_provider",
+        "get_oauth2_credential_provider",
+        "list_oauth2_credential_providers",
+        "update_oauth2_credential_provider",
+        "delete_oauth2_credential_provider",
+        # API key credential provider CRUD
+        "create_api_key_credential_provider",
+        "get_api_key_credential_provider",
+        "list_api_key_credential_providers",
+        "delete_api_key_credential_provider",
+        # Workload identity
+        "get_workload_identity",
+        "update_workload_identity",
+    }
 
-    def create_api_key_credential_provider(self, req):
-        """Create an API key credential provider."""
-        self.logger.info("Creating API key credential provider...")
-        return self.cp_client.create_api_key_credential_provider(**req)
+    _ALLOWED_DP_METHODS = {
+        "get_resource_oauth2_token",
+        "get_resource_api_key",
+        "get_workload_access_token",
+        "get_workload_access_token_for_jwt",
+        "get_workload_access_token_for_user_id",
+    }
+
+    def __getattr__(self, name: str):
+        """Dynamically forward allowlisted method calls to the appropriate boto3 client."""
+        if name in self._ALLOWED_DP_METHODS and hasattr(self.dp_client, name):
+            method = getattr(self.dp_client, name)
+            return accept_snake_case_kwargs(method)
+
+        if name in self._ALLOWED_CP_METHODS and hasattr(self.cp_client, name):
+            method = getattr(self.cp_client, name)
+            return accept_snake_case_kwargs(method)
+
+        raise AttributeError(
+            f"'{self.__class__.__name__}' object has no attribute '{name}'. "
+            f"Method not found on data plane or control plane client. "
+            f"Available methods can be found in the boto3 documentation for "
+            f"'bedrock-agentcore' and 'bedrock-agentcore-control' services."
+        )
 
     def get_workload_access_token(
         self, workload_name: str, user_token: Optional[str] = None, user_id: Optional[str] = None
@@ -122,20 +162,6 @@ class IdentityClient:
         return self.cp_client.create_workload_identity(
             name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls or []
         )
-
-    def update_workload_identity(self, name: str, allowed_resource_oauth_2_return_urls: list[str]) -> Dict:
-        """Update an existing workload identity with allowed resource OAuth2 callback urls."""
-        self.logger.info(
-            "Updating workload identity '%s' with callback urls: %s", name, allowed_resource_oauth_2_return_urls
-        )
-        return self.cp_client.update_workload_identity(
-            name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls
-        )
-
-    def get_workload_identity(self, name: str) -> Dict:
-        """Retrieves information about a workload identity."""
-        self.logger.info("Fetching workload identity '%s'", name)
-        return self.cp_client.get_workload_identity(name=name)
 
     def complete_resource_token_auth(
         self, session_uri: str, user_identifier: Union[UserTokenIdentifier, UserIdIdentifier]
@@ -246,3 +272,106 @@ class IdentityClient:
         req = {"resourceCredentialProviderName": provider_name, "workloadIdentityToken": agent_identity_token}
 
         return self.dp_client.get_resource_api_key(**req)["apiKey"]
+
+    # list_all_* methods
+    # -------------------------------------------------------------------------
+    def list_all_oauth2_credential_providers(
+        self,
+        list_config: Optional[ListConfig] = None,
+        **kwargs,
+    ) -> List[Dict[str, Any]]:
+        """List all OAuth2 credential providers with automatic pagination.
+
+        Args:
+            list_config: Optional ListConfig to control max items returned (default: 100).
+            **kwargs: Additional arguments forwarded to the
+                list_oauth2_credential_providers API.
+
+        Returns:
+            List of OAuth2 credential provider summaries.
+        """
+        return list_all(
+            self.cp_client,
+            "list_oauth2_credential_providers",
+            "credentialProviders",
+            list_config,
+            **kwargs,
+        )
+
+    def list_all_api_key_credential_providers(
+        self,
+        list_config: Optional[ListConfig] = None,
+        **kwargs,
+    ) -> List[Dict[str, Any]]:
+        """List all API key credential providers with automatic pagination.
+
+        Args:
+            list_config: Optional ListConfig to control max items returned (default: 100).
+            **kwargs: Additional arguments forwarded to the
+                list_api_key_credential_providers API.
+
+        Returns:
+            List of API key credential provider summaries.
+        """
+        return list_all(
+            self.cp_client,
+            "list_api_key_credential_providers",
+            "credentialProviders",
+            list_config,
+            **kwargs,
+        )
+
+    # *_and_wait methods
+    # -------------------------------------------------------------------------
+    def create_oauth2_credential_provider_and_wait(
+        self,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Create an OAuth2 credential provider and wait for READY status.
+
+        Args:
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Arguments forwarded to the
+                create_oauth2_credential_provider API.
+
+        Returns:
+            OAuth2 credential provider details when READY.
+
+        Raises:
+            RuntimeError: If the provider reaches a failed state.
+            TimeoutError: If the provider doesn't become READY within max_wait.
+        """
+        response = self.cp_client.create_oauth2_credential_provider(**kwargs)
+        return self._wait_for_oauth2_provider_ready(
+            response["name"],
+            wait_config,
+        )
+
+    # Private helpers
+    # -------------------------------------------------------------------------
+    def _wait_for_oauth2_provider_ready(
+        self,
+        name: str,
+        wait_config: Optional[WaitConfig] = None,
+    ) -> Dict[str, Any]:
+        """Poll until an OAuth2 credential provider reaches READY status."""
+        wait = wait_config or WaitConfig()
+        start_time = time.time()
+        failed = {"CREATE_FAILED", "UPDATE_FAILED", "DELETE_FAILED"}
+        while time.time() - start_time < wait.max_wait:
+            resp = self.cp_client.get_oauth2_credential_provider(name=name)
+            status = resp.get("status")
+            if status == "READY":
+                self.logger.info(
+                    "OAuth2 credential provider '%s' is READY",
+                    name,
+                )
+                return resp
+            if status in failed:
+                reason = resp.get("failureReason", "Unknown")
+                raise RuntimeError("OAuth2 credential provider '%s' reached %s: %s" % (name, status, reason))
+            time.sleep(wait.poll_interval)
+        raise TimeoutError(
+            "OAuth2 credential provider '%s' did not become READY within %d seconds" % (name, wait.max_wait)
+        )
