@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.6.3] - 2026-04-16
+
+### Fixed
+- fix: validate region parameter to prevent SSRF request redirection (#417) (640b3ad)
+
+## [1.6.2] - 2026-04-13
+
+### Fixed
+- fix: make agentcore-worker-loop compatible with OTEL threading instrumentation (#405) (1235897)
+
+### Other Changes
+- fix(ci): increase memory integration test timeout to 15 minutes (#401) (180a7c5)
+
 ## [1.6.1] - 2026-04-10
 
 ### Added

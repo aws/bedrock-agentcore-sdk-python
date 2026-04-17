@@ -21,7 +21,7 @@ from botocore.config import Config
 
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
-from .._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
+from .._utils.endpoints import get_data_plane_endpoint
 from .config import (
     BrowserExtension,
     Certificate,
@@ -68,6 +68,9 @@ class BrowserClient:
                 for telemetry (e.g., 'langchain', 'crewai'). Used to track
                 customer acquisition from different integrations.
         """
+        from bedrock_agentcore._utils.endpoints import CP_ENDPOINT_OVERRIDE, DP_ENDPOINT_OVERRIDE, validate_region
+
+        validate_region(region)
         self.region = region
         self.logger = logging.getLogger(__name__)
         self.integration_source = integration_source
@@ -76,21 +79,17 @@ class BrowserClient:
         user_agent_extra = build_user_agent_suffix(integration_source)
         client_config = Config(user_agent_extra=user_agent_extra)
 
-        # Control plane client for browser management
-        self.control_plane_client = boto3.client(
-            "bedrock-agentcore-control",
-            region_name=region,
-            endpoint_url=get_control_plane_endpoint(region),
-            config=client_config,
-        )
+        # Control plane client — let boto3 resolve endpoint natively.
+        cp_kwargs: dict = {"region_name": region, "config": client_config}
+        if CP_ENDPOINT_OVERRIDE:
+            cp_kwargs["endpoint_url"] = CP_ENDPOINT_OVERRIDE
+        self.control_plane_client = boto3.client("bedrock-agentcore-control", **cp_kwargs)
 
-        # Data plane client for session operations
-        self.data_plane_client = boto3.client(
-            "bedrock-agentcore",
-            region_name=region,
-            endpoint_url=get_data_plane_endpoint(region),
-            config=client_config,
-        )
+        # Data plane client — same pattern.
+        dp_kwargs: dict = {"region_name": region, "config": client_config}
+        if DP_ENDPOINT_OVERRIDE:
+            dp_kwargs["endpoint_url"] = DP_ENDPOINT_OVERRIDE
+        self.data_plane_client = boto3.client("bedrock-agentcore", **dp_kwargs)
 
         self._identifier = None
         self._session_id = None
