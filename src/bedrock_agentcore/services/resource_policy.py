@@ -6,7 +6,7 @@ from typing import Optional, Union
 
 import boto3
 
-from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint
+from bedrock_agentcore._utils.endpoints import CP_ENDPOINT_OVERRIDE
 
 
 class ResourcePolicyClient:
@@ -19,11 +19,10 @@ class ResourcePolicyClient:
     def __init__(self, region: str):
         """Initialize the client for the specified region."""
         self.region = region
-        self.client = boto3.client(
-            "bedrock-agentcore-control",
-            region_name=region,
-            endpoint_url=get_control_plane_endpoint(region),
-        )
+        cp_kwargs: dict = {"region_name": region}
+        if CP_ENDPOINT_OVERRIDE:
+            cp_kwargs["endpoint_url"] = CP_ENDPOINT_OVERRIDE
+        self.client = boto3.client("bedrock-agentcore-control", **cp_kwargs)
         self.logger = logging.getLogger("bedrock_agentcore.resource_policy_client")
 
     def put_resource_policy(self, resource_arn: str, policy: Union[str, dict]) -> dict:

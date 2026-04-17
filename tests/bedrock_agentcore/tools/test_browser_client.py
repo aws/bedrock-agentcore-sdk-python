@@ -26,16 +26,12 @@ from bedrock_agentcore.tools.config import (
 
 
 class TestBrowserClient:
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_init(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_init(self, mock_boto3):
         # Arrange
         mock_control_client = MagicMock()
         mock_data_client = MagicMock()
         mock_boto3.client.side_effect = [mock_control_client, mock_data_client]
-        mock_get_control_endpoint.return_value = "https://mock-control-endpoint.com"
-        mock_get_data_endpoint.return_value = "https://mock-data-endpoint.com"
         region = "us-west-2"
 
         # Act
@@ -46,13 +42,11 @@ class TestBrowserClient:
         mock_boto3.client.assert_any_call(
             "bedrock-agentcore-control",
             region_name=region,
-            endpoint_url="https://mock-control-endpoint.com",
             config=ANY,
         )
         mock_boto3.client.assert_any_call(
             "bedrock-agentcore",
             region_name=region,
-            endpoint_url="https://mock-data-endpoint.com",
             config=ANY,
         )
         assert client.control_plane_client == mock_control_client
@@ -61,16 +55,12 @@ class TestBrowserClient:
         assert client.identifier is None
         assert client.session_id is None
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_init_with_integration_source(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_init_with_integration_source(self, mock_boto3):
         # Arrange
         mock_control_client = MagicMock()
         mock_data_client = MagicMock()
         mock_boto3.client.side_effect = [mock_control_client, mock_data_client]
-        mock_get_control_endpoint.return_value = "https://mock-control-endpoint.com"
-        mock_get_data_endpoint.return_value = "https://mock-data-endpoint.com"
         region = "us-west-2"
         integration_source = "langchain"
 
@@ -81,10 +71,8 @@ class TestBrowserClient:
         assert client.integration_source == integration_source
         assert mock_boto3.client.call_count == 2
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_property_getters_setters(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_property_getters_setters(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -99,10 +87,8 @@ class TestBrowserClient:
         client.session_id = test_session_id
         assert client.session_id == test_session_id
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_create_browser_minimal(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_create_browser_minimal(self, mock_boto3):
         # Arrange
         mock_control_client = MagicMock()
         mock_data_client = MagicMock()
@@ -131,10 +117,8 @@ class TestBrowserClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_create_browser_with_all_options(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_create_browser_with_all_options(self, mock_boto3):
         # Arrange
         mock_control_client = MagicMock()
         mock_data_client = MagicMock()
@@ -182,10 +166,8 @@ class TestBrowserClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_delete_browser(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_delete_browser(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -204,10 +186,8 @@ class TestBrowserClient:
         client.control_plane_client.delete_browser.assert_called_once_with(browserId="test-browser-123")
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_delete_browser_with_client_token(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_delete_browser_with_client_token(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -228,10 +208,8 @@ class TestBrowserClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_get_browser(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_get_browser(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -252,10 +230,8 @@ class TestBrowserClient:
         client.control_plane_client.get_browser.assert_called_once_with(browserId="test-browser-123")
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_list_browsers_default(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_list_browsers_default(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -275,10 +251,8 @@ class TestBrowserClient:
         client.control_plane_client.list_browsers.assert_called_once_with(maxResults=10)
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_list_browsers_with_filters(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_list_browsers_with_filters(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -298,11 +272,9 @@ class TestBrowserClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_defaults(self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_start_with_defaults(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -324,11 +296,9 @@ class TestBrowserClient:
         assert client.identifier == "aws.browser.v1"
         assert client.session_id == "session-123"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_custom_params(self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_start_with_custom_params(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -350,10 +320,8 @@ class TestBrowserClient:
         assert client.identifier == "custom.browser"
         assert client.session_id == "custom-session-123"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_stop_when_session_exists(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_stop_when_session_exists(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -370,10 +338,8 @@ class TestBrowserClient:
         assert client.identifier is None
         assert client.session_id is None
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_stop_when_no_session(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_stop_when_no_session(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -387,10 +353,8 @@ class TestBrowserClient:
         client.data_plane_client.stop_browser_session.assert_not_called()
         assert result is True
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_get_session(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_get_session(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -413,10 +377,8 @@ class TestBrowserClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_get_session_with_params(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_get_session_with_params(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -437,10 +399,8 @@ class TestBrowserClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_get_session_missing_ids(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_get_session_missing_ids(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -449,10 +409,8 @@ class TestBrowserClient:
         with pytest.raises(ValueError, match="Browser ID and Session ID must be provided"):
             client.get_session()
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_list_sessions(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_list_sessions(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -475,10 +433,8 @@ class TestBrowserClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_list_sessions_with_filters(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_list_sessions_with_filters(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -506,10 +462,8 @@ class TestBrowserClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_list_sessions_missing_browser_id(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_list_sessions_missing_browser_id(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -518,10 +472,8 @@ class TestBrowserClient:
         with pytest.raises(ValueError, match="Browser ID must be provided"):
             client.list_sessions()
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_update_stream(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_update_stream(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -538,10 +490,8 @@ class TestBrowserClient:
             streamUpdate={"automationStreamUpdate": {"streamStatus": "DISABLED"}},
         )
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_update_stream_with_params(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_update_stream_with_params(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -556,10 +506,8 @@ class TestBrowserClient:
             streamUpdate={"automationStreamUpdate": {"streamStatus": "ENABLED"}},
         )
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_update_stream_missing_ids(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_update_stream_missing_ids(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -568,7 +516,6 @@ class TestBrowserClient:
         with pytest.raises(ValueError, match="Browser ID and Session ID must be provided"):
             client.update_stream("DISABLED")
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.datetime")
@@ -581,7 +528,6 @@ class TestBrowserClient:
         mock_datetime,
         mock_boto3,
         mock_get_data_endpoint,
-        mock_get_control_endpoint,
     ):
         # Arrange
         mock_boto_session = MagicMock()
@@ -664,10 +610,9 @@ class TestBrowserClient:
         mock_client.start.assert_called_once_with(identifier="custom-browser-123")  # ✅ CORRECT
         mock_client.stop.assert_called_once()
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_get_ws_headers_no_credentials(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_get_ws_headers_no_credentials(self, mock_boto3, mock_get_data_endpoint):
         # Arrange
         mock_boto_session = MagicMock()
         mock_boto_session.get_credentials.return_value = None  # No credentials
@@ -680,10 +625,9 @@ class TestBrowserClient:
         with pytest.raises(RuntimeError, match="No AWS credentials found"):
             client.generate_ws_headers()
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_generate_live_view_url(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_generate_live_view_url(self, mock_boto3, mock_get_data_endpoint):
         # Arrange
         mock_boto_session = MagicMock()
         mock_credentials = MagicMock()
@@ -728,12 +672,9 @@ class TestBrowserClient:
                     expires=MAX_LIVE_VIEW_PRESIGNED_URL_TIMEOUT,
                 )
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_generate_live_view_url_expires_validation_valid(
-        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_generate_live_view_url_expires_validation_valid(self, mock_boto3, mock_get_data_endpoint):
         # Arrange
         client = BrowserClient("us-west-2")
         client.identifier = "test-browser-id"
@@ -767,12 +708,8 @@ class TestBrowserClient:
                 # Assert
                 assert result == "https://api.example.com/signed-url"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_generate_live_view_url_expires_validation_invalid(
-        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_generate_live_view_url_expires_validation_invalid(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -787,10 +724,8 @@ class TestBrowserClient:
             with pytest.raises(ValueError, match=expected_msg):
                 client.generate_live_view_url(expires=invalid_expires)
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_take_control(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_take_control(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -807,10 +742,8 @@ class TestBrowserClient:
             streamUpdate={"automationStreamUpdate": {"streamStatus": "DISABLED"}},
         )
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_release_control(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_release_control(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         client = BrowserClient("us-west-2")
@@ -827,11 +760,9 @@ class TestBrowserClient:
             streamUpdate={"automationStreamUpdate": {"streamStatus": "ENABLED"}},
         )
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_viewport(self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_start_with_viewport(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -887,13 +818,9 @@ class TestBrowserClient:
         mock_client.start.assert_called_once_with(viewport=viewport, identifier="custom-browser")
         mock_client.stop.assert_called_once()
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_proxy_configuration(
-        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_start_with_proxy_configuration(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -934,13 +861,9 @@ class TestBrowserClient:
         assert client.identifier == "aws.browser.v1"
         assert client.session_id == "session-123"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_proxy_configuration_and_viewport(
-        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_start_with_proxy_configuration_and_viewport(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -974,13 +897,9 @@ class TestBrowserClient:
         )
         assert session_id == "session-123"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_proxy_configuration_multiple_proxies(
-        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_start_with_proxy_configuration_multiple_proxies(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -1026,13 +945,9 @@ class TestBrowserClient:
         )
         assert session_id == "session-123"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_without_proxy_configuration_unchanged(
-        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_start_without_proxy_configuration_unchanged(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -1114,11 +1029,9 @@ class TestBrowserClient:
         )
         mock_client.stop.assert_called_once()
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_extensions(self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_start_with_extensions(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -1141,13 +1054,9 @@ class TestBrowserClient:
         )
         assert session_id == "session-123"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_profile_configuration(
-        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_start_with_profile_configuration(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -1170,13 +1079,9 @@ class TestBrowserClient:
         )
         assert session_id == "session-123"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_all_session_params(
-        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_start_with_all_session_params(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -1246,13 +1151,9 @@ class TestBrowserClient:
         mock_client.start.assert_called_once_with(profile_configuration=profile_config)
         mock_client.stop.assert_called_once()
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_proxy_configuration_dataclass(
-        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_start_with_proxy_configuration_dataclass(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -1306,13 +1207,9 @@ class TestBrowserClient:
         )
         assert session_id == "session-123"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_extensions_dataclass(
-        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_start_with_extensions_dataclass(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -1449,13 +1346,9 @@ class TestBrowserClient:
             "viewport": {"width": 1920, "height": 1080},
         }
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_enterprise_policies(
-        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_start_with_enterprise_policies(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -1478,11 +1371,9 @@ class TestBrowserClient:
         )
         assert session_id == "session-123"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_certificates(self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_start_with_certificates(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -1505,13 +1396,9 @@ class TestBrowserClient:
         )
         assert session_id == "session-123"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_enterprise_policies_dataclass(
-        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_start_with_enterprise_policies_dataclass(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -1541,13 +1428,9 @@ class TestBrowserClient:
         )
         assert session_id == "session-123"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
     @patch("bedrock_agentcore.tools.browser_client.uuid.uuid4")
-    def test_start_with_certificates_dataclass(
-        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_start_with_certificates_dataclass(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
         mock_uuid4.return_value.hex = "12345678abcdef"
@@ -1572,12 +1455,8 @@ class TestBrowserClient:
         )
         assert session_id == "session-123"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_create_browser_with_enterprise_policies(
-        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_create_browser_with_enterprise_policies(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
 
@@ -1603,10 +1482,8 @@ class TestBrowserClient:
         )
         assert response["browserId"] == "browser-123"
 
-    @patch("bedrock_agentcore.tools.browser_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.browser_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.browser_client.boto3")
-    def test_create_browser_with_certificates(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_create_browser_with_certificates(self, mock_boto3):
         # Arrange
         mock_boto3.client.return_value = MagicMock()
 

@@ -43,6 +43,9 @@ class AgentCoreRuntimeClient:
             session (Optional[boto3.Session]): Optional boto3 session. If not provided,
                 a new session will be created using default credentials.
         """
+        from .._utils.endpoints import validate_region
+
+        validate_region(region)
         self.region = region
         self.logger = logging.getLogger(__name__)
 

@@ -14,7 +14,7 @@ from typing import Any, Dict, Generator, List, Optional, Union
 import boto3
 from botocore.config import Config
 
-from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint, get_data_plane_endpoint
+from bedrock_agentcore._utils.endpoints import CP_ENDPOINT_OVERRIDE, DP_ENDPOINT_OVERRIDE
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
 from .config import Certificate
@@ -102,21 +102,18 @@ class CodeInterpreter:
         # Data plane config (preserve existing read_timeout)
         data_config = Config(read_timeout=300, user_agent_extra=user_agent_extra)
 
-        # Control plane client for interpreter management
-        self.control_plane_client = session.client(
-            "bedrock-agentcore-control",
-            region_name=region,
-            endpoint_url=get_control_plane_endpoint(region),
-            config=control_config,
-        )
+        # Control plane client — let boto3 resolve endpoint natively (includes region validation).
+        # Only pass endpoint_url when an environment override is set.
+        cp_kwargs: dict = {"region_name": region, "config": control_config}
+        if CP_ENDPOINT_OVERRIDE:
+            cp_kwargs["endpoint_url"] = CP_ENDPOINT_OVERRIDE
+        self.control_plane_client = session.client("bedrock-agentcore-control", **cp_kwargs)
 
-        # Data plane client for session operations
-        self.data_plane_client = session.client(
-            "bedrock-agentcore",
-            region_name=region,
-            endpoint_url=get_data_plane_endpoint(region),
-            config=data_config,
-        )
+        # Data plane client — same pattern.
+        dp_kwargs: dict = {"region_name": region, "config": data_config}
+        if DP_ENDPOINT_OVERRIDE:
+            dp_kwargs["endpoint_url"] = DP_ENDPOINT_OVERRIDE
+        self.data_plane_client = session.client("bedrock-agentcore", **dp_kwargs)
 
         self._identifier = None
         self._session_id = None
