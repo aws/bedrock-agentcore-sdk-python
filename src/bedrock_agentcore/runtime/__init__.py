@@ -4,22 +4,17 @@ This package contains the core runtime components for Bedrock AgentCore applicat
 - BedrockAgentCoreApp: Main application class
 - RequestContext: HTTP request context
 - BedrockAgentCoreContext: Agent identity context
-- AgentCoreRuntimeHttpClient: Bearer-token HTTP client for invoking a deployed runtime
-- AgentRuntimeError: Exception raised by the HTTP client
+- AgentCoreRuntimeClient: Authentication + HTTP invocation client for deployed runtimes
+- AgentRuntimeError: Exception raised by the HTTP invocation methods
 """
 
-from .agent_core_runtime_client import AgentCoreRuntimeClient
-from .agent_core_runtime_http_client import (
-    AgentCoreRuntimeHttpClient,
-    AgentRuntimeError,
-)
+from .agent_core_runtime_client import AgentCoreRuntimeClient, AgentRuntimeError
 from .app import BedrockAgentCoreApp
 from .context import BedrockAgentCoreContext, RequestContext
 from .models import PingStatus
 
 __all__ = [
     "AgentCoreRuntimeClient",
-    "AgentCoreRuntimeHttpClient",
     "AgentRuntimeError",
     "AGUIApp",
     "BedrockAgentCoreApp",

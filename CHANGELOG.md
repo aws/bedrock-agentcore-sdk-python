@@ -3,8 +3,8 @@
 ## [Unreleased]
 
 ### Added
-- feat(runtime): add AgentCoreRuntimeHttpClient for bearer-token HTTP invocation, SSE streaming, and the InvokeAgentRuntimeCommand shell-exec API (alongside existing AgentCoreRuntimeClient for WebSocket URLs)
-- feat(runtime): add AgentRuntimeError exception raised by the HTTP client on non-2xx responses and in-band SSE error events
+- feat(runtime): add HTTP invocation methods (`invoke`, `invoke_streaming`, `invoke_streaming_async`) and `InvokeAgentRuntimeCommand` shell-exec support (`execute_command`, `execute_command_streaming`) to `AgentCoreRuntimeClient`, plus `stop_runtime_session`. Methods take `runtime_arn` and `bearer_token` per-call, matching `generate_ws_connection_oauth`. The `urllib3.PoolManager` is lazy-initialized so SigV4 URL-generation users pay no cost.
+- feat(runtime): add `AgentRuntimeError` exception raised by the HTTP methods on non-2xx responses and in-band SSE error events.
 
 ## [1.6.3] - 2026-04-16
 
