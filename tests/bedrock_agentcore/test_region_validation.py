@@ -219,7 +219,9 @@ class TestClientConstructorValidation:
     """Tests that all client constructors reject malicious regions early."""
 
     def test_agent_core_runtime_client_rejects_bad_region(self):
-        with pytest.raises(InvalidRegionError):
+        from botocore.exceptions import InvalidRegionError as BotocoreInvalidRegionError
+
+        with pytest.raises(BotocoreInvalidRegionError):
             from bedrock_agentcore.runtime.agent_core_runtime_client import AgentCoreRuntimeClient
 
             AgentCoreRuntimeClient("x@attacker.com:443/#")
