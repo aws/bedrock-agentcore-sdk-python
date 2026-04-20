@@ -39,8 +39,10 @@ jobs:
             exit 0
           fi
 
-          # Try to merge public/main
-          if git merge public/main -m "chore: sync main with public/main"; then
+          # Merge but exclude .github/workflows/ (token lacks workflow permission)
+          if git merge public/main --no-commit --no-ff; then
+            git checkout HEAD -- .github/workflows/ 2>/dev/null || true
+            git commit -m "chore: sync main with public/main"
             git push origin main
             echo "✅ main synced successfully"
           else
@@ -62,6 +64,7 @@ jobs:
             git checkout -b "$conflict_branch"
 
             git merge public/main --no-commit --no-ff || true
+            git checkout HEAD -- .github/workflows/ 2>/dev/null || true
             git add -A
             git commit -m "chore: sync main with public/main (conflicts present)
 

