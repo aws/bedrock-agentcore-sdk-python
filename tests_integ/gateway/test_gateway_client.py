@@ -161,7 +161,7 @@ class TestGatewayTargetClient:
             except Exception as e:
                 print(f"Failed to delete gateway {cls.gateway_id}: {e}")
 
-    @pytest.mark.order(1)
+    @pytest.mark.order(9)
     def test_create_gateway_target_and_wait(self):
         target = self.client.create_gateway_target_and_wait(
             gatewayIdentifier=self.gateway_id,
@@ -189,7 +189,7 @@ class TestGatewayTargetClient:
         self.__class__.target_ids.append(target["targetId"])
         assert target["status"] == "READY"
 
-    @pytest.mark.order(2)
+    @pytest.mark.order(10)
     def test_get_gateway_target_passthrough(self):
         if not self.target_ids:
             pytest.skip("prerequisite test did not create target")
@@ -199,7 +199,7 @@ class TestGatewayTargetClient:
         )
         assert target["status"] == "READY"
 
-    @pytest.mark.order(3)
+    @pytest.mark.order(11)
     def test_get_gateway_target_by_name(self):
         if not self.target_ids:
             pytest.skip("prerequisite test did not create target")
@@ -210,14 +210,14 @@ class TestGatewayTargetClient:
         assert target is not None
         assert target["targetId"] == self.target_ids[0]
 
-    @pytest.mark.order(4)
+    @pytest.mark.order(12)
     def test_list_gateway_targets_passthrough(self):
         targets = self.client.list_gateway_targets(
             gatewayIdentifier=self.gateway_id,
         )
         assert "items" in targets
 
-    @pytest.mark.order(5)
+    @pytest.mark.order(13)
     def test_update_gateway_target_and_wait(self):
         if not self.target_ids:
             pytest.skip("prerequisite test did not create target")
@@ -248,7 +248,7 @@ class TestGatewayTargetClient:
         )
         assert updated["status"] == "READY"
 
-    @pytest.mark.order(6)
+    @pytest.mark.order(14)
     def test_get_gateway_target_by_name_not_found(self):
         result = self.client.get_gateway_target_by_name(
             gateway_identifier=self.gateway_id,
@@ -256,7 +256,7 @@ class TestGatewayTargetClient:
         )
         assert result is None
 
-    @pytest.mark.order(7)
+    @pytest.mark.order(15)
     def test_delete_gateway_target_and_wait(self):
         if not self.target_ids:
             pytest.skip("prerequisite test did not create target")
