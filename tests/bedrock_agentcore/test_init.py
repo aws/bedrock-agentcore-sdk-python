@@ -7,7 +7,10 @@ def test_getattr_raises_for_unknown_attribute():
     """Test that __getattr__ raises AttributeError for unknown attributes."""
     import bedrock_agentcore
 
-    with pytest.raises(AttributeError, match="module 'bedrock_agentcore' has no attribute 'UnknownAttribute'"):
+    with pytest.raises(
+        AttributeError,
+        match="module 'bedrock_agentcore' has no attribute 'UnknownAttribute'",
+    ):
         _ = bedrock_agentcore.UnknownAttribute
 
 

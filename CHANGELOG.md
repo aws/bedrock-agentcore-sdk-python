@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- feat(runtime): add AgentCoreRuntimeHttpClient for bearer-token HTTP invocation, SSE streaming, and the InvokeAgentRuntimeCommand shell-exec API (alongside existing AgentCoreRuntimeClient for WebSocket URLs)
+- feat(runtime): add AgentRuntimeError exception raised by the HTTP client on non-2xx responses and in-band SSE error events
+
 ## [1.6.3] - 2026-04-16
 
 ### Fixed

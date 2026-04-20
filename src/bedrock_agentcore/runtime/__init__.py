@@ -4,15 +4,23 @@ This package contains the core runtime components for Bedrock AgentCore applicat
 - BedrockAgentCoreApp: Main application class
 - RequestContext: HTTP request context
 - BedrockAgentCoreContext: Agent identity context
+- AgentCoreRuntimeHttpClient: Bearer-token HTTP client for invoking a deployed runtime
+- AgentRuntimeError: Exception raised by the HTTP client
 """
 
 from .agent_core_runtime_client import AgentCoreRuntimeClient
+from .agent_core_runtime_http_client import (
+    AgentCoreRuntimeHttpClient,
+    AgentRuntimeError,
+)
 from .app import BedrockAgentCoreApp
 from .context import BedrockAgentCoreContext, RequestContext
 from .models import PingStatus
 
 __all__ = [
     "AgentCoreRuntimeClient",
+    "AgentCoreRuntimeHttpClient",
+    "AgentRuntimeError",
     "AGUIApp",
     "BedrockAgentCoreApp",
     "BedrockCallContextBuilder",
@@ -29,7 +37,12 @@ __all__ = [
 
 def __getattr__(name: str):
     """Lazy imports for A2A and AG-UI symbols so optional dependencies are not required at import time."""
-    _a2a_exports = {"BedrockCallContextBuilder", "build_a2a_app", "build_runtime_url", "serve_a2a"}
+    _a2a_exports = {
+        "BedrockCallContextBuilder",
+        "build_a2a_app",
+        "build_runtime_url",
+        "serve_a2a",
+    }
     if name in _a2a_exports:
         from . import a2a as _a2a_module
 
