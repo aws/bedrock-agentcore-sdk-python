@@ -628,8 +628,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             Optional[SessionMessage]: The message if found, None otherwise.
 
         Note:
-            This is primarily used internally by the `update_message` method to read
-            the original event before replacing it.
+            This reads a single event by ID from AgentCore Memory.
         """
         result = self.memory_client.gmdp_client.get_event(
             memoryId=self.config.memory_id, actorId=self.config.actor_id, sessionId=session_id, eventId=message_id
@@ -681,6 +680,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             logger.error("Failed to update message in AgentCore Memory: %s", e)
             raise SessionException(f"Failed to update message: {e}") from e
 
+        new_event_id = new_event.get("eventId") if new_event else None
+        if not new_event_id:
+            logger.warning(
+                "create_message did not return an eventId — skipping delete of old event %s", old_message_id
+            )
+            return
+
         # Delete the old event; if this fails, roll back the newly created event
         try:
             self.memory_client.gmdp_client.delete_event(
@@ -695,32 +701,29 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 old_message_id,
                 delete_error,
             )
-            new_event_id = new_event.get("eventId") if new_event else None
-            if new_event_id:
-                try:
-                    self.memory_client.gmdp_client.delete_event(
-                        memoryId=self.config.memory_id,
-                        actorId=self.config.actor_id,
-                        sessionId=session_id,
-                        eventId=new_event_id,
-                    )
-                    logger.info("Rolled back new event %s after failed delete of old event", new_event_id)
-                except Exception as rollback_error:
-                    logger.error(
-                        "Rollback failed: could not delete new event %s: %s. Both old (%s) and new events may exist.",
-                        new_event_id,
-                        rollback_error,
-                        old_message_id,
-                    )
+            try:
+                self.memory_client.gmdp_client.delete_event(
+                    memoryId=self.config.memory_id,
+                    actorId=self.config.actor_id,
+                    sessionId=session_id,
+                    eventId=new_event_id,
+                )
+                logger.info("Rolled back new event %s after failed delete of old event", new_event_id)
+            except Exception as rollback_error:
+                logger.error(
+                    "Rollback failed: could not delete new event %s: %s. Both old (%s) and new events may exist.",
+                    new_event_id,
+                    rollback_error,
+                    old_message_id,
+                )
             raise SessionException(
                 f"Failed to update message: could not delete old event: {delete_error}"
             ) from delete_error
 
         # Update _latest_agent_message so it doesn't hold a stale eventId
-        new_event_id = new_event.get("eventId") if new_event else None
         latest_messages = getattr(self, "_latest_agent_message", None)
-        if new_event_id and latest_messages and agent_id in latest_messages:
-            old_latest = latest_messages[agent_id]
+        if latest_messages and agent_id in latest_messages:
+            old_latest = self._latest_agent_message[agent_id]
             if old_latest.message_id == old_message_id:
                 self._latest_agent_message[agent_id] = SessionMessage(
                     message=session_message.message,
@@ -987,6 +990,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         with self._message_lock:
             messages_to_send = list(self._message_buffer)
+            self._message_buffer.clear()
 
         if not messages_to_send:
             return []
@@ -1039,11 +1043,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                     event.get("eventId"),
                 )
 
-            # Clear message buffer only after ALL messages succeed
-            with self._message_lock:
-                self._message_buffer.clear()
-
         except Exception as e:
+            # Restore messages to buffer so they aren't lost
+            with self._message_lock:
+                self._message_buffer.extend(messages_to_send)
             logger.error("Failed to flush messages to AgentCore Memory: %s", e)
             raise SessionException(f"Failed to flush messages: {e}") from e
 
