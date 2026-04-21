@@ -682,9 +682,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         new_event_id = new_event.get("eventId") if new_event else None
         if not new_event_id:
-            logger.warning(
-                "create_message did not return an eventId — skipping delete of old event %s", old_message_id
-            )
+            logger.warning("create_message did not return an eventId — skipping delete of old event %s", old_message_id)
             return
 
         # Delete the old event; if this fails, roll back the newly created event
