@@ -853,11 +853,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 top_k=retrieval_config.top_k,
             )
             if retrieval_config.relevance_score:
-                memories = [
-                    m
-                    for m in memories
-                    if m.get("relevanceScore", retrieval_config.relevance_score) >= retrieval_config.relevance_score
-                ]
+                memories = [m for m in memories if m.get("score", 0.0) >= retrieval_config.relevance_score]
             context_items = []
             for memory in memories:
                 if isinstance(memory, dict):
