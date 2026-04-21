@@ -35,6 +35,12 @@ class BedrockAgentCoreContext:
     _request_id: ContextVar[Optional[str]] = ContextVar("request_id")
     _session_id: ContextVar[Optional[str]] = ContextVar("session_id")
     _request_headers: ContextVar[Optional[Dict[str, str]]] = ContextVar("request_headers")
+    _routing_experiment_arn: ContextVar[Optional[str]] = ContextVar(
+        "routing_experiment_arn", default=None
+    )
+    _routing_experiment_variant: ContextVar[Optional[str]] = ContextVar(
+        "routing_experiment_variant", default=None
+    )
 
     # Config bundle — ref identifies the bundle for this request.
     # _bundle_fetcher is the lru_cache-wrapped app._resolve_bundle_config(ref),
@@ -103,6 +109,22 @@ class BedrockAgentCoreContext:
             return cls._request_headers.get()
         except LookupError:
             return None
+
+    @classmethod
+    def set_routing_experiment(cls, arn: Optional[str], variant: Optional[str]) -> None:
+        """Store routing experiment identifiers for the current request."""
+        cls._routing_experiment_arn.set(arn)
+        cls._routing_experiment_variant.set(variant)
+
+    @classmethod
+    def get_routing_experiment_arn(cls) -> Optional[str]:
+        """Return the routing experiment ARN for the current request, or None."""
+        return cls._routing_experiment_arn.get()
+
+    @classmethod
+    def get_routing_experiment_variant(cls) -> Optional[str]:
+        """Return the routing experiment variant name for the current request, or None."""
+        return cls._routing_experiment_variant.get()
 
     @classmethod
     def set_config_bundle_ref(cls, ref: Optional[ConfigBundleRef]) -> None:

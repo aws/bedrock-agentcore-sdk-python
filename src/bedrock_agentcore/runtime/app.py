@@ -33,6 +33,8 @@ from .context import BedrockAgentCoreContext, RequestContext
 from .models import (
     ACCESS_TOKEN_HEADER,
     AUTHORIZATION_HEADER,
+    BAGGAGE_KEY_EXPERIMENT_ARN,
+    BAGGAGE_KEY_EXPERIMENT_VARIANT,
     CUSTOM_HEADER_PREFIX,
     OAUTH2_CALLBACK_URL_HEADER,
     REQUEST_ID_HEADER,
@@ -44,6 +46,7 @@ from .models import (
     TASK_ACTION_PING_STATUS,
     PingStatus,
 )
+from .tracing import _ensure_baggage_processor_registered
 from .utils import convert_complex_objects
 
 # Sentinel so we only parse OTEL_RESOURCE_ATTRIBUTES once per process.
@@ -201,6 +204,11 @@ class BedrockAgentCoreApp(Starlette):
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
             self.logger.setLevel(logging.DEBUG if self.debug else logging.INFO)
+
+        # Register early so the ASGI entry span (POST /invocations) gets stamped.
+        # In the managed runtime ADOT sets up the TracerProvider before __init__ runs,
+        # so this call lands on the real provider rather than the no-op default.
+        _ensure_baggage_processor_registered()
 
     def entrypoint(self, func: Callable) -> Callable:
         """Decorator to register a function as the main entrypoint.
@@ -421,17 +429,19 @@ class BedrockAgentCoreApp(Starlette):
             if request_headers:
                 BedrockAgentCoreContext.set_request_headers(request_headers)
 
-            # Extract config bundle reference from OTEL baggage
+            # Parse baggage once; reuse for both config bundle and routing experiment.
+            all_baggage: dict = {}
+            bundle_ref = None
             try:
-                bundle_ref = _parse_config_bundle_baggage(_extract_baggage(headers))
+                all_baggage = _extract_baggage(headers)
+                bundle_ref = _parse_config_bundle_baggage(all_baggage)
             except Exception as e:
                 self.logger.warning(
-                    "Failed to parse config bundle baggage: %s: %s — raw baggage: %r",
+                    "Failed to parse baggage: %s: %s — raw baggage: %r",
                     type(e).__name__,
                     e,
                     headers.get("baggage", ""),
                 )
-                bundle_ref = None
 
             if bundle_ref is not None:
                 self.logger.info("Received config bundle ref: %s", bundle_ref.bundle_id)
@@ -443,6 +453,13 @@ class BedrockAgentCoreApp(Starlette):
                 self.logger.debug("No config bundle ref found in request baggage")
                 BedrockAgentCoreContext.set_config_bundle_ref(None)
                 BedrockAgentCoreContext._clear_bundle_loader()
+
+            experiment_arn = next(iter(all_baggage.get(BAGGAGE_KEY_EXPERIMENT_ARN, [])), None)
+            experiment_variant = next(iter(all_baggage.get(BAGGAGE_KEY_EXPERIMENT_VARIANT, [])), None)
+            BedrockAgentCoreContext.set_routing_experiment(experiment_arn, experiment_variant)
+            # Re-registers if the TracerProvider was replaced after __init__ ran
+            # (e.g. a framework calling set_tracer_provider during first-request setup).
+            _ensure_baggage_processor_registered()
 
             # Get the headers from context to pass to RequestContext
             req_headers = BedrockAgentCoreContext.get_request_headers()
