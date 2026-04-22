@@ -152,7 +152,7 @@ class BedrockAgentCoreContext:
         cls._bundle_fetcher.set(None)
 
     @classmethod
-    def get_bundle_config(cls) -> Dict[str, Any]:
+    def get_config_bundle(cls) -> Dict[str, Any]:
         """Return this runtime's config from the current request's bundle.
 
         Fetches from the API on the first call for a given bundle version, then

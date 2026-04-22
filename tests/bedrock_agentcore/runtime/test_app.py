@@ -2811,7 +2811,7 @@ class TestConfigBundleBaggageParsing:
 
         @app.entrypoint
         def handler(payload):
-            return BedrockAgentCoreContext.get_bundle_config()
+            return BedrockAgentCoreContext.get_config_bundle()
 
         with patch.object(app, "_config_client", mock_client):
             client = TestClient(app)
