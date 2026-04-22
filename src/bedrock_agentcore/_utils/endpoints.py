@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 # Environment-configurable constants with fallback defaults
 DP_ENDPOINT_OVERRIDE = os.getenv("BEDROCK_AGENTCORE_DP_ENDPOINT")
 CP_ENDPOINT_OVERRIDE = os.getenv("BEDROCK_AGENTCORE_CP_ENDPOINT")
-DEFAULT_REGION = os.getenv("AWS_REGION", "us-west-2")
+DEFAULT_REGION = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-west-2"
 
 # Regex for valid AWS region names (e.g., us-east-1, eu-west-2, cn-north-1, us-gov-west-1).
 # Uses \A and \Z anchors to prevent newline injection bypass that $ allows.

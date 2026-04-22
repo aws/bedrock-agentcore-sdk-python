@@ -293,7 +293,7 @@ class TestBedrockAgentCoreContextConfigBundles:
         assert result2 == ref2
 
     def test_get_config_returns_empty_when_no_loader(self):
-        result = self._fresh_context().run(BedrockAgentCoreContext.get_bundle_config)
+        result = self._fresh_context().run(BedrockAgentCoreContext.get_config_bundle)
         assert result == {}
 
     def test_get_config_calls_fetcher(self):
@@ -302,7 +302,7 @@ class TestBedrockAgentCoreContextConfigBundles:
 
         def run():
             BedrockAgentCoreContext._set_bundle_loader(fetcher)
-            return BedrockAgentCoreContext.get_bundle_config()
+            return BedrockAgentCoreContext.get_config_bundle()
 
         result = self._fresh_context().run(run)
 
@@ -317,7 +317,7 @@ class TestBedrockAgentCoreContextConfigBundles:
 
         def run():
             BedrockAgentCoreContext._set_bundle_loader(fetcher)
-            return BedrockAgentCoreContext.get_bundle_config()
+            return BedrockAgentCoreContext.get_config_bundle()
 
         result1 = self._fresh_context().run(run)
         result2 = self._fresh_context().run(run)
@@ -329,7 +329,7 @@ class TestBedrockAgentCoreContextConfigBundles:
     def test_clear_bundle_loader_returns_empty(self):
         def run():
             BedrockAgentCoreContext._clear_bundle_loader()
-            return BedrockAgentCoreContext.get_bundle_config()
+            return BedrockAgentCoreContext.get_config_bundle()
 
         result = self._fresh_context().run(run)
         assert result == {}
