@@ -32,44 +32,54 @@ class TestIdentityClient:
             )
 
     def test_create_oauth2_credential_provider(self):
-        """Test OAuth2 credential provider creation."""
+        """Test OAuth2 credential provider creation via passthrough."""
         region = "us-west-2"
 
         with patch("boto3.client") as mock_boto_client:
-            mock_client = Mock()
-            mock_boto_client.return_value = mock_client
+            mock_cp_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
 
             identity_client = IdentityClient(region)
 
-            # Test data
-            req = {"name": "test-provider", "clientId": "test-client"}
             expected_response = {"providerId": "test-provider-id"}
-            mock_client.create_oauth2_credential_provider.return_value = expected_response
+            mock_cp_client.create_oauth2_credential_provider.return_value = expected_response
 
-            result = identity_client.create_oauth2_credential_provider(req)
+            result = identity_client.create_oauth2_credential_provider(
+                name="test-provider",
+                clientId="test-client",
+            )
 
             assert result == expected_response
-            mock_client.create_oauth2_credential_provider.assert_called_once_with(**req)
+            mock_cp_client.create_oauth2_credential_provider.assert_called_once_with(
+                name="test-provider",
+                clientId="test-client",
+            )
 
     def test_create_api_key_credential_provider(self):
-        """Test API key credential provider creation."""
+        """Test API key credential provider creation via passthrough."""
         region = "us-west-2"
 
         with patch("boto3.client") as mock_boto_client:
-            mock_client = Mock()
-            mock_boto_client.return_value = mock_client
+            mock_cp_client = Mock()
+            mock_dp_client = Mock()
+            mock_boto_client.side_effect = [mock_cp_client, mock_dp_client]
 
             identity_client = IdentityClient(region)
 
-            # Test data
-            req = {"name": "test-api-provider", "apiKeyName": "test-key"}
             expected_response = {"providerId": "test-api-provider-id"}
-            mock_client.create_api_key_credential_provider.return_value = expected_response
+            mock_cp_client.create_api_key_credential_provider.return_value = expected_response
 
-            result = identity_client.create_api_key_credential_provider(req)
+            result = identity_client.create_api_key_credential_provider(
+                name="test-api-provider",
+                apiKeyName="test-key",
+            )
 
             assert result == expected_response
-            mock_client.create_api_key_credential_provider.assert_called_once_with(**req)
+            mock_cp_client.create_api_key_credential_provider.assert_called_once_with(
+                name="test-api-provider",
+                apiKeyName="test-key",
+            )
 
     @pytest.mark.asyncio
     async def test_get_token_direct_response(self):
@@ -505,11 +515,15 @@ class TestIdentityClient:
 
             mock_cp_client.update_workload_identity.return_value = expected_response
 
-            result = identity_client.update_workload_identity(workload_name, allowed_urls)
+            result = identity_client.update_workload_identity(
+                name=workload_name,
+                allowedResourceOauth2ReturnUrls=allowed_urls,
+            )
 
             assert result == expected_response
             mock_cp_client.update_workload_identity.assert_called_once_with(
-                name=workload_name, allowedResourceOauth2ReturnUrls=allowed_urls
+                name=workload_name,
+                allowedResourceOauth2ReturnUrls=allowed_urls,
             )
 
     def test_get_workload_identity(self):
@@ -523,15 +537,16 @@ class TestIdentityClient:
             identity_client = IdentityClient(region)
 
             workload_name = "test-workload"
-            allowed_urls = ["https://unit-test.com/callback", "https://test.com/oauth"]
-            expected_response = {"name": workload_name, "allowedResourceOauth2ReturnUrls": allowed_urls}
+            expected_response = {"name": workload_name}
 
             mock_cp_client.get_workload_identity.return_value = expected_response
 
-            result = identity_client.get_workload_identity(workload_name)
+            result = identity_client.get_workload_identity(name=workload_name)
 
             assert result == expected_response
-            mock_cp_client.get_workload_identity.assert_called_once_with(name=workload_name)
+            mock_cp_client.get_workload_identity.assert_called_once_with(
+                name=workload_name,
+            )
 
     def test_complete_resource_token_auth_with_user_id(self):
         region = "us-west-2"
