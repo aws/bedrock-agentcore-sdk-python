@@ -156,11 +156,11 @@ class GatewayClient:
             TimeoutError: If the target doesn't become READY within max_wait.
         """
         response = self.cp_client.create_gateway_target(**convert_kwargs(kwargs))
-        gw_arn = response["gatewayArn"]
+        gw_id = response["gatewayArn"].rsplit("/", 1)[-1]
         target_id = response["targetId"]
         return wait_until(
             lambda: self.cp_client.get_gateway_target(
-                gatewayIdentifier=gw_arn,
+                gatewayIdentifier=gw_id,
                 targetId=target_id,
             ),
             "READY",
@@ -184,11 +184,11 @@ class GatewayClient:
             TimeoutError: If the target doesn't become READY within max_wait.
         """
         response = self.cp_client.update_gateway_target(**convert_kwargs(kwargs))
-        gw_arn = response["gatewayArn"]
+        gw_id = response["gatewayArn"].rsplit("/", 1)[-1]
         target_id = response["targetId"]
         return wait_until(
             lambda: self.cp_client.get_gateway_target(
-                gatewayIdentifier=gw_arn,
+                gatewayIdentifier=gw_id,
                 targetId=target_id,
             ),
             "READY",
@@ -232,11 +232,11 @@ class GatewayClient:
             TimeoutError: If the target isn't deleted within max_wait.
         """
         response = self.cp_client.delete_gateway_target(**convert_kwargs(kwargs))
-        gw_arn = response["gatewayArn"]
+        gw_id = response["gatewayArn"].rsplit("/", 1)[-1]
         target_id = response["targetId"]
         wait_until_deleted(
             lambda: self.cp_client.get_gateway_target(
-                gatewayIdentifier=gw_arn,
+                gatewayIdentifier=gw_id,
                 targetId=target_id,
             ),
             wait_config=wait_config,
