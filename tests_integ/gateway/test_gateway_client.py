@@ -241,6 +241,9 @@ class TestGatewayTargetClient:
                     }
                 },
             },
+            credentialProviderConfigurations=[
+                {"credentialProviderType": "GATEWAY_IAM_ROLE"},
+            ],
             description="updated by integ test",
         )
         assert updated["status"] == "READY"
