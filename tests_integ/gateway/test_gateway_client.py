@@ -23,7 +23,7 @@ class TestGatewayClient:
         cls.region = os.environ.get("BEDROCK_TEST_REGION", "us-west-2")
         cls.role_arn = os.environ.get("GATEWAY_ROLE_ARN")
         if not cls.role_arn:
-            pytest.skip("GATEWAY_ROLE_ARN not set")
+            pytest.fail("GATEWAY_ROLE_ARN must be set")
         cls.client = GatewayClient(region_name=cls.region)
         cls.test_prefix = f"sdk-integ-{int(time.time())}"
         cls.gateway_ids = []
@@ -100,6 +100,7 @@ class TestGatewayClient:
             description="updated by integ test",
         )
         assert updated["status"] == "READY"
+        assert updated.get("description") == "updated by integ test"
 
     @pytest.mark.order(8)
     def test_delete_gateway_and_wait(self):
@@ -125,10 +126,8 @@ class TestGatewayTargetClient:
         cls.region = os.environ.get("BEDROCK_TEST_REGION", "us-west-2")
         cls.role_arn = os.environ.get("GATEWAY_ROLE_ARN")
         cls.lambda_arn = os.environ.get("GATEWAY_LAMBDA_ARN")
-        if not cls.role_arn:
-            pytest.skip("GATEWAY_ROLE_ARN not set")
-        if not cls.lambda_arn:
-            pytest.skip("GATEWAY_LAMBDA_ARN not set")
+        if not cls.role_arn or not cls.lambda_arn:
+            pytest.fail("GATEWAY_ROLE_ARN and GATEWAY_LAMBDA_ARN must be set")
         cls.client = GatewayClient(region_name=cls.region)
         cls.test_prefix = f"sdk-integ-tgt-{int(time.time())}"
         cls.gateway_id = None
