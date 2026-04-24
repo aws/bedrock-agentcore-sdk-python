@@ -111,7 +111,6 @@ class IdentityClient:
     _ALLOWED_DP_METHODS = {
         "get_resource_oauth2_token",
         "get_resource_api_key",
-        "get_workload_access_token",
         "get_workload_access_token_for_jwt",
         "get_workload_access_token_for_user_id",
     }
