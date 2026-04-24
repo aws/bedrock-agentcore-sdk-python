@@ -19,7 +19,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from .._utils.config import WaitConfig
-from .._utils.endpoints import get_data_plane_endpoint
+from .._utils.endpoints import get_data_plane_endpoint, validate_region
 from .._utils.polling import wait_until, wait_until_deleted
 from .._utils.snake_case import accept_snake_case_kwargs, convert_kwargs
 from .._utils.user_agent import build_user_agent_suffix
@@ -81,7 +81,7 @@ class AgentCoreRuntimeClient:
                 telemetry.
         """
         session = session if session else boto3.Session()
-        self.region = region or session.region_name or "us-west-2"
+        self.region = validate_region(region or session.region_name or "us-west-2")
         self.session = session
         self.integration_source = integration_source
         self.logger = logging.getLogger(__name__)
@@ -572,13 +572,11 @@ class AgentCoreRuntimeClient:
             TimeoutError: If the endpoint doesn't become READY within
                 max_wait.
         """
+        converted = convert_kwargs(kwargs)
         response = self.cp_client.create_agent_runtime_endpoint(
-            **convert_kwargs(kwargs),
+            **converted,
         )
-        rid = kwargs.get(
-            "agentRuntimeId",
-            convert_kwargs(kwargs).get("agentRuntimeId"),
-        )
+        rid = converted.get("agentRuntimeId")
         ename = response.get("name", kwargs.get("name", "DEFAULT"))
         return wait_until(
             lambda: self.cp_client.get_agent_runtime_endpoint(
@@ -611,13 +609,11 @@ class AgentCoreRuntimeClient:
             TimeoutError: If the endpoint doesn't become READY within
                 max_wait.
         """
+        converted = convert_kwargs(kwargs)
         response = self.cp_client.update_agent_runtime_endpoint(
-            **convert_kwargs(kwargs),
+            **converted,
         )
-        rid = kwargs.get(
-            "agentRuntimeId",
-            convert_kwargs(kwargs).get("agentRuntimeId"),
-        )
+        rid = converted.get("agentRuntimeId")
         ename = response.get("name", kwargs.get("endpointName", "DEFAULT"))
         return wait_until(
             lambda: self.cp_client.get_agent_runtime_endpoint(
