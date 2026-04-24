@@ -6,6 +6,7 @@ import time
 import pytest
 from botocore.exceptions import ClientError
 
+from bedrock_agentcore._utils.polling import wait_until_deleted
 from bedrock_agentcore.services.identity import IdentityClient
 
 
@@ -128,11 +129,8 @@ class TestIdentityClientOauth2Crud:
         self.client.delete_oauth2_credential_provider(
             name=self.provider_name,
         )
-        # Provider may take a moment to delete
-        import time
-
-        time.sleep(5)
-        with pytest.raises(ClientError):
-            self.client.get_oauth2_credential_provider(
+        wait_until_deleted(
+            lambda: self.client.get_oauth2_credential_provider(
                 name=self.provider_name,
-            )
+            ),
+        )
