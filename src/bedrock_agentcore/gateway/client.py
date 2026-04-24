@@ -258,10 +258,10 @@ class GatewayClient:
         Returns:
             Gateway details from get_gateway, or None if not found.
         """
-        kwargs = convert_kwargs(kwargs)
-        kwargs.pop("nextToken", None)
+        params = convert_kwargs(kwargs)
+        params.pop("nextToken", None)
         while True:
-            response = self.cp_client.list_gateways(**kwargs)
+            response = self.cp_client.list_gateways(**params)
             for gw in response.get("items", []):
                 if gw.get("name") == name:
                     return self.cp_client.get_gateway(
@@ -269,7 +269,7 @@ class GatewayClient:
                     )
             if not response.get("nextToken"):
                 return None
-            kwargs["nextToken"] = response["nextToken"]
+            params["nextToken"] = response["nextToken"]
 
     def get_gateway_target_by_name(self, gateway_identifier: str, name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Look up a gateway target by name.
@@ -286,11 +286,11 @@ class GatewayClient:
         Returns:
             Gateway target details from get_gateway_target, or None if not found.
         """
-        kwargs = convert_kwargs(kwargs)
-        kwargs.pop("nextToken", None)
-        kwargs["gatewayIdentifier"] = gateway_identifier
+        params = convert_kwargs(kwargs)
+        params.pop("nextToken", None)
+        params["gatewayIdentifier"] = gateway_identifier
         while True:
-            response = self.cp_client.list_gateway_targets(**kwargs)
+            response = self.cp_client.list_gateway_targets(**params)
             for target in response.get("items", []):
                 if target.get("name") == name:
                     return self.cp_client.get_gateway_target(
@@ -299,4 +299,4 @@ class GatewayClient:
                     )
             if not response.get("nextToken"):
                 return None
-            kwargs["nextToken"] = response["nextToken"]
+            params["nextToken"] = response["nextToken"]
