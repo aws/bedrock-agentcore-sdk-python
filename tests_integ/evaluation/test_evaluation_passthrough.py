@@ -107,6 +107,7 @@ class TestEvaluatorCrud:
             description="updated by integ test",
         )
         assert updated["status"] == "ACTIVE"
+        assert updated.get("description") == "updated by integ test"
 
     @pytest.mark.order(9)
     def test_delete_evaluator_and_wait(self):
@@ -182,6 +183,7 @@ class TestOnlineEvaluationConfigCrud:
             description="updated by integ test",
         )
         assert updated["status"] == "ACTIVE"
+        assert updated.get("description") == "updated by integ test"
 
     @pytest.mark.order(13)
     def test_delete_online_eval_config_and_wait(self):

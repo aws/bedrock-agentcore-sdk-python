@@ -21,7 +21,6 @@ QUERY_TIMEOUT_SECONDS = 60
 POLL_INTERVAL_SECONDS = 2
 
 _EVALUATOR_FAILED_STATUSES = {"CREATE_FAILED", "UPDATE_FAILED"}
-_ONLINE_EVAL_FAILED_STATUSES = {"CREATE_FAILED", "UPDATE_FAILED"}
 
 
 class ReferenceInputs(BaseModel):
@@ -477,7 +476,7 @@ class EvaluationClient:
                 onlineEvaluationConfigId=cid,
             ),
             "ACTIVE",
-            _ONLINE_EVAL_FAILED_STATUSES,
+            _EVALUATOR_FAILED_STATUSES,
             wait_config,
             error_field="failureReason",
         )
@@ -507,7 +506,7 @@ class EvaluationClient:
                 onlineEvaluationConfigId=cid,
             ),
             "ACTIVE",
-            _ONLINE_EVAL_FAILED_STATUSES,
+            _EVALUATOR_FAILED_STATUSES,
             wait_config,
             error_field="failureReason",
         )
