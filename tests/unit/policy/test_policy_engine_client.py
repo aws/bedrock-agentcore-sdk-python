@@ -412,7 +412,7 @@ class TestCreateOrGet:
         client.cp_client.create_policy_engine.side_effect = self._conflict_error()
         client.cp_client.list_policy_engines.return_value = {"policyEngines": []}
 
-        with pytest.raises(ClientError):
+        with pytest.raises(RuntimeError, match="already exists but could not be found"):
             client.create_or_get_policy_engine(name="ghost-engine")
 
     def test_create_or_get_policy_creates_new(self):

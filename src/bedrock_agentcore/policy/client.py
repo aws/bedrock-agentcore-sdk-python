@@ -443,7 +443,7 @@ class PolicyEngineClient:
             logger.info("Policy engine '%s' already exists, looking up...", name)
             engine_id = self._find_policy_engine_by_name(name)
             if not engine_id:
-                raise
+                raise RuntimeError(f"Policy engine '{name}' already exists but could not be found by name.") from e
 
         return wait_until(
             lambda: self.cp_client.get_policy_engine(policyEngineId=engine_id),
@@ -501,7 +501,7 @@ class PolicyEngineClient:
             logger.info("Policy '%s' already exists, looking up...", name)
             policy_id = self._find_policy_by_name(policy_engine_id, name)
             if not policy_id:
-                raise
+                raise RuntimeError(f"Policy '{name}' already exists but could not be found by name.") from e
 
         return wait_until(
             lambda: self.cp_client.get_policy(
