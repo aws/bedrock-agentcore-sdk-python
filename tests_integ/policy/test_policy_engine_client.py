@@ -3,7 +3,6 @@
 import os
 import time
 
-import boto3
 import pytest
 from botocore.exceptions import ClientError
 
@@ -21,26 +20,20 @@ class TestPolicyEngineClient:
         cls.test_prefix = f"sdk_integ_{int(time.time())}"
         cls.engine_ids = []
         cls.policy_ids = []
-        sts = boto3.client("sts", region_name=cls.region)
-        account_id = sts.get_caller_identity()["Account"]
-        cls.gateway_resource_arn = f"arn:aws:bedrock-agentcore:{cls.region}:{account_id}:gateway/*"
 
     @classmethod
     def teardown_class(cls):
         for engine_id, policy_id in cls.policy_ids:
             try:
-                cls.client.delete_policy(
+                cls.client.delete_policy_and_wait(
                     policyEngineId=engine_id,
                     policyId=policy_id,
                 )
             except Exception as e:
                 print(f"Failed to delete policy {policy_id}: {e}")
-        # Wait for policy deletes to complete before deleting engines
-        if cls.policy_ids:
-            time.sleep(15)
         for engine_id in cls.engine_ids:
             try:
-                cls.client.delete_policy_engine(
+                cls.client.delete_policy_engine_and_wait(
                     policyEngineId=engine_id,
                 )
             except Exception as e:
@@ -82,6 +75,7 @@ class TestPolicyEngineClient:
             description={"optionalValue": "updated by integ test"},
         )
         assert updated["status"] == "ACTIVE"
+        assert updated.get("description") == "updated by integ test"
 
     @pytest.mark.order(5)
     def test_create_policy_and_wait(self):
@@ -124,6 +118,31 @@ class TestPolicyEngineClient:
         assert "policies" in policies
 
     @pytest.mark.order(9)
+    def test_create_or_get_policy_engine(self):
+        if not self.engine_ids:
+            pytest.skip("prerequisite test did not create engine")
+        # Call create_or_get with the same name — should return existing
+        engine = self.client.create_or_get_policy_engine(
+            name=f"{self.test_prefix}_engine",
+        )
+        assert engine["policyEngineId"] == self.engine_ids[0]
+        assert engine["status"] == "ACTIVE"
+
+    @pytest.mark.order(10)
+    def test_create_or_get_policy(self):
+        if not self.engine_ids or not self.policy_ids:
+            pytest.skip("prerequisite tests did not create resources")
+        engine_id, existing_policy_id = self.policy_ids[0]
+        # Call create_or_get with the same name — should return existing
+        policy = self.client.create_or_get_policy(
+            policy_engine_id=engine_id,
+            name=f"{self.test_prefix}_policy",
+            definition={"cedar": {"statement": ("permit(principal, action, resource is AgentCore::Gateway);")}},
+        )
+        assert policy["policyId"] == existing_policy_id
+        assert policy["status"] == "ACTIVE"
+
+    @pytest.mark.order(11)
     def test_delete_policy_and_wait(self):
         if not self.policy_ids:
             pytest.skip("prerequisite test did not create policy")
@@ -132,14 +151,13 @@ class TestPolicyEngineClient:
             policyEngineId=engine_id,
             policyId=policy_id,
         )
-        # Verify it's gone
         with pytest.raises(ClientError):
             self.client.get_policy(
                 policyEngineId=engine_id,
                 policyId=policy_id,
             )
 
-    @pytest.mark.order(10)
+    @pytest.mark.order(12)
     def test_delete_policy_engine_and_wait(self):
         if not self.engine_ids:
             pytest.skip("prerequisite test did not create engine")
@@ -147,6 +165,5 @@ class TestPolicyEngineClient:
         self.client.delete_policy_engine_and_wait(
             policyEngineId=engine_id,
         )
-        # Verify it's gone
         with pytest.raises(ClientError):
             self.client.get_policy_engine(policyEngineId=engine_id)
