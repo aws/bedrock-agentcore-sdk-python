@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.4] - 2026-04-23
+
+### Added
+- feat: add utility methods for primitive clients (#424) (d3537c6)
+
+### Fixed
+- fix: use correct score field for relevance filtering in retrieve_customer_context (#415) (e632e9d)
+- fix: implement update_message() for guardrail redaction support (#388) (9ba4512)
+
+### Other Changes
+- fix(converters): prepend reasoningContent blocks in _openai_to_bedrock() (#419) (667ef55)
+
 ## [1.6.3] - 2026-04-16
 
 ### Fixed
