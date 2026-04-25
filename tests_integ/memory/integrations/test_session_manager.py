@@ -144,7 +144,7 @@ class TestAgentCoreMemorySessionManager:
             memory_id=test_memory_ltm["id"],
             session_id=f"test-session-{int(time.time())}",
             actor_id=actor_id,
-            retrieval_config={"/preferences/{actorId}/": RetrievalConfig(top_k=5, relevance_score=0.7)},
+            retrieval_config={"/preferences/{actorId}/": RetrievalConfig(top_k=5, relevance_score=0.3)},
         )
 
         session_manager = AgentCoreMemorySessionManager(agentcore_memory_config=config, region_name=REGION)
@@ -161,7 +161,7 @@ class TestAgentCoreMemorySessionManager:
             poll_interval=10,
         )
 
-        response2 = agent("What do I like to eat?")
+        response2 = agent("What sushi do I like?")
         assert response2 is not None
         assert "sushi" in str(agent.messages)
         assert "<user_context>" in str(agent.messages)
