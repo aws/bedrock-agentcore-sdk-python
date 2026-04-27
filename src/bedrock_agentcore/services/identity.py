@@ -93,19 +93,14 @@ class IdentityClient:
     # -------------------------------------------------------------------------
     _ALLOWED_CP_METHODS = {
         # OAuth2 credential provider CRUD
-        "create_oauth2_credential_provider",
         "get_oauth2_credential_provider",
         "list_oauth2_credential_providers",
         "update_oauth2_credential_provider",
         "delete_oauth2_credential_provider",
         # API key credential provider CRUD
-        "create_api_key_credential_provider",
         "get_api_key_credential_provider",
         "list_api_key_credential_providers",
         "delete_api_key_credential_provider",
-        # Workload identity
-        "get_workload_identity",
-        "update_workload_identity",
     }
 
     _ALLOWED_DP_METHODS = {
@@ -131,6 +126,16 @@ class IdentityClient:
             f"Available methods can be found in the boto3 documentation for "
             f"'bedrock-agentcore' and 'bedrock-agentcore-control' services."
         )
+
+    def create_oauth2_credential_provider(self, req):
+        """Create an OAuth2 credential provider."""
+        self.logger.info("Creating OAuth2 credential provider...")
+        return self.cp_client.create_oauth2_credential_provider(**req)
+
+    def create_api_key_credential_provider(self, req):
+        """Create an API key credential provider."""
+        self.logger.info("Creating API key credential provider...")
+        return self.cp_client.create_api_key_credential_provider(**req)
 
     def get_workload_access_token(
         self, workload_name: str, user_token: Optional[str] = None, user_id: Optional[str] = None
@@ -161,6 +166,20 @@ class IdentityClient:
         return self.cp_client.create_workload_identity(
             name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls or []
         )
+
+    def update_workload_identity(self, name: str, allowed_resource_oauth_2_return_urls: list[str]) -> Dict:
+        """Update an existing workload identity with allowed resource OAuth2 callback urls."""
+        self.logger.info(
+            "Updating workload identity '%s' with callback urls: %s", name, allowed_resource_oauth_2_return_urls
+        )
+        return self.cp_client.update_workload_identity(
+            name=name, allowedResourceOauth2ReturnUrls=allowed_resource_oauth_2_return_urls
+        )
+
+    def get_workload_identity(self, name: str) -> Dict:
+        """Retrieves information about a workload identity."""
+        self.logger.info("Fetching workload identity '%s'", name)
+        return self.cp_client.get_workload_identity(name=name)
 
     def complete_resource_token_auth(
         self, session_uri: str, user_identifier: Union[UserTokenIdentifier, UserIdIdentifier]

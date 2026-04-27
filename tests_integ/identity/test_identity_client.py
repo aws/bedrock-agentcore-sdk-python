@@ -100,17 +100,19 @@ class TestIdentityClientOauth2Crud:
     @pytest.mark.order(10)
     def test_create_oauth2_credential_provider(self):
         self.client.create_oauth2_credential_provider(
-            name=self.provider_name,
-            credentialProviderVendor="CustomOauth2",
-            oauth2ProviderConfigInput={
-                "customOauth2ProviderConfig": {
-                    "oauthDiscovery": {
-                        "discoveryUrl": self.discovery_url,
-                    },
-                    "clientId": self.client_id,
-                    "clientSecret": self.client_secret,
-                }
-            },
+            {
+                "name": self.provider_name,
+                "credentialProviderVendor": "CustomOauth2",
+                "oauth2ProviderConfigInput": {
+                    "customOauth2ProviderConfig": {
+                        "oauthDiscovery": {
+                            "discoveryUrl": self.discovery_url,
+                        },
+                        "clientId": self.client_id,
+                        "clientSecret": self.client_secret,
+                    }
+                },
+            }
         )
         provider = self.client.get_oauth2_credential_provider(
             name=self.provider_name,

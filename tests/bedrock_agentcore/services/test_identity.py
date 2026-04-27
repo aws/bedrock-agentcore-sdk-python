@@ -32,7 +32,7 @@ class TestIdentityClient:
             )
 
     def test_create_oauth2_credential_provider(self):
-        """Test OAuth2 credential provider creation via passthrough."""
+        """Test OAuth2 credential provider creation."""
         region = "us-west-2"
 
         with patch("boto3.client") as mock_boto_client:
@@ -45,10 +45,8 @@ class TestIdentityClient:
             expected_response = {"providerId": "test-provider-id"}
             mock_cp_client.create_oauth2_credential_provider.return_value = expected_response
 
-            result = identity_client.create_oauth2_credential_provider(
-                name="test-provider",
-                clientId="test-client",
-            )
+            req = {"name": "test-provider", "clientId": "test-client"}
+            result = identity_client.create_oauth2_credential_provider(req)
 
             assert result == expected_response
             mock_cp_client.create_oauth2_credential_provider.assert_called_once_with(
@@ -57,7 +55,7 @@ class TestIdentityClient:
             )
 
     def test_create_api_key_credential_provider(self):
-        """Test API key credential provider creation via passthrough."""
+        """Test API key credential provider creation."""
         region = "us-west-2"
 
         with patch("boto3.client") as mock_boto_client:
@@ -70,10 +68,8 @@ class TestIdentityClient:
             expected_response = {"providerId": "test-api-provider-id"}
             mock_cp_client.create_api_key_credential_provider.return_value = expected_response
 
-            result = identity_client.create_api_key_credential_provider(
-                name="test-api-provider",
-                apiKeyName="test-key",
-            )
+            req = {"name": "test-api-provider", "apiKeyName": "test-key"}
+            result = identity_client.create_api_key_credential_provider(req)
 
             assert result == expected_response
             mock_cp_client.create_api_key_credential_provider.assert_called_once_with(
@@ -517,7 +513,7 @@ class TestIdentityClient:
 
             result = identity_client.update_workload_identity(
                 name=workload_name,
-                allowedResourceOauth2ReturnUrls=allowed_urls,
+                allowed_resource_oauth_2_return_urls=allowed_urls,
             )
 
             assert result == expected_response
