@@ -138,6 +138,21 @@ jobs:
             timeout: 5
             extra-deps: ""
             ignore: ""
+          - group: policy
+            path: tests_integ/policy
+            timeout: 15
+            extra-deps: ""
+            ignore: ""
+          - group: gateway
+            path: tests_integ/gateway
+            timeout: 15
+            extra-deps: ""
+            ignore: ""
+          - group: identity
+            path: tests_integ/identity/test_identity_client.py
+            timeout: 15
+            extra-deps: ""
+            ignore: ""
     steps:
       - name: Configure Credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -172,6 +187,15 @@ jobs:
           MEMORY_PREPOPULATED_ID: ${{ secrets.MEMORY_PREPOPULATED_ID }}
           RESOURCE_POLICY_TEST_ARN: ${{ secrets.RESOURCE_POLICY_TEST_ARN }}
           RESOURCE_POLICY_TEST_PRINCIPAL: ${{ secrets.RESOURCE_POLICY_TEST_PRINCIPAL }}
+          GATEWAY_ROLE_ARN: ${{ secrets.GATEWAY_ROLE_ARN }}
+          GATEWAY_LAMBDA_ARN: ${{ secrets.GATEWAY_LAMBDA_ARN }}
+          EVAL_ROLE_ARN: ${{ secrets.EVAL_ROLE_ARN }}
+          EVAL_LOG_GROUP: ${{ secrets.EVAL_LOG_GROUP }}
+          RUNTIME_ROLE_ARN: ${{ secrets.RUNTIME_ROLE_ARN }}
+          RUNTIME_S3_CODE_URI: ${{ secrets.RUNTIME_S3_CODE_URI }}
+          COGNITO_POOL_ID: ${{ secrets.COGNITO_POOL_ID }}
+          COGNITO_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID }}
+          COGNITO_CLIENT_SECRET: ${{ secrets.COGNITO_CLIENT_SECRET }}
         id: tests
         timeout-minutes: ${{ matrix.timeout }}
         run: |
