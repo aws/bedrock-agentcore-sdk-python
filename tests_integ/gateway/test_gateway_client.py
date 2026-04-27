@@ -97,6 +97,7 @@ class TestGatewayClient:
             name=f"{self.test_prefix}-gw",
             roleArn=self.role_arn,
             authorizerType="NONE",
+            protocolType="MCP",
             description="updated by integ test",
         )
         assert updated["status"] == "READY"
