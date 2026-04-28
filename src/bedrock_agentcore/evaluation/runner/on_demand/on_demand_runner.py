@@ -11,12 +11,13 @@ from botocore.config import Config
 
 from bedrock_agentcore.evaluation.agent_span_collector import AgentSpanCollector
 
-from ..dataset_types import Dataset, PredefinedScenario, Scenario
+from ..dataset_types import Dataset, PredefinedScenario, Scenario, SimulatedScenario
 from ..invoker_types import AgentInvokerFn
 from ..scenario_executor import (
     PredefinedScenarioExecutor,
     ScenarioExecutionResult,
     ScenarioExecutor,
+    SimulatedScenarioExecutor,
 )
 from .config import EvaluationRunConfig
 from .result import EvaluationResult, EvaluatorResult, ScenarioResult
@@ -45,6 +46,7 @@ class OnDemandEvaluationDatasetRunner:
         self._cache_lock = threading.Lock()
         self._scenario_executors: Dict[type, type[ScenarioExecutor]] = {
             PredefinedScenario: PredefinedScenarioExecutor,
+            SimulatedScenario: SimulatedScenarioExecutor,
         }
 
     def run(
@@ -85,7 +87,7 @@ class OnDemandEvaluationDatasetRunner:
             logger.info("Phase 1: Invoking %d scenario(s)", num_scenarios)
             invoke_futures = {}
             for idx, scenario in enumerate(dataset.scenarios):
-                future = pool.submit(self._run_scenario, scenario, agent_invoker)
+                future = pool.submit(self._run_scenario, config, scenario, agent_invoker)
                 invoke_futures[idx] = (scenario, future)
 
             # Collect invocation results
@@ -177,6 +179,7 @@ class OnDemandEvaluationDatasetRunner:
 
     def _run_scenario(
         self,
+        config: EvaluationRunConfig,
         scenario: Scenario,
         agent_invoker: AgentInvokerFn,
     ) -> ScenarioExecutionResult:
@@ -184,7 +187,12 @@ class OnDemandEvaluationDatasetRunner:
         executor_cls = self._scenario_executors.get(type(scenario))
         if executor_cls is None:
             raise TypeError(f"No runner registered for scenario type: {type(scenario).__name__}")
-        executor = executor_cls(agent_invoker=agent_invoker)
+
+        kwargs: Dict[str, Any] = {"agent_invoker": agent_invoker}
+        if isinstance(scenario, SimulatedScenario):
+            kwargs["simulation_config"] = config.simulation_config
+
+        executor = executor_cls(**kwargs)
         return executor.run_scenario(scenario)
 
     # --- Step 2: Collect Spans ---
