@@ -10,7 +10,11 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Union
 import boto3
 from pydantic import BaseModel
 
-from bedrock_agentcore._utils.endpoints import CP_ENDPOINT_OVERRIDE, DP_ENDPOINT_OVERRIDE
+from bedrock_agentcore._utils.endpoints import (
+    CP_ENDPOINT_OVERRIDE,
+    DP_ENDPOINT_OVERRIDE,
+)
+from bedrock_agentcore._utils.snake_case import accept_snake_case_kwargs
 
 
 class TokenPoller(ABC):
@@ -84,6 +88,44 @@ class IdentityClient:
             dp_kwargs["endpoint_url"] = DP_ENDPOINT_OVERRIDE
         self.dp_client = boto3.client("bedrock-agentcore", **dp_kwargs)
         self.logger = logging.getLogger("bedrock_agentcore.identity_client")
+
+    # Pass-through
+    # -------------------------------------------------------------------------
+    _ALLOWED_CP_METHODS = {
+        # OAuth2 credential provider CRUD
+        "get_oauth2_credential_provider",
+        "list_oauth2_credential_providers",
+        "update_oauth2_credential_provider",
+        "delete_oauth2_credential_provider",
+        # API key credential provider CRUD
+        "get_api_key_credential_provider",
+        "list_api_key_credential_providers",
+        "delete_api_key_credential_provider",
+    }
+
+    _ALLOWED_DP_METHODS = {
+        "get_resource_oauth2_token",
+        "get_resource_api_key",
+        "get_workload_access_token_for_jwt",
+        "get_workload_access_token_for_user_id",
+    }
+
+    def __getattr__(self, name: str):
+        """Dynamically forward allowlisted method calls to the appropriate boto3 client."""
+        if name in self._ALLOWED_DP_METHODS and hasattr(self.dp_client, name):
+            method = getattr(self.dp_client, name)
+            return accept_snake_case_kwargs(method)
+
+        if name in self._ALLOWED_CP_METHODS and hasattr(self.cp_client, name):
+            method = getattr(self.cp_client, name)
+            return accept_snake_case_kwargs(method)
+
+        raise AttributeError(
+            f"'{self.__class__.__name__}' object has no attribute '{name}'. "
+            f"Method not found on data plane or control plane client. "
+            f"Available methods can be found in the boto3 documentation for "
+            f"'bedrock-agentcore' and 'bedrock-agentcore-control' services."
+        )
 
     def create_oauth2_credential_provider(self, req):
         """Create an OAuth2 credential provider."""

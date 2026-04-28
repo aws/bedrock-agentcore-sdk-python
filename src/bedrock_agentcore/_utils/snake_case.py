@@ -44,3 +44,8 @@ def accept_snake_case_kwargs(method: Callable[..., Any]) -> Callable[..., Any]:
         return method(*args, **converted)
 
     return wrapper
+
+
+def convert_kwargs(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert snake_case kwargs to camelCase for direct boto3 calls."""
+    return {snake_to_camel(k): v for k, v in kwargs.items()}
