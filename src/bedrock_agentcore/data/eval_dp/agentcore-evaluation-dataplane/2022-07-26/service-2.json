@@ -17,7 +17,7 @@
       "name":"CreateABTest",
       "http":{
         "method":"POST",
-        "requestUri":"/abtests",
+        "requestUri":"/ab-tests",
         "responseCode":202
       },
       "input":{"shape":"CreateABTestRequest"},
@@ -36,7 +36,7 @@
       "name":"DeleteABTest",
       "http":{
         "method":"DELETE",
-        "requestUri":"/abtests/{abTestId}",
+        "requestUri":"/ab-tests/{abTestId}",
         "responseCode":202
       },
       "input":{"shape":"DeleteABTestRequest"},
@@ -56,8 +56,8 @@
       "name":"DeleteBatchEvaluation",
       "http":{
         "method":"DELETE",
-        "requestUri":"/evaluations/batch-evaluate/{batchEvaluateId}",
-        "responseCode":200
+        "requestUri":"/evaluations/batch-evaluate/{batchEvaluationId}",
+        "responseCode":202
       },
       "input":{"shape":"DeleteBatchEvaluationRequest"},
       "output":{"shape":"DeleteBatchEvaluationResponse"},
@@ -116,7 +116,7 @@
       "name":"GetABTest",
       "http":{
         "method":"GET",
-        "requestUri":"/abtests/{abTestId}",
+        "requestUri":"/ab-tests/{abTestId}",
         "responseCode":200
       },
       "input":{"shape":"GetABTestRequest"},
@@ -135,30 +135,11 @@
       "name":"GetBatchEvaluation",
       "http":{
         "method":"GET",
-        "requestUri":"/evaluations/batch-evaluate/{batchEvaluateId}",
+        "requestUri":"/evaluations/batch-evaluate/{batchEvaluationId}",
         "responseCode":200
       },
       "input":{"shape":"GetBatchEvaluationRequest"},
       "output":{"shape":"GetBatchEvaluationResponse"},
-      "errors":[
-        {"shape":"UnauthorizedException"},
-        {"shape":"ValidationException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ThrottlingException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"}
-      ],
-      "readonly":true
-    },
-    "GetEvaluationJobResult":{
-      "name":"GetEvaluationJobResult",
-      "http":{
-        "method":"GET",
-        "requestUri":"/evaluation-jobs/{jobId}/runs/{runId}",
-        "responseCode":200
-      },
-      "input":{"shape":"GetEvaluationJobResultRequest"},
-      "output":{"shape":"GetEvaluationJobResultResponse"},
       "errors":[
         {"shape":"UnauthorizedException"},
         {"shape":"ValidationException"},
@@ -191,7 +172,7 @@
       "name":"ListABTests",
       "http":{
         "method":"GET",
-        "requestUri":"/abtests",
+        "requestUri":"/ab-tests",
         "responseCode":200
       },
       "input":{"shape":"ListABTestsRequest"},
@@ -223,24 +204,6 @@
       ],
       "readonly":true
     },
-    "ListEvaluationJobResults":{
-      "name":"ListEvaluationJobResults",
-      "http":{
-        "method":"GET",
-        "requestUri":"/evaluation-jobs/{jobId}/runs",
-        "responseCode":200
-      },
-      "input":{"shape":"ListEvaluationJobResultsRequest"},
-      "output":{"shape":"ListEvaluationJobResultsResponse"},
-      "errors":[
-        {"shape":"UnauthorizedException"},
-        {"shape":"ValidationException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ThrottlingException"},
-        {"shape":"InternalServerException"}
-      ],
-      "readonly":true
-    },
     "ListRecommendations":{
       "name":"ListRecommendations",
       "http":{
@@ -258,25 +221,6 @@
       ],
       "readonly":true
     },
-    "RunEvaluationJob":{
-      "name":"RunEvaluationJob",
-      "http":{
-        "method":"POST",
-        "requestUri":"/evaluation-jobs/{jobId}/runs",
-        "responseCode":202
-      },
-      "input":{"shape":"RunEvaluationJobRequest"},
-      "output":{"shape":"RunEvaluationJobResponse"},
-      "errors":[
-        {"shape":"UnauthorizedException"},
-        {"shape":"ValidationException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ConflictException"},
-        {"shape":"ThrottlingException"},
-        {"shape":"InternalServerException"}
-      ],
-      "idempotent":true
-    },
     "StartBatchEvaluation":{
       "name":"StartBatchEvaluation",
       "http":{
@@ -287,6 +231,7 @@
       "input":{"shape":"StartBatchEvaluationRequest"},
       "output":{"shape":"StartBatchEvaluationResponse"},
       "errors":[
+        {"shape":"ServiceQuotaExceededException"},
         {"shape":"UnauthorizedException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
@@ -318,7 +263,7 @@
       "name":"StopBatchEvaluation",
       "http":{
         "method":"POST",
-        "requestUri":"/evaluations/batch-evaluate/{batchEvaluateId}/stop",
+        "requestUri":"/evaluations/batch-evaluate/{batchEvaluationId}/stop",
         "responseCode":202
       },
       "input":{"shape":"StopBatchEvaluationRequest"},
@@ -333,30 +278,11 @@
         {"shape":"InternalServerException"}
       ]
     },
-    "StopEvaluationJobRun":{
-      "name":"StopEvaluationJobRun",
-      "http":{
-        "method":"POST",
-        "requestUri":"/evaluation-jobs/{jobId}/runs/{runId}/stop",
-        "responseCode":200
-      },
-      "input":{"shape":"StopEvaluationJobRunRequest"},
-      "output":{"shape":"StopEvaluationJobRunResponse"},
-      "errors":[
-        {"shape":"UnauthorizedException"},
-        {"shape":"ValidationException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ConflictException"},
-        {"shape":"ThrottlingException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"}
-      ]
-    },
     "UpdateABTest":{
       "name":"UpdateABTest",
       "http":{
         "method":"PUT",
-        "requestUri":"/abtests/{abTestId}",
+        "requestUri":"/ab-tests/{abTestId}",
         "responseCode":202
       },
       "input":{"shape":"UpdateABTestRequest"},
@@ -386,17 +312,19 @@
     },
     "ABTestEvaluationConfig":{
       "type":"structure",
-      "required":["onlineEvaluationConfigArn"],
       "members":{
-        "onlineEvaluationConfigArn":{"shape":"OnlineEvaluationConfigArn"}
-      }
+        "onlineEvaluationConfigArn":{"shape":"OnlineEvaluationConfigArn"},
+        "perVariantOnlineEvaluationConfig":{"shape":"PerVariantOnlineEvaluationConfigList"}
+      },
+      "union":true
     },
     "ABTestExecutionStatus":{
       "type":"string",
       "enum":[
         "PAUSED",
         "RUNNING",
-        "STOPPED"
+        "STOPPED",
+        "NOT_STARTED"
       ]
     },
     "ABTestId":{
@@ -424,7 +352,8 @@
         "UPDATING",
         "UPDATE_FAILED",
         "DELETING",
-        "DELETE_FAILED"
+        "DELETE_FAILED",
+        "FAILED"
       ]
     },
     "ABTestSummary":{
@@ -445,7 +374,7 @@
         "status":{"shape":"ABTestStatus"},
         "executionStatus":{"shape":"ABTestExecutionStatus"},
         "description":{"shape":"ABTestDescription"},
-        "gatewayArn":{"shape":"String"},
+        "gatewayArn":{"shape":"GatewayArn"},
         "createdAt":{"shape":"Timestamp"},
         "updatedAt":{"shape":"Timestamp"}
       }
@@ -473,50 +402,63 @@
       },
       "union":true
     },
-    "BatchEvaluateArn":{
+    "BatchEvaluationArn":{
       "type":"string",
       "documentation":"<p>ARN for a batch evaluation</p>"
     },
-    "BatchEvaluateId":{
+    "BatchEvaluationDescription":{
       "type":"string",
-      "documentation":"<p>Unique identifier for a batch evaluation (UUID)</p>",
-      "pattern":"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
+      "max":200,
+      "min":0
     },
-    "BatchEvaluateStatus":{
+    "BatchEvaluationId":{
+      "type":"string",
+      "documentation":"<p>Unique identifier for a batch evaluation (name-prefixed format)</p>",
+      "pattern":"[a-zA-Z][a-zA-Z0-9-_]{0,99}-[a-zA-Z0-9]{10}"
+    },
+    "BatchEvaluationName":{
+      "type":"string",
+      "documentation":"<p>Human-readable name for a batch evaluation</p>",
+      "pattern":"[a-zA-Z][a-zA-Z0-9_]{0,47}"
+    },
+    "BatchEvaluationStatus":{
       "type":"string",
       "enum":[
         "PENDING",
         "IN_PROGRESS",
         "COMPLETED",
+        "COMPLETED_WITH_ERRORS",
         "FAILED",
         "STOPPING",
-        "STOPPED"
+        "STOPPED",
+        "DELETING"
       ]
     },
-    "BatchEvaluateSummary":{
+    "BatchEvaluationSummary":{
       "type":"structure",
       "required":[
-        "batchEvaluateId",
-        "batchEvaluateArn",
-        "name",
+        "batchEvaluationId",
+        "batchEvaluationArn",
+        "batchEvaluationName",
         "status",
         "createdAt"
       ],
       "members":{
-        "batchEvaluateId":{"shape":"BatchEvaluateId"},
-        "batchEvaluateArn":{"shape":"BatchEvaluateArn"},
-        "name":{"shape":"String"},
-        "status":{"shape":"BatchEvaluateStatus"},
+        "batchEvaluationId":{"shape":"BatchEvaluationId"},
+        "batchEvaluationArn":{"shape":"BatchEvaluationArn"},
+        "batchEvaluationName":{"shape":"BatchEvaluationName"},
+        "status":{"shape":"BatchEvaluationStatus"},
         "createdAt":{"shape":"SyntheticTimestamp_date_time"},
-        "evaluationConfig":{"shape":"EvaluationConfiguration"},
-        "evaluationResults":{"shape":"RunSummaryEvaluationResults"},
+        "description":{"shape":"BatchEvaluationDescription"},
+        "evaluators":{"shape":"EvaluatorList"},
+        "evaluationResults":{"shape":"EvaluationJobResults"},
         "errorDetails":{"shape":"ErrorDetailsList"}
       },
       "documentation":"<p>Summary representation for list responses</p>"
     },
-    "BatchEvaluateSummaryList":{
+    "BatchEvaluationSummaryList":{
       "type":"list",
-      "member":{"shape":"BatchEvaluateSummary"}
+      "member":{"shape":"BatchEvaluationSummary"}
     },
     "Boolean":{
       "type":"boolean",
@@ -527,6 +469,19 @@
       "max":256,
       "min":33,
       "pattern":"[a-zA-Z0-9](-*[a-zA-Z0-9]){0,256}"
+    },
+    "CloudWatchFilterConfig":{
+      "type":"structure",
+      "members":{
+        "sessionIds":{"shape":"CloudWatchFilterConfigSessionIdsList"},
+        "timeRange":{"shape":"SessionFilterConfig"}
+      }
+    },
+    "CloudWatchFilterConfigSessionIdsList":{
+      "type":"list",
+      "member":{"shape":"String"},
+      "max":500,
+      "min":0
     },
     "CloudWatchLogsFilter":{
       "type":"structure",
@@ -570,6 +525,30 @@
         "filters":{"shape":"CloudWatchLogsFilterList"}
       }
     },
+    "CloudWatchLogsSource":{
+      "type":"structure",
+      "required":[
+        "serviceNames",
+        "logGroupNames"
+      ],
+      "members":{
+        "serviceNames":{"shape":"CloudWatchLogsSourceServiceNamesList"},
+        "logGroupNames":{"shape":"CloudWatchLogsSourceLogGroupNamesList"},
+        "filterConfig":{"shape":"CloudWatchFilterConfig"}
+      }
+    },
+    "CloudWatchLogsSourceLogGroupNamesList":{
+      "type":"list",
+      "member":{"shape":"String"},
+      "max":5,
+      "min":1
+    },
+    "CloudWatchLogsSourceServiceNamesList":{
+      "type":"list",
+      "member":{"shape":"String"},
+      "max":1,
+      "min":1
+    },
     "CloudWatchLogsTraceConfig":{
       "type":"structure",
       "required":[
@@ -592,7 +571,7 @@
       "max":5,
       "min":1
     },
-    "CloudWatchOutputDataConfig":{
+    "CloudWatchOutputConfig":{
       "type":"structure",
       "required":[
         "logGroupName",
@@ -604,37 +583,6 @@
       },
       "documentation":"<p>CloudWatch Logs destination for batch evaluation results</p>"
     },
-    "CloudWatchSessionInput":{
-      "type":"structure",
-      "members":{
-        "sessionIds":{"shape":"EvaluationStringList"},
-        "sessionFilterConfig":{"shape":"SessionFilterConfig"}
-      }
-    },
-    "CloudWatchSessionSource":{
-      "type":"structure",
-      "required":[
-        "serviceNames",
-        "logGroupNames"
-      ],
-      "members":{
-        "serviceNames":{"shape":"CloudWatchSessionSourceServiceNamesList"},
-        "logGroupNames":{"shape":"CloudWatchSessionSourceLogGroupNamesList"},
-        "sessionInput":{"shape":"CloudWatchSessionInput"}
-      }
-    },
-    "CloudWatchSessionSourceLogGroupNamesList":{
-      "type":"list",
-      "member":{"shape":"String"},
-      "max":5,
-      "min":1
-    },
-    "CloudWatchSessionSourceServiceNamesList":{
-      "type":"list",
-      "member":{"shape":"String"},
-      "max":1,
-      "min":1
-    },
     "ConfidenceInterval":{
       "type":"structure",
       "members":{
@@ -644,7 +592,7 @@
     },
     "ConfigurationBundleArn":{
       "type":"string",
-      "pattern":"arn:aws:bedrock-agentcore:[a-z0-9-]+:[0-9]{12}:configuration-bundle/[a-zA-Z][a-zA-Z0-9-_]{0,99}-[a-zA-Z0-9]{10}"
+      "pattern":"arn:aws[a-zA-Z-]*:bedrock-agentcore:[a-z0-9-]+:[0-9]{12}:configuration-bundle/[a-zA-Z][a-zA-Z0-9-_]{0,99}-[a-zA-Z0-9]{10}"
     },
     "ConfigurationBundleRef":{
       "type":"structure",
@@ -698,12 +646,12 @@
     "ControlStats":{
       "type":"structure",
       "required":[
-        "treatmentName",
+        "variantName",
         "sampleSize",
         "mean"
       ],
       "members":{
-        "treatmentName":{"shape":"String"},
+        "variantName":{"shape":"String"},
         "sampleSize":{"shape":"Integer"},
         "mean":{"shape":"Double"}
       }
@@ -720,11 +668,10 @@
       "members":{
         "name":{"shape":"ABTestName"},
         "description":{"shape":"ABTestDescription"},
-        "gatewayArn":{"shape":"String"},
+        "gatewayArn":{"shape":"GatewayArn"},
         "variants":{"shape":"VariantList"},
-        "trafficAllocationConfig":{"shape":"TrafficAllocationConfig"},
+        "gatewayFilter":{"shape":"GatewayFilter"},
         "evaluationConfig":{"shape":"ABTestEvaluationConfig"},
-        "maxDurationDays":{"shape":"MaxDurationDays"},
         "roleArn":{"shape":"RoleArn"},
         "enableOnCreate":{"shape":"Boolean"},
         "clientToken":{
@@ -751,12 +698,16 @@
         "createdAt":{"shape":"Timestamp"}
       }
     },
-    "DatasetManagementGroundTruth":{
+    "DataSourceConfig":{
       "type":"structure",
-      "required":["datasetId"],
       "members":{
-        "datasetId":{"shape":"String"}
-      }
+        "cloudWatchLogs":{
+          "shape":"CloudWatchLogsSource",
+          "documentation":"<p>Pull session spans from CloudWatch</p>"
+        }
+      },
+      "documentation":"<p>Where to pull session spans from</p>",
+      "union":true
     },
     "DeleteABTestRequest":{
       "type":"structure",
@@ -784,26 +735,26 @@
     },
     "DeleteBatchEvaluationRequest":{
       "type":"structure",
-      "required":["batchEvaluateId"],
+      "required":["batchEvaluationId"],
       "members":{
-        "batchEvaluateId":{
-          "shape":"BatchEvaluateId",
+        "batchEvaluationId":{
+          "shape":"BatchEvaluationId",
           "location":"uri",
-          "locationName":"batchEvaluateId"
+          "locationName":"batchEvaluationId"
         }
       }
     },
     "DeleteBatchEvaluationResponse":{
       "type":"structure",
       "required":[
-        "batchEvaluateId",
-        "batchEvaluateArn",
+        "batchEvaluationId",
+        "batchEvaluationArn",
         "status"
       ],
       "members":{
-        "batchEvaluateId":{"shape":"BatchEvaluateId"},
-        "batchEvaluateArn":{"shape":"BatchEvaluateArn"},
-        "status":{"shape":"BatchEvaluateStatus"}
+        "batchEvaluationId":{"shape":"BatchEvaluationId"},
+        "batchEvaluationArn":{"shape":"BatchEvaluationArn"},
+        "status":{"shape":"BatchEvaluationStatus"}
       }
     },
     "DeleteRecommendationRequest":{
@@ -845,7 +796,14 @@
     },
     "ErrorDetailsList":{
       "type":"list",
-      "member":{"shape":"String"}
+      "member":{"shape":"ErrorDetailsListMemberString"},
+      "max":1,
+      "min":0
+    },
+    "ErrorDetailsListMemberString":{
+      "type":"string",
+      "max":1000,
+      "min":0
     },
     "EvaluateRequest":{
       "type":"structure",
@@ -870,32 +828,6 @@
       "members":{
         "evaluationResults":{"shape":"EvaluationResults"}
       }
-    },
-    "EvaluationConfiguration":{
-      "type":"structure",
-      "members":{
-        "evaluators":{
-          "shape":"EvaluationConfigurationEvaluatorsList",
-          "documentation":"<p>List of evaluators to run against sessions</p>"
-        },
-        "insights":{
-          "shape":"EvaluationConfigurationInsightsList",
-          "documentation":"<p>List of insight types to generate (e.g., FAILURE_ANALYSIS)</p>"
-        }
-      },
-      "documentation":"<p>Configuration specifying what analysis to run — evaluators, insights, or both</p>"
-    },
-    "EvaluationConfigurationEvaluatorsList":{
-      "type":"list",
-      "member":{"shape":"Evaluator"},
-      "max":10,
-      "min":0
-    },
-    "EvaluationConfigurationInsightsList":{
-      "type":"list",
-      "member":{"shape":"Insight"},
-      "max":10,
-      "min":0
     },
     "EvaluationContent":{
       "type":"structure",
@@ -944,19 +876,23 @@
       },
       "union":true
     },
-    "EvaluationJobId":{
-      "type":"string",
-      "pattern":"[a-zA-Z][a-zA-Z0-9-_]{0,99}-[a-zA-Z0-9]{10}"
-    },
     "EvaluationJobResults":{
       "type":"structure",
       "members":{
-        "sessionsCompleted":{"shape":"Integer"},
-        "sessionsInProgress":{"shape":"Integer"},
-        "sessionsFailed":{"shape":"Integer"},
-        "totalSessions":{"shape":"Integer"},
+        "numberOfSessionsCompleted":{"shape":"Integer"},
+        "numberOfSessionsInProgress":{"shape":"Integer"},
+        "numberOfSessionsFailed":{"shape":"Integer"},
+        "totalNumberOfSessions":{"shape":"Integer"},
+        "numberOfSessionsIgnored":{"shape":"Integer"},
         "evaluatorSummaries":{"shape":"EvaluatorSummaryList"}
       }
+    },
+    "EvaluationMetadata":{
+      "type":"structure",
+      "members":{
+        "sessionMetadata":{"shape":"SessionMetadataList"}
+      },
+      "union":true
     },
     "EvaluationReferenceInput":{
       "type":"structure",
@@ -1001,33 +937,6 @@
       "type":"list",
       "member":{"shape":"EvaluationResultContent"}
     },
-    "EvaluationSessionSource":{
-      "type":"structure",
-      "members":{
-        "cloudWatchSource":{
-          "shape":"CloudWatchSessionSource",
-          "documentation":"<p>Pull session spans from CloudWatch</p>"
-        },
-        "s3Source":{
-          "shape":"S3SessionSource",
-          "documentation":"<p>Pull session spans from S3</p>"
-        },
-        "inlineSource":{
-          "shape":"InlineSessionSource",
-          "documentation":"<p>Provide session spans inline</p>"
-        },
-        "onlineEvaluationConfigSource":{
-          "shape":"OnlineEvaluationConfigSource",
-          "documentation":"<p>Reference an existing OnlineEvaluationConfig as session source</p>"
-        }
-      },
-      "documentation":"<p>Where to pull session spans from</p>",
-      "union":true
-    },
-    "EvaluationStringList":{
-      "type":"list",
-      "member":{"shape":"String"}
-    },
     "EvaluationTarget":{
       "type":"structure",
       "members":{
@@ -1051,17 +960,21 @@
       "type":"structure",
       "required":["evaluatorId"],
       "members":{
-        "evaluatorId":{"shape":"String"}
+        "evaluatorId":{"shape":"EvaluatorId"}
       },
       "documentation":"<p>An evaluator to run against sessions</p>"
     },
     "EvaluatorArn":{
       "type":"string",
-      "pattern":"arn:aws:bedrock-agentcore:[a-z0-9-]+:[0-9]{12}:evaluator\\/[a-zA-Z][a-zA-Z0-9-_]{0,99}-[a-zA-Z0-9]{10}$|^arn:aws:bedrock-agentcore:::evaluator/Builtin.[a-zA-Z0-9_-]+"
+      "pattern":"arn:aws[a-zA-Z-]*:bedrock-agentcore:[a-z0-9-]+:[0-9]{12}:evaluator\\/[a-zA-Z][a-zA-Z0-9-_]{0,99}-[a-zA-Z0-9]{10}$|^arn:aws[a-zA-Z-]*:bedrock-agentcore:::evaluator/Builtin.[a-zA-Z0-9_-]+"
     },
     "EvaluatorId":{
       "type":"string",
       "pattern":"(Builtin.[a-zA-Z0-9_-]+|[a-zA-Z][a-zA-Z0-9-_]{0,99}-[a-zA-Z0-9]{10})"
+    },
+    "EvaluatorList":{
+      "type":"list",
+      "member":{"shape":"Evaluator"}
     },
     "EvaluatorMetric":{
       "type":"structure",
@@ -1087,16 +1000,13 @@
     "EvaluatorStatistics":{
       "type":"structure",
       "members":{
-        "averageScore":{"shape":"Double"},
-        "averageTokenUsage":{"shape":"TokenUsageSummary"}
+        "averageScore":{"shape":"Double"}
       }
     },
     "EvaluatorSummary":{
       "type":"structure",
       "members":{
-        "evaluatorArn":{"shape":"String"},
         "evaluatorId":{"shape":"String"},
-        "evaluatorName":{"shape":"String"},
         "statistics":{"shape":"EvaluatorStatistics"},
         "totalEvaluated":{"shape":"Integer"},
         "totalFailed":{"shape":"Integer"}
@@ -1105,32 +1015,6 @@
     "EvaluatorSummaryList":{
       "type":"list",
       "member":{"shape":"EvaluatorSummary"}
-    },
-    "Failure":{
-      "type":"structure",
-      "members":{
-        "sessionId":{"shape":"String"},
-        "spanId":{"shape":"String"},
-        "evidence":{"shape":"String"}
-      }
-    },
-    "FailureCategory":{
-      "type":"structure",
-      "members":{
-        "failureCategoryName":{"shape":"String"},
-        "failureCategoryDescription":{"shape":"String"},
-        "categoryGroupName":{"shape":"String"},
-        "failures":{"shape":"FailureList"},
-        "rootCauses":{"shape":"RootCauseList"}
-      }
-    },
-    "FailureCategoryList":{
-      "type":"list",
-      "member":{"shape":"FailureCategory"}
-    },
-    "FailureList":{
-      "type":"list",
-      "member":{"shape":"Failure"}
     },
     "FilterStringValue":{
       "type":"string",
@@ -1145,6 +1029,16 @@
         "booleanValue":{"shape":"Boolean"}
       },
       "union":true
+    },
+    "GatewayArn":{
+      "type":"string",
+      "pattern":"arn:aws(|-cn|-us-gov):bedrock-agentcore:[a-z0-9-]{1,20}:[0-9]{12}:gateway/([0-9a-z][-]?){1,48}-[a-z0-9]{10}"
+    },
+    "GatewayFilter":{
+      "type":"structure",
+      "members":{
+        "targetPaths":{"shape":"TargetPathList"}
+      }
     },
     "GetABTestRequest":{
       "type":"structure",
@@ -1178,11 +1072,10 @@
         "description":{"shape":"ABTestDescription"},
         "status":{"shape":"ABTestStatus"},
         "executionStatus":{"shape":"ABTestExecutionStatus"},
-        "gatewayArn":{"shape":"String"},
+        "gatewayArn":{"shape":"GatewayArn"},
         "variants":{"shape":"VariantList"},
-        "trafficAllocationConfig":{"shape":"TrafficAllocationConfig"},
+        "gatewayFilter":{"shape":"GatewayFilter"},
         "evaluationConfig":{"shape":"ABTestEvaluationConfig"},
-        "maxDurationDays":{"shape":"MaxDurationDays"},
         "roleArn":{"shape":"RoleArn"},
         "currentRunId":{"shape":"String"},
         "errorDetails":{"shape":"ErrorDetailsList"},
@@ -1196,82 +1089,37 @@
     },
     "GetBatchEvaluationRequest":{
       "type":"structure",
-      "required":["batchEvaluateId"],
+      "required":["batchEvaluationId"],
       "members":{
-        "batchEvaluateId":{
-          "shape":"BatchEvaluateId",
+        "batchEvaluationId":{
+          "shape":"BatchEvaluationId",
           "location":"uri",
-          "locationName":"batchEvaluateId"
+          "locationName":"batchEvaluationId"
         }
       }
     },
     "GetBatchEvaluationResponse":{
       "type":"structure",
       "required":[
-        "batchEvaluateId",
-        "batchEvaluateArn",
-        "name",
+        "batchEvaluationId",
+        "batchEvaluationArn",
+        "batchEvaluationName",
         "status",
         "createdAt"
       ],
       "members":{
-        "batchEvaluateId":{"shape":"BatchEvaluateId"},
-        "batchEvaluateArn":{"shape":"BatchEvaluateArn"},
-        "name":{"shape":"String"},
-        "status":{"shape":"BatchEvaluateStatus"},
+        "batchEvaluationId":{"shape":"BatchEvaluationId"},
+        "batchEvaluationArn":{"shape":"BatchEvaluationArn"},
+        "batchEvaluationName":{"shape":"BatchEvaluationName"},
+        "status":{"shape":"BatchEvaluationStatus"},
         "createdAt":{"shape":"SyntheticTimestamp_date_time"},
-        "evaluationConfig":{"shape":"EvaluationConfiguration"},
-        "executionRoleArn":{"shape":"String"},
-        "outputDataConfig":{"shape":"OutputDataConfig"},
+        "evaluators":{"shape":"EvaluatorList"},
+        "dataSourceConfig":{"shape":"DataSourceConfig"},
+        "outputConfig":{"shape":"OutputConfig"},
         "evaluationResults":{"shape":"EvaluationJobResults"},
         "errorDetails":{"shape":"ErrorDetailsList"},
-        "tags":{"shape":"StringMap"}
-      }
-    },
-    "GetEvaluationJobResultRequest":{
-      "type":"structure",
-      "required":[
-        "jobId",
-        "runId"
-      ],
-      "members":{
-        "jobId":{
-          "shape":"EvaluationJobId",
-          "location":"uri",
-          "locationName":"jobId"
-        },
-        "runId":{
-          "shape":"RunId",
-          "location":"uri",
-          "locationName":"runId"
-        }
-      }
-    },
-    "GetEvaluationJobResultResponse":{
-      "type":"structure",
-      "required":[
-        "runId",
-        "jobId",
-        "status",
-        "startedAt"
-      ],
-      "members":{
-        "runId":{"shape":"RunId"},
-        "jobId":{"shape":"EvaluationJobId"},
-        "status":{"shape":"RunStatusShape"},
-        "startedAt":{"shape":"SyntheticTimestamp_date_time"},
-        "evaluationResults":{
-          "shape":"EvaluationJobResults",
-          "documentation":"<p>Present when evaluation completes</p>"
-        },
-        "insights":{
-          "shape":"InsightsResult",
-          "documentation":"<p>Present if insightsJobConfig was set</p>"
-        },
-        "errorDetails":{
-          "shape":"ErrorDetailsList",
-          "documentation":"<p>List of error messages</p>"
-        }
+        "description":{"shape":"BatchEvaluationDescription"},
+        "updatedAt":{"shape":"SyntheticTimestamp_date_time"}
       }
     },
     "GetRecommendationRequest":{
@@ -1307,8 +1155,7 @@
         "status":{"shape":"RecommendationStatus"},
         "createdAt":{"shape":"SyntheticTimestamp_date_time"},
         "updatedAt":{"shape":"SyntheticTimestamp_date_time"},
-        "recommendationResult":{"shape":"RecommendationResult"},
-        "kmsKeyArn":{"shape":"KmsKeyArn"}
+        "recommendationResult":{"shape":"RecommendationResult"}
       }
     },
     "GroundTruthSource":{
@@ -1317,14 +1164,6 @@
         "inline":{
           "shape":"InlineGroundTruth",
           "documentation":"<p>Provide ground truth inline</p>"
-        },
-        "s3":{
-          "shape":"S3GroundTruth",
-          "documentation":"<p>Pull ground truth from S3</p>"
-        },
-        "datasetManagementConfiguration":{
-          "shape":"DatasetManagementGroundTruth",
-          "documentation":"<p>Pull ground truth from dataset management</p>"
         }
       },
       "documentation":"<p>Where to pull ground truth from</p>",
@@ -1334,21 +1173,20 @@
       "type":"structure",
       "members":{
         "input":{"shape":"GroundTruthTurnInput"},
-        "expectedResponse":{
-          "shape":"EvaluationContent",
-          "documentation":"<p>expectedResponse for evaluation, reuses common model EvaluationContent</p>"
-        }
+        "expectedResponse":{"shape":"EvaluationContent"}
       }
     },
     "GroundTruthTurnInput":{
       "type":"structure",
       "members":{
-        "prompt":{"shape":"String"}
-      }
+        "prompt":{"shape":"GroundTruthTurnInputPromptString"}
+      },
+      "union":true
     },
-    "GroundTruthTurnList":{
-      "type":"list",
-      "member":{"shape":"GroundTruthTurn"}
+    "GroundTruthTurnInputPromptString":{
+      "type":"string",
+      "max":4000,
+      "min":0
     },
     "IgnoredReferenceInputField":{
       "type":"string",
@@ -1372,53 +1210,13 @@
           "shape":"EvaluationExpectedTrajectory",
           "documentation":"<p>expectedTrajectory for evaluation, reuses common model EvaluationExpectedTrajectory</p>"
         },
-        "turns":{"shape":"GroundTruthTurnList"}
+        "turns":{"shape":"InlineGroundTruthTurnsList"}
       }
     },
-    "InlineSession":{
-      "type":"structure",
-      "required":[
-        "sessionId",
-        "sessionSpans"
-      ],
-      "members":{
-        "sessionId":{"shape":"String"},
-        "sessionSpans":{"shape":"Spans"}
-      }
-    },
-    "InlineSessionList":{
+    "InlineGroundTruthTurnsList":{
       "type":"list",
-      "member":{"shape":"InlineSession"},
+      "member":{"shape":"GroundTruthTurn"},
       "min":1
-    },
-    "InlineSessionSource":{
-      "type":"structure",
-      "required":["sessions"],
-      "members":{
-        "sessions":{"shape":"InlineSessionList"}
-      }
-    },
-    "Insight":{
-      "type":"structure",
-      "required":["insightId"],
-      "members":{
-        "insightId":{"shape":"String"}
-      },
-      "documentation":"<p>An insight analysis to run against sessions</p>"
-    },
-    "InsightRecommendationType":{
-      "type":"string",
-      "enum":[
-        "SYSTEM_PROMPT_FIX",
-        "TOOL_DESCRIPTION_FIX",
-        "OTHERS"
-      ]
-    },
-    "InsightsResult":{
-      "type":"structure",
-      "members":{
-        "failureCategories":{"shape":"FailureCategoryList"}
-      }
     },
     "Integer":{
       "type":"integer",
@@ -1432,12 +1230,6 @@
       "error":{"httpStatusCode":500},
       "exception":true,
       "fault":true
-    },
-    "KmsKeyArn":{
-      "type":"string",
-      "max":2048,
-      "min":1,
-      "pattern":"arn:aws(|-cn|-us-gov):kms:[a-zA-Z0-9-]*:[0-9]{12}:key/[a-zA-Z0-9-]{36}"
     },
     "ListABTestsRequest":{
       "type":"structure",
@@ -1493,42 +1285,7 @@
       "type":"structure",
       "required":["batchEvaluations"],
       "members":{
-        "batchEvaluations":{"shape":"BatchEvaluateSummaryList"},
-        "nextToken":{"shape":"String"}
-      }
-    },
-    "ListEvaluationJobResultsRequest":{
-      "type":"structure",
-      "required":["jobId"],
-      "members":{
-        "jobId":{
-          "shape":"EvaluationJobId",
-          "location":"uri",
-          "locationName":"jobId"
-        },
-        "maxResults":{
-          "shape":"ListEvaluationJobResultsRequestMaxResultsInteger",
-          "location":"querystring",
-          "locationName":"maxResults"
-        },
-        "nextToken":{
-          "shape":"String",
-          "location":"querystring",
-          "locationName":"nextToken"
-        }
-      }
-    },
-    "ListEvaluationJobResultsRequestMaxResultsInteger":{
-      "type":"integer",
-      "box":true,
-      "max":100,
-      "min":1
-    },
-    "ListEvaluationJobResultsResponse":{
-      "type":"structure",
-      "required":["runs"],
-      "members":{
-        "runs":{"shape":"RunSummaryList"},
+        "batchEvaluations":{"shape":"BatchEvaluationSummaryList"},
         "nextToken":{"shape":"String"}
       }
     },
@@ -1566,12 +1323,6 @@
         "nextToken":{"shape":"NextToken"}
       }
     },
-    "MaxDurationDays":{
-      "type":"integer",
-      "box":true,
-      "max":90,
-      "min":1
-    },
     "NextToken":{
       "type":"string",
       "max":2048,
@@ -1584,24 +1335,37 @@
     },
     "OnlineEvaluationConfigArn":{
       "type":"string",
-      "pattern":"arn:aws:bedrock-agentcore:[a-z0-9-]+:[0-9]{12}:online-evaluation-config\\/[a-zA-Z][a-zA-Z0-9-_]{0,99}-[a-zA-Z0-9]{10}"
+      "pattern":"arn:aws[a-zA-Z-]*:bedrock-agentcore:[a-z0-9-]+:[0-9]{12}:online-evaluation-config\\/[a-zA-Z][a-zA-Z0-9-_]{0,99}-[a-zA-Z0-9]{10}"
     },
-    "OnlineEvaluationConfigSource":{
-      "type":"structure",
-      "required":["onlineEvaluationConfigArn"],
-      "members":{
-        "onlineEvaluationConfigArn":{"shape":"OnlineEvaluationConfigArn"},
-        "sessionFilterConfig":{"shape":"SessionFilterConfig"}
-      },
-      "documentation":"<p>Session source that references an existing OnlineEvaluationConfig</p>"
-    },
-    "OutputDataConfig":{
+    "OutputConfig":{
       "type":"structure",
       "members":{
-        "cloudWatchDestination":{"shape":"CloudWatchOutputDataConfig"}
+        "cloudWatchConfig":{"shape":"CloudWatchOutputConfig"}
       },
       "documentation":"<p>Output destination configuration</p>",
       "union":true
+    },
+    "PathPattern":{
+      "type":"string",
+      "max":500,
+      "min":1
+    },
+    "PerVariantOnlineEvaluationConfig":{
+      "type":"structure",
+      "required":[
+        "name",
+        "onlineEvaluationConfigArn"
+      ],
+      "members":{
+        "name":{"shape":"VariantName"},
+        "onlineEvaluationConfigArn":{"shape":"OnlineEvaluationConfigArn"}
+      }
+    },
+    "PerVariantOnlineEvaluationConfigList":{
+      "type":"list",
+      "member":{"shape":"PerVariantOnlineEvaluationConfig"},
+      "max":2,
+      "min":2
     },
     "RecommendationArn":{
       "type":"string",
@@ -1649,12 +1413,6 @@
       "members":{
         "evaluatorArn":{"shape":"EvaluatorArn"}
       }
-    },
-    "RecommendationExplanation":{
-      "type":"string",
-      "max":100000,
-      "min":0,
-      "sensitive":true
     },
     "RecommendationId":{
       "type":"string",
@@ -1734,21 +1492,6 @@
         "TOOL_DESCRIPTION_RECOMMENDATION"
       ]
     },
-    "RelatedSession":{
-      "type":"structure",
-      "members":{
-        "sessionId":{"shape":"String"},
-        "failureSpanId":{"shape":"String"},
-        "rootCauseSpanId":{"shape":"String"},
-        "rootCauseExplanation":{"shape":"String"},
-        "recommendationType":{"shape":"InsightRecommendationType"},
-        "recommendation":{"shape":"String"}
-      }
-    },
-    "RelatedSessionList":{
-      "type":"list",
-      "member":{"shape":"RelatedSession"}
-    },
     "ResourceNotFoundException":{
       "type":"structure",
       "members":{
@@ -1765,132 +1508,6 @@
       "max":2048,
       "min":1,
       "pattern":"arn:aws(-[^:]+)?:iam::([0-9]{12})?:role/.+"
-    },
-    "RootCause":{
-      "type":"structure",
-      "members":{
-        "rootCauseCategory":{"shape":"String"},
-        "rootCauseDescription":{"shape":"String"},
-        "recommendation":{"shape":"String"},
-        "relatedSessions":{"shape":"RelatedSessionList"}
-      }
-    },
-    "RootCauseList":{
-      "type":"list",
-      "member":{"shape":"RootCause"}
-    },
-    "RunEvaluationJobRequest":{
-      "type":"structure",
-      "required":[
-        "jobId",
-        "runId",
-        "sessionSource"
-      ],
-      "members":{
-        "jobId":{
-          "shape":"EvaluationJobId",
-          "location":"uri",
-          "locationName":"jobId"
-        },
-        "runId":{"shape":"RunId"},
-        "clientToken":{
-          "shape":"String",
-          "idempotencyToken":true
-        },
-        "sessionSource":{"shape":"EvaluationSessionSource"},
-        "sessionMetadata":{"shape":"SessionMetadataList"}
-      }
-    },
-    "RunEvaluationJobResponse":{
-      "type":"structure",
-      "required":[
-        "runId",
-        "jobId",
-        "status",
-        "startedAt"
-      ],
-      "members":{
-        "runId":{"shape":"RunId"},
-        "jobId":{"shape":"EvaluationJobId"},
-        "status":{"shape":"RunStatusShape"},
-        "startedAt":{"shape":"SyntheticTimestamp_date_time"}
-      }
-    },
-    "RunId":{
-      "type":"string",
-      "pattern":"[a-zA-Z][a-zA-Z0-9-_]{0,99}-[a-zA-Z0-9]{10}"
-    },
-    "RunStatusShape":{
-      "type":"string",
-      "enum":[
-        "PENDING",
-        "IN_PROGRESS",
-        "COMPLETED",
-        "FAILED",
-        "STOPPED",
-        "STOPPING"
-      ]
-    },
-    "RunSummary":{
-      "type":"structure",
-      "required":[
-        "runId",
-        "jobId",
-        "status",
-        "startedAt"
-      ],
-      "members":{
-        "runId":{"shape":"RunId"},
-        "jobId":{"shape":"EvaluationJobId"},
-        "status":{"shape":"RunStatusShape"},
-        "startedAt":{"shape":"SyntheticTimestamp_date_time"},
-        "evaluationResults":{
-          "shape":"RunSummaryEvaluationResults",
-          "documentation":"<p>Present when evaluation completes</p>"
-        },
-        "insights":{
-          "shape":"InsightsResult",
-          "documentation":"<p>Present if insightsJobConfig was set</p>"
-        },
-        "errorDetails":{
-          "shape":"ErrorDetailsList",
-          "documentation":"<p>List of error messages</p>"
-        }
-      }
-    },
-    "RunSummaryEvaluationResults":{
-      "type":"structure",
-      "members":{
-        "evaluatorSummaries":{"shape":"EvaluatorSummaryList"}
-      },
-      "documentation":"<p>Evaluation results summary for list responses (no session counts)</p>"
-    },
-    "RunSummaryList":{
-      "type":"list",
-      "member":{"shape":"RunSummary"}
-    },
-    "S3GroundTruth":{
-      "type":"structure",
-      "required":[
-        "bucketName",
-        "key"
-      ],
-      "members":{
-        "bucketName":{"shape":"String"},
-        "key":{"shape":"String"}
-      }
-    },
-    "S3SessionSource":{
-      "type":"structure",
-      "required":[
-        "bucketName",
-        "key"
-      ],
-      "members":{
-        "bucketName":{"shape":"String"},
-        "key":{"shape":"String"},
-        "sessionIds":{"shape":"EvaluationStringList"}
-      }
     },
     "ServiceName":{
       "type":"string",
@@ -1922,7 +1539,9 @@
     },
     "SessionMetadataList":{
       "type":"list",
-      "member":{"shape":"SessionMetadataShape"}
+      "member":{"shape":"SessionMetadataShape"},
+      "max":500,
+      "min":0
     },
     "SessionMetadataShape":{
       "type":"structure",
@@ -1969,62 +1588,45 @@
     "StartBatchEvaluationRequest":{
       "type":"structure",
       "required":[
-        "name",
-        "sessionSource"
+        "batchEvaluationName",
+        "dataSourceConfig"
       ],
       "members":{
-        "name":{"shape":"StartBatchEvaluationRequestNameString"},
-        "evaluationConfig":{
-          "shape":"EvaluationConfiguration",
-          "documentation":"<p>What analysis to run. Required for CW/S3/inline sources. Must have at least one of evaluators or insightTypes. Must not be provided when sessionSource is onlineEvaluationConfigSource (inherited from referenced config).</p>"
-        },
-        "sessionSource":{"shape":"EvaluationSessionSource"},
-        "executionRoleArn":{"shape":"String"},
+        "batchEvaluationName":{"shape":"BatchEvaluationName"},
+        "evaluators":{"shape":"StartBatchEvaluationRequestEvaluatorsList"},
+        "dataSourceConfig":{"shape":"DataSourceConfig"},
         "clientToken":{
-          "shape":"String",
+          "shape":"ClientToken",
           "idempotencyToken":true
         },
-        "sessionMetadata":{"shape":"StartBatchEvaluationRequestSessionMetadataList"},
-        "tags":{"shape":"StartBatchEvaluationRequestTagsMap"}
+        "evaluationMetadata":{"shape":"EvaluationMetadata"},
+        "description":{"shape":"BatchEvaluationDescription"}
       }
     },
-    "StartBatchEvaluationRequestNameString":{
-      "type":"string",
-      "max":128,
-      "min":1
-    },
-    "StartBatchEvaluationRequestSessionMetadataList":{
+    "StartBatchEvaluationRequestEvaluatorsList":{
       "type":"list",
-      "member":{"shape":"SessionMetadataShape"},
-      "max":1000,
-      "min":0
-    },
-    "StartBatchEvaluationRequestTagsMap":{
-      "type":"map",
-      "key":{"shape":"String"},
-      "value":{"shape":"String"},
-      "max":50,
+      "member":{"shape":"Evaluator"},
+      "max":10,
       "min":0
     },
     "StartBatchEvaluationResponse":{
       "type":"structure",
       "required":[
-        "batchEvaluateId",
-        "batchEvaluateArn",
-        "name",
+        "batchEvaluationId",
+        "batchEvaluationArn",
+        "batchEvaluationName",
         "status",
         "createdAt"
       ],
       "members":{
-        "batchEvaluateId":{"shape":"BatchEvaluateId"},
-        "batchEvaluateArn":{"shape":"BatchEvaluateArn"},
-        "name":{"shape":"String"},
-        "evaluationConfig":{"shape":"EvaluationConfiguration"},
-        "executionRoleArn":{"shape":"String"},
-        "status":{"shape":"BatchEvaluateStatus"},
+        "batchEvaluationId":{"shape":"BatchEvaluationId"},
+        "batchEvaluationArn":{"shape":"BatchEvaluationArn"},
+        "batchEvaluationName":{"shape":"BatchEvaluationName"},
+        "evaluators":{"shape":"EvaluatorList"},
+        "status":{"shape":"BatchEvaluationStatus"},
         "createdAt":{"shape":"SyntheticTimestamp_date_time"},
-        "outputDataConfig":{"shape":"OutputDataConfig"},
-        "tags":{"shape":"StringMap"}
+        "outputConfig":{"shape":"OutputConfig"},
+        "description":{"shape":"BatchEvaluationDescription"}
       }
     },
     "StartRecommendationRequest":{
@@ -2039,7 +1641,6 @@
         "description":{"shape":"RecommendationDescription"},
         "type":{"shape":"RecommendationType"},
         "recommendationConfig":{"shape":"RecommendationConfig"},
-        "kmsKeyArn":{"shape":"KmsKeyArn"},
         "clientToken":{
           "shape":"ClientToken",
           "idempotencyToken":true
@@ -2072,58 +1673,27 @@
     },
     "StopBatchEvaluationRequest":{
       "type":"structure",
-      "required":["batchEvaluateId"],
+      "required":["batchEvaluationId"],
       "members":{
-        "batchEvaluateId":{
-          "shape":"BatchEvaluateId",
+        "batchEvaluationId":{
+          "shape":"BatchEvaluationId",
           "location":"uri",
-          "locationName":"batchEvaluateId"
+          "locationName":"batchEvaluationId"
         }
       }
     },
     "StopBatchEvaluationResponse":{
       "type":"structure",
       "required":[
-        "batchEvaluateId",
-        "batchEvaluateArn",
+        "batchEvaluationId",
+        "batchEvaluationArn",
         "status"
       ],
       "members":{
-        "batchEvaluateId":{"shape":"BatchEvaluateId"},
-        "batchEvaluateArn":{"shape":"BatchEvaluateArn"},
-        "status":{"shape":"BatchEvaluateStatus"}
-      }
-    },
-    "StopEvaluationJobRunRequest":{
-      "type":"structure",
-      "required":[
-        "jobId",
-        "runId"
-      ],
-      "members":{
-        "jobId":{
-          "shape":"EvaluationJobId",
-          "location":"uri",
-          "locationName":"jobId"
-        },
-        "runId":{
-          "shape":"RunId",
-          "location":"uri",
-          "locationName":"runId"
-        }
-      }
-    },
-    "StopEvaluationJobRunResponse":{
-      "type":"structure",
-      "required":[
-        "jobId",
-        "runId",
-        "status"
-      ],
-      "members":{
-        "jobId":{"shape":"EvaluationJobId"},
-        "runId":{"shape":"RunId"},
-        "status":{"shape":"RunStatusShape"}
+        "batchEvaluationId":{"shape":"BatchEvaluationId"},
+        "batchEvaluationArn":{"shape":"BatchEvaluationArn"},
+        "status":{"shape":"BatchEvaluationStatus"},
+        "description":{"shape":"BatchEvaluationDescription"}
       }
     },
     "String":{"type":"string"},
@@ -2174,7 +1744,6 @@
       "type":"structure",
       "members":{
         "recommendedSystemPrompt":{"shape":"SystemPromptText"},
-        "explanation":{"shape":"RecommendationExplanation"},
         "configurationBundle":{"shape":"RecommendationResultConfigurationBundle"},
         "errorCode":{"shape":"RecommendationErrorCode"},
         "errorMessage":{"shape":"RecommendationErrorMessage"}
@@ -2182,9 +1751,27 @@
     },
     "SystemPromptText":{
       "type":"string",
-      "max":100000,
+      "max":20000,
       "min":1,
       "sensitive":true
+    },
+    "TargetName":{
+      "type":"string",
+      "max":100,
+      "min":1
+    },
+    "TargetPathList":{
+      "type":"list",
+      "member":{"shape":"PathPattern"},
+      "max":1,
+      "min":1
+    },
+    "TargetRef":{
+      "type":"structure",
+      "required":["name"],
+      "members":{
+        "name":{"shape":"TargetName"}
+      }
     },
     "ThrottlingException":{
       "type":"structure",
@@ -2199,14 +1786,6 @@
     },
     "Timestamp":{"type":"timestamp"},
     "TokenUsage":{
-      "type":"structure",
-      "members":{
-        "inputTokens":{"shape":"Integer"},
-        "outputTokens":{"shape":"Integer"},
-        "totalTokens":{"shape":"Integer"}
-      }
-    },
-    "TokenUsageSummary":{
       "type":"structure",
       "members":{
         "inputTokens":{"shape":"Integer"},
@@ -2254,8 +1833,7 @@
       "required":["toolName"],
       "members":{
         "toolName":{"shape":"RecommendationToolName"},
-        "recommendedToolDescription":{"shape":"ToolDescriptionText"},
-        "explanation":{"shape":"RecommendationExplanation"}
+        "recommendedToolDescription":{"shape":"ToolDescriptionText"}
       }
     },
     "ToolDescriptionRecommendationConfig":{
@@ -2292,7 +1870,7 @@
     },
     "ToolDescriptionText":{
       "type":"string",
-      "max":100000,
+      "max":20000,
       "min":1,
       "sensitive":true
     },
@@ -2313,20 +1891,6 @@
       "member":{"shape":"TraceId"},
       "max":10,
       "min":1
-    },
-    "TrafficAllocationConfig":{
-      "type":"structure",
-      "members":{
-        "routeOnHeader":{"shape":"TrafficRouteOnHeader"}
-      },
-      "union":true
-    },
-    "TrafficRouteOnHeader":{
-      "type":"structure",
-      "required":["headerName"],
-      "members":{
-        "headerName":{"shape":"String"}
-      }
     },
     "UnauthorizedException":{
       "type":"structure",
@@ -2355,9 +1919,8 @@
         "name":{"shape":"ABTestName"},
         "description":{"shape":"ABTestDescription"},
         "variants":{"shape":"VariantList"},
-        "trafficAllocationConfig":{"shape":"TrafficAllocationConfig"},
+        "gatewayFilter":{"shape":"GatewayFilter"},
         "evaluationConfig":{"shape":"ABTestEvaluationConfig"},
-        "maxDurationDays":{"shape":"MaxDurationDays"},
         "roleArn":{"shape":"RoleArn"},
         "executionStatus":{"shape":"ABTestExecutionStatus"}
       }
@@ -2437,9 +2000,9 @@
     "VariantConfiguration":{
       "type":"structure",
       "members":{
-        "configurationBundle":{"shape":"ConfigurationBundleRef"}
-      },
-      "union":true
+        "configurationBundle":{"shape":"ConfigurationBundleRef"},
+        "target":{"shape":"TargetRef"}
+      }
     },
     "VariantList":{
       "type":"list",
@@ -2456,13 +2019,13 @@
     "VariantResult":{
       "type":"structure",
       "required":[
-        "treatmentName",
+        "variantName",
         "sampleSize",
         "mean",
         "isSignificant"
       ],
       "members":{
-        "treatmentName":{"shape":"String"},
+        "variantName":{"shape":"String"},
         "sampleSize":{"shape":"Integer"},
         "mean":{"shape":"Double"},
         "absoluteChange":{"shape":"Double"},

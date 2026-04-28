@@ -12,15 +12,15 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Session source configs
+# Data source configs
 # ---------------------------------------------------------------------------
 
 
-class SessionSourceConfig(ABC):
+class DataSourceConfig(ABC):
     """Abstract base for session span sources passed to the evaluation API.
 
-    Subclass this to support any EvaluationSessionSource union member
-    (cloudWatchSource or future additions).
+    Subclass this to support any DataSourceConfig union member
+    (cloudWatchLogs or future additions).
     """
 
     def pre_evaluation_run_hook(self) -> None:
@@ -38,13 +38,13 @@ class SessionSourceConfig(ABC):
         return None
 
     @abstractmethod
-    def to_api_source(
+    def to_data_source_config(
         self,
         session_ids: List[str],
         start_time: datetime,
         end_time: datetime,
     ) -> Dict[str, Any]:
-        """Return the sessionSource dict for the evaluation API call.
+        """Return the dataSourceConfig dict for the evaluation API call.
 
         The runner always provides all three arguments after agent invocation.
         Implementations use what they need and ignore the rest.
@@ -55,12 +55,12 @@ class SessionSourceConfig(ABC):
             end_time: Latest session end time across all invocations.
 
         Returns:
-            Dict matching one member of the EvaluationSessionSource union.
+            Dict matching one member of the DataSourceConfig union.
         """
 
 
-class CloudWatchSessionSourceConfig(BaseModel, SessionSourceConfig):
-    """CloudWatch session source — pulls spans from CloudWatch log groups.
+class CloudWatchDataSourceConfig(BaseModel, DataSourceConfig):
+    """CloudWatch data source — pulls spans from CloudWatch log groups.
 
     Attributes:
         service_names: Service names for span filtering. The API accepts exactly one (list of length 1).
@@ -81,24 +81,30 @@ class CloudWatchSessionSourceConfig(BaseModel, SessionSourceConfig):
             logger.info("Waiting %ds for CloudWatch span ingestion...", self.ingestion_delay_seconds)
             time.sleep(self.ingestion_delay_seconds)
 
-    def to_api_source(
+    def to_data_source_config(
         self,
         session_ids: List[str],
         start_time: datetime,
         end_time: datetime,
     ) -> Dict[str, Any]:
-        """Return a cloudWatchSource session source dict for the evaluation API."""
+        """Return a cloudWatchLogs dataSourceConfig dict for the evaluation API."""
         return {
-            "cloudWatchSource": {
+            "cloudWatchLogs": {
                 "serviceNames": self.service_names,
                 "logGroupNames": self.log_group_names,
-                "sessionInput": {"sessionIds": session_ids},
+                "filterConfig": {
+                    "sessionIds": session_ids,
+                    "timeRange": {
+                        "startTime": start_time,
+                        "endTime": end_time,
+                    },
+                },
             }
         }
 
 
 # ---------------------------------------------------------------------------
-# Result models
+# Batch eval result models
 # ---------------------------------------------------------------------------
 
 
@@ -114,53 +120,31 @@ class FailedScenario(BaseModel):
     error_message: str
 
 
-class TokenUsageSummary(BaseModel):
-    """Token usage statistics.
-
-    Attributes:
-        input_tokens: Number of input tokens.
-        output_tokens: Number of output tokens.
-        total_tokens: Total token count.
-    """
-
-    model_config = ConfigDict(alias_generator=alias_generators.to_camel, populate_by_name=True)
-
-    input_tokens: int
-    output_tokens: int
-    total_tokens: int
-
-
 class EvaluatorStatistics(BaseModel):
     """Statistics for an evaluator.
 
     Attributes:
         average_score: Average evaluation score across all evaluations.
-        average_token_usage: Average token usage statistics.
     """
 
     model_config = ConfigDict(alias_generator=alias_generators.to_camel, populate_by_name=True)
 
     average_score: Optional[float] = None
-    average_token_usage: Optional[TokenUsageSummary] = None
 
 
 class EvaluatorSummary(BaseModel):
     """Summary statistics for a single evaluator.
 
     Attributes:
-        evaluator_arn: ARN of the evaluator.
         evaluator_id: Evaluator identifier.
-        evaluator_name: Human-readable evaluator name.
-        statistics: Aggregated statistics (average score and token usage).
+        statistics: Aggregated statistics (average score).
         total_evaluated: Number of items evaluated.
         total_failed: Number of evaluation failures.
     """
 
     model_config = ConfigDict(alias_generator=alias_generators.to_camel, populate_by_name=True)
 
-    evaluator_arn: Optional[str] = None
     evaluator_id: Optional[str] = None
-    evaluator_name: Optional[str] = None
     statistics: Optional[EvaluatorStatistics] = None
     total_evaluated: Optional[int] = None
     total_failed: Optional[int] = None
@@ -170,21 +154,22 @@ class BatchEvaluationSummary(BaseModel):
     """Aggregated results from a completed batch evaluation.
 
     Attributes:
-        sessions_completed: Number of sessions that were successfully evaluated.
-        sessions_in_progress: Number of sessions still being evaluated (non-zero
+        number_of_sessions_completed: Number of sessions that were successfully evaluated.
+        number_of_sessions_in_progress: Number of sessions still being evaluated (non-zero
             only in intermediate states).
-        sessions_failed: Number of sessions that failed evaluation.
-        total_sessions: Total number of sessions submitted for evaluation.
-        evaluator_summaries: Per-evaluator statistics including average score
-            and token usage.
+        number_of_sessions_failed: Number of sessions that failed evaluation.
+        total_number_of_sessions: Total number of sessions submitted for evaluation.
+        number_of_sessions_ignored: Number of sessions that were ignored.
+        evaluator_summaries: Per-evaluator statistics including average score.
     """
 
     model_config = ConfigDict(alias_generator=alias_generators.to_camel, populate_by_name=True)
 
-    sessions_completed: Optional[int] = None
-    sessions_in_progress: Optional[int] = None
-    sessions_failed: Optional[int] = None
-    total_sessions: Optional[int] = None
+    number_of_sessions_completed: Optional[int] = None
+    number_of_sessions_in_progress: Optional[int] = None
+    number_of_sessions_failed: Optional[int] = None
+    total_number_of_sessions: Optional[int] = None
+    number_of_sessions_ignored: Optional[int] = None
     evaluator_summaries: Optional[List[EvaluatorSummary]] = None
 
 
@@ -204,9 +189,10 @@ class BatchEvaluationResult(BaseModel):
     """Result returned by :py:meth:`BatchEvaluationRunner.run`.
 
     Attributes:
-        batch_evaluate_id: Unique identifier for the batch evaluation job,
+        batch_evaluation_id: Unique identifier for the batch evaluation job,
             returned by StartBatchEvaluation.
-        batch_evaluate_arn: ARN of the batch evaluation resource.
+        batch_evaluation_arn: ARN of the batch evaluation resource.
+        batch_evaluation_name: Human-readable name for the batch evaluation job.
         status: Terminal status of the job (e.g. ``"COMPLETED"``).
         created_at: Timestamp when the batch evaluation job was created.
         evaluation_results: Aggregated per-evaluator statistics. Present when
@@ -222,8 +208,9 @@ class BatchEvaluationResult(BaseModel):
             to read the raw OTel evaluation records.
     """
 
-    batch_evaluate_id: str
-    batch_evaluate_arn: str
+    batch_evaluation_id: str
+    batch_evaluation_arn: str
+    batch_evaluation_name: str
     status: str
     created_at: datetime
     evaluation_results: Optional[BatchEvaluationSummary] = None
@@ -251,10 +238,10 @@ class BatchEvaluationRunConfig(BaseModel):
     """Configuration for a single batch evaluation run.
 
     Attributes:
-        name: Human-readable name for the batch evaluation job.
+        batch_evaluation_name: Human-readable name for the batch evaluation job.
         evaluator_config: Evaluators to run (built-in IDs or custom ARNs).
-        session_source: Source from which the service reads agent session spans.
-            Use ``CloudWatchSessionSourceConfig`` for agents running on AgentCore Runtime.
+        data_source: Source from which the service reads agent session spans.
+            Use ``CloudWatchDataSourceConfig`` for agents running on AgentCore Runtime.
         max_concurrent_scenarios: Maximum number of scenarios to invoke in
             parallel during the agent invocation phase. Defaults to 5.
         polling_timeout_seconds: Maximum time to wait for the evaluation job
@@ -265,9 +252,10 @@ class BatchEvaluationRunConfig(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    name: str
+    batch_evaluation_name: str
+    description: Optional[str] = None
     evaluator_config: BatchEvaluatorConfig
-    session_source: SessionSourceConfig
+    data_source: DataSourceConfig
     max_concurrent_scenarios: int = 5
     polling_timeout_seconds: int = 1800
     polling_interval_seconds: int = 30

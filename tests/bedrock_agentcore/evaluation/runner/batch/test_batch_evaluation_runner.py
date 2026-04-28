@@ -10,7 +10,7 @@ from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     BatchEvaluationRunConfig,
     BatchEvaluatorConfig,
     CloudWatchOutputDataConfig,
-    CloudWatchSessionSourceConfig,
+    CloudWatchDataSourceConfig,
 )
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_runner import (
     BatchEvaluationRunner,
@@ -42,7 +42,7 @@ def _make_invoker():
 
 
 def _make_cw_source():
-    return CloudWatchSessionSourceConfig(
+    return CloudWatchDataSourceConfig(
         service_names=["my-service"],
         log_group_names=["/aws/my-log-group"],
         ingestion_delay_seconds=0,
@@ -51,61 +51,51 @@ def _make_cw_source():
 
 def _make_config(source=None):
     return BatchEvaluationRunConfig(
-        name="test-eval",
+        batch_evaluation_name="test-eval",
         evaluator_config=BatchEvaluatorConfig(evaluator_ids=["Builtin.Helpfulness"]),
-        session_source=source or _make_cw_source(),
+        data_source=source or _make_cw_source(),
         max_concurrent_scenarios=2,
         polling_timeout_seconds=60,
         polling_interval_seconds=5,
     )
 
 
-def _make_start_response(batch_evaluate_id="eval-001"):
+def _make_start_response(batch_evaluation_id="eval-001"):
     return {
-        "batchEvaluateId": batch_evaluate_id,
-        "batchEvaluateArn": f"arn:aws:bedrock-agentcore:us-west-2:123:batch-evaluation/{batch_evaluate_id}",
-        "name": "test-eval",
+        "batchEvaluationId": batch_evaluation_id,
+        "batchEvaluationArn": f"arn:aws:bedrock-agentcore:us-west-2:123:batch-evaluation/{batch_evaluation_id}",
+        "batchEvaluationName": "test-eval",
         "status": "PENDING",
         "createdAt": _T0,
-        "evaluationConfig": {},
-        "executionRoleArn": "arn:aws:iam::123456789012:role/EvalRole",
     }
 
 
-def _make_completed_response(batch_evaluate_id="eval-001", with_output_data=False, with_eval_results=False):
+def _make_completed_response(batch_evaluation_id="eval-001", with_output_data=False, with_eval_results=False):
     response = {
-        "batchEvaluateId": batch_evaluate_id,
-        "batchEvaluateArn": f"arn:aws:bedrock-agentcore:us-west-2:123:batch-evaluation/{batch_evaluate_id}",
-        "name": "test-eval",
+        "batchEvaluationId": batch_evaluation_id,
+        "batchEvaluationArn": f"arn:aws:bedrock-agentcore:us-west-2:123:batch-evaluation/{batch_evaluation_id}",
+        "batchEvaluationName": "test-eval",
         "status": "COMPLETED",
         "createdAt": _T0,
-        "evaluationConfig": {},
-        "executionRoleArn": "arn:aws:iam::123456789012:role/EvalRole",
     }
     if with_output_data:
-        response["outputDataConfig"] = {
-            "cloudWatchDestination": {
+        response["outputConfig"] = {
+            "cloudWatchConfig": {
                 "logGroupName": "/aws/agentcore/evaluation/results",
                 "logStreamName": "batch-eval-001",
             }
         }
     if with_eval_results:
         response["evaluationResults"] = {
-            "sessionsCompleted": 1,
-            "sessionsInProgress": 0,
-            "sessionsFailed": 0,
-            "totalSessions": 1,
+            "numberOfSessionsCompleted": 1,
+            "numberOfSessionsInProgress": 0,
+            "numberOfSessionsFailed": 0,
+            "totalNumberOfSessions": 1,
             "evaluatorSummaries": [
                 {
                     "evaluatorId": "Builtin.Helpfulness",
-                    "evaluatorName": "Helpfulness",
                     "statistics": {
                         "averageScore": 0.9,
-                        "averageTokenUsage": {
-                            "inputTokens": 100,
-                            "outputTokens": 50,
-                            "totalTokens": 150,
-                        },
                     },
                     "totalEvaluated": 1,
                     "totalFailed": 0,
@@ -138,9 +128,9 @@ def test_run_config_polling_timeout_must_exceed_interval():
     # Equal counts as invalid (validator uses <=)
     with pytest.raises(ValidationError, match="polling_timeout_seconds"):
         BatchEvaluationRunConfig(
-            name="x",
+            batch_evaluation_name="x",
             evaluator_config=BatchEvaluatorConfig(evaluator_ids=["Builtin.Helpfulness"]),
-            session_source=_make_cw_source(),
+            data_source=_make_cw_source(),
             polling_timeout_seconds=5,
             polling_interval_seconds=5,
         )
@@ -149,9 +139,9 @@ def test_run_config_polling_timeout_must_exceed_interval():
 def test_run_config_max_concurrent_must_be_positive():
     with pytest.raises(ValidationError, match="max_concurrent_scenarios"):
         BatchEvaluationRunConfig(
-            name="x",
+            batch_evaluation_name="x",
             evaluator_config=BatchEvaluatorConfig(evaluator_ids=["Builtin.Helpfulness"]),
-            session_source=_make_cw_source(),
+            data_source=_make_cw_source(),
             max_concurrent_scenarios=0,
             polling_timeout_seconds=60,
             polling_interval_seconds=5,
@@ -159,13 +149,13 @@ def test_run_config_max_concurrent_must_be_positive():
 
 
 # ---------------------------------------------------------------------------
-# CloudWatchSessionSourceConfig.pre_evaluation_run_hook (#12)
+# CloudWatchDataSourceConfig.pre_evaluation_run_hook (#12)
 # ---------------------------------------------------------------------------
 
 
 @patch("time.sleep")
 def test_pre_evaluation_run_hook_sleeps_when_delay_nonzero(mock_sleep):
-    source = CloudWatchSessionSourceConfig(
+    source = CloudWatchDataSourceConfig(
         service_names=["svc"],
         log_group_names=["/aws/logs"],
         ingestion_delay_seconds=30,
@@ -176,7 +166,7 @@ def test_pre_evaluation_run_hook_sleeps_when_delay_nonzero(mock_sleep):
 
 @patch("time.sleep")
 def test_pre_evaluation_run_hook_skips_sleep_when_delay_zero(mock_sleep):
-    source = CloudWatchSessionSourceConfig(
+    source = CloudWatchDataSourceConfig(
         service_names=["svc"],
         log_group_names=["/aws/logs"],
         ingestion_delay_seconds=0,
@@ -238,7 +228,7 @@ def test_run_happy_path_returns_result():
     ):
         result = runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
 
-    assert result.batch_evaluate_id == "eval-001"
+    assert result.batch_evaluation_id == "eval-001"
     assert result.status == "COMPLETED"
     assert result.agent_invocation_failures == []
 
@@ -302,13 +292,12 @@ def test_run_parses_evaluation_results():
         result = runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
 
     assert result.evaluation_results is not None
-    assert result.evaluation_results.sessions_completed == 1
-    assert result.evaluation_results.total_sessions == 1
+    assert result.evaluation_results.number_of_sessions_completed == 1
+    assert result.evaluation_results.total_number_of_sessions == 1
     assert len(result.evaluation_results.evaluator_summaries) == 1
     summary = result.evaluation_results.evaluator_summaries[0]
     assert summary.evaluator_id == "Builtin.Helpfulness"
     assert summary.statistics.average_score == 0.9
-    assert summary.statistics.average_token_usage.total_tokens == 150
 
 
 def test_run_start_batch_evaluation_failure_raises_runtime_error():
@@ -391,7 +380,7 @@ def test_poll_for_results_timeout_raises_timeout_error():
 
 
 def test_run_cloudwatch_source_passes_session_ids():
-    """Runner passes session_ids to CloudWatchSessionSourceConfig."""
+    """Runner passes session_ids to CloudWatchDataSourceConfig."""
     runner = _make_runner()
     runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
     runner.data_plane_client.get_batch_evaluation.return_value = _make_completed_response()
@@ -409,8 +398,8 @@ def test_run_cloudwatch_source_passes_session_ids():
         )
 
     call_kwargs = runner.data_plane_client.start_batch_evaluation.call_args.kwargs
-    session_input = call_kwargs["sessionSource"]["cloudWatchSource"]["sessionInput"]
-    assert session_input == {"sessionIds": ["s1-session-abc"]}
+    filter_config = call_kwargs["dataSourceConfig"]["cloudWatchLogs"]["filterConfig"]
+    assert filter_config["sessionIds"] == ["s1-session-abc"]
 
 
 # ---------------------------------------------------------------------------
@@ -422,7 +411,7 @@ def test_fetch_evaluation_events_raises_when_no_output_data_config():
     runner = _make_runner()
     result = MagicMock()
     result.output_data_config = None
-    result.batch_evaluate_id = "eval-001"
+    result.batch_evaluation_id = "eval-001"
 
     with pytest.raises(ValueError, match="No output_data_config"):
         runner.fetch_evaluation_events(result)
@@ -568,7 +557,7 @@ def _make_log_event(message: str) -> dict:
 def _make_fetch_result(output_data_config):
     result = MagicMock()
     result.output_data_config = output_data_config
-    result.batch_evaluate_id = "eval-001"
+    result.batch_evaluation_id = "eval-001"
     return result
 
 
