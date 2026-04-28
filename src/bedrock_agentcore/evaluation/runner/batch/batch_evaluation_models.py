@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, alias_generators, model_validator
 
+from bedrock_agentcore.evaluation.runner.dataset_types import SimulationConfig
+
 logger = logging.getLogger(__name__)
 
 
@@ -248,6 +250,8 @@ class BatchEvaluationRunConfig(BaseModel):
             to reach a terminal state. Defaults to 1800 (30 minutes).
         polling_interval_seconds: Time between GetBatchEvaluation polls.
             Defaults to 30 seconds. Must be less than ``polling_timeout_seconds``.
+        simulation_config: Actor simulation settings. Required when the dataset
+            contains SimulatedScenario entries.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -259,6 +263,7 @@ class BatchEvaluationRunConfig(BaseModel):
     max_concurrent_scenarios: int = 5
     polling_timeout_seconds: int = 1800
     polling_interval_seconds: int = 30
+    simulation_config: Optional[SimulationConfig] = None
 
     @model_validator(mode="after")
     def validate_polling(self):

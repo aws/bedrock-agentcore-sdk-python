@@ -15,7 +15,13 @@ from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_runner import (
     BatchEvaluationRunner,
 )
-from bedrock_agentcore.evaluation.runner.dataset_types import Dataset, PredefinedScenario, Turn
+from bedrock_agentcore.evaluation.runner.dataset_types import (
+    ActorProfile,
+    Dataset,
+    PredefinedScenario,
+    SimulatedScenario,
+    Turn,
+)
 from bedrock_agentcore.evaluation.runner.invoker_types import AgentInvokerInput, AgentInvokerOutput
 
 # ---------------------------------------------------------------------------
@@ -503,6 +509,32 @@ def test_transform_ground_truth_all_fields():
     assert "turns" in gt
 
 
+def test_transform_ground_truth_simulated_no_assertions():
+    runner = _make_runner()
+    scenario = SimulatedScenario(
+        scenario_id="sim-1",
+        scenario_description="Customer orders pizza",
+        actor_profile=ActorProfile(context="A customer", goal="Order pizza"),
+        input="Hello",
+    )
+    assert runner._transform_ground_truth(scenario) is None
+
+
+def test_transform_ground_truth_simulated_with_assertions():
+    runner = _make_runner()
+    scenario = SimulatedScenario(
+        scenario_id="sim-2",
+        scenario_description="Customer orders pizza",
+        actor_profile=ActorProfile(context="A customer", goal="Order pizza"),
+        input="Hello",
+        assertions=["Must confirm order", "Must be polite"],
+    )
+    gt = runner._transform_ground_truth(scenario)
+    assert gt == {"assertions": [{"text": "Must confirm order"}, {"text": "Must be polite"}]}
+    assert "turns" not in gt
+    assert "expectedTrajectory" not in gt
+
+
 # ---------------------------------------------------------------------------
 # _execute_scenario and _poll_for_results edge cases
 # ---------------------------------------------------------------------------
@@ -517,8 +549,11 @@ def test_execute_scenario_unsupported_type_raises_type_error():
         pass
 
     scenario = _CustomScenario(scenario_id="s1")
+    from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import BatchEvaluationRunConfig
+
+    config = BatchEvaluationRunConfig.__new__(BatchEvaluationRunConfig)
     with pytest.raises(TypeError, match="Unsupported scenario type"):
-        runner._execute_scenario(scenario, _make_invoker())
+        runner._execute_scenario(config, scenario, _make_invoker())
 
 
 def test_poll_for_results_get_batch_evaluation_failure_raises_runtime_error():

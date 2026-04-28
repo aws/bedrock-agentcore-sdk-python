@@ -3,11 +3,25 @@
 Defines how evaluation datasets, scenarios, and turns are structured.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 Input = Union[str, Dict[str, Any]]
+
+
+class ActorProfile(BaseModel):
+    """Profile describing the simulated actor's identity and objective.
+
+    Attributes:
+        traits: Characteristics of the actor (e.g. expertise level, communication style).
+        context: Background information about the actor.
+        goal: What the actor wants to achieve in the interaction.
+    """
+
+    traits: Dict[str, Any] = {}
+    context: str
+    goal: str
 
 
 class Turn(BaseModel):
@@ -39,6 +53,38 @@ class PredefinedScenario(Scenario):
         return self
 
 
+class SimulatedScenario(Scenario):
+    """A scenario driven by a simulated actor in a multi-turn conversation loop.
+
+    Attributes:
+        scenario_description: Human-readable description of what this scenario tests.
+            When provided, this is injected into the actor's system prompt as a
+            ``## Scenario`` section to give the actor additional context. When omitted,
+            the Strands default system prompt is used unchanged. Defaults to ``""``.
+
+        actor_profile: Profile defining the simulated actor's traits, context, and goal.
+        input: The initial payload sent to the agent to start the conversation.
+            Accepts a plain string, a structured dict, or a ``pydantic.BaseModel``
+            instance (e.g. an instance of ``SimulationConfig.input_type``).
+        max_turns: Maximum number of conversation turns before the simulation stops.
+            Defaults to 10.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    scenario_description: str = ""
+    actor_profile: ActorProfile
+    input: Union[str, Dict[str, Any], BaseModel]
+    max_turns: int = 10
+
+    @model_validator(mode="after")
+    def validate_max_turns(self):
+        """Validate that max_turns is at least 1."""
+        if self.max_turns < 1:
+            raise ValueError("max_turns must be >= 1")
+        return self
+
+
 class Dataset(BaseModel):
     """A collection of evaluation scenarios."""
 
@@ -49,8 +95,41 @@ class Dataset(BaseModel):
         """Validate that scenarios list is not empty and has unique IDs."""
         if not self.scenarios:
             raise ValueError("scenarios must not be empty")
-        ids = [s.scenario_id for s in self.scenarios]
-        duplicates = set(sid for sid in ids if ids.count(sid) > 1)
+        seen: set = set()
+        duplicates: set = set()
+        for s in self.scenarios:
+            (duplicates if s.scenario_id in seen else seen).add(s.scenario_id)
         if duplicates:
             raise ValueError(f"Duplicate scenario_ids: {duplicates}")
         return self
+
+
+class SimulationConfig(BaseModel):
+    """Configuration for actor simulation in SimulatedScenario execution.
+
+    Attributes:
+        model_id: Bedrock model ID for the actor agent. Uses the Strands
+            default model when None.
+        system_prompt_template: Jinja2 system prompt template for the actor.
+            Must contain an ``{{ actor_profile }}`` placeholder. When ``output_type``
+            is set, may include an ``{{ output_schema }}`` placeholder so the actor
+            knows the JSON format to expect from the agent. Input schema is not
+            injected into the prompt — structured input typing is enforced via the
+            response model's tool-use schema instead. When None, the built-in
+            ``structured_user_simulator.j2`` template is used.
+        input_type: Pydantic model class describing the agent's expected input.
+            When set, ``input`` values in SimulatedScenario are validated into
+            this type for the first agent call. For subsequent turns the actor is
+            schema-constrained via tool-use to produce instances of this type
+            directly, eliminating the need for JSON parsing heuristics.
+        output_type: Pydantic model class describing the agent's output schema. When
+            set, the actor system prompt includes the output schema so the actor knows
+            the JSON format to expect from the agent when forming its next turn.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    model_id: Optional[str] = None
+    system_prompt_template: Optional[str] = None
+    input_type: Optional[Type[BaseModel]] = None
+    output_type: Optional[Type[BaseModel]] = None

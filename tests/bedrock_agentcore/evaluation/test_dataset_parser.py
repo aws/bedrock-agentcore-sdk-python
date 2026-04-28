@@ -6,8 +6,10 @@ import pytest
 
 from bedrock_agentcore.evaluation.runner.dataset_providers import FileDatasetProvider
 from bedrock_agentcore.evaluation.runner.dataset_types import (
+    ActorProfile,
     Dataset,
     PredefinedScenario,
+    SimulatedScenario,
 )
 
 
@@ -89,3 +91,79 @@ class TestFileDatasetProvider:
         provider = FileDatasetProvider(str(file_path))
         with pytest.raises(json.JSONDecodeError):
             provider.get_dataset()
+
+    def test_parse_simulated(self, tmp_path):
+        data = {
+            "scenarios": [
+                {
+                    "scenario_id": "sim-1",
+                    "scenario_description": "Customer orders pizza",
+                    "actor_profile": {
+                        "traits": {"expertise": "novice"},
+                        "context": "A hungry customer",
+                        "goal": "Order a pizza successfully",
+                    },
+                    "input": "I'd like to order a pizza",
+                    "max_turns": 5,
+                }
+            ]
+        }
+        dataset = self._write_and_load(tmp_path, data)
+        assert len(dataset.scenarios) == 1
+        scenario = dataset.scenarios[0]
+        assert isinstance(scenario, SimulatedScenario)
+        assert scenario.scenario_id == "sim-1"
+        assert scenario.scenario_description == "Customer orders pizza"
+        assert isinstance(scenario.actor_profile, ActorProfile)
+        assert scenario.actor_profile.goal == "Order a pizza successfully"
+        assert scenario.input == "I'd like to order a pizza"
+        assert scenario.max_turns == 5
+
+    def test_parse_simulated_default_max_turns(self, tmp_path):
+        data = {
+            "scenarios": [
+                {
+                    "scenario_id": "sim-2",
+                    "scenario_description": "desc",
+                    "actor_profile": {"context": "ctx", "goal": "goal"},
+                    "input": "hello",
+                }
+            ]
+        }
+        dataset = self._write_and_load(tmp_path, data)
+        assert dataset.scenarios[0].max_turns == 10
+
+    def test_parse_simulated_with_assertions(self, tmp_path):
+        data = {
+            "scenarios": [
+                {
+                    "scenario_id": "sim-3",
+                    "scenario_description": "desc",
+                    "actor_profile": {"context": "ctx", "goal": "goal"},
+                    "input": "hello",
+                    "assertions": ["Must greet user", "Must confirm order"],
+                }
+            ]
+        }
+        dataset = self._write_and_load(tmp_path, data)
+        assert dataset.scenarios[0].assertions == ["Must greet user", "Must confirm order"]
+
+    def test_parse_mixed_predefined_and_simulated(self, tmp_path):
+        data = {
+            "scenarios": [
+                {
+                    "scenario_id": "pre-1",
+                    "turns": [{"input": "hello"}],
+                },
+                {
+                    "scenario_id": "sim-1",
+                    "scenario_description": "desc",
+                    "actor_profile": {"context": "ctx", "goal": "goal"},
+                    "input": "hello",
+                },
+            ]
+        }
+        dataset = self._write_and_load(tmp_path, data)
+        assert len(dataset.scenarios) == 2
+        assert isinstance(dataset.scenarios[0], PredefinedScenario)
+        assert isinstance(dataset.scenarios[1], SimulatedScenario)

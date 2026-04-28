@@ -25,10 +25,12 @@ from bedrock_agentcore.evaluation.runner.dataset_providers import (
     FileDatasetProvider,
 )
 from bedrock_agentcore.evaluation.runner.dataset_types import (
+    ActorProfile,
     Dataset,
     Input,
     PredefinedScenario,
     Scenario,
+    SimulatedScenario,
     Turn,
 )
 from bedrock_agentcore.evaluation.runner.invoker_types import (
@@ -48,6 +50,8 @@ from bedrock_agentcore.evaluation.runner.on_demand import (
     ScenarioExecutionResult,
     ScenarioExecutor,
     ScenarioResult,
+    SimulatedScenarioExecutor,
+    SimulationConfig,
 )
 from bedrock_agentcore.evaluation.span_to_adot_serializer import (
     convert_strands_to_adot,
@@ -57,6 +61,7 @@ from bedrock_agentcore.evaluation.utils.cloudwatch_span_helper import (
 )
 
 __all__ = [
+    "ActorProfile",
     "AgentInvokerFn",
     "BatchEvaluationRunner",
     "BatchEvaluationResult",
@@ -89,10 +94,13 @@ __all__ = [
     "ScenarioExecutor",
     "ScenarioResult",
     "AgentSpanCollector",
+    "SimulationConfig",
     "StrandsEvalsAgentCoreEvaluator",
     "Turn",
     "PredefinedScenario",
     "PredefinedScenarioExecutor",
+    "SimulatedScenario",
+    "SimulatedScenarioExecutor",
     "custom_code_based_evaluator",
     "convert_strands_to_adot",
     "create_strands_evaluator",

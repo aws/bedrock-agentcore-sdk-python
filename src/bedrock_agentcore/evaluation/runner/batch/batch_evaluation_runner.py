@@ -22,12 +22,13 @@ from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     CloudWatchOutputDataConfig,
     FailedScenario,
 )
-from bedrock_agentcore.evaluation.runner.dataset_types import Dataset, PredefinedScenario, Scenario
+from bedrock_agentcore.evaluation.runner.dataset_types import Dataset, PredefinedScenario, Scenario, SimulatedScenario
 from bedrock_agentcore.evaluation.runner.invoker_types import AgentInvokerFn
 from bedrock_agentcore.evaluation.runner.scenario_executor import (
     PredefinedScenarioExecutor,
     ScenarioExecutionResult,
     ScenarioExecutor,
+    SimulatedScenarioExecutor,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ class BatchEvaluationRunner:
 
     _SCENARIO_EXECUTORS: Dict[type, type[ScenarioExecutor]] = {
         PredefinedScenario: PredefinedScenarioExecutor,
+        SimulatedScenario: SimulatedScenarioExecutor,
     }
 
     def __init__(self, region: Optional[str] = None):
@@ -122,12 +124,14 @@ class BatchEvaluationRunner:
 
     def _execute_scenario(
         self,
+        config: BatchEvaluationRunConfig,
         scenario: Scenario,
         agent_invoker: AgentInvokerFn,
     ) -> ScenarioExecutionResult:
         """Execute a single scenario and return the execution result.
 
         Args:
+            config: Batch evaluation run configuration.
             scenario: Scenario to execute.
             agent_invoker: Agent invocation function.
 
@@ -141,11 +145,16 @@ class BatchEvaluationRunner:
         if executor_cls is None:
             raise TypeError(f"Unsupported scenario type: {type(scenario).__name__}")
 
-        executor = executor_cls(agent_invoker=agent_invoker)
+        kwargs: Dict[str, Any] = {"agent_invoker": agent_invoker}
+        if isinstance(scenario, SimulatedScenario):
+            kwargs["simulation_config"] = config.simulation_config
+
+        executor = executor_cls(**kwargs)
         return executor.run_scenario(scenario)
 
     def _execute_scenarios_parallel(
         self,
+        config: BatchEvaluationRunConfig,
         dataset: Dataset,
         agent_invoker: AgentInvokerFn,
         max_workers: int,
@@ -153,6 +162,7 @@ class BatchEvaluationRunner:
         """Execute all scenarios in parallel using ThreadPoolExecutor.
 
         Args:
+            config: Batch evaluation run configuration forwarded to each executor.
             dataset: Collection of scenarios.
             agent_invoker: Agent invocation function.
             max_workers: Maximum concurrent executions.
@@ -166,7 +176,7 @@ class BatchEvaluationRunner:
         workers = min(max_workers, len(dataset.scenarios)) if dataset.scenarios else 1
         with ThreadPoolExecutor(max_workers=workers) as executor:
             future_to_scenario = {
-                executor.submit(self._execute_scenario, scenario, agent_invoker): scenario
+                executor.submit(self._execute_scenario, config, scenario, agent_invoker): scenario
                 for scenario in dataset.scenarios
             }
             for future in as_completed(future_to_scenario):
@@ -351,6 +361,7 @@ class BatchEvaluationRunner:
         )
 
         successful_sessions, failed_scenarios = self._execute_scenarios_parallel(
+            config,
             dataset,
             agent_invoker,
             config.max_concurrent_scenarios,
@@ -408,10 +419,6 @@ class BatchEvaluationRunner:
             config.polling_interval_seconds,
         )
 
-        created_at = response["createdAt"]
-        if isinstance(created_at, str):
-            created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-
         evaluation_results = None
         if "evaluationResults" in response:
             evaluation_results = BatchEvaluationSummary.model_validate(response["evaluationResults"])
@@ -430,7 +437,7 @@ class BatchEvaluationRunner:
             batch_evaluation_arn=batch_evaluation_arn,
             batch_evaluation_name=response["batchEvaluationName"],
             status=response["status"],
-            created_at=created_at,
+            created_at=response["createdAt"],
             description=response.get("description"),
             agent_invocation_failures=failed_scenarios,
             evaluation_results=evaluation_results,

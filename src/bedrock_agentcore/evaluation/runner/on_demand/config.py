@@ -16,10 +16,12 @@ class EvaluatorConfig(BaseModel):
 
 
 class EvaluationRunConfig(BaseModel):
-    """Top-level configuration for an evaluation run.
+    """Top-level configuration for an on-demand evaluation run.
 
     Attributes:
         evaluator_config: Evaluator settings.
+        evaluation_delay_seconds: Seconds to wait for CloudWatch span ingestion.
+        max_concurrent_scenarios: Thread pool size for concurrent scenario execution.
     """
 
     evaluator_config: EvaluatorConfig
