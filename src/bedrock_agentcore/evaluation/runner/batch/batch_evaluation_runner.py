@@ -225,14 +225,14 @@ class BatchEvaluationRunner:
 
     def _poll_for_results(
         self,
-        batch_evaluate_id: str,
+        batch_evaluation_id: str,
         timeout: int,
         poll_interval: int,
     ) -> Dict[str, Any]:
         """Poll GetBatchEvaluation until a terminal state is reached.
 
         Args:
-            batch_evaluate_id: Batch evaluation ID returned by StartBatchEvaluation.
+            batch_evaluation_id: Batch evaluation ID returned by StartBatchEvaluation.
             timeout: Maximum polling time in seconds.
             poll_interval: Fixed interval between polls in seconds.
 
@@ -247,7 +247,7 @@ class BatchEvaluationRunner:
         start_time = time.monotonic()
         logger.info(
             "Polling for batch evaluation %s (timeout=%ds, interval=%ds)",
-            batch_evaluate_id,
+            batch_evaluation_id,
             timeout,
             poll_interval,
         )
@@ -257,15 +257,15 @@ class BatchEvaluationRunner:
             if elapsed > timeout:
                 logger.error(
                     "Polling timeout exceeded for batch evaluation %s (elapsed=%.1fs, timeout=%ds)",
-                    batch_evaluate_id,
+                    batch_evaluation_id,
                     elapsed,
                     timeout,
                 )
-                raise TimeoutError(f"Polling timeout exceeded ({timeout}s) for batch evaluation {batch_evaluate_id}")
+                raise TimeoutError(f"Polling timeout exceeded ({timeout}s) for batch evaluation {batch_evaluation_id}")
 
             try:
                 response: Dict[str, Any] = self.data_plane_client.get_batch_evaluation(
-                    batchEvaluateId=batch_evaluate_id,
+                    batchEvaluationId=batch_evaluation_id,
                 )
             except Exception as e:
                 error_code = self._get_boto3_error_code(e)
@@ -279,7 +279,7 @@ class BatchEvaluationRunner:
             status = response.get("status")
             logger.info(
                 "Batch evaluation %s status: %s (elapsed: %.1fs)",
-                batch_evaluate_id,
+                batch_evaluation_id,
                 status,
                 elapsed,
             )
@@ -289,11 +289,11 @@ class BatchEvaluationRunner:
 
             if status == "FAILED":
                 error_details = response.get("errorDetails", [])
-                logger.error("Batch evaluation %s failed: %s", batch_evaluate_id, error_details)
-                raise RuntimeError(f"Batch evaluation {batch_evaluate_id} failed: {error_details}")
+                logger.error("Batch evaluation %s failed: %s", batch_evaluation_id, error_details)
+                raise RuntimeError(f"Batch evaluation {batch_evaluation_id} failed: {error_details}")
 
             if status == "STOPPED":
-                raise RuntimeError(f"Batch evaluation {batch_evaluate_id} was stopped")
+                raise RuntimeError(f"Batch evaluation {batch_evaluation_id} was stopped")
 
             if status in _RUNNING_STATES:
                 time.sleep(poll_interval)
@@ -321,7 +321,7 @@ class BatchEvaluationRunner:
           with explanations (``gen_ai.evaluation.explanation``).
 
         Args:
-            config: Evaluation name, IAM role, evaluator IDs, session source,
+            config: Evaluation name, evaluator IDs, session source,
                 concurrency, and polling timeouts.
             dataset: Scenarios to evaluate, with optional ground truth
                 (``assertions``, ``expected_trajectory``, per-turn
@@ -362,7 +362,7 @@ class BatchEvaluationRunner:
                 f"Failed scenario IDs: {[fs.scenario_id for fs in failed_scenarios]}"
             )
 
-        config.session_source.pre_evaluation_run_hook()
+        config.data_source.pre_evaluation_run_hook()
 
         session_metadata_list = [
             {
@@ -373,36 +373,37 @@ class BatchEvaluationRunner:
             for session in successful_sessions
         ]
 
-        logger.info("Calling StartBatchEvaluation (name=%s)", config.name)
+        logger.info("Calling StartBatchEvaluation (name=%s)", config.batch_evaluation_name)
         try:
-            start_response = self.data_plane_client.start_batch_evaluation(
-                name=config.name,
-                evaluationConfig={
-                    "evaluators": [{"evaluatorId": eid} for eid in config.evaluator_config.evaluator_ids]
-                },
-                sessionSource=config.session_source.to_api_source(
+            start_kwargs: Dict[str, Any] = dict(
+                batchEvaluationName=config.batch_evaluation_name,
+                evaluators=[{"evaluatorId": eid} for eid in config.evaluator_config.evaluator_ids],
+                dataSourceConfig=config.data_source.to_data_source_config(
                     [s.session_id for s in successful_sessions],
                     min(s.start_time for s in successful_sessions),
                     max(s.end_time for s in successful_sessions),
                 ),
-                sessionMetadata=session_metadata_list,
+                evaluationMetadata={"sessionMetadata": session_metadata_list},
             )
+            if config.description is not None:
+                start_kwargs["description"] = config.description
+            start_response = self.data_plane_client.start_batch_evaluation(**start_kwargs)
         except Exception as e:
             error_code = self._get_boto3_error_code(e)
             logger.exception(
                 "StartBatchEvaluation failed (name=%s, error_code=%s): %s",
-                config.name,
+                config.batch_evaluation_name,
                 error_code,
                 e,
             )
             raise RuntimeError(f"StartBatchEvaluation failed: {e} (error_code={error_code})") from e
 
-        batch_evaluate_id: str = start_response["batchEvaluateId"]
-        batch_evaluate_arn: str = start_response["batchEvaluateArn"]
-        logger.info("Started batch evaluation: %s", batch_evaluate_id)
+        batch_evaluation_id: str = start_response["batchEvaluationId"]
+        batch_evaluation_arn: str = start_response["batchEvaluationArn"]
+        logger.info("Started batch evaluation: %s", batch_evaluation_id)
 
         response = self._poll_for_results(
-            batch_evaluate_id,
+            batch_evaluation_id,
             config.polling_timeout_seconds,
             config.polling_interval_seconds,
         )
@@ -416,8 +417,8 @@ class BatchEvaluationRunner:
             evaluation_results = BatchEvaluationSummary.model_validate(response["evaluationResults"])
 
         output_data_config = None
-        if "outputDataConfig" in response:
-            odc = response["outputDataConfig"].get("cloudWatchDestination")
+        if "outputConfig" in response:
+            odc = response["outputConfig"].get("cloudWatchConfig")
             if odc:
                 output_data_config = CloudWatchOutputDataConfig(
                     log_group_name=odc["logGroupName"],
@@ -425,10 +426,12 @@ class BatchEvaluationRunner:
                 )
 
         result = BatchEvaluationResult(
-            batch_evaluate_id=batch_evaluate_id,
-            batch_evaluate_arn=batch_evaluate_arn,
+            batch_evaluation_id=batch_evaluation_id,
+            batch_evaluation_arn=batch_evaluation_arn,
+            batch_evaluation_name=response["batchEvaluationName"],
             status=response["status"],
             created_at=created_at,
+            description=response.get("description"),
             agent_invocation_failures=failed_scenarios,
             evaluation_results=evaluation_results,
             error_details=response.get("errorDetails"),
@@ -436,11 +439,11 @@ class BatchEvaluationRunner:
         )
 
         logger.info(
-            "Batch evaluation complete: batch_evaluate_id=%s, status=%s, sessions_completed=%s, sessions_failed=%s",
-            result.batch_evaluate_id,
+            "Batch evaluation complete: batch_evaluation_id=%s, status=%s, sessions_completed=%s, sessions_failed=%s",
+            result.batch_evaluation_id,
             result.status,
-            result.evaluation_results.sessions_completed if result.evaluation_results else None,
-            result.evaluation_results.sessions_failed if result.evaluation_results else None,
+            result.evaluation_results.number_of_sessions_completed if result.evaluation_results else None,
+            result.evaluation_results.number_of_sessions_failed if result.evaluation_results else None,
         )
         return result
 
@@ -470,7 +473,7 @@ class BatchEvaluationRunner:
         """
         if result.output_data_config is None:
             raise ValueError(
-                f"No output_data_config on batch evaluation {result.batch_evaluate_id}. "
+                f"No output_data_config on batch evaluation {result.batch_evaluation_id}. "
                 "The service did not return a CloudWatch destination for this evaluation."
             )
         output_data_config = result.output_data_config

@@ -88,25 +88,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Publishes the current DRAFT as a new numbered version.</p> <p>Snapshots the DRAFT examples as the next version (0→1, 1→2, ...). The DRAFT is preserved and remains editable after publishing. Returns immediately with status PUBLISHING. Poll GetDataset until status transitions to ACTIVE or PUBLISH_FAILED.</p> <p><strong>State guard:</strong> Returns ConflictException (DATASET_NOT_READY) if the dataset status is not in {DRAFT, ACTIVE, PUBLISH_FAILED}.</p> <p><strong>Quota:</strong> MAX_VERSIONS_PER_DATASET applies to published versions only (not DRAFT).</p>"
-    },
-    "CreateEvaluationJob":{
-      "name":"CreateEvaluationJob",
-      "http":{
-        "method":"POST",
-        "requestUri":"/evaluation-jobs/create",
-        "responseCode":202
-      },
-      "input":{"shape":"CreateEvaluationJobRequest"},
-      "output":{"shape":"CreateEvaluationJobResponse"},
-      "errors":[
-        {"shape":"ServiceQuotaExceededException"},
-        {"shape":"ValidationException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ConflictException"},
-        {"shape":"ThrottlingException"},
-        {"shape":"InternalServerException"}
-      ]
+      "documentation":"<p>Publishes the current DRAFT as a new numbered version.</p> <p>Snapshots the DRAFT examples as the next version (1, 2, 3, ...). The DRAFT is preserved and remains editable after publishing. Returns immediately with status UPDATING. Poll GetDataset until status transitions to ACTIVE (draftStatus=UNMODIFIED) or UPDATE_FAILED.</p> <p><strong>State guard:</strong> Returns ConflictException (DATASET_NOT_READY) if status is in {CREATING, UPDATING, DELETING}, or DATASET_IN_FAILED_STATE if status is in {CREATE_FAILED, DELETE_FAILED}.</p> <p><strong>Quota:</strong> MAX_VERSIONS_PER_DATASET applies to published versions only (not DRAFT).</p>"
     },
     "CreateEvaluator":{
       "name":"CreateEvaluator",
@@ -202,25 +184,6 @@
       ],
       "documentation":"<p>Deletes specific examples by ID from DRAFT.</p> <p><strong>Validation:</strong> All example IDs are validated before any deletes occur. If any ID does not exist in DRAFT, the entire batch is rejected with ResourceNotFoundException — no examples are deleted (all-or-nothing semantics).</p> <p><strong>Asynchronous:</strong> Operates in-place on DRAFT. No version bump occurs. Use CreateDatasetVersion to publish DRAFT as a new numbered version.</p> <p><strong>State guard:</strong> Returns ConflictException (DATASET_NOT_READY) if the dataset status is not in {DRAFT, ACTIVE}.</p>"
     },
-    "DeleteEvaluationJob":{
-      "name":"DeleteEvaluationJob",
-      "http":{
-        "method":"DELETE",
-        "requestUri":"/evaluation-jobs/{evaluationJobId}",
-        "responseCode":202
-      },
-      "input":{"shape":"DeleteEvaluationJobRequest"},
-      "output":{"shape":"DeleteEvaluationJobResponse"},
-      "errors":[
-        {"shape":"ValidationException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ConflictException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"ThrottlingException"},
-        {"shape":"InternalServerException"}
-      ],
-      "idempotent":true
-    },
     "DeleteEvaluator":{
       "name":"DeleteEvaluator",
       "http":{
@@ -312,25 +275,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Retrieves dataset metadata only.</p> <p>Use <code>?datasetVersion=DRAFT</code> or <code>?datasetVersion=N</code> to retrieve a specific version's metadata. If absent, defaults to DRAFT (the latest unpublished version). Returns ResourceNotFoundException if the specified version is not found.</p> <p><strong>State guard:</strong> Returns ConflictException (DELETION_IN_PROGRESS) if the dataset status is DELETING — the resource exists but is mid-deletion and should not be read.</p> <p>For paginated example IDs use ListDatasetExamples.</p>",
-      "readonly":true
-    },
-    "GetEvaluationJob":{
-      "name":"GetEvaluationJob",
-      "http":{
-        "method":"GET",
-        "requestUri":"/evaluation-jobs/{evaluationJobId}",
-        "responseCode":200
-      },
-      "input":{"shape":"GetEvaluationJobRequest"},
-      "output":{"shape":"GetEvaluationJobResponse"},
-      "errors":[
-        {"shape":"ValidationException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"ThrottlingException"},
-        {"shape":"InternalServerException"}
-      ],
+      "documentation":"<p>Retrieves dataset metadata only.</p> <p>Use <code>?datasetVersion=DRAFT</code> or <code>?datasetVersion=N</code> to retrieve a specific version's metadata. If absent, defaults to DRAFT (the latest unpublished version). Returns ResourceNotFoundException if the specified version is not found.</p> <p><strong>State guard:</strong> Allowed for all statuses including DELETING. Returns the dataset record with its current status so callers can observe the deletion in progress.</p> <p>For paginated example IDs use ListDatasetExamples.</p>",
       "readonly":true
     },
     "GetEvaluator":{
@@ -421,7 +366,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Returns paginated example IDs from the dataset.</p> <p><strong>Version-pinned pagination:</strong> The server embeds the resolved version in the <code>nextToken</code>. Once pagination begins, all subsequent pages are pinned to that version regardless of concurrent mutations or whether <code>datasetVersion</code> is passed on subsequent requests. The <code>datasetVersion</code> query parameter is only used for the first request (when <code>nextToken</code> is absent); if omitted, defaults to DRAFT.</p> <p><strong>State guard:</strong> Returns ConflictException (DELETION_IN_PROGRESS) if the dataset status is DELETING.</p>",
+      "documentation":"<p>Returns paginated example IDs from the dataset.</p> <p><strong>Version-pinned pagination:</strong> The server embeds the resolved version in the <code>nextToken</code>. Once pagination begins, all subsequent pages are pinned to that version regardless of concurrent mutations or whether <code>datasetVersion</code> is passed on subsequent requests. The <code>datasetVersion</code> query parameter is only used for the first request (when <code>nextToken</code> is absent); if omitted, defaults to DRAFT.</p> <p><strong>State guard:</strong> Allowed for all statuses including DELETING.</p>",
       "readonly":true
     },
     "ListDatasets":{
@@ -440,23 +385,6 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Lists all datasets in the caller's account, paginated. No presigned URLs in list results.</p>",
-      "readonly":true
-    },
-    "ListEvaluationJobs":{
-      "name":"ListEvaluationJobs",
-      "http":{
-        "method":"POST",
-        "requestUri":"/evaluation-jobs",
-        "responseCode":200
-      },
-      "input":{"shape":"ListEvaluationJobsRequest"},
-      "output":{"shape":"ListEvaluationJobsResponse"},
-      "errors":[
-        {"shape":"ValidationException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ThrottlingException"},
-        {"shape":"InternalServerException"}
-      ],
       "readonly":true
     },
     "ListEvaluators":{
@@ -551,25 +479,6 @@
       ],
       "documentation":"<p>Updates multiple existing examples in-place on DRAFT.</p> <p><strong>Validation:</strong> All examples are validated against the dataset's schemaType before any writes occur. If any example fails validation, the entire batch is rejected with ValidationException — no examples are updated (all-or-nothing semantics).</p> <p><strong>Asynchronous:</strong> Operates in-place on DRAFT. No version bump occurs. Use CreateDatasetVersion to publish DRAFT as a new numbered version.</p> <p>Fails with ResourceNotFoundException if any exampleId does not exist in DRAFT. To add new examples, use AddDatasetExamples instead.</p> <p><strong>State guard:</strong> Returns ConflictException (DATASET_NOT_READY) if the dataset status is not in {DRAFT, ACTIVE}.</p> <p><strong>Request size limit:</strong> Max 5 MB total request body. Max 1000 examples per call.</p>"
     },
-    "UpdateEvaluationJob":{
-      "name":"UpdateEvaluationJob",
-      "http":{
-        "method":"PUT",
-        "requestUri":"/evaluation-jobs/{evaluationJobId}",
-        "responseCode":202
-      },
-      "input":{"shape":"UpdateEvaluationJobRequest"},
-      "output":{"shape":"UpdateEvaluationJobResponse"},
-      "errors":[
-        {"shape":"ValidationException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ConflictException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"ThrottlingException"},
-        {"shape":"InternalServerException"}
-      ],
-      "idempotent":true
-    },
     "UpdateEvaluator":{
       "name":"UpdateEvaluator",
       "http":{
@@ -647,7 +556,8 @@
     },
     "AddDatasetExamplesRequestExamplesList":{
       "type":"list",
-      "member":{"shape":"DatasetExample"},
+      "member":{"shape":"SensitiveJson"},
+      "documentation":"<p>Source of the dataset file. Either a customer S3 URI or inline bytes. Each element is a free-form JSON document whose structure is defined by the dataset's <code>schemaType</code>. Validated against the declared schema at write time. If an <code>exampleId</code> string field is present it is used as the example identifier and removed from the persisted content; otherwise a UUID is generated automatically.</p>",
       "max":1000,
       "min":1
     },
@@ -753,6 +663,27 @@
         "logGroupName":{"shape":"LogGroupName"}
       }
     },
+    "ClusteringConfig":{
+      "type":"structure",
+      "required":["frequencies"],
+      "members":{
+        "frequencies":{"shape":"ClusteringFrequencyList"}
+      }
+    },
+    "ClusteringFrequency":{
+      "type":"string",
+      "enum":[
+        "DAILY",
+        "WEEKLY",
+        "MONTHLY"
+      ]
+    },
+    "ClusteringFrequencyList":{
+      "type":"list",
+      "member":{"shape":"ClusteringFrequency"},
+      "max":3,
+      "min":0
+    },
     "CodeBasedEvaluatorConfig":{
       "type":"structure",
       "members":{
@@ -765,7 +696,8 @@
       "required":["configuration"],
       "members":{
         "configuration":{"shape":"Document"}
-      }
+      },
+      "sensitive":true
     },
     "ComponentConfigurationMap":{
       "type":"map",
@@ -910,7 +842,7 @@
       "type":"structure",
       "required":[
         "datasetName",
-        "source",
+        "examples",
         "schemaType"
       ],
       "members":{
@@ -924,12 +856,12 @@
           "documentation":"<p>Human-readable name for the dataset. Unique within the account (case-insensitive). Immutable after creation.</p>"
         },
         "description":{"shape":"CreateDatasetRequestDescriptionString"},
-        "source":{
-          "shape":"DatasetSource",
-          "documentation":"<p>Source of the dataset file.</p>"
+        "examples":{
+          "shape":"CreateDatasetRequestExamplesList",
+          "documentation":"<p>Initial examples for the dataset. Each element is a free-form JSON document validated against the declared schemaType. If an <code>exampleId</code> string field is present it is used as the example identifier and removed from persisted content; otherwise a UUID is generated automatically. Max 1000 examples per call.</p>"
         },
         "schemaType":{
-          "shape":"SchemaType",
+          "shape":"DatasetSchemaType",
           "documentation":"<p>Versioned schema type governing the structure of examples. Immutable after creation.</p>"
         },
         "kmsKeyArn":{
@@ -944,6 +876,13 @@
       "max":200,
       "min":0
     },
+    "CreateDatasetRequestExamplesList":{
+      "type":"list",
+      "member":{"shape":"SensitiveJson"},
+      "documentation":"<p>Source of the dataset file. Either a customer S3 URI or inline bytes. Each element is a free-form JSON document whose structure is defined by the dataset's <code>schemaType</code>. Validated against the declared schema at write time. If an <code>exampleId</code> string field is present it is used as the example identifier and removed from the persisted content; otherwise a UUID is generated automatically.</p>",
+      "max":1000,
+      "min":1
+    },
     "CreateDatasetResponse":{
       "type":"structure",
       "required":[
@@ -957,7 +896,7 @@
         "datasetId":{"shape":"DatasetId"},
         "status":{
           "shape":"DatasetStatus",
-          "documentation":"<p>Always CREATING immediately after this call. Poll GetDataset until ACTIVE or CREATE_FAILED.</p>"
+          "documentation":"<p>Always CREATING immediately after this call. Poll GetDataset until status == ACTIVE (draftStatus=MODIFIED) or CREATE_FAILED.</p>"
         },
         "createdAt":{"shape":"Timestamp"}
       }
@@ -991,56 +930,13 @@
         "datasetId":{"shape":"DatasetId"},
         "status":{
           "shape":"DatasetStatus",
-          "documentation":"<p>Always PUBLISHING immediately after this call. Poll GetDataset until ACTIVE or PUBLISH_FAILED.</p>"
+          "documentation":"<p>Always UPDATING immediately after this call. Poll GetDataset until status == ACTIVE (draftStatus=UNMODIFIED) or UPDATE_FAILED.</p>"
         },
         "datasetVersion":{
           "shape":"DatasetVersion",
           "documentation":"<p>The version being created.</p>"
         },
         "createdAt":{"shape":"Timestamp"}
-      }
-    },
-    "CreateEvaluationJobRequest":{
-      "type":"structure",
-      "required":[
-        "name",
-        "configuration",
-        "evaluationJobExecutionRole"
-      ],
-      "members":{
-        "clientToken":{
-          "shape":"ClientToken",
-          "idempotencyToken":true
-        },
-        "name":{"shape":"EvaluationJobName"},
-        "description":{"shape":"EvaluationJobDescription"},
-        "configuration":{"shape":"EvaluationJobConfiguration"},
-        "evaluationJobExecutionRole":{"shape":"RoleArn"},
-        "tags":{"shape":"TagsMap"}
-      }
-    },
-    "CreateEvaluationJobResponse":{
-      "type":"structure",
-      "required":[
-        "evaluationJobId",
-        "evaluationJobArn",
-        "name",
-        "configuration",
-        "status",
-        "createdAt",
-        "updatedAt"
-      ],
-      "members":{
-        "evaluationJobId":{"shape":"EvaluationJobId"},
-        "evaluationJobArn":{"shape":"EvaluationJobArn"},
-        "name":{"shape":"EvaluationJobName"},
-        "description":{"shape":"EvaluationJobDescription"},
-        "configuration":{"shape":"EvaluationJobConfiguration"},
-        "status":{"shape":"EvaluationJobStatus"},
-        "outputConfig":{"shape":"OutputConfig"},
-        "tags":{"shape":"TagsMap"},
-        "createdAt":{"shape":"Timestamp"},
-        "updatedAt":{"shape":"Timestamp"}
       }
     },
     "CreateEvaluatorRequest":{
@@ -1059,6 +955,7 @@
         "description":{"shape":"EvaluatorDescription"},
         "evaluatorConfig":{"shape":"EvaluatorConfig"},
         "level":{"shape":"EvaluatorLevel"},
+        "kmsKeyArn":{"shape":"KmsKeyArn"},
         "tags":{"shape":"TagsMap"}
       }
     },
@@ -1097,6 +994,7 @@
         "dataSourceConfig":{"shape":"DataSourceConfig"},
         "evaluators":{"shape":"EvaluatorList"},
         "insights":{"shape":"InsightList"},
+        "clusteringConfig":{"shape":"ClusteringConfig"},
         "evaluationExecutionRoleArn":{"shape":"RoleArn"},
         "enableOnCreate":{"shape":"Boolean"},
         "tags":{"shape":"TagsMap"}
@@ -1138,72 +1036,34 @@
     },
     "DatasetArn":{
       "type":"string",
-      "pattern":"arn:aws(-[a-z]+)*:bedrock-agentcore:[a-z0-9-]+:[0-9]{12}:dataset/[a-zA-Z0-9-]{1,110}"
-    },
-    "DatasetExample":{
-      "type":"structure",
-      "required":["content"],
-      "members":{
-        "content":{
-          "shape":"Document",
-          "documentation":"<p>Validated against dataset.schemaType by SchemaRegistry at write time. Stored as-is.</p>"
-        }
-      },
-      "documentation":"<p>A single example in a dataset.</p> <p><code>content</code> is a free-form JSON Document whose structure is defined by the dataset's <code>schemaType</code>. The service validates <code>content</code> against the declared schema at write time using <code>SchemaRegistry</code>. Content is stored as-is — no normalization is applied.</p>"
-    },
-    "DatasetExampleUpdate":{
-      "type":"structure",
-      "required":[
-        "exampleId",
-        "content"
-      ],
-      "members":{
-        "exampleId":{
-          "shape":"ExampleId",
-          "documentation":"<p>Must exist in DRAFT; fails with ResourceNotFoundException if not found.</p>"
-        },
-        "content":{
-          "shape":"Document",
-          "documentation":"<p>New content for the example. Validated against dataset.schemaType at write time.</p>"
-        }
-      },
-      "documentation":"<p>An example update entry containing the exampleId and new content.</p>"
+      "pattern":"arn:aws(-[a-z]+)*:bedrock-agentcore:[a-z0-9-]+:[0-9]{12}:dataset/[a-zA-Z0-9_-]{1,110}"
     },
     "DatasetId":{
       "type":"string",
-      "pattern":"[a-zA-Z0-9-]{1,110}"
+      "pattern":"[a-zA-Z0-9_-]{1,110}"
     },
     "DatasetName":{
       "type":"string",
       "pattern":"[a-zA-Z][a-zA-Z0-9_]{0,47}"
     },
-    "DatasetSource":{
-      "type":"structure",
-      "members":{
-        "s3":{
-          "shape":"S3DatasetSource",
-          "documentation":"<p>Customer S3 URI. Service reads using the caller's FAS credentials.</p>"
-        },
-        "inlineContent":{
-          "shape":"InlineContent",
-          "documentation":"<p>Raw file bytes embedded in the request body. Maximum 5 MB decoded. For larger files, upload to S3 and use the <code>s3</code> union member.</p>"
-        }
-      },
-      "documentation":"<p>Source of the dataset file. Either a customer S3 URI or inline bytes.</p> <p>Inline content is limited to 5 MB (enforced by @length constraint on the content blob). For files larger than 5 MB, use the s3 union member with a pre-uploaded S3 URI.</p>",
-      "union":true
+    "DatasetSchemaType":{
+      "type":"string",
+      "documentation":"<p>Format of a customer-provided source file.</p> <p><strong>JSONL</strong> (JSON Lines, one object per line) is the service's native ingestion and storage format — it can be streamed line-by-line without loading the entire file into memory, which is important as the row-count cap is extended.</p> <p><strong>JSON array (<code>[{...},{...}]</code>) is intentionally not supported</strong> at launch: it cannot be streamed (requires loading the full file into memory to parse), and all major eval frameworks (LangSmith, Ragas, DeepEval, Arize Phoenix) export as JSONL or CSV — not JSON arrays. Customers with JSON array files can Versioned schema type for dataset examples.</p> <p>Each value identifies both the source format and the version of that format's schema. Schema definitions (required/optional fields) are stored as constants in SchemaRegistry. The schemaType on a Dataset is immutable after creation.</p> <p>When a framework changes its format, a new version is added (e.g., RAGAS_V2) without breaking existing datasets using the old version. Content is always stored as-is.</p>",
+      "enum":[
+        "AGENTCORE_EVALUATION_PREDEFINED_V1",
+        "AGENTCORE_EVALUATION_SIMULATED_V1"
+      ]
     },
     "DatasetStatus":{
       "type":"string",
-      "documentation":"<p>Dataset lifecycle status.</p> <p>State transition rules: CreateDataset: CREATING → DRAFT | CREATE_FAILED CreateDatasetVersion: DRAFT | ACTIVE | PUBLISH_FAILED → PUBLISHING → ACTIVE | PUBLISH_FAILED AddDatasetExamples / UpdateDatasetExamples / DeleteDatasetExamples: (asynchronous, in-place on DRAFT — no status change) Allowed when status in {DRAFT, ACTIVE} Error state if operation fails: UPDATE_FAILED DeleteDataset (full): DELETING → (record deleted) | DELETE_FAILED</p> <p>Operation guards: GetDataset / ListDatasetExamples: ConflictException(DELETION_IN_PROGRESS) if status == DELETING CreateDatasetVersion: ConflictException(DATASET_NOT_READY) if status not in {DRAFT, ACTIVE, PUBLISH_FAILED} AddDatasetExamples / UpdateDatasetExamples / DeleteDatasetExamples: ConflictException(DATASET_NOT_READY) if status not in {DRAFT, ACTIVE} UpdateDataset: ConflictException(DATASET_NOT_READY) if status not in {DRAFT, ACTIVE, CREATE_FAILED, UPDATE_FAILED, PUBLISH_FAILED} DeleteDataset: ConflictException(DATASET_NOT_READY) if status in {CREATING, PUBLISHING}</p>",
+      "documentation":"<p>Dataset lifecycle / operation status.</p> <p>Two-column status model: <code>DatasetStatus</code> tracks lifecycle state independently from <code>DraftStatus</code> which tracks publish synchronization.</p> <p>IN-FLIGHT states (busy — all writes blocked): CREATING — CreateDataset async ingestion in progress. UPDATING — Example mutation (Add/Update/Delete) or CreateDatasetVersion in progress. DELETING — Full or version-specific delete in progress.</p> <p>TERMINAL states (stable — operations allowed per guards below): ACTIVE — Dataset is stable. failureReason cleared. CREATE_FAILED — Initial ingestion failed. DRAFT record exists but has no examples. failureReason populated. UPDATE_FAILED — Last example mutation or CreateDatasetVersion failed. DRAFT may be partially modified. failureReason populated. DELETE_FAILED — Delete failed after retries. Dataset/S3 may be in inconsistent state. Sev-2 ticket filed (full-delete only). failureReason populated.</p> <p>State transitions: CreateDataset → CREATING → ACTIVE (draftStatus=MODIFIED) | CREATE_FAILED Add/Update/DeleteDatasetExamples → UPDATING → ACTIVE (draftStatus=MODIFIED) | UPDATE_FAILED CreateDatasetVersion → UPDATING → ACTIVE (draftStatus=UNMODIFIED) | UPDATE_FAILED DeleteDataset (version-specific) → DELETING → ACTIVE (draftStatus unchanged) | DELETE_FAILED DeleteDataset (full) → DELETING → (record deleted) | DELETE_FAILED [auto Sev-2]</p> <p>Operation guards (ConflictException codes): GetDataset / ListDatasetExamples: — Allowed for all statuses (no guard) UpdateDataset, AddDatasetExamples, DeleteDatasetExamples: — DATASET_NOT_READY if status in {CREATING, UPDATING, DELETING} — DATASET_IN_FAILED_STATE if status == DELETE_FAILED UpdateDatasetExamples: — DATASET_NOT_READY if status in {CREATING, UPDATING, DELETING} — DATASET_IN_FAILED_STATE if status in {CREATE_FAILED, DELETE_FAILED} CreateDatasetVersion: — DATASET_NOT_READY if status in {CREATING, UPDATING, DELETING} — DATASET_IN_FAILED_STATE if status in {CREATE_FAILED, DELETE_FAILED} DeleteDataset: — DATASET_NOT_READY if status in {CREATING, UPDATING, DELETING}</p>",
       "enum":[
         "CREATING",
-        "DRAFT",
-        "PUBLISHING",
+        "UPDATING",
+        "DELETING",
         "ACTIVE",
         "CREATE_FAILED",
         "UPDATE_FAILED",
-        "PUBLISH_FAILED",
-        "DELETING",
         "DELETE_FAILED"
       ]
     },
@@ -1225,7 +1085,11 @@
         "datasetName":{"shape":"DatasetName"},
         "description":{"shape":"String"},
         "status":{"shape":"DatasetStatus"},
-        "schemaType":{"shape":"SchemaType"},
+        "draftStatus":{
+          "shape":"DraftStatus",
+          "documentation":"<p>Publish synchronization state. Only authoritative when status == ACTIVE.</p>"
+        },
+        "schemaType":{"shape":"DatasetSchemaType"},
         "exampleCount":{"shape":"Long"},
         "createdAt":{"shape":"Timestamp"},
         "updatedAt":{"shape":"Timestamp"}
@@ -1237,7 +1101,7 @@
     },
     "DatasetVersion":{
       "type":"string",
-      "documentation":"<p>Dataset version. Accepts &quot;DRAFT&quot; or a version number.</p>",
+      "documentation":"<p>Dataset version identifier. Accepts &quot;DRAFT&quot; or a non-negative integer string.</p> <p>&quot;DRAFT&quot; refers to the single mutable working copy of the dataset.</p> <ul> <li>Always present after CreateDataset ingestion completes.</li> <li>Content changes in-place when examples are added, updated, or deleted.</li> <li>NOT tracked as a DDB DatasetVersionItem — state lives in S3 (draft/manifest.json, draft/dataset.jsonl) and the DatasetItem.exampleCount field.</li> <li>Default for read operations when ?datasetVersion is absent.</li> </ul> <p>An integer string (e.g. &quot;1&quot;, &quot;2&quot;, &quot;3&quot;) refers to a published, immutable snapshot created by CreateDatasetVersion. Once created, a published version's content never changes. Stored as a DDB DatasetVersionItem (SK=VERSION#{zero-padded-N}).</p>",
       "pattern":"(DRAFT|[0-9]+)"
     },
     "DeleteConfigurationBundleRequest":{
@@ -1341,30 +1205,6 @@
         "updatedAt":{"shape":"Timestamp"}
       }
     },
-    "DeleteEvaluationJobRequest":{
-      "type":"structure",
-      "required":["evaluationJobId"],
-      "members":{
-        "evaluationJobId":{
-          "shape":"EvaluationJobId",
-          "location":"uri",
-          "locationName":"evaluationJobId"
-        }
-      }
-    },
-    "DeleteEvaluationJobResponse":{
-      "type":"structure",
-      "required":[
-        "evaluationJobArn",
-        "evaluationJobId",
-        "status"
-      ],
-      "members":{
-        "evaluationJobArn":{"shape":"EvaluationJobArn"},
-        "evaluationJobId":{"shape":"EvaluationJobId"},
-        "status":{"shape":"EvaluationJobStatus"}
-      }
-    },
     "DeleteEvaluatorRequest":{
       "type":"structure",
       "required":["evaluatorId"],
@@ -1416,12 +1256,19 @@
     "Document":{
       "type":"structure",
       "members":{},
-      "documentation":"<p>Free-form JSON document. Used for dataset example content whose structure is governed by the dataset's schemaType.</p>",
       "document":true
     },
     "Double":{
       "type":"double",
       "box":true
+    },
+    "DraftStatus":{
+      "type":"string",
+      "documentation":"<p>Publish synchronization state of the DRAFT working copy.</p> <p>Tracks whether the current DRAFT content has been published as a version. Only authoritative when DatasetStatus == ACTIVE. Not meaningful during in-flight or failed states.</p> <p>Transitions: CreateDataset succeeds → MODIFIED (DRAFT has content with no published version yet) Add/Update/DeleteExamples succeed → MODIFIED (DRAFT differs from last published version) CreateDatasetVersion succeeds → UNMODIFIED (DRAFT matches the version just published)</p>",
+      "enum":[
+        "MODIFIED",
+        "UNMODIFIED"
+      ]
     },
     "EvaluationConfigDescription":{
       "type":"string",
@@ -1433,72 +1280,6 @@
     "EvaluationConfigName":{
       "type":"string",
       "pattern":"[a-zA-Z][a-zA-Z0-9_]{0,47}"
-    },
-    "EvaluationConfiguration":{
-      "type":"structure",
-      "required":["evaluators"],
-      "members":{
-        "evaluators":{"shape":"EvaluatorList"}
-      }
-    },
-    "EvaluationJobArn":{
-      "type":"string",
-      "pattern":"arn:aws[a-z\\-]*:bedrock-agentcore:[a-z0-9\\-]+:[0-9]{12}:evaluation-job/[a-zA-Z][a-zA-Z0-9-_]{0,99}-[a-zA-Z0-9]{10}"
-    },
-    "EvaluationJobConfiguration":{
-      "type":"structure",
-      "members":{
-        "evaluationConfig":{"shape":"EvaluationConfiguration"},
-        "insightsJobConfig":{"shape":"InsightsJobConfiguration"}
-      }
-    },
-    "EvaluationJobDescription":{
-      "type":"string",
-      "max":200,
-      "min":1,
-      "pattern":".+",
-      "sensitive":true
-    },
-    "EvaluationJobId":{
-      "type":"string",
-      "pattern":"[a-zA-Z][a-zA-Z0-9-_]{0,99}-[a-zA-Z0-9]{10}"
-    },
-    "EvaluationJobName":{
-      "type":"string",
-      "pattern":"[a-zA-Z][a-zA-Z0-9_]{0,47}"
-    },
-    "EvaluationJobStatus":{
-      "type":"string",
-      "enum":[
-        "ACTIVE",
-        "INACTIVE",
-        "FAILED",
-        "DELETING"
-      ]
-    },
-    "EvaluationJobSummary":{
-      "type":"structure",
-      "required":[
-        "evaluationJobArn",
-        "evaluationJobId",
-        "name",
-        "status",
-        "createdAt",
-        "updatedAt"
-      ],
-      "members":{
-        "evaluationJobArn":{"shape":"EvaluationJobArn"},
-        "evaluationJobId":{"shape":"EvaluationJobId"},
-        "name":{"shape":"EvaluationJobName"},
-        "description":{"shape":"EvaluationJobDescription"},
-        "status":{"shape":"EvaluationJobStatus"},
-        "createdAt":{"shape":"Timestamp"},
-        "updatedAt":{"shape":"Timestamp"}
-      }
-    },
-    "EvaluationJobSummaryList":{
-      "type":"list",
-      "member":{"shape":"EvaluationJobSummary"}
     },
     "EvaluatorArn":{
       "type":"string",
@@ -1590,7 +1371,8 @@
         "status":{"shape":"EvaluatorStatus"},
         "createdAt":{"shape":"Timestamp"},
         "updatedAt":{"shape":"Timestamp"},
-        "lockedForModification":{"shape":"Boolean"}
+        "lockedForModification":{"shape":"Boolean"},
+        "kmsKeyArn":{"shape":"KmsKeyArn"}
       }
     },
     "EvaluatorSummaryList":{
@@ -1772,6 +1554,7 @@
         "datasetId",
         "datasetName",
         "status",
+        "schemaType",
         "exampleCount",
         "createdAt",
         "updatedAt"
@@ -1782,16 +1565,16 @@
         "datasetName":{"shape":"DatasetName"},
         "description":{"shape":"String"},
         "status":{"shape":"DatasetStatus"},
+        "draftStatus":{
+          "shape":"DraftStatus",
+          "documentation":"<p>Publish synchronization state. Only authoritative when status == ACTIVE. MODIFIED — DRAFT has unpublished changes (or no published versions yet). UNMODIFIED — DRAFT matches the latest published version exactly.</p>"
+        },
         "failureReason":{
           "shape":"String",
-          "documentation":"<p>Populated when status is CREATE_FAILED, UPDATE_FAILED, PUBLISH_FAILED, or DELETE_FAILED.</p>"
-        },
-        "source":{
-          "shape":"DatasetSource",
-          "documentation":"<p>Indicates how the dataset was originally provided. For S3-sourced datasets, contains the S3 URI. For inline-created datasets, this field is omitted.</p>"
+          "documentation":"<p>Populated when status is CREATE_FAILED, UPDATE_FAILED, or DELETE_FAILED.</p>"
         },
         "schemaType":{
-          "shape":"SchemaType",
+          "shape":"DatasetSchemaType",
           "documentation":"<p>The schema type declared at create time. Immutable after creation.</p>"
         },
         "kmsKeyArn":{
@@ -1806,43 +1589,6 @@
         "updatedAt":{"shape":"Timestamp"}
       }
     },
-    "GetEvaluationJobRequest":{
-      "type":"structure",
-      "required":["evaluationJobId"],
-      "members":{
-        "evaluationJobId":{
-          "shape":"EvaluationJobId",
-          "location":"uri",
-          "locationName":"evaluationJobId"
-        }
-      }
-    },
-    "GetEvaluationJobResponse":{
-      "type":"structure",
-      "required":[
-        "evaluationJobArn",
-        "evaluationJobId",
-        "name",
-        "configuration",
-        "evaluationJobExecutionRole",
-        "status",
-        "createdAt",
-        "updatedAt"
-      ],
-      "members":{
-        "evaluationJobArn":{"shape":"EvaluationJobArn"},
-        "evaluationJobId":{"shape":"EvaluationJobId"},
-        "name":{"shape":"EvaluationJobName"},
-        "description":{"shape":"EvaluationJobDescription"},
-        "configuration":{"shape":"EvaluationJobConfiguration"},
-        "evaluationJobExecutionRole":{"shape":"RoleArn"},
-        "status":{"shape":"EvaluationJobStatus"},
-        "tags":{"shape":"TagsMap"},
-        "outputConfig":{"shape":"OutputConfig"},
-        "createdAt":{"shape":"Timestamp"},
-        "updatedAt":{"shape":"Timestamp"}
-      }
-    },
     "GetEvaluatorRequest":{
       "type":"structure",
       "required":["evaluatorId"],
@@ -1851,6 +1597,11 @@
           "shape":"EvaluatorId",
           "location":"uri",
           "locationName":"evaluatorId"
+        },
+        "includedData":{
+          "shape":"IncludedData",
+          "location":"querystring",
+          "locationName":"includedData"
         }
       }
     },
@@ -1876,7 +1627,8 @@
         "status":{"shape":"EvaluatorStatus"},
         "createdAt":{"shape":"Timestamp"},
         "updatedAt":{"shape":"Timestamp"},
-        "lockedForModification":{"shape":"Boolean"}
+        "lockedForModification":{"shape":"Boolean"},
+        "kmsKeyArn":{"shape":"KmsKeyArn"}
       }
     },
     "GetOnlineEvaluationConfigRequest":{
@@ -1912,6 +1664,7 @@
         "dataSourceConfig":{"shape":"DataSourceConfig"},
         "evaluators":{"shape":"EvaluatorList"},
         "insights":{"shape":"InsightList"},
+        "clusteringConfig":{"shape":"ClusteringConfig"},
         "outputConfig":{"shape":"OutputConfig"},
         "evaluationExecutionRoleArn":{"shape":"RoleArn"},
         "status":{"shape":"OnlineEvaluationConfigStatus"},
@@ -1920,6 +1673,13 @@
         "updatedAt":{"shape":"Timestamp"},
         "failureReason":{"shape":"String"}
       }
+    },
+    "IncludedData":{
+      "type":"string",
+      "enum":[
+        "ALL_DATA",
+        "METADATA_ONLY"
+      ]
     },
     "InferenceConfiguration":{
       "type":"structure",
@@ -1953,21 +1713,6 @@
       "max":1,
       "min":0
     },
-    "InlineContent":{
-      "type":"structure",
-      "required":["content"],
-      "members":{
-        "content":{
-          "shape":"InlineContentContentBlob",
-          "documentation":"<p>Maximum 5 MB (5,242,880 bytes). Use S3 source for larger files.</p>"
-        }
-      }
-    },
-    "InlineContentContentBlob":{
-      "type":"blob",
-      "max":5242880,
-      "min":0
-    },
     "Insight":{
       "type":"structure",
       "required":["insightId"],
@@ -1987,21 +1732,6 @@
       "max":10,
       "min":0
     },
-    "InsightsJobConfiguration":{
-      "type":"structure",
-      "required":["insightsTypes"],
-      "members":{
-        "insightsTypes":{"shape":"InsightsTypeList"}
-      }
-    },
-    "InsightsType":{
-      "type":"string",
-      "enum":["FAILURE_ANALYSIS"]
-    },
-    "InsightsTypeList":{
-      "type":"list",
-      "member":{"shape":"InsightsType"}
-    },
     "InternalServerException":{
       "type":"structure",
       "members":{
@@ -2013,8 +1743,9 @@
     },
     "KmsKeyArn":{
       "type":"string",
-      "documentation":"<p>Supports both standard single-region keys (UUID format) and multi-region keys (mrk- prefix).</p>",
-      "pattern":"arn:aws(-[a-z]+)*:kms:[a-z0-9-]+:[0-9]{12}:key/(mrk-[a-f0-9]{32}|[a-f0-9-]{36})"
+      "max":2048,
+      "min":1,
+      "pattern":"arn:aws(|-cn|-us-gov):kms:[a-zA-Z0-9-]*:[0-9]{12}:key/[a-zA-Z0-9-]{36}"
     },
     "LambdaArn":{
       "type":"string",
@@ -2193,35 +1924,6 @@
         "nextToken":{"shape":"String"}
       }
     },
-    "ListEvaluationJobsRequest":{
-      "type":"structure",
-      "members":{
-        "nextToken":{
-          "shape":"String",
-          "location":"querystring",
-          "locationName":"nextToken"
-        },
-        "maxResults":{
-          "shape":"ListEvaluationJobsRequestMaxResultsInteger",
-          "location":"querystring",
-          "locationName":"maxResults"
-        }
-      }
-    },
-    "ListEvaluationJobsRequestMaxResultsInteger":{
-      "type":"integer",
-      "box":true,
-      "max":100,
-      "min":1
-    },
-    "ListEvaluationJobsResponse":{
-      "type":"structure",
-      "required":["evaluationJobs"],
-      "members":{
-        "evaluationJobs":{"shape":"EvaluationJobSummaryList"},
-        "nextToken":{"shape":"String"}
-      }
-    },
     "ListEvaluatorsRequest":{
       "type":"structure",
       "members":{
@@ -2282,11 +1984,7 @@
     },
     "LlmAsAJudgeEvaluatorConfig":{
       "type":"structure",
-      "required":[
-        "instructions",
-        "ratingScale",
-        "modelConfig"
-      ],
+      "required":["modelConfig"],
       "members":{
         "instructions":{"shape":"EvaluatorInstructions"},
         "ratingScale":{"shape":"RatingScale"},
@@ -2355,7 +2053,8 @@
         "CREATE_FAILED",
         "UPDATING",
         "UPDATE_FAILED",
-        "DELETING"
+        "DELETING",
+        "ERROR"
       ]
     },
     "OnlineEvaluationConfigSummary":{
@@ -2379,7 +2078,8 @@
         "createdAt":{"shape":"Timestamp"},
         "updatedAt":{"shape":"Timestamp"},
         "failureReason":{"shape":"String"},
-        "insights":{"shape":"InsightList"}
+        "insights":{"shape":"InsightList"},
+        "clusteringConfig":{"shape":"ClusteringConfig"}
       }
     },
     "OnlineEvaluationConfigSummaryList":{
@@ -2435,20 +2135,6 @@
         "sessionConfig":{"shape":"SessionConfig"}
       }
     },
-    "S3DatasetSource":{
-      "type":"structure",
-      "required":["s3Uri"],
-      "members":{
-        "s3Uri":{
-          "shape":"S3DatasetSourceS3UriString",
-          "documentation":"<p>S3 URI in format s3://bucket-name/path/to/file. Path must be URL-encoded if it contains special characters.</p>"
-        }
-      }
-    },
-    "S3DatasetSourceS3UriString":{
-      "type":"string",
-      "pattern":"s3://[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/.+"
-    },
     "SamplingConfig":{
       "type":"structure",
       "required":["samplingPercentage"],
@@ -2462,13 +2148,11 @@
       "max":100.0,
       "min":0.01
     },
-    "SchemaType":{
-      "type":"string",
-      "documentation":"<p>Format of a customer-provided source file.</p> <p><strong>JSONL</strong> (JSON Lines, one object per line) is the service's native ingestion and storage format — it can be streamed line-by-line without loading the entire file into memory, which is important as the row-count cap is extended.</p> <p><strong>JSON array (<code>[{...},{...}]</code>) is intentionally not supported</strong> at launch: it cannot be streamed (requires loading the full file into memory to parse), and all major eval frameworks (LangSmith, Ragas, DeepEval, Arize Phoenix) export as JSONL or CSV — not JSON arrays. Customers with JSON array files can Versioned schema type for dataset examples.</p> <p>Each value identifies both the source format and the version of that format's schema. Schema definitions (required/optional fields) are stored as constants in SchemaRegistry. The schemaType on a Dataset is immutable after creation.</p> <p>When a framework changes its format, a new version is added (e.g., RAGAS_V2) without breaking existing datasets using the old version. Content is always stored as-is.</p>",
-      "enum":[
-        "AGENTCORE_EVALUATION_PREDEFINED_V1",
-        "AGENTCORE_EVALUATION_SIMULATED_V1"
-      ]
+    "SensitiveJson":{
+      "type":"structure",
+      "members":{},
+      "document":true,
+      "sensitive":true
     },
     "ServiceName":{
       "type":"string",
@@ -2592,13 +2276,14 @@
         },
         "examples":{
           "shape":"UpdateDatasetExamplesRequestExamplesList",
-          "documentation":"<p>Examples to update. Each entry must include an existing exampleId and new content. Max 1000 examples per call. Total request body must not exceed 5 MB.</p>"
+          "documentation":"<p>Examples to update. Each element is a JSON object containing a required <code>exampleId</code> string field identifying the existing example, plus the replacement fields. The <code>exampleId</code> is extracted and removed before persistence; the remaining document is validated against the dataset's schemaType. Max 1000 examples per call. Total request body must not exceed 5 MB.</p>"
         }
       }
     },
     "UpdateDatasetExamplesRequestExamplesList":{
       "type":"list",
-      "member":{"shape":"DatasetExampleUpdate"},
+      "member":{"shape":"SensitiveJson"},
+      "documentation":"<p>Source of the dataset file. Either a customer S3 URI or inline bytes. Each element is a free-form JSON document whose structure is defined by the dataset's <code>schemaType</code>. Validated against the declared schema at write time. If an <code>exampleId</code> string field is present it is used as the example identifier and removed from the persisted content; otherwise a UUID is generated automatically.</p>",
       "max":1000,
       "min":1
     },
@@ -2654,38 +2339,6 @@
         "updatedAt":{"shape":"Timestamp"}
       }
     },
-    "UpdateEvaluationJobRequest":{
-      "type":"structure",
-      "required":["evaluationJobId"],
-      "members":{
-        "clientToken":{
-          "shape":"ClientToken",
-          "idempotencyToken":true
-        },
-        "evaluationJobId":{
-          "shape":"EvaluationJobId",
-          "location":"uri",
-          "locationName":"evaluationJobId"
-        },
-        "description":{"shape":"EvaluationJobDescription"},
-        "configuration":{"shape":"EvaluationJobConfiguration"}
-      }
-    },
-    "UpdateEvaluationJobResponse":{
-      "type":"structure",
-      "required":[
-        "evaluationJobArn",
-        "evaluationJobId",
-        "updatedAt",
-        "status"
-      ],
-      "members":{
-        "evaluationJobArn":{"shape":"EvaluationJobArn"},
-        "evaluationJobId":{"shape":"EvaluationJobId"},
-        "updatedAt":{"shape":"Timestamp"},
-        "status":{"shape":"EvaluationJobStatus"}
-      }
-    },
     "UpdateEvaluatorRequest":{
       "type":"structure",
       "required":["evaluatorId"],
@@ -2701,7 +2354,8 @@
         },
         "description":{"shape":"EvaluatorDescription"},
         "evaluatorConfig":{"shape":"EvaluatorConfig"},
-        "level":{"shape":"EvaluatorLevel"}
+        "level":{"shape":"EvaluatorLevel"},
+        "kmsKeyArn":{"shape":"KmsKeyArn"}
       }
     },
     "UpdateEvaluatorResponse":{
@@ -2737,6 +2391,7 @@
         "dataSourceConfig":{"shape":"DataSourceConfig"},
         "evaluators":{"shape":"EvaluatorList"},
         "insights":{"shape":"InsightList"},
+        "clusteringConfig":{"shape":"ClusteringConfig"},
         "evaluationExecutionRoleArn":{"shape":"RoleArn"},
         "executionStatus":{"shape":"OnlineEvaluationExecutionStatus"}
       }
