@@ -106,7 +106,13 @@ See the [AG-UI protocol contract](https://docs.aws.amazon.com/bedrock-agentcore/
 
 ### AgentCore CLI (Recommended)
 
-The fastest way to deploy your agent to Bedrock AgentCore:
+The fastest way to deploy your agent to Bedrock AgentCore. Install via [npm](https://www.npmjs.com/package/@aws/agentcore):
+
+```bash
+npm i -g @aws/agentcore
+```
+
+Then create and deploy your agent:
 
 ```bash
 agentcore create --name MyAgent --defaults
@@ -115,7 +121,7 @@ agentcore deploy
 ```
 
 The CLI handles packaging, infrastructure provisioning, and deployment automatically.
-See the [AgentCore CLI documentation](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-getting-started.html) for full details.
+See the [AgentCore CLI documentation](https://github.com/aws/bedrock-agentcore-cli) for full details.
 
 ### AWS CDK (Advanced)
 
