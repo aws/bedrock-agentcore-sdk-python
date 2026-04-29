@@ -28,7 +28,6 @@
     ◆ <a href="https://discord.gg/bedrockagentcore-preview">Discord</a>
     ◆ <a href="https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-agentcore-control.html">Boto3 Python SDK</a>
     ◆ <a href="https://github.com/aws/bedrock-agentcore-sdk-python">Runtime Python SDK</a>
-    ◆ <a href="https://github.com/aws/bedrock-agentcore-starter-toolkit">Starter Toolkit</a>
 
   </p>
 </div>
@@ -63,13 +62,13 @@ app.run()
 - ✅ **Production-ready deployment** - Reliable, scalable, compliant hosting
 
 ## Amazon Bedrock AgentCore services
-- 🚀 **Runtime** - Secure and session isolated compute: **[Runtime Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-get-started-toolkit.html)**
-- 🧠 **Memory** - Persistent knowledge across sessions: **[Memory Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-get-started.html)**
-- 🔗 **Gateway** - Transform APIs into MCP tools: **[Gateway Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-quick-start.html)**
-- 💻 **Code Interpreter** - Secure sandboxed execution: **[Code Interpreter Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/code-interpreter-getting-started.html)**
-- 🌐 **Browser** - Cloud-based web automation: **[Browser Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/browser-onboarding.html)**
-- 📊 **Observability** - OpenTelemetry tracing: **[Observability Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability-get-started.html)**
-- 🔐 **Identity** - AWS & third-party auth: **[Identity Quick Start](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/identity-getting-started-cognito.html)**
+- 🚀 **Runtime** - Secure and session isolated compute: **[Get started](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-getting-started.html)**
+- 🧠 **Memory** - Persistent knowledge across sessions: **[Get started](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-get-started.html)**
+- 🔗 **Gateway** - Transform APIs into MCP tools: **[Get started](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-quick-start.html)**
+- 💻 **Code Interpreter** - Secure sandboxed execution: **[Get started](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/code-interpreter-tool.html)**
+- 🌐 **Browser** - Cloud-based web automation: **[Get started](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/browser-quickstart.html)**
+- 📊 **Observability** - OpenTelemetry tracing: **[Get started](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability-get-started.html)**
+- 🔐 **Identity** - AWS & third-party auth: **[Get started](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/identity-getting-started.html)**
 
 ## AG-UI Protocol Support
 
@@ -105,9 +104,22 @@ See the [AG-UI protocol contract](https://docs.aws.amazon.com/bedrock-agentcore/
 
 ## 🏗️ Deployment
 
-**Quick Start:** Use the [Bedrock AgentCore Starter Toolkit](https://github.com/aws/bedrock-agentcore-starter-toolkit) for rapid prototyping.
+### AgentCore CLI (Recommended)
 
-**Production:** [AWS CDK](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_bedrockagentcore-readme.html).
+The fastest way to deploy your agent to Bedrock AgentCore:
+
+```bash
+agentcore init my-agent
+cd my-agent
+agentcore deploy
+```
+
+The CLI handles packaging, infrastructure provisioning, and deployment automatically.
+See the [AgentCore CLI documentation](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-getting-started.html) for full details.
+
+### AWS CDK (Advanced)
+
+The AgentCore CLI generates AWS CDK under the hood. For full infrastructure-as-code control, customize the generated CDK project directly or refer to the [L1 CDK documentation](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_bedrockagentcore-readme.html).
 
 ## A2A Protocol Support
 
