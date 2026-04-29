@@ -121,7 +121,7 @@ agentcore deploy
 ```
 
 The CLI handles packaging, infrastructure provisioning, and deployment automatically.
-See the [AgentCore CLI documentation](https://github.com/aws/bedrock-agentcore-cli) for full details.
+See the [AgentCore CLI documentation](https://github.com/aws/agentcore-cli) for full details.
 
 ### AWS CDK (Advanced)
 
