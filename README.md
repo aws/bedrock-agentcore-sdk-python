@@ -109,8 +109,8 @@ See the [AG-UI protocol contract](https://docs.aws.amazon.com/bedrock-agentcore/
 The fastest way to deploy your agent to Bedrock AgentCore:
 
 ```bash
-agentcore init my-agent
-cd my-agent
+agentcore create --name MyAgent --defaults
+cd MyAgent
 agentcore deploy
 ```
 
