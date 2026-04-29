@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.7.0] - 2026-04-28
+
+### Added
+- feat: add identity client passthrough and tests (#429) (cc12fdd)
+- feat: update runtime client with passthrough (#434) (86c621a)
+- feat: add evaluations client passthrough and tests (#430) (b0d9d52)
+- feat: add gateway client and tests (#428) (61677ba)
+- feat: add policy client and tests (#427) (89fa76e)
+
+### Fixed
+- fix: add newly required param protocolType to test input (#440) (d116646)
+- fix: add pytest-rerunfailures to integ test config (#435) (c8810f9)
+- fix: reduce flakiness in retrieval config integration test (#432) (#437) (5dfce96)
+
+### Other Changes
+- chore: add CI/CD test matrix for new primitive clients and expose GH secrets to test env (#439) (eefea80)
+
 ## [1.6.4] - 2026-04-23
 
 ### Added
