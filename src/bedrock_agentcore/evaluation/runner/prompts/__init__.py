@@ -22,7 +22,7 @@ def _get_environment():
                 "jinja2 is required for SimulatedScenario execution. "
                 "Install it with: pip install 'bedrock-agentcore[simulation]'"
             ) from e
-        _environment = Environment(
+        _environment = Environment(  # nosec B701 - templates render plain text/JSON, not HTML
             loader=FileSystemLoader(_PROMPTS_DIR),
             autoescape=False,
             keep_trailing_newline=True,
