@@ -6,7 +6,6 @@ from typing import Optional
 
 import boto3
 
-from .._utils.boto3_loader import _inject_eval_cp_models
 from .._utils.endpoints import DEFAULT_REGION, get_control_plane_endpoint
 
 logger = logging.getLogger(__name__)
@@ -25,7 +24,7 @@ _ALLOWED_OPERATIONS = frozenset({
 class ConfigBundleClient:
     """Client for AgentCore configuration bundle operations.
 
-    Wraps the ``agentcore-evaluation-controlplane`` boto3 client and forwards all method
+    Wraps the ``bedrock-agentcore-control`` boto3 client and forwards all method
     calls to it via ``__getattr__``, so any boto3 operation (e.g.
     ``get_configuration_bundle_version``, ``list_configuration_bundles``) is
     available without explicit definitions.
@@ -48,9 +47,9 @@ class ConfigBundleClient:
         if self.__dict__.get("_client") is None:
             with self._client_lock:
                 if self.__dict__.get("_client") is None:
-                    session = _inject_eval_cp_models(self._boto3_session)
+                    session = self._boto3_session or boto3.Session()
                     self._client = session.client(
-                        "agentcore-evaluation-controlplane",
+                        "bedrock-agentcore-control",
                         region_name=self._region,
                         endpoint_url=get_control_plane_endpoint(self._region),
                     )

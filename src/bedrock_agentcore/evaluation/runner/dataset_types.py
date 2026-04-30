@@ -58,10 +58,6 @@ class SimulatedScenario(Scenario):
 
     Attributes:
         scenario_description: Human-readable description of what this scenario tests.
-            When provided, this is injected into the actor's system prompt as a
-            ``## Scenario`` section to give the actor additional context. When omitted,
-            the Strands default system prompt is used unchanged. Defaults to ``""``.
-
         actor_profile: Profile defining the simulated actor's traits, context, and goal.
         input: The initial payload sent to the agent to start the conversation.
             Accepts a plain string, a structured dict, or a ``pydantic.BaseModel``
@@ -111,20 +107,13 @@ class SimulationConfig(BaseModel):
         model_id: Bedrock model ID for the actor agent. Uses the Strands
             default model when None.
         system_prompt_template: Jinja2 system prompt template for the actor.
-            Must contain an ``{{ actor_profile }}`` placeholder. When ``output_type``
-            is set, may include an ``{{ output_schema }}`` placeholder so the actor
-            knows the JSON format to expect from the agent. Input schema is not
-            injected into the prompt — structured input typing is enforced via the
-            response model's tool-use schema instead. When None, the built-in
+            Must contain an ``{{ actor_profile }}`` placeholder. When None, the built-in
             ``structured_user_simulator.j2`` template is used.
         input_type: Pydantic model class describing the agent's expected input.
             When set, ``input`` values in SimulatedScenario are validated into
             this type for the first agent call. For subsequent turns the actor is
-            schema-constrained via tool-use to produce instances of this type
-            directly, eliminating the need for JSON parsing heuristics.
-        output_type: Pydantic model class describing the agent's output schema. When
-            set, the actor system prompt includes the output schema so the actor knows
-            the JSON format to expect from the agent when forming its next turn.
+            schema-constrained via tool-use to produce instances of this type directly.
+        output_type: Pydantic model class describing the agent's output schema.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
