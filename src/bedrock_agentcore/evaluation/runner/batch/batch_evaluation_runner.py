@@ -53,6 +53,9 @@ class BatchEvaluationRunner:
     """Runs evaluation using the AgentCore Batch Evaluation API.
 
     Starts a batch evaluation via StartBatchEvaluation, and polls GetBatchEvaluation for results.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
     """
 
     _SCENARIO_EXECUTORS: Dict[type, type[ScenarioExecutor]] = {

@@ -9,7 +9,11 @@ ConfigBundleComponents = Dict[str, Dict[str, Any]]
 
 @dataclass(frozen=True)
 class ConfigBundleRef:
-    """Lightweight reference to a configuration bundle version, parsed from OTEL baggage."""
+    """Lightweight reference to a configuration bundle version, parsed from OTEL baggage.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
+    """
 
     bundle_arn: str
     bundle_version: str

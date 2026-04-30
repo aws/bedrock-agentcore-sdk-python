@@ -90,6 +90,9 @@ def _get_base_class() -> type:
 class BaggageSpanProcessor(_get_base_class()):  # type: ignore[misc]
     """SpanProcessor that stamps every span with routing experiment attributes.
 
+    .. warning::
+        This feature is in preview and may change in future releases.
+
     Reads ``BedrockAgentCoreContext.get_routing_experiment_arn()`` and
     ``get_routing_experiment_variant()`` from ContextVars on ``on_start``,
     so each concurrent request gets its own values with no cross-talk.

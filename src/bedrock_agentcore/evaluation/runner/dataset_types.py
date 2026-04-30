@@ -13,6 +13,9 @@ Input = Union[str, Dict[str, Any]]
 class ActorProfile(BaseModel):
     """Profile describing the simulated actor's identity and objective.
 
+    .. warning::
+        This feature is in preview and may change in future releases.
+
     Attributes:
         traits: Characteristics of the actor (e.g. expertise level, communication style).
         context: Background information about the actor.
@@ -55,6 +58,9 @@ class PredefinedScenario(Scenario):
 
 class SimulatedScenario(Scenario):
     """A scenario driven by a simulated actor in a multi-turn conversation loop.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
 
     Attributes:
         scenario_description: Human-readable description of what this scenario tests.
@@ -102,6 +108,9 @@ class Dataset(BaseModel):
 
 class SimulationConfig(BaseModel):
     """Configuration for actor simulation in SimulatedScenario execution.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
 
     Attributes:
         model_id: Bedrock model ID for the actor agent. Uses the Strands
