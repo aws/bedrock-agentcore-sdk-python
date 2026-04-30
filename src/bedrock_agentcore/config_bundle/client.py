@@ -10,15 +10,17 @@ from .._utils.endpoints import DEFAULT_REGION, get_control_plane_endpoint
 
 logger = logging.getLogger(__name__)
 
-_ALLOWED_OPERATIONS = frozenset({
-    "create_configuration_bundle",
-    "delete_configuration_bundle",
-    "get_configuration_bundle",
-    "get_configuration_bundle_version",
-    "list_configuration_bundle_versions",
-    "list_configuration_bundles",
-    "update_configuration_bundle",
-})
+_ALLOWED_OPERATIONS = frozenset(
+    {
+        "create_configuration_bundle",
+        "delete_configuration_bundle",
+        "get_configuration_bundle",
+        "get_configuration_bundle_version",
+        "list_configuration_bundle_versions",
+        "list_configuration_bundles",
+        "update_configuration_bundle",
+    }
+)
 
 
 class ConfigBundleClient:

@@ -121,9 +121,7 @@ class BaggageSpanProcessor(_get_base_class()):  # type: ignore[misc]
                 from opentelemetry import baggage as otel_baggage
 
                 if arn is None:
-                    arn = otel_baggage.get_baggage(
-                        "aws.agentcore.gateway.routing_experiment_arn", parent_context
-                    )
+                    arn = otel_baggage.get_baggage("aws.agentcore.gateway.routing_experiment_arn", parent_context)
                 if variant is None:
                     variant = otel_baggage.get_baggage(
                         "aws.agentcore.gateway.routing_experiment_variant_name", parent_context

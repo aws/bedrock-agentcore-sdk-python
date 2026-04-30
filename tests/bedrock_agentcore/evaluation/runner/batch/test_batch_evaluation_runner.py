@@ -9,8 +9,8 @@ from pydantic import ValidationError
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     BatchEvaluationRunConfig,
     BatchEvaluatorConfig,
-    CloudWatchOutputDataConfig,
     CloudWatchDataSourceConfig,
+    CloudWatchOutputDataConfig,
 )
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_runner import (
     BatchEvaluationRunner,

@@ -102,6 +102,7 @@ class BedrockCallContextBuilder:
     """
 
     def __init__(self) -> None:
+        """Initialize BedrockCallContextBuilder and register the baggage span processor."""
         # Register early so the ASGI entry span (POST /invocations) gets stamped.
         _ensure_baggage_processor_registered()
 

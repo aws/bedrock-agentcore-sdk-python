@@ -35,12 +35,8 @@ class BedrockAgentCoreContext:
     _request_id: ContextVar[Optional[str]] = ContextVar("request_id")
     _session_id: ContextVar[Optional[str]] = ContextVar("session_id")
     _request_headers: ContextVar[Optional[Dict[str, str]]] = ContextVar("request_headers")
-    _routing_experiment_arn: ContextVar[Optional[str]] = ContextVar(
-        "routing_experiment_arn", default=None
-    )
-    _routing_experiment_variant: ContextVar[Optional[str]] = ContextVar(
-        "routing_experiment_variant", default=None
-    )
+    _routing_experiment_arn: ContextVar[Optional[str]] = ContextVar("routing_experiment_arn", default=None)
+    _routing_experiment_variant: ContextVar[Optional[str]] = ContextVar("routing_experiment_variant", default=None)
 
     # Config bundle — ref identifies the bundle for this request.
     # _bundle_fetcher is the lru_cache-wrapped app._resolve_bundle_config(ref),

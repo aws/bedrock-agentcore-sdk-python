@@ -69,7 +69,6 @@ class BatchEvaluationRunner:
         Args:
             region: AWS region. Defaults to boto3 session region or DEFAULT_REGION.
         """
-
         session = boto3.Session()
         self.region = region or session.region_name or DEFAULT_REGION
         self.data_plane_client = session.client(

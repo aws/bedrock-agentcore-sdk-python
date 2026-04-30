@@ -76,7 +76,7 @@ class TestFileDatasetProvider:
 
     def test_parse_missing_required_field(self, tmp_path):
         data = {"scenarios": [{"scenario_id": "s1"}]}
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError):
             self._write_and_load(tmp_path, data)
 
     def test_file_not_found(self):

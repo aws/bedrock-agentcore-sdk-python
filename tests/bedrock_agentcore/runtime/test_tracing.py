@@ -7,7 +7,6 @@ import pytest
 
 from bedrock_agentcore.runtime.tracing import BaggageSpanProcessor, _ensure_baggage_processor_registered
 
-
 # ---------------------------------------------------------------------------
 # BaggageSpanProcessor.on_start
 # ---------------------------------------------------------------------------
@@ -69,14 +68,17 @@ class TestBaggageSpanProcessorOnStart:
         """ASGI entry span: ContextVars not yet set, baggage in parent_context."""
         from opentelemetry import baggage as otel_baggage
         from opentelemetry import context as otel_context
+
         from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
 
         BedrockAgentCoreContext.set_routing_experiment(None, None)
 
         parent_ctx = otel_baggage.set_baggage(
-            "aws.agentcore.gateway.routing_experiment_arn", "arn:exp-fallback",
+            "aws.agentcore.gateway.routing_experiment_arn",
+            "arn:exp-fallback",
             otel_baggage.set_baggage(
-                "aws.agentcore.gateway.routing_experiment_variant_name", "green",
+                "aws.agentcore.gateway.routing_experiment_variant_name",
+                "green",
                 otel_context.get_current(),
             ),
         )
@@ -92,14 +94,17 @@ class TestBaggageSpanProcessorOnStart:
         """ContextVar value wins for both fields when both sources are set."""
         from opentelemetry import baggage as otel_baggage
         from opentelemetry import context as otel_context
+
         from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
 
         BedrockAgentCoreContext.set_routing_experiment("arn:exp-ctx", "blue")
 
         parent_ctx = otel_baggage.set_baggage(
-            "aws.agentcore.gateway.routing_experiment_arn", "arn:exp-baggage",
+            "aws.agentcore.gateway.routing_experiment_arn",
+            "arn:exp-baggage",
             otel_baggage.set_baggage(
-                "aws.agentcore.gateway.routing_experiment_variant_name", "green",
+                "aws.agentcore.gateway.routing_experiment_variant_name",
+                "green",
                 otel_context.get_current(),
             ),
         )
@@ -257,9 +262,8 @@ class TestEnsureBaggageProcessorRegistered:
 class TestBaggageEndToEnd:
     def test_baggage_processor_registered_on_provider(self):
         """BaggageSpanProcessor is registered on the TracerProvider when app is created."""
-        from bedrock_agentcore.runtime import BedrockAgentCoreApp
-
         import bedrock_agentcore.runtime.tracing as tracing_mod
+        from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
         tracing_mod._registered_on = None
         mock_provider = MagicMock()
@@ -349,8 +353,6 @@ class TestBaggageEndToEnd:
         assert captured["variant"] is None
 
 
-
-
 # ---------------------------------------------------------------------------
 # A2A: BedrockCallContextBuilder experiment baggage extraction
 # ---------------------------------------------------------------------------
@@ -388,7 +390,6 @@ class TestA2ACallContextBuilderBaggage:
         """Baggage header → experiment ContextVars are set by the time build() returns."""
         from bedrock_agentcore.runtime.a2a import BedrockCallContextBuilder
         from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
-
         from bedrock_agentcore.runtime.models import REQUEST_ID_HEADER, SESSION_HEADER
 
         headers = {

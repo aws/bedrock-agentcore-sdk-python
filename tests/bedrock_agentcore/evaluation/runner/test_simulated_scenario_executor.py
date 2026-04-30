@@ -9,12 +9,10 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from bedrock_agentcore.evaluation.runner.dataset_types import ActorProfile, SimulatedScenario, SimulationConfig
-from bedrock_agentcore.evaluation.runner.invoker_types import AgentInvokerInput, AgentInvokerOutput
+from bedrock_agentcore.evaluation.runner.invoker_types import AgentInvokerOutput
 from bedrock_agentcore.evaluation.runner.prompts import render_template_file, render_template_string
 from bedrock_agentcore.evaluation.runner.scenario_executor import (
-    AgentCoreActorSimulator,
     SimulatedScenarioExecutor,
-    SimulatorResult,
     _build_payload,
     _extract_agent_output,
     _make_response_model,
@@ -75,9 +73,7 @@ def mock_strands():
         "strands_evals": MagicMock(),
         "strands_evals.simulation": MagicMock(),
         "strands_evals.simulation.tools": MagicMock(),
-        "strands_evals.simulation.tools.goal_completion": MagicMock(
-            get_conversation_goal_completion=mock_goal_tool
-        ),
+        "strands_evals.simulation.tools.goal_completion": MagicMock(get_conversation_goal_completion=mock_goal_tool),
         "strands_evals.types": MagicMock(),
         "strands_evals.types.simulation": MagicMock(ActorProfile=mock_profile_cls),
     }
@@ -356,7 +352,7 @@ class TestMakeResponseModel:
 
     def test_reasoning_required(self):
         model_cls = _make_response_model(None)
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             model_cls(stop=False, message="hi")
 
 
@@ -470,9 +466,7 @@ class TestSimulatedScenarioExecutor:
     def test_successful_single_turn(self, simulated_scenario, mock_strands):
         """Actor stops after first turn — agent invoked exactly once."""
         mock_agent_cls, mock_agent_instance, _ = mock_strands
-        mock_agent_instance.side_effect = _make_actor_side_effect(
-            messages=[None], stops=[True]
-        )
+        mock_agent_instance.side_effect = _make_actor_side_effect(messages=[None], stops=[True])
 
         invoker_calls = []
 
@@ -512,9 +506,7 @@ class TestSimulatedScenarioExecutor:
 
     def test_same_session_id_across_all_turns(self, simulated_scenario, mock_strands):
         mock_agent_cls, mock_agent_instance, _ = mock_strands
-        mock_agent_instance.side_effect = _make_actor_side_effect(
-            messages=["msg 1", None], stops=[False, True]
-        )
+        mock_agent_instance.side_effect = _make_actor_side_effect(messages=["msg 1", None], stops=[False, True])
 
         session_ids = []
 
@@ -529,9 +521,7 @@ class TestSimulatedScenarioExecutor:
 
     def test_agent_invoker_failure_marks_scenario_failed(self, simulated_scenario, mock_strands):
         mock_agent_cls, mock_agent_instance, _ = mock_strands
-        mock_agent_instance.side_effect = _make_actor_side_effect(
-            messages=["msg"], stops=[True]
-        )
+        mock_agent_instance.side_effect = _make_actor_side_effect(messages=["msg"], stops=[True])
 
         def failing_invoker(inp):
             raise RuntimeError("agent exploded")
@@ -589,9 +579,7 @@ class TestSimulatedScenarioExecutor:
     def test_input_type_parses_input_dict(self, actor_profile, mock_strands):
         """input dict is validated into input_type for the first agent call."""
         mock_agent_cls, mock_agent_instance, _ = mock_strands
-        mock_agent_instance.side_effect = _make_actor_side_effect(
-            messages=[None], stops=[True]
-        )
+        mock_agent_instance.side_effect = _make_actor_side_effect(messages=[None], stops=[True])
 
         scenario = SimulatedScenario(
             scenario_id="s-typed",
@@ -651,7 +639,8 @@ class TestSimulatedScenarioExecutor:
         """If actor returns stop=False but message=None with input_type set, treat as goal_completed."""
         mock_agent_cls, mock_agent_instance, _ = mock_strands
         mock_agent_instance.side_effect = _make_actor_side_effect(
-            messages=[None], stops=[False]  # stop=False but message=None
+            messages=[None],
+            stops=[False],  # stop=False but message=None
         )
 
         scenario = SimulatedScenario(
@@ -673,9 +662,7 @@ class TestSimulatedScenarioExecutor:
     def test_agent_output_serialized_for_actor(self, actor_profile, mock_strands):
         """Agent output is serialized with _to_string and passed as-is to the actor."""
         mock_agent_cls, mock_agent_instance, _ = mock_strands
-        mock_agent_instance.side_effect = _make_actor_side_effect(
-            messages=[None], stops=[True]
-        )
+        mock_agent_instance.side_effect = _make_actor_side_effect(messages=[None], stops=[True])
 
         scenario = SimulatedScenario(
             scenario_id="s-output-single",
@@ -704,9 +691,7 @@ class TestSimulatedScenarioExecutor:
     def test_agent_output_multi_field_schema_passes_json_to_actor(self, actor_profile, mock_strands):
         """When output_type has multiple fields, actor receives the full JSON string."""
         mock_agent_cls, mock_agent_instance, _ = mock_strands
-        mock_agent_instance.side_effect = _make_actor_side_effect(
-            messages=[None], stops=[True]
-        )
+        mock_agent_instance.side_effect = _make_actor_side_effect(messages=[None], stops=[True])
 
         scenario = SimulatedScenario(
             scenario_id="s-output-multi",
@@ -732,9 +717,7 @@ class TestSimulatedScenarioExecutor:
     def test_agent_plain_text_passed_through_when_output_type_parse_fails(self, actor_profile, mock_strands):
         """When agent returns plain text that can't be parsed as output_type, pass it through."""
         mock_agent_cls, mock_agent_instance, _ = mock_strands
-        mock_agent_instance.side_effect = _make_actor_side_effect(
-            messages=[None], stops=[True]
-        )
+        mock_agent_instance.side_effect = _make_actor_side_effect(messages=[None], stops=[True])
 
         scenario = SimulatedScenario(
             scenario_id="s-output-fallback",
@@ -756,9 +739,7 @@ class TestSimulatedScenarioExecutor:
 
     def test_actor_profile_mapped_to_strands_profile(self, simulated_scenario, mock_strands):
         mock_agent_cls, mock_agent_instance, mock_profile_cls = mock_strands
-        mock_agent_instance.side_effect = _make_actor_side_effect(
-            messages=[None], stops=[True]
-        )
+        mock_agent_instance.side_effect = _make_actor_side_effect(messages=[None], stops=[True])
 
         executor = SimulatedScenarioExecutor(agent_invoker=lambda inp: AgentInvokerOutput(agent_output="ok"))
         executor.run_scenario(simulated_scenario)

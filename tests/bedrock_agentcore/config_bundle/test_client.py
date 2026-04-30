@@ -1,7 +1,8 @@
 """Tests for ConfigBundleClient."""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from bedrock_agentcore.config_bundle.client import ConfigBundleClient
 
@@ -21,7 +22,7 @@ class TestConfigBundleClient:
         _ = client.list_configuration_bundles
 
         mock_session.client.assert_called_once_with(
-            "agentcore-evaluation-controlplane",
+            "bedrock-agentcore-control",
             region_name="us-east-1",
             endpoint_url="https://bedrock-agentcore-control.us-east-1.amazonaws.com",
         )
