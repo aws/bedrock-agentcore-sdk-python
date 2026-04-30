@@ -22,6 +22,10 @@ AUTHORIZATION_HEADER = "Authorization"
 CUSTOM_HEADER_PREFIX = "X-Amzn-Bedrock-AgentCore-Runtime-Custom-"
 AGENTCORE_RUNTIME_URL_ENV = "AGENTCORE_RUNTIME_URL"
 
+# Baggage keys for routing experiment span attributes
+BAGGAGE_KEY_EXPERIMENT_ARN = "aws.agentcore.gateway.routing_experiment_arn"
+BAGGAGE_KEY_EXPERIMENT_VARIANT = "aws.agentcore.gateway.routing_experiment_variant_name"
+
 # Task action constants
 TASK_ACTION_PING_STATUS = "ping_status"
 TASK_ACTION_JOB_STATUS = "job_status"

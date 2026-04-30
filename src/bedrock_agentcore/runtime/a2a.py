@@ -9,17 +9,21 @@ import time
 import uuid
 from typing import Any, Callable, Optional
 
+from ..config_bundle.baggage import _extract_baggage
 from .context import BedrockAgentCoreContext
 from .models import (
     ACCESS_TOKEN_HEADER,
     AGENTCORE_RUNTIME_URL_ENV,
     AUTHORIZATION_HEADER,
+    BAGGAGE_KEY_EXPERIMENT_ARN,
+    BAGGAGE_KEY_EXPERIMENT_VARIANT,
     CUSTOM_HEADER_PREFIX,
     OAUTH2_CALLBACK_URL_HEADER,
     REQUEST_ID_HEADER,
     SESSION_HEADER,
     PingStatus,
 )
+from .tracing import _ensure_baggage_processor_registered
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +101,11 @@ class BedrockCallContextBuilder:
     automatically calls ``build()`` on every incoming request.
     """
 
+    def __init__(self) -> None:
+        """Initialize BedrockCallContextBuilder and register the baggage span processor."""
+        # Register early so the ASGI entry span (POST /invocations) gets stamped.
+        _ensure_baggage_processor_registered()
+
     def build(self, request: Any) -> Any:
         """Build a ServerCallContext from a Starlette Request.
 
@@ -131,6 +140,21 @@ class BedrockCallContextBuilder:
                 request_headers[header_name] = header_value
         if request_headers:
             BedrockAgentCoreContext.set_request_headers(request_headers)
+
+        all_baggage: dict = {}
+        try:
+            all_baggage = _extract_baggage(headers)
+        except Exception as e:
+            logger.warning(
+                "Failed to parse baggage: %s: %s — raw baggage: %r",
+                type(e).__name__,
+                e,
+                headers.get("baggage", ""),
+            )
+        experiment_arn = next(iter(all_baggage.get(BAGGAGE_KEY_EXPERIMENT_ARN, [])), None)
+        experiment_variant = next(iter(all_baggage.get(BAGGAGE_KEY_EXPERIMENT_VARIANT, [])), None)
+        BedrockAgentCoreContext.set_routing_experiment(experiment_arn, experiment_variant)
+        _ensure_baggage_processor_registered()
 
         state = {
             "request_id": request_id,

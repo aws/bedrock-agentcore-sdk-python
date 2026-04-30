@@ -1,15 +1,19 @@
 """Tests for the OnDemandEvaluationDatasetRunner and related types."""
 
-from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
+from unittest.mock import ANY, MagicMock, patch
 
 from bedrock_agentcore.evaluation.agent_span_collector import (
     AgentSpanCollector,
     CloudWatchAgentSpanCollector,
 )
 from bedrock_agentcore.evaluation.runner.dataset_types import (
+    ActorProfile,
     Dataset,
     PredefinedScenario,
     Scenario,
+    SimulatedScenario,
+    SimulationConfig,
     Turn,
 )
 from bedrock_agentcore.evaluation.runner.invoker_types import (
@@ -73,6 +77,19 @@ class TestEvaluationRunConfig:
             max_concurrent_scenarios=10,
         )
         assert cfg.max_concurrent_scenarios == 10
+
+    def test_simulation_config_defaults_to_none(self):
+        cfg = EvaluationRunConfig(evaluator_config=EvaluatorConfig(evaluator_ids=["accuracy"]))
+        assert cfg.simulation_config is None
+
+    def test_simulation_config_accepted(self):
+        sim = SimulationConfig(model_id="us.amazon.nova-lite-v1:0")
+        cfg = EvaluationRunConfig(
+            evaluator_config=EvaluatorConfig(evaluator_ids=["accuracy"]),
+            simulation_config=sim,
+        )
+        assert cfg.simulation_config is sim
+        assert cfg.simulation_config.model_id == "us.amazon.nova-lite-v1:0"
 
 
 # --- Result dataclass tests ---
@@ -932,3 +949,209 @@ class TestOnDemandEvaluationDatasetRunnerUnknownScenario:
         assert len(result.scenario_results) == 1
         assert result.scenario_results[0].status == "FAILED"
         assert "No runner registered" in result.scenario_results[0].error
+
+
+# --- _run_scenario dispatch tests ---
+
+
+def _make_completed_exec_result(scenario_id: str) -> ScenarioExecutionResult:
+    now = datetime.now(timezone.utc)
+    return ScenarioExecutionResult(
+        scenario_id=scenario_id,
+        session_id=f"{scenario_id}-session",
+        start_time=now,
+        end_time=now,
+        status="COMPLETED",
+    )
+
+
+def _make_simulated_scenario() -> SimulatedScenario:
+    return SimulatedScenario(
+        scenario_id="sim-1",
+        actor_profile=ActorProfile(context="A customer", goal="Place an order"),
+        input="I'd like to order a pizza",
+    )
+
+
+class TestRunScenarioDispatch:
+    """Unit tests for _run_scenario — executor selection and kwarg threading.
+
+    The runner looks up executor classes from its _scenario_executors dict (populated at
+    __init__), so module-level patching doesn't intercept the calls. Instead we inject
+    mock classes directly into the dict after construction.
+    """
+
+    @patch("bedrock_agentcore.evaluation.runner.on_demand.on_demand_runner.boto3")
+    def test_predefined_scenario_uses_predefined_executor(self, mock_boto3):
+        mock_boto3.client.side_effect = [MagicMock(), MagicMock()]
+        runner = OnDemandEvaluationDatasetRunner()
+
+        mock_executor_cls = MagicMock()
+        mock_executor_cls.return_value.run_scenario.return_value = _make_completed_exec_result("p1")
+        runner._scenario_executors[PredefinedScenario] = mock_executor_cls
+
+        scenario = PredefinedScenario(scenario_id="p1", turns=[Turn(input="hi")])
+        config = EvaluationRunConfig(
+            evaluator_config=EvaluatorConfig(evaluator_ids=["e1"]),
+            evaluation_delay_seconds=0,
+        )
+
+        runner._run_scenario(config, scenario, lambda inp: AgentInvokerOutput(agent_output="ok"))
+
+        mock_executor_cls.assert_called_once_with(agent_invoker=ANY)
+        call_kwargs = mock_executor_cls.call_args[1]
+        assert "simulation_config" not in call_kwargs
+
+    @patch("bedrock_agentcore.evaluation.runner.on_demand.on_demand_runner.boto3")
+    def test_simulated_scenario_uses_simulated_executor(self, mock_boto3):
+        mock_boto3.client.side_effect = [MagicMock(), MagicMock()]
+        runner = OnDemandEvaluationDatasetRunner()
+
+        mock_executor_cls = MagicMock()
+        mock_executor_cls.return_value.run_scenario.return_value = _make_completed_exec_result("sim-1")
+        runner._scenario_executors[SimulatedScenario] = mock_executor_cls
+
+        scenario = _make_simulated_scenario()
+        sim_config = SimulationConfig(model_id="us.amazon.nova-lite-v1:0")
+        config = EvaluationRunConfig(
+            evaluator_config=EvaluatorConfig(evaluator_ids=["e1"]),
+            evaluation_delay_seconds=0,
+            simulation_config=sim_config,
+        )
+
+        runner._run_scenario(config, scenario, lambda inp: AgentInvokerOutput(agent_output="ok"))
+
+        mock_executor_cls.assert_called_once_with(agent_invoker=ANY, simulation_config=sim_config)
+
+    @patch("bedrock_agentcore.evaluation.runner.on_demand.on_demand_runner.boto3")
+    def test_simulated_scenario_passes_none_simulation_config_when_absent(self, mock_boto3):
+        mock_boto3.client.side_effect = [MagicMock(), MagicMock()]
+        runner = OnDemandEvaluationDatasetRunner()
+
+        mock_executor_cls = MagicMock()
+        mock_executor_cls.return_value.run_scenario.return_value = _make_completed_exec_result("sim-1")
+        runner._scenario_executors[SimulatedScenario] = mock_executor_cls
+
+        scenario = _make_simulated_scenario()
+        config = EvaluationRunConfig(
+            evaluator_config=EvaluatorConfig(evaluator_ids=["e1"]),
+            evaluation_delay_seconds=0,
+            # simulation_config omitted — defaults to None
+        )
+
+        runner._run_scenario(config, scenario, lambda inp: AgentInvokerOutput(agent_output="ok"))
+
+        mock_executor_cls.assert_called_once_with(agent_invoker=ANY, simulation_config=None)
+
+    @patch("bedrock_agentcore.evaluation.runner.on_demand.on_demand_runner.boto3")
+    def test_predefined_scenario_ignores_simulation_config(self, mock_boto3):
+        """simulation_config on the run config must not be forwarded to PredefinedScenarioExecutor."""
+        mock_boto3.client.side_effect = [MagicMock(), MagicMock()]
+        runner = OnDemandEvaluationDatasetRunner()
+
+        mock_executor_cls = MagicMock()
+        mock_executor_cls.return_value.run_scenario.return_value = _make_completed_exec_result("p1")
+        runner._scenario_executors[PredefinedScenario] = mock_executor_cls
+
+        scenario = PredefinedScenario(scenario_id="p1", turns=[Turn(input="hi")])
+        config = EvaluationRunConfig(
+            evaluator_config=EvaluatorConfig(evaluator_ids=["e1"]),
+            evaluation_delay_seconds=0,
+            simulation_config=SimulationConfig(model_id="some-model"),
+        )
+
+        runner._run_scenario(config, scenario, lambda inp: AgentInvokerOutput(agent_output="ok"))
+
+        call_kwargs = mock_executor_cls.call_args[1]
+        assert "simulation_config" not in call_kwargs
+
+
+# --- End-to-end: SimulatedScenario in run() ---
+
+
+class TestOnDemandRunnerWithSimulatedScenario:
+    """Integration-style tests for run() when the dataset contains SimulatedScenario entries."""
+
+    def _make_config(self, simulation_config=None):
+        return EvaluationRunConfig(
+            evaluator_config=EvaluatorConfig(evaluator_ids=["accuracy"]),
+            evaluation_delay_seconds=0,
+            simulation_config=simulation_config,
+        )
+
+    @patch("bedrock_agentcore.evaluation.runner.on_demand.on_demand_runner.boto3")
+    def test_simulated_scenario_completes_end_to_end(self, mock_boto3):
+        """A simulated scenario runs through the full runner pipeline."""
+        mock_dp_client = MagicMock()
+        mock_cp_client = MagicMock()
+        mock_boto3.client.side_effect = [mock_dp_client, mock_cp_client]
+
+        mock_dp_client.evaluate.return_value = {"evaluationResults": [{"value": 0.9, "explanation": "Good"}]}
+        mock_cp_client.get_evaluator.return_value = {"level": "SESSION"}
+
+        mock_collector = MagicMock(spec=AgentSpanCollector)
+        mock_collector.collect.return_value = []
+
+        dataset = Dataset(scenarios=[_make_simulated_scenario()])
+        config = self._make_config()
+
+        mock_sim_exec_cls = MagicMock()
+        mock_sim_exec_cls.return_value.run_scenario.return_value = _make_completed_exec_result("sim-1")
+
+        runner = OnDemandEvaluationDatasetRunner(region="us-west-2")
+        runner._scenario_executors[SimulatedScenario] = mock_sim_exec_cls
+
+        result = runner.run(
+            config=config,
+            dataset=dataset,
+            agent_invoker=lambda inp: AgentInvokerOutput(agent_output="ok"),
+            span_collector=mock_collector,
+        )
+
+        assert len(result.scenario_results) == 1
+        sr = result.scenario_results[0]
+        assert sr.scenario_id == "sim-1"
+        assert sr.status == "COMPLETED"
+        assert sr.error is None
+
+    @patch("bedrock_agentcore.evaluation.runner.on_demand.on_demand_runner.boto3")
+    def test_mixed_dataset_dispatches_each_executor_correctly(self, mock_boto3):
+        """Dataset with both PredefinedScenario and SimulatedScenario uses the right executor per type."""
+        mock_dp_client = MagicMock()
+        mock_cp_client = MagicMock()
+        mock_boto3.client.side_effect = [mock_dp_client, mock_cp_client]
+
+        mock_dp_client.evaluate.return_value = {"evaluationResults": [{"value": 1.0, "explanation": "Ok"}]}
+        mock_cp_client.get_evaluator.return_value = {"level": "SESSION"}
+
+        mock_collector = MagicMock(spec=AgentSpanCollector)
+        mock_collector.collect.return_value = []
+
+        predefined = PredefinedScenario(scenario_id="pred-1", turns=[Turn(input="hello")])
+        simulated = _make_simulated_scenario()
+        dataset = Dataset(scenarios=[predefined, simulated])
+        sim_config = SimulationConfig(model_id="us.amazon.nova-lite-v1:0")
+        config = self._make_config(simulation_config=sim_config)
+
+        mock_pred_cls = MagicMock()
+        mock_pred_cls.return_value.run_scenario.return_value = _make_completed_exec_result("pred-1")
+        mock_sim_cls = MagicMock()
+        mock_sim_cls.return_value.run_scenario.return_value = _make_completed_exec_result("sim-1")
+
+        runner = OnDemandEvaluationDatasetRunner(region="us-west-2")
+        runner._scenario_executors[PredefinedScenario] = mock_pred_cls
+        runner._scenario_executors[SimulatedScenario] = mock_sim_cls
+
+        result = runner.run(
+            config=config,
+            dataset=dataset,
+            agent_invoker=lambda inp: AgentInvokerOutput(agent_output="ok"),
+            span_collector=mock_collector,
+        )
+
+        # Each executor called exactly once for its scenario type
+        mock_pred_cls.assert_called_once_with(agent_invoker=ANY)
+        mock_sim_cls.assert_called_once_with(agent_invoker=ANY, simulation_config=sim_config)
+
+        assert len(result.scenario_results) == 2
+        assert all(sr.status == "COMPLETED" for sr in result.scenario_results)

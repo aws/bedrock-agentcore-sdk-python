@@ -21,16 +21,20 @@ from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from ..config_bundle.baggage import _extract_baggage
 from .context import BedrockAgentCoreContext, RequestContext
 from .models import (
     ACCESS_TOKEN_HEADER,
     AUTHORIZATION_HEADER,
+    BAGGAGE_KEY_EXPERIMENT_ARN,
+    BAGGAGE_KEY_EXPERIMENT_VARIANT,
     CUSTOM_HEADER_PREFIX,
     OAUTH2_CALLBACK_URL_HEADER,
     REQUEST_ID_HEADER,
     SESSION_HEADER,
     PingStatus,
 )
+from .tracing import _ensure_baggage_processor_registered
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +86,9 @@ class AGUIApp(Starlette):
             WebSocketRoute("/ws", self._handle_websocket),
         ]
         super().__init__(routes=routes, debug=debug, lifespan=lifespan, middleware=middleware)
+
+        # Register early so the ASGI entry span (POST /invocations) gets stamped.
+        _ensure_baggage_processor_registered()
 
     def entrypoint(self, agent_or_func: Any) -> Any:
         """Register the agent handler for both SSE and WebSocket transports.
@@ -171,6 +178,21 @@ class AGUIApp(Starlette):
                 request_headers[header_name] = header_value
         if request_headers:
             BedrockAgentCoreContext.set_request_headers(request_headers)
+
+        all_baggage: dict = {}
+        try:
+            all_baggage = _extract_baggage(headers)
+        except Exception as e:
+            logger.warning(
+                "Failed to parse baggage: %s: %s — raw baggage: %r",
+                type(e).__name__,
+                e,
+                headers.get("baggage", ""),
+            )
+        experiment_arn = next(iter(all_baggage.get(BAGGAGE_KEY_EXPERIMENT_ARN, [])), None)
+        experiment_variant = next(iter(all_baggage.get(BAGGAGE_KEY_EXPERIMENT_VARIANT, [])), None)
+        BedrockAgentCoreContext.set_routing_experiment(experiment_arn, experiment_variant)
+        _ensure_baggage_processor_registered()
 
         return RequestContext(
             session_id=session_id,

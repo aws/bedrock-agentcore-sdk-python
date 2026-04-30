@@ -2,10 +2,12 @@
 
 from .dataset_providers import DatasetProvider, FileDatasetProvider
 from .dataset_types import (
+    ActorProfile,
     Dataset,
     Input,
     PredefinedScenario,
     Scenario,
+    SimulatedScenario,
     Turn,
 )
 from .invoker_types import (
@@ -22,33 +24,43 @@ from .on_demand import (
     EvaluatorResult,
     OnDemandEvaluationDatasetRunner,
     ScenarioResult,
+    SimulationConfig,
 )
 from .scenario_executor import (
+    AgentCoreActorSimulator,
     PredefinedScenarioExecutor,
     ScenarioExecutionResult,
     ScenarioExecutor,
+    SimulatedScenarioExecutor,
+    SimulatorResult,
 )
 
 __all__ = [
+    "ActorProfile",
     "AgentInvokerFn",
     "AgentInvokerInput",
     "AgentInvokerOutput",
+    "AgentSpanCollector",
     "CloudWatchAgentSpanCollector",
     "Dataset",
     "DatasetProvider",
     "EvaluationResult",
     "EvaluationRunConfig",
-    "OnDemandEvaluationDatasetRunner",
     "EvaluatorConfig",
     "EvaluatorResult",
     "FileDatasetProvider",
     "Input",
+    "OnDemandEvaluationDatasetRunner",
+    "PredefinedScenario",
+    "AgentCoreActorSimulator",
+    "PredefinedScenarioExecutor",
     "Scenario",
     "ScenarioExecutionResult",
     "ScenarioExecutor",
+    "SimulatorResult",
     "ScenarioResult",
-    "AgentSpanCollector",
+    "SimulatedScenario",
+    "SimulatedScenarioExecutor",
+    "SimulationConfig",
     "Turn",
-    "PredefinedScenario",
-    "PredefinedScenarioExecutor",
 ]
