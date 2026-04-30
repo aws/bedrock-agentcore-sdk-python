@@ -216,6 +216,7 @@ class BatchEvaluationResult(BaseModel):
             returned by StartBatchEvaluation.
         batch_evaluation_arn: ARN of the batch evaluation resource.
         batch_evaluation_name: Human-readable name for the batch evaluation job.
+        description: Optional human-readable description of the batch evaluation job.
         status: Terminal status of the job (e.g. ``"COMPLETED"``).
         created_at: Timestamp when the batch evaluation job was created.
         evaluation_results: Aggregated per-evaluator statistics. Present when
@@ -234,6 +235,7 @@ class BatchEvaluationResult(BaseModel):
     batch_evaluation_id: str
     batch_evaluation_arn: str
     batch_evaluation_name: str
+    description: Optional[str] = None
     status: str
     created_at: datetime
     evaluation_results: Optional[BatchEvaluationSummary] = None
