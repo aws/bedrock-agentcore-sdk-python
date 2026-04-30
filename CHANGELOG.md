@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.8.0] - 2026-04-30
+
+### Added
+- feat: support on-behalf-of token exchange and additional parameters (#447) (995536b)
+
+### Fixed
+- fix: increase memory regression test timeout to 15 minutes (#442) (0c9ce37)
+
+### Documentation
+- docs: update README links and remove Starter Toolkit references (#444) (c2805d3)
+
+### Other Changes
+- Feat: Evaluation preview features - Batch evaluation and config bundles  (#446) (719907b)
+
 ## [1.7.0] - 2026-04-28
 
 ### Added
