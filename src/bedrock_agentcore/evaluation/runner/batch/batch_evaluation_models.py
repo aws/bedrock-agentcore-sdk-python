@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 class DataSourceConfig(ABC):
     """Abstract base for session span sources passed to the evaluation API.
 
+    .. warning::
+        This feature is in preview and may change in future releases.
+
     Subclass this to support any DataSourceConfig union member
     (cloudWatchLogs or future additions).
     """
@@ -63,6 +66,9 @@ class DataSourceConfig(ABC):
 
 class CloudWatchDataSourceConfig(BaseModel, DataSourceConfig):
     """CloudWatch data source — pulls spans from CloudWatch log groups.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
 
     Attributes:
         service_names: Service names for span filtering. The API accepts exactly one (list of length 1).
@@ -125,6 +131,9 @@ class FailedScenario(BaseModel):
 class EvaluatorStatistics(BaseModel):
     """Statistics for an evaluator.
 
+    .. warning::
+        This feature is in preview and may change in future releases.
+
     Attributes:
         average_score: Average evaluation score across all evaluations.
     """
@@ -136,6 +145,9 @@ class EvaluatorStatistics(BaseModel):
 
 class EvaluatorSummary(BaseModel):
     """Summary statistics for a single evaluator.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
 
     Attributes:
         evaluator_id: Evaluator identifier.
@@ -154,6 +166,9 @@ class EvaluatorSummary(BaseModel):
 
 class BatchEvaluationSummary(BaseModel):
     """Aggregated results from a completed batch evaluation.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
 
     Attributes:
         number_of_sessions_completed: Number of sessions that were successfully evaluated.
@@ -178,6 +193,9 @@ class BatchEvaluationSummary(BaseModel):
 class CloudWatchOutputDataConfig(BaseModel):
     """CloudWatch destination for batch evaluation output data.
 
+    .. warning::
+        This feature is in preview and may change in future releases.
+
     Attributes:
         log_group_name: CloudWatch log group where evaluation results are written.
         log_stream_name: CloudWatch log stream for this batch evaluation's results.
@@ -189,6 +207,9 @@ class CloudWatchOutputDataConfig(BaseModel):
 
 class BatchEvaluationResult(BaseModel):
     """Result returned by :py:meth:`BatchEvaluationRunner.run`.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
 
     Attributes:
         batch_evaluation_id: Unique identifier for the batch evaluation job,
@@ -229,6 +250,9 @@ class BatchEvaluationResult(BaseModel):
 class BatchEvaluatorConfig(BaseModel):
     """Configuration for evaluators.
 
+    .. warning::
+        This feature is in preview and may change in future releases.
+
     Attributes:
         evaluator_ids: List of evaluator IDs (built-in names or custom ARNs).
     """
@@ -238,6 +262,9 @@ class BatchEvaluatorConfig(BaseModel):
 
 class BatchEvaluationRunConfig(BaseModel):
     """Configuration for a single batch evaluation run.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
 
     Attributes:
         batch_evaluation_name: Human-readable name for the batch evaluation job.

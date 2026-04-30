@@ -24,6 +24,9 @@ _ALLOWED_OPERATIONS = frozenset({
 class ConfigBundleClient:
     """Client for AgentCore configuration bundle operations.
 
+    .. warning::
+        This feature is in preview and may change in future releases.
+
     Wraps the ``bedrock-agentcore-control`` boto3 client and forwards all method
     calls to it via ``__getattr__``, so any boto3 operation (e.g.
     ``get_configuration_bundle_version``, ``list_configuration_bundles``) is

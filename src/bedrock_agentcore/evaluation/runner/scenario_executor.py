@@ -34,6 +34,9 @@ _INITIAL_GREETINGS: List[str] = [
 class SimulatorResult:
     """Output from a single actor turn in a simulated conversation.
 
+    .. warning::
+        This feature is in preview and may change in future releases.
+
     Attributes:
         message: The actor's next message. An ``input_type`` instance when
             ``input_type`` is configured; a plain ``str`` or ``None`` otherwise.
@@ -126,6 +129,9 @@ class PredefinedScenarioExecutor(ScenarioExecutor):
 
 class SimulatedScenarioExecutor(ScenarioExecutor):
     """Runs a SimulatedScenario using AgentCoreActorSimulator.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
 
     Uses a dynamically-typed structured output model so the LLM is schema-constrained
     via tool-use enforcement to produce correctly-typed messages, eliminating the need
@@ -242,6 +248,9 @@ class SimulatedScenarioExecutor(ScenarioExecutor):
 
 class AgentCoreActorSimulator:
     """Actor simulator with dynamically-typed structured output.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
 
     Uses a strands ``Agent`` with a per-scenario Pydantic response model whose
     ``message`` field is typed as ``Optional[input_type]`` when ``input_type``

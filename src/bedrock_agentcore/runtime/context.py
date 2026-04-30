@@ -112,28 +112,48 @@ class BedrockAgentCoreContext:
 
     @classmethod
     def set_routing_experiment(cls, arn: Optional[str], variant: Optional[str]) -> None:
-        """Store routing experiment identifiers for the current request."""
+        """Store routing experiment identifiers for the current request.
+
+        .. warning::
+            This feature is in preview and may change in future releases.
+        """
         cls._routing_experiment_arn.set(arn)
         cls._routing_experiment_variant.set(variant)
 
     @classmethod
     def get_routing_experiment_arn(cls) -> Optional[str]:
-        """Return the routing experiment ARN for the current request, or None."""
+        """Return the routing experiment ARN for the current request, or None.
+
+        .. warning::
+            This feature is in preview and may change in future releases.
+        """
         return cls._routing_experiment_arn.get()
 
     @classmethod
     def get_routing_experiment_variant(cls) -> Optional[str]:
-        """Return the routing experiment variant name for the current request, or None."""
+        """Return the routing experiment variant name for the current request, or None.
+
+        .. warning::
+            This feature is in preview and may change in future releases.
+        """
         return cls._routing_experiment_variant.get()
 
     @classmethod
     def set_config_bundle_ref(cls, ref: Optional[ConfigBundleRef]) -> None:
-        """Set the configuration bundle reference for the current request."""
+        """Set the configuration bundle reference for the current request.
+
+        .. warning::
+            This feature is in preview and may change in future releases.
+        """
         cls._config_bundle_ref.set(ref)
 
     @classmethod
     def get_config_bundle_ref(cls) -> Optional[ConfigBundleRef]:
-        """Get the configuration bundle reference for the current request."""
+        """Get the configuration bundle reference for the current request.
+
+        .. warning::
+            This feature is in preview and may change in future releases.
+        """
         return cls._config_bundle_ref.get()
 
     @classmethod
@@ -154,6 +174,9 @@ class BedrockAgentCoreContext:
     @classmethod
     def get_config_bundle(cls) -> Dict[str, Any]:
         """Return this runtime's config from the current request's bundle.
+
+        .. warning::
+            This feature is in preview and may change in future releases.
 
         Fetches from the API on the first call for a given bundle version, then
         serves from the per-app-instance LRU cache on all subsequent calls.
