@@ -349,6 +349,184 @@ class TestIdentityClient:
             )
 
     @pytest.mark.asyncio
+    async def test_get_token_with_resources(self):
+        """Test get_token forwards the resources list to the data plane request."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_client = Mock()
+            mock_boto_client.return_value = mock_client
+
+            identity_client = IdentityClient(region)
+
+            provider_name = "test-provider"
+            scopes = ["read"]
+            agent_identity_token = "test-agent-token"
+            resources = ["https://backend.example.com/api1", "https://backend.example.com/api2"]
+            expected_token = "test-access-token"
+
+            mock_client.get_resource_oauth2_token.return_value = {"accessToken": expected_token}
+
+            result = await identity_client.get_token(
+                provider_name=provider_name,
+                scopes=scopes,
+                resources=resources,
+                agent_identity_token=agent_identity_token,
+                auth_flow="M2M",
+            )
+
+            assert result == expected_token
+            mock_client.get_resource_oauth2_token.assert_called_once_with(
+                resourceCredentialProviderName=provider_name,
+                scopes=scopes,
+                oauth2Flow="M2M",
+                workloadIdentityToken=agent_identity_token,
+                resources=resources,
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_token_with_audiences(self):
+        """Test get_token forwards the audiences list to the data plane request."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_client = Mock()
+            mock_boto_client.return_value = mock_client
+
+            identity_client = IdentityClient(region)
+
+            provider_name = "test-provider"
+            scopes = ["read"]
+            agent_identity_token = "test-agent-token"
+            audiences = ["urn:example:cooperation", "urn:example:other"]
+            expected_token = "test-access-token"
+
+            mock_client.get_resource_oauth2_token.return_value = {"accessToken": expected_token}
+
+            result = await identity_client.get_token(
+                provider_name=provider_name,
+                scopes=scopes,
+                audiences=audiences,
+                agent_identity_token=agent_identity_token,
+                auth_flow="M2M",
+            )
+
+            assert result == expected_token
+            mock_client.get_resource_oauth2_token.assert_called_once_with(
+                resourceCredentialProviderName=provider_name,
+                scopes=scopes,
+                oauth2Flow="M2M",
+                workloadIdentityToken=agent_identity_token,
+                audiences=audiences,
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_token_with_resources_and_audiences(self):
+        """Test get_token forwards both resources and audiences together."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_client = Mock()
+            mock_boto_client.return_value = mock_client
+
+            identity_client = IdentityClient(region)
+
+            provider_name = "test-provider"
+            scopes = ["read", "write"]
+            agent_identity_token = "test-agent-token"
+            resources = ["https://backend.example.com/api"]
+            audiences = ["urn:example:cooperation"]
+            expected_token = "test-access-token"
+
+            mock_client.get_resource_oauth2_token.return_value = {"accessToken": expected_token}
+
+            result = await identity_client.get_token(
+                provider_name=provider_name,
+                scopes=scopes,
+                resources=resources,
+                audiences=audiences,
+                agent_identity_token=agent_identity_token,
+                auth_flow="ON_BEHALF_OF_TOKEN_EXCHANGE",
+            )
+
+            assert result == expected_token
+            mock_client.get_resource_oauth2_token.assert_called_once_with(
+                resourceCredentialProviderName=provider_name,
+                scopes=scopes,
+                oauth2Flow="ON_BEHALF_OF_TOKEN_EXCHANGE",
+                workloadIdentityToken=agent_identity_token,
+                resources=resources,
+                audiences=audiences,
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_token_empty_resources_and_audiences_not_forwarded(self):
+        """Test get_token does not forward empty/None resources or audiences."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_client = Mock()
+            mock_boto_client.return_value = mock_client
+
+            identity_client = IdentityClient(region)
+
+            provider_name = "test-provider"
+            scopes = ["read"]
+            agent_identity_token = "test-agent-token"
+            expected_token = "test-access-token"
+
+            mock_client.get_resource_oauth2_token.return_value = {"accessToken": expected_token}
+
+            # Pass empty list and None — neither should appear in the request
+            result = await identity_client.get_token(
+                provider_name=provider_name,
+                scopes=scopes,
+                resources=[],
+                audiences=None,
+                agent_identity_token=agent_identity_token,
+                auth_flow="M2M",
+            )
+
+            assert result == expected_token
+            call_kwargs = mock_client.get_resource_oauth2_token.call_args.kwargs
+            assert "resources" not in call_kwargs
+            assert "audiences" not in call_kwargs
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("auth_flow", ["M2M", "USER_FEDERATION", "ON_BEHALF_OF_TOKEN_EXCHANGE"])
+    async def test_get_token_all_auth_flows(self, auth_flow):
+        """Test get_token forwards each supported auth_flow to the data plane request."""
+        region = "us-west-2"
+
+        with patch("boto3.client") as mock_boto_client:
+            mock_client = Mock()
+            mock_boto_client.return_value = mock_client
+
+            identity_client = IdentityClient(region)
+
+            provider_name = "test-provider"
+            scopes = ["read"]
+            agent_identity_token = "test-agent-token"
+            expected_token = "test-access-token"
+
+            mock_client.get_resource_oauth2_token.return_value = {"accessToken": expected_token}
+
+            result = await identity_client.get_token(
+                provider_name=provider_name,
+                scopes=scopes,
+                agent_identity_token=agent_identity_token,
+                auth_flow=auth_flow,
+            )
+
+            assert result == expected_token
+            mock_client.get_resource_oauth2_token.assert_called_once_with(
+                resourceCredentialProviderName=provider_name,
+                scopes=scopes,
+                oauth2Flow=auth_flow,
+                workloadIdentityToken=agent_identity_token,
+            )
+
+    @pytest.mark.asyncio
     async def test_get_api_key_success(self):
         """Test successful API key retrieval."""
         region = "us-west-2"

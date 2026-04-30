@@ -24,8 +24,10 @@ def requires_access_token(
     provider_name: str,
     into: str = "access_token",
     scopes: List[str],
+    resources: Optional[List[str]] = None,
+    audiences: Optional[List[str]] = None,
     on_auth_url: Optional[Callable[[str], Any]] = None,
-    auth_flow: Literal["M2M", "USER_FEDERATION"],
+    auth_flow: Literal["M2M", "USER_FEDERATION", "ON_BEHALF_OF_TOKEN_EXCHANGE"],
     callback_url: Optional[str] = None,
     force_authentication: bool = False,
     token_poller: Optional[TokenPoller] = None,
@@ -38,8 +40,10 @@ def requires_access_token(
         provider_name: The credential provider name
         into: Parameter name to inject the token into
         scopes: OAuth2 scopes to request
+        resources: OAuth2 resources to request
+        audiences: OAuth2 audiences to request
         on_auth_url: Callback for handling authorization URLs
-        auth_flow: Authentication flow type ("M2M" or "USER_FEDERATION")
+        auth_flow: Authentication flow type ("M2M" or "USER_FEDERATION" or "ON_BEHALF_OF_TOKEN_EXCHANGE")
         callback_url: OAuth2 callback URL
         force_authentication: Force re-authentication
         token_poller: Custom token poller implementation
@@ -60,6 +64,8 @@ def requires_access_token(
                 provider_name=provider_name,
                 agent_identity_token=await _get_workload_access_token(client),
                 scopes=scopes,
+                resources=resources,
+                audiences=audiences,
                 on_auth_url=on_auth_url,
                 auth_flow=auth_flow,
                 callback_url=_get_oauth2_callback_url(callback_url),

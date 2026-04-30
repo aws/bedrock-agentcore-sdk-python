@@ -202,9 +202,11 @@ class IdentityClient:
         *,
         provider_name: str,
         scopes: Optional[List[str]] = None,
+        resources: Optional[List[str]] = None,
+        audiences: Optional[List[str]] = None,
         agent_identity_token: str,
         on_auth_url: Optional[Callable[[str], Any]] = None,
-        auth_flow: Literal["M2M", "USER_FEDERATION"],
+        auth_flow: Literal["M2M", "USER_FEDERATION", "ON_BEHALF_OF_TOKEN_EXCHANGE"],
         callback_url: Optional[str] = None,
         force_authentication: bool = False,
         token_poller: Optional[TokenPoller] = None,
@@ -216,9 +218,11 @@ class IdentityClient:
         Args:
             provider_name: The credential provider name
             scopes: Optional list of OAuth2 scopes to request
+            resources: Optional list of OAuth2 resources to request
+            audiences: Optional list of OAuth2 audiences to request
             agent_identity_token: Agent identity token for authentication
             on_auth_url: Callback for handling authorization URLs
-            auth_flow: Authentication flow type ("M2M" or "USER_FEDERATION")
+            auth_flow: Authentication flow type ("M2M" or "USER_FEDERATION" or "ON_BEHALF_OF_TOKEN_EXCHANGE")
             callback_url: OAuth2 callback URL (must be pre-registered)
             force_authentication: Force re-authentication even if token exists in the token vault
             token_poller: Custom token poller implementation
@@ -244,6 +248,10 @@ class IdentityClient:
         }
 
         # Add optional parameters
+        if resources:
+            req["resources"] = resources
+        if audiences:
+            req["audiences"] = audiences
         if callback_url:
             req["resourceOauth2ReturnUrl"] = callback_url
         if force_authentication:
