@@ -322,7 +322,7 @@ def test_run_start_batch_evaluation_failure_raises_runtime_error():
             runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
 
 
-def test_run_polling_failed_status_raises_runtime_error():
+def test_run_polling_failed_status_returns_result():
     runner = _make_runner()
     runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
     runner.data_plane_client.get_batch_evaluation.return_value = {
@@ -339,11 +339,12 @@ def test_run_polling_failed_status_raises_runtime_error():
             [],
         ),
     ):
-        with pytest.raises(RuntimeError, match="failed"):
-            runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
+        result = runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
+        assert result.status == "FAILED"
+        assert result.error_details == ["Internal error"]
 
 
-def test_run_polling_stopped_status_raises_runtime_error():
+def test_run_polling_stopped_status_returns_result():
     runner = _make_runner()
     runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
     runner.data_plane_client.get_batch_evaluation.return_value = {
@@ -359,8 +360,50 @@ def test_run_polling_stopped_status_raises_runtime_error():
             [],
         ),
     ):
-        with pytest.raises(RuntimeError, match="stopped"):
-            runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
+        result = runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
+        assert result.status == "STOPPED"
+
+
+def test_run_polling_deleting_status_returns_result():
+    runner = _make_runner()
+    runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
+    runner.data_plane_client.get_batch_evaluation.return_value = {
+        **_make_completed_response(),
+        "status": "DELETING",
+    }
+
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [],
+        ),
+    ):
+        result = runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
+        assert result.status == "DELETING"
+
+
+def test_run_polling_completed_with_errors_status_returns_result():
+    runner = _make_runner()
+    runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
+    runner.data_plane_client.get_batch_evaluation.return_value = {
+        **_make_completed_response(),
+        "status": "COMPLETED_WITH_ERRORS",
+        "errorDetails": ["Some sessions failed"],
+    }
+
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [],
+        ),
+    ):
+        result = runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
+        assert result.status == "COMPLETED_WITH_ERRORS"
+        assert result.error_details == ["Some sessions failed"]
 
 
 def test_poll_for_results_timeout_raises_timeout_error():

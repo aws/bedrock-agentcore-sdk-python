@@ -45,6 +45,8 @@ class _SessionExecutionMetadata(NamedTuple):
 
 # States where the batch evaluation is still making progress
 _RUNNING_STATES = frozenset({"PENDING", "IN_PROGRESS", "STOPPING"})
+_SUCCESSFUL_STATES = frozenset({"COMPLETED", "COMPLETED_WITH_ERRORS"})
+_TERMINAL_STATES = _SUCCESSFUL_STATES | frozenset({"FAILED", "STOPPED", "DELETING"})
 
 
 class BatchEvaluationRunner:
@@ -250,8 +252,7 @@ class BatchEvaluationRunner:
 
         Raises:
             TimeoutError: If polling exceeds timeout.
-            RuntimeError: If the evaluation fails, is stopped, reaches an unknown status,
-                or the API call fails.
+            RuntimeError: If the API call fails or the job reaches an unknown status.
         """
         start_time = time.monotonic()
         logger.info(
@@ -293,16 +294,14 @@ class BatchEvaluationRunner:
                 elapsed,
             )
 
-            if status == "COMPLETED":
+            if status in _TERMINAL_STATES:
+                if status not in _SUCCESSFUL_STATES:
+                    logger.warning(
+                        "Batch evaluation %s reached non-successful terminal status %s",
+                        batch_evaluation_id,
+                        status,
+                    )
                 return response
-
-            if status == "FAILED":
-                error_details = response.get("errorDetails", [])
-                logger.error("Batch evaluation %s failed: %s", batch_evaluation_id, error_details)
-                raise RuntimeError(f"Batch evaluation {batch_evaluation_id} failed: {error_details}")
-
-            if status == "STOPPED":
-                raise RuntimeError(f"Batch evaluation {batch_evaluation_id} was stopped")
 
             if status in _RUNNING_STATES:
                 time.sleep(poll_interval)
@@ -347,7 +346,7 @@ class BatchEvaluationRunner:
         Raises:
             ValueError: If ``dataset`` is empty or all scenarios fail during
                 agent invocation.
-            RuntimeError: If API calls fail or the job reaches ``FAILED``/``STOPPED``.
+            RuntimeError: If API calls fail.
             TimeoutError: If the job exceeds ``config.polling_timeout_seconds``.
         """
         if not dataset.scenarios:
