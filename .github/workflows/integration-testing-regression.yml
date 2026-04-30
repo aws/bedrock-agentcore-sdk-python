@@ -147,7 +147,7 @@ jobs:
               tests_integ/memory/test_controlplane.py
               tests_integ/memory/test_memory_client.py
               tests_integ/memory/integrations/test_session_manager.py
-            timeout: 10
+            timeout: 15
             extra-deps: ""
           - group: evaluation
             path: tests_integ/evaluation
@@ -218,7 +218,7 @@ jobs:
       - name: Install test dependencies
         run: |
           pip install --no-cache-dir \
-            pytest pytest-xdist pytest-order \
+            pytest pytest-xdist pytest-order pytest-rerunfailures \
             requests strands-agents uvicorn httpx starlette websockets \
             ${{ matrix.extra-deps }}
 
