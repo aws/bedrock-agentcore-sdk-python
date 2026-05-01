@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 import boto3
 from botocore.exceptions import ClientError
 
+from .._utils.namespace import resolve_namespace_templates
 from .constants import (
     MemoryStatus,
 )
@@ -414,6 +415,7 @@ class MemoryControlPlaneClient:
         strategy_id: str,
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
+        namespace_templates: Optional[List[str]] = None,
         configuration: Optional[Dict[str, Any]] = None,
         wait_for_active: bool = False,
         max_wait: int = 300,
@@ -425,7 +427,8 @@ class MemoryControlPlaneClient:
             memory_id: Memory resource ID
             strategy_id: Strategy ID to update
             description: Optional new description
-            namespaces: Optional new namespaces list
+            namespaces: DEPRECATED. Use ``namespace_templates`` instead.
+            namespace_templates: Optional new list of namespace templates
             configuration: Optional new configuration
             wait_for_active: Whether to wait for strategy to become ACTIVE
             max_wait: Maximum seconds to wait if wait_for_active is True
@@ -434,14 +437,16 @@ class MemoryControlPlaneClient:
         Returns:
             Updated memory object
         """
+        resolved_templates = resolve_namespace_templates(namespaces, namespace_templates)
+
         # Note: API expects memoryStrategyId for input but returns strategyId in response
         modify_config: Dict = {"memoryStrategyId": strategy_id}
 
         if description is not None:
             modify_config["description"] = description
 
-        if namespaces is not None:
-            modify_config["namespaces"] = namespaces
+        if resolved_templates is not None:
+            modify_config["namespaceTemplates"] = resolved_templates
 
         if configuration is not None:
             modify_config["configuration"] = configuration
