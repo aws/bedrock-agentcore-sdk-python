@@ -371,11 +371,11 @@ class TestMemoryClient:
         assert len(results) > 0, "Expected summary memories in /summaries/ namespace"
 
     @pytest.mark.order(14)
-    # retrieve_memories with a prefix namespace matches broader results
+    # retrieve_memories with a path prefix matches all descendants under /facts/
     def test_retrieve_memories_prefix_namespace(self):
         results = self.client.retrieve_memories(
             memory_id=self.prepopulated_memory_id,
-            namespace="/facts/",
+            namespace_path="/facts/",
             query="developer preferences",
         )
         assert len(results) > 0, "Expected prefix namespace to match"

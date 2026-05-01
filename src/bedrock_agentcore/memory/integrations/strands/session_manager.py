@@ -848,7 +848,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
             memories = self.memory_client.retrieve_memories(
                 memory_id=self.config.memory_id,
-                namespace=resolved_namespace,
+                namespace_path=resolved_namespace,
                 query=user_query,
                 top_k=retrieval_config.top_k,
             )
