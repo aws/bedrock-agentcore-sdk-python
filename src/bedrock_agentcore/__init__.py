@@ -1,5 +1,6 @@
 """BedrockAgentCore Runtime SDK - A Python SDK for building and deploying AI agents."""
 
+from .dataset import DatasetClient
 from .runtime import BedrockAgentCoreApp, BedrockAgentCoreContext, RequestContext
 from .runtime.models import PingStatus
 
@@ -8,4 +9,5 @@ __all__ = [
     "RequestContext",
     "BedrockAgentCoreContext",
     "PingStatus",
+    "DatasetClient",
 ]

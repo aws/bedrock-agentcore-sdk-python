@@ -1,6 +1,7 @@
 """AgentCore Dataset SDK - Client for Dataset Management operations."""
 
 import logging
+import uuid
 from typing import Any, Dict, Optional
 
 import boto3
@@ -40,6 +41,8 @@ class DatasetClient:
         "list_datasets",
         "update_dataset",
         "delete_dataset",
+        "get_paginator",
+        "get_waiter",
     }
 
     def __init__(
@@ -101,10 +104,12 @@ class DatasetClient:
             RuntimeError: If the dataset reaches a failed state.
             TimeoutError: If the dataset doesn't become READY within max_wait.
         """
-        response = self.cp_client.create_dataset(**convert_kwargs(kwargs))
+        params = convert_kwargs(kwargs)
+        params.setdefault("clientToken", str(uuid.uuid4()))
+        response = self.cp_client.create_dataset(**params)
         dataset_id = response["datasetId"]
         return wait_until(
-            lambda: self.cp_client.get_dataset(datasetIdentifier=dataset_id),
+            lambda: self.cp_client.get_dataset(datasetIdentifier=dataset_id)["dataset"],
             "READY",
             _DATASET_FAILED_STATUSES,
             wait_config,
@@ -127,7 +132,7 @@ class DatasetClient:
         response = self.cp_client.update_dataset(**convert_kwargs(kwargs))
         dataset_id = response["datasetId"]
         return wait_until(
-            lambda: self.cp_client.get_dataset(datasetIdentifier=dataset_id),
+            lambda: self.cp_client.get_dataset(datasetIdentifier=dataset_id)["dataset"],
             "READY",
             _DATASET_FAILED_STATUSES,
             wait_config,
@@ -148,7 +153,9 @@ class DatasetClient:
             TimeoutError: If the dataset isn't deleted within max_wait.
         """
         response = self.cp_client.delete_dataset(**convert_kwargs(kwargs))
-        dataset_id = response["datasetId"]
+        dataset_id = response.get("datasetId")
+        if not dataset_id:
+            raise ValueError("delete_dataset response did not include a 'datasetId'; cannot poll for deletion.")
         wait_until_deleted(
             lambda: self.cp_client.get_dataset(datasetIdentifier=dataset_id),
             wait_config=wait_config,

@@ -1,12 +1,37 @@
 """Unit tests for DatasetClient - no external connections."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from botocore.exceptions import ClientError
 
 from bedrock_agentcore.dataset import DatasetClient
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _make_client(region="us-west-2", **kwargs):
+    """Return a DatasetClient backed by a single MagicMock boto3 client."""
+    mock_session = MagicMock()
+    mock_boto_client = MagicMock()
+    mock_session.region_name = region
+    mock_session.client.return_value = mock_boto_client
+    client = DatasetClient(region_name=region, boto3_session=mock_session, **kwargs)
+    return client, mock_boto_client
+
+
+def _not_found_error():
+    return ClientError(
+        {"Error": {"Code": "ResourceNotFoundException", "Message": "Not found"}},
+        "GetDataset",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Initialisation
+# ---------------------------------------------------------------------------
 
 def test_client_initialization():
     """Test client initialization creates a single bedrock-agentcore-control client."""
@@ -23,8 +48,8 @@ def test_client_initialization():
         assert mock_session.client.call_count == 1
 
         # Verify config was passed
-        for call in mock_session.client.call_args_list:
-            assert "config" in call.kwargs
+        for call_item in mock_session.client.call_args_list:
+            assert "config" in call_item.kwargs
 
         # Verify the correct service was used
         service_name = mock_session.client.call_args_list[0][0][0]
@@ -56,7 +81,7 @@ def test_client_initialization_with_boto3_session():
     assert mock_session.client.call_count == 1
 
     # Verify the correct service was used
-    call_args = [call[0][0] for call in mock_session.client.call_args_list]
+    call_args = [c[0][0] for c in mock_session.client.call_args_list]
     assert "bedrock-agentcore-control" in call_args
 
 
@@ -72,13 +97,23 @@ def test_client_initialization_region_fallback_to_default():
         assert client.region_name == "us-west-2"
 
 
+# ---------------------------------------------------------------------------
+# Top-level export
+# ---------------------------------------------------------------------------
+
+def test_dataset_client_exported_from_top_level():
+    """DatasetClient must be importable directly from bedrock_agentcore."""
+    from bedrock_agentcore import DatasetClient as DC  # noqa: F401
+    assert DC is DatasetClient
+
+
+# ---------------------------------------------------------------------------
+# __getattr__ dispatch
+# ---------------------------------------------------------------------------
+
 def test_getattr_allowed_methods():
     """Verify each allowed method dispatches correctly via __getattr__."""
-    mock_session = MagicMock()
-    mock_boto_client = MagicMock()
-    mock_session.client.return_value = mock_boto_client
-
-    client = DatasetClient(region_name="us-east-1", boto3_session=mock_session)
+    client, _ = _make_client()
 
     allowed_methods = [
         "create_dataset",
@@ -86,6 +121,8 @@ def test_getattr_allowed_methods():
         "list_datasets",
         "update_dataset",
         "delete_dataset",
+        "get_paginator",
+        "get_waiter",
     ]
 
     for method_name in allowed_methods:
@@ -95,141 +132,243 @@ def test_getattr_allowed_methods():
 
 def test_getattr_unknown_method_raises():
     """AttributeError is raised for unknown/disallowed methods."""
-    mock_session = MagicMock()
-    mock_session.client.return_value = MagicMock()
-
-    client = DatasetClient(region_name="us-east-1", boto3_session=mock_session)
+    client, _ = _make_client()
 
     with pytest.raises(AttributeError, match="has no attribute 'create_evaluator'"):
         _ = client.create_evaluator
 
 
+def test_getattr_error_message_contains_service():
+    """AttributeError message mentions the service name."""
+    client, _ = _make_client()
+
+    with pytest.raises(AttributeError, match="bedrock-agentcore-control"):
+        _ = client.unknown_operation
+
+
+# ---------------------------------------------------------------------------
+# Pass-through CRUD
+# ---------------------------------------------------------------------------
+
 def test_create_dataset():
     """Test create_dataset delegates to cp_client."""
-    mock_session = MagicMock()
-    mock_boto_client = MagicMock()
-    mock_session.client.return_value = mock_boto_client
-    mock_boto_client.create_dataset.return_value = {"datasetId": "ds-123", "status": "CREATING"}
+    client, mock_boto = _make_client()
+    mock_boto.create_dataset.return_value = {"datasetId": "ds-123", "status": "CREATING"}
 
-    client = DatasetClient(region_name="us-west-2", boto3_session=mock_session)
     result = client.create_dataset(name="my-dataset")
 
-    mock_boto_client.create_dataset.assert_called_once_with(name="my-dataset")
+    mock_boto.create_dataset.assert_called_once_with(name="my-dataset")
     assert result["datasetId"] == "ds-123"
 
 
 def test_list_datasets():
     """Test list_datasets delegates to cp_client."""
-    mock_session = MagicMock()
-    mock_boto_client = MagicMock()
-    mock_session.client.return_value = mock_boto_client
-    mock_boto_client.list_datasets.return_value = {
+    client, mock_boto = _make_client()
+    mock_boto.list_datasets.return_value = {
         "items": [{"datasetId": "ds-1"}, {"datasetId": "ds-2"}]
     }
 
-    client = DatasetClient(region_name="us-west-2", boto3_session=mock_session)
     result = client.list_datasets()
 
-    mock_boto_client.list_datasets.assert_called_once_with()
+    mock_boto.list_datasets.assert_called_once_with()
     assert len(result["items"]) == 2
 
 
 def test_delete_dataset():
     """Test delete_dataset delegates to cp_client."""
-    mock_session = MagicMock()
-    mock_boto_client = MagicMock()
-    mock_session.client.return_value = mock_boto_client
-    mock_boto_client.delete_dataset.return_value = {"datasetId": "ds-123"}
+    client, mock_boto = _make_client()
+    mock_boto.delete_dataset.return_value = {"datasetId": "ds-123"}
 
-    client = DatasetClient(region_name="us-west-2", boto3_session=mock_session)
     result = client.delete_dataset(datasetIdentifier="ds-123")
 
-    mock_boto_client.delete_dataset.assert_called_once_with(datasetIdentifier="ds-123")
+    mock_boto.delete_dataset.assert_called_once_with(datasetIdentifier="ds-123")
     assert result["datasetId"] == "ds-123"
 
 
-def test_delete_dataset_and_wait():
-    """Test delete_dataset_and_wait polls until the dataset is deleted."""
-    from botocore.exceptions import ClientError
-
-    mock_session = MagicMock()
-    mock_boto_client = MagicMock()
-    mock_session.client.return_value = mock_boto_client
-
-    # delete_dataset returns the datasetId
-    mock_boto_client.delete_dataset.return_value = {"datasetId": "ds-123"}
-
-    # get_dataset raises ResourceNotFoundException after deletion
-    not_found_error = ClientError(
-        {"Error": {"Code": "ResourceNotFoundException", "Message": "Not found"}},
-        "GetDataset",
-    )
-    mock_boto_client.get_dataset.side_effect = not_found_error
-
-    client = DatasetClient(region_name="us-west-2", boto3_session=mock_session)
-    # Should not raise
-    client.delete_dataset_and_wait(datasetIdentifier="ds-123")
-
-    mock_boto_client.delete_dataset.assert_called_once()
-    mock_boto_client.get_dataset.assert_called_once_with(datasetIdentifier="ds-123")
-
+# ---------------------------------------------------------------------------
+# create_dataset_and_wait
+# ---------------------------------------------------------------------------
 
 def test_create_dataset_and_wait():
     """Test create_dataset_and_wait polls until READY status."""
-    mock_session = MagicMock()
-    mock_boto_client = MagicMock()
-    mock_session.client.return_value = mock_boto_client
+    client, mock_boto = _make_client()
 
-    mock_boto_client.create_dataset.return_value = {"datasetId": "ds-456", "status": "CREATING"}
-    mock_boto_client.get_dataset.return_value = {"datasetId": "ds-456", "status": "READY"}
+    mock_boto.create_dataset.return_value = {"datasetId": "ds-456", "status": "CREATING"}
+    mock_boto.get_dataset.return_value = {"dataset": {"datasetId": "ds-456", "status": "READY"}}
 
-    client = DatasetClient(region_name="us-west-2", boto3_session=mock_session)
     result = client.create_dataset_and_wait(name="my-dataset")
 
     assert result["status"] == "READY"
     assert result["datasetId"] == "ds-456"
-    mock_boto_client.create_dataset.assert_called_once_with(name="my-dataset")
-    mock_boto_client.get_dataset.assert_called_once_with(datasetIdentifier="ds-456")
+    mock_boto.create_dataset.assert_called_once()
+    mock_boto.get_dataset.assert_called_once_with(datasetIdentifier="ds-456")
 
 
-def test_update_dataset_and_wait():
-    """Test update_dataset_and_wait polls until READY status."""
-    mock_session = MagicMock()
-    mock_boto_client = MagicMock()
-    mock_session.client.return_value = mock_boto_client
+def test_create_dataset_and_wait_adds_client_token():
+    """create_dataset_and_wait injects a clientToken for idempotency."""
+    client, mock_boto = _make_client()
 
-    mock_boto_client.update_dataset.return_value = {"datasetId": "ds-789", "status": "UPDATING"}
-    mock_boto_client.get_dataset.return_value = {"datasetId": "ds-789", "status": "READY"}
+    mock_boto.create_dataset.return_value = {"datasetId": "ds-tok", "status": "CREATING"}
+    mock_boto.get_dataset.return_value = {"dataset": {"datasetId": "ds-tok", "status": "READY"}}
 
-    client = DatasetClient(region_name="us-west-2", boto3_session=mock_session)
-    result = client.update_dataset_and_wait(datasetIdentifier="ds-789", name="updated-name")
+    client.create_dataset_and_wait(name="tok-dataset")
 
-    assert result["status"] == "READY"
-    mock_boto_client.update_dataset.assert_called_once_with(datasetIdentifier="ds-789", name="updated-name")
-    mock_boto_client.get_dataset.assert_called_once_with(datasetIdentifier="ds-789")
+    create_call_kwargs = mock_boto.create_dataset.call_args[1]
+    assert "clientToken" in create_call_kwargs
+    # Should be a non-empty string (UUID)
+    assert len(create_call_kwargs["clientToken"]) > 0
+
+
+def test_create_dataset_and_wait_respects_explicit_client_token():
+    """Caller-supplied clientToken must not be overwritten."""
+    client, mock_boto = _make_client()
+
+    mock_boto.create_dataset.return_value = {"datasetId": "ds-ct", "status": "CREATING"}
+    mock_boto.get_dataset.return_value = {"dataset": {"datasetId": "ds-ct", "status": "READY"}}
+
+    client.create_dataset_and_wait(name="ct-dataset", clientToken="my-token-123")
+
+    create_call_kwargs = mock_boto.create_dataset.call_args[1]
+    assert create_call_kwargs["clientToken"] == "my-token-123"
 
 
 def test_create_dataset_and_wait_failed_status():
     """Test create_dataset_and_wait raises RuntimeError on FAILED status."""
-    mock_session = MagicMock()
-    mock_boto_client = MagicMock()
-    mock_session.client.return_value = mock_boto_client
+    client, mock_boto = _make_client()
 
-    mock_boto_client.create_dataset.return_value = {"datasetId": "ds-bad", "status": "CREATING"}
-    mock_boto_client.get_dataset.return_value = {"datasetId": "ds-bad", "status": "FAILED", "statusReasons": "Bad config"}
-
-    client = DatasetClient(region_name="us-west-2", boto3_session=mock_session)
+    mock_boto.create_dataset.return_value = {"datasetId": "ds-bad", "status": "CREATING"}
+    mock_boto.get_dataset.return_value = {
+        "dataset": {"datasetId": "ds-bad", "status": "FAILED", "statusReasons": "Bad config"}
+    }
 
     with pytest.raises(RuntimeError, match="FAILED"):
         client.create_dataset_and_wait(name="bad-dataset")
 
 
-def test_getattr_error_message_contains_service():
-    """AttributeError message mentions the service name."""
-    mock_session = MagicMock()
-    mock_session.client.return_value = MagicMock()
+def test_create_dataset_and_wait_update_unsuccessful():
+    """create_dataset_and_wait raises RuntimeError on UPDATE_UNSUCCESSFUL status."""
+    client, mock_boto = _make_client()
 
-    client = DatasetClient(region_name="us-east-1", boto3_session=mock_session)
+    mock_boto.create_dataset.return_value = {"datasetId": "ds-upd", "status": "CREATING"}
+    mock_boto.get_dataset.return_value = {
+        "dataset": {"datasetId": "ds-upd", "status": "UPDATE_UNSUCCESSFUL"}
+    }
 
-    with pytest.raises(AttributeError, match="bedrock-agentcore-control"):
-        _ = client.unknown_operation
+    with pytest.raises(RuntimeError, match="UPDATE_UNSUCCESSFUL"):
+        client.create_dataset_and_wait(name="upd-dataset")
+
+
+def test_create_dataset_and_wait_polls_nested_dataset_key():
+    """The poll lambda must unwrap response['dataset'] before reading status."""
+    client, mock_boto = _make_client()
+
+    mock_boto.create_dataset.return_value = {"datasetId": "ds-nested", "status": "CREATING"}
+    # First call returns CREATING, second returns READY — both wrapped under 'dataset'
+    mock_boto.get_dataset.side_effect = [
+        {"dataset": {"datasetId": "ds-nested", "status": "CREATING"}},
+        {"dataset": {"datasetId": "ds-nested", "status": "READY"}},
+    ]
+
+    result = client.create_dataset_and_wait(name="nested-dataset")
+
+    assert result["status"] == "READY"
+    assert mock_boto.get_dataset.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# update_dataset_and_wait
+# ---------------------------------------------------------------------------
+
+def test_update_dataset_and_wait():
+    """Test update_dataset_and_wait polls until READY status."""
+    client, mock_boto = _make_client()
+
+    mock_boto.update_dataset.return_value = {"datasetId": "ds-789", "status": "UPDATING"}
+    mock_boto.get_dataset.return_value = {"dataset": {"datasetId": "ds-789", "status": "READY"}}
+
+    result = client.update_dataset_and_wait(datasetIdentifier="ds-789", name="updated-name")
+
+    assert result["status"] == "READY"
+    mock_boto.update_dataset.assert_called_once_with(datasetIdentifier="ds-789", name="updated-name")
+    mock_boto.get_dataset.assert_called_once_with(datasetIdentifier="ds-789")
+
+
+def test_update_dataset_and_wait_unwraps_nested_key():
+    """update_dataset_and_wait must unwrap response['dataset'] for status check."""
+    client, mock_boto = _make_client()
+
+    mock_boto.update_dataset.return_value = {"datasetId": "ds-upd2", "status": "UPDATING"}
+    mock_boto.get_dataset.side_effect = [
+        {"dataset": {"datasetId": "ds-upd2", "status": "UPDATING"}},
+        {"dataset": {"datasetId": "ds-upd2", "status": "READY"}},
+    ]
+
+    result = client.update_dataset_and_wait(datasetIdentifier="ds-upd2", name="v2")
+
+    assert result["status"] == "READY"
+    assert mock_boto.get_dataset.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# delete_dataset_and_wait
+# ---------------------------------------------------------------------------
+
+def test_delete_dataset_and_wait():
+    """Test delete_dataset_and_wait polls until the dataset is deleted."""
+    client, mock_boto = _make_client()
+
+    mock_boto.delete_dataset.return_value = {"datasetId": "ds-123"}
+    mock_boto.get_dataset.side_effect = _not_found_error()
+
+    client.delete_dataset_and_wait(datasetIdentifier="ds-123")
+
+    mock_boto.delete_dataset.assert_called_once()
+    mock_boto.get_dataset.assert_called_once_with(datasetIdentifier="ds-123")
+
+
+def test_delete_dataset_and_wait_missing_dataset_id_raises():
+    """delete_dataset_and_wait raises ValueError when response has no datasetId."""
+    client, mock_boto = _make_client()
+
+    mock_boto.delete_dataset.return_value = {}  # missing datasetId
+
+    with pytest.raises(ValueError, match="datasetId"):
+        client.delete_dataset_and_wait(datasetIdentifier="ds-missing")
+
+
+def test_delete_dataset_and_wait_non_404_error_propagates():
+    """Non-ResourceNotFoundException errors bubble up during polling."""
+    client, mock_boto = _make_client()
+
+    mock_boto.delete_dataset.return_value = {"datasetId": "ds-err"}
+    mock_boto.get_dataset.side_effect = ClientError(
+        {"Error": {"Code": "InternalServerError", "Message": "Oops"}},
+        "GetDataset",
+    )
+
+    with pytest.raises(ClientError, match="InternalServerError"):
+        client.delete_dataset_and_wait(datasetIdentifier="ds-err")
+
+
+# ---------------------------------------------------------------------------
+# Pagination helpers
+# ---------------------------------------------------------------------------
+
+def test_get_paginator_is_accessible():
+    """get_paginator must be reachable via __getattr__."""
+    client, mock_boto = _make_client()
+    mock_boto.get_paginator.return_value = MagicMock()
+
+    paginator = client.get_paginator("list_datasets")
+
+    mock_boto.get_paginator.assert_called_once_with("list_datasets")
+
+
+def test_get_waiter_is_accessible():
+    """get_waiter must be reachable via __getattr__."""
+    client, mock_boto = _make_client()
+    mock_boto.get_waiter.return_value = MagicMock()
+
+    waiter = client.get_waiter("dataset_ready")
+
+    mock_boto.get_waiter.assert_called_once_with("dataset_ready")
