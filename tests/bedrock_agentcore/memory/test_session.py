@@ -1197,7 +1197,7 @@ class TestSessionManager:
             assert call_args["memoryId"] == "testMemory-1234567890"
             assert call_args["searchCriteria"]["searchQuery"] == "test query"
             assert call_args["searchCriteria"]["topK"] == 5
-            assert call_args["namespace"] == "test/namespace/"
+            assert call_args["namespacePath"] == "test/namespace/"
 
     def test_search_long_term_memories_with_strategy(self):
         """Test search_long_term_memories with strategy_id."""

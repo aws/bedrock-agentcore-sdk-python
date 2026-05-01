@@ -913,7 +913,7 @@ class MemorySessionManager:
         params = {
             "memoryId": self._memory_id,
             "searchCriteria": search_criteria,
-            "namespace": namespace,
+            "namespacePath": namespace,
             "maxResults": max_results,
         }
 
@@ -940,7 +940,7 @@ class MemorySessionManager:
 
             params = {
                 "memoryId": self._memory_id,
-                "namespace": namespace_prefix,
+                "namespacePath": namespace_prefix,
             }
 
             if strategy_id:

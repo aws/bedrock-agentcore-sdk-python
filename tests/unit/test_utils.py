@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 from botocore.exceptions import ClientError
 
+from bedrock_agentcore._utils.namespace import build_namespace_params
 from bedrock_agentcore._utils.polling import wait_until, wait_until_deleted
 
 
@@ -112,3 +113,29 @@ class TestWaitUntilDeleted:
         poll_fn = Mock(return_value={"status": "DELETING"})
         with pytest.raises(TimeoutError):
             wait_until_deleted(poll_fn)
+
+
+class TestBuildNamespaceParams:
+    """Tests for build_namespace_params utility."""
+
+    def test_namespace_only(self):
+        assert build_namespace_params(namespace="/actor/Jane/") == {"namespace": "/actor/Jane/"}
+
+    def test_namespace_path_only(self):
+        assert build_namespace_params(namespace_path="/org/team/") == {"namespacePath": "/org/team/"}
+
+    def test_both_raises(self):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            build_namespace_params(namespace="/a/", namespace_path="/b/")
+
+    def test_neither_raises(self):
+        with pytest.raises(ValueError, match="At least one"):
+            build_namespace_params()
+
+    def test_wildcard_in_namespace_raises(self):
+        with pytest.raises(ValueError, match="[Ww]ildcard"):
+            build_namespace_params(namespace="/actor/*/")
+
+    def test_wildcard_in_namespace_path_raises(self):
+        with pytest.raises(ValueError, match="[Ww]ildcard"):
+            build_namespace_params(namespace_path="/org/*/team/")
