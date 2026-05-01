@@ -113,7 +113,7 @@ def test_namespace_defaults():
         strategies = [{StrategyType.SEMANTIC.value: {"name": "TestStrategy"}}]
         processed = client._add_default_namespaces(strategies)
 
-        assert "namespaces" in processed[0][StrategyType.SEMANTIC.value]
+        assert "namespaceTemplates" in processed[0][StrategyType.SEMANTIC.value]
 
 
 def test_create_memory():
@@ -872,7 +872,7 @@ def test_add_user_preference_strategy():
             user_pref_config = strategy["userPreferenceMemoryStrategy"]
             assert user_pref_config["name"] == "Test User Preference Strategy"
             assert user_pref_config["description"] == "User preference test description"
-            assert user_pref_config["namespaces"] == ["preferences/{actorId}/"]
+            assert user_pref_config["namespaceTemplates"] == ["preferences/{actorId}/"]
 
             # Verify client token and memory ID
             assert kwargs["memoryId"] == "mem-456"
@@ -928,7 +928,7 @@ def test_add_custom_semantic_strategy():
             custom_config = strategy["customMemoryStrategy"]
             assert custom_config["name"] == "Test Custom Semantic Strategy"
             assert custom_config["description"] == "Custom semantic strategy test description"
-            assert custom_config["namespaces"] == ["custom/{actorId}/{sessionId}/"]
+            assert custom_config["namespaceTemplates"] == ["custom/{actorId}/{sessionId}/"]
 
             # Verify the semantic override configuration
             assert "configuration" in custom_config
@@ -1496,7 +1496,7 @@ def test_modify_strategy():
             modified_strategy = kwargs["memoryStrategies"]["modifyMemoryStrategies"][0]
             assert modified_strategy["memoryStrategyId"] == "strat-789"
             assert modified_strategy["description"] == "Modified description"
-            assert modified_strategy["namespaces"] == ["custom/namespace/"]
+            assert modified_strategy["namespaceTemplates"] == ["custom/namespace/"]
 
 
 def test_retrieve_memories_resource_not_found_error():
@@ -3143,8 +3143,8 @@ def test_add_episodic_strategy():
             episodic_config = strategy["episodicMemoryStrategy"]
             assert episodic_config["name"] == "Test Episodic Strategy"
             assert episodic_config["description"] == "Episodic test description"
-            assert episodic_config["namespaces"] == ["episodes/{actorId}/{sessionId}/"]
-            assert episodic_config["reflectionConfiguration"] == {"namespaces": ["reflections/{actorId}/"]}
+            assert episodic_config["namespaceTemplates"] == ["episodes/{actorId}/{sessionId}/"]
+            assert episodic_config["reflectionConfiguration"] == {"namespaceTemplates": ["reflections/{actorId}/"]}
 
             assert kwargs["memoryId"] == "mem-123"
 
@@ -3198,7 +3198,7 @@ def test_add_custom_episodic_strategy():
             assert episodic_override["extraction"]["appendToPrompt"] == "Extract episodes from conversation"
             assert episodic_override["consolidation"]["appendToPrompt"] == "Consolidate episodes"
             assert episodic_override["reflection"]["appendToPrompt"] == "Generate reflections from episodes"
-            assert episodic_override["reflection"]["namespaces"] == ["reflections/{actorId}/"]
+            assert episodic_override["reflection"]["namespaceTemplates"] == ["reflections/{actorId}/"]
 
 
 def test_add_episodic_strategy_and_wait():
