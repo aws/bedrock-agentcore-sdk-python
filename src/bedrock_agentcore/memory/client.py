@@ -1364,9 +1364,9 @@ class MemoryClient:
         name: str,
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
-        namespace_templates: Optional[List[str]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a semantic strategy and wait for memory to return to ACTIVE state.
 
@@ -1434,9 +1434,9 @@ class MemoryClient:
         name: str,
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
-        namespace_templates: Optional[List[str]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a summary strategy and wait for memory to return to ACTIVE state."""
         self.add_summary_strategy(
@@ -1488,9 +1488,9 @@ class MemoryClient:
         name: str,
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
-        namespace_templates: Optional[List[str]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a user preference strategy and wait for memory to return to ACTIVE state."""
         self.add_user_preference_strategy(
@@ -1556,10 +1556,10 @@ class MemoryClient:
         reflection_namespaces: Optional[List[str]] = None,
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
-        namespace_templates: Optional[List[str]] = None,
-        reflection_namespace_templates: Optional[List[str]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        namespace_templates: Optional[List[str]] = None,
+        reflection_namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add an episodic strategy and wait for memory to return to ACTIVE state."""
         self.add_episodic_strategy(
@@ -1631,9 +1631,9 @@ class MemoryClient:
         consolidation_config: Dict[str, Any],
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
-        namespace_templates: Optional[List[str]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a custom semantic strategy and wait for memory to return to ACTIVE state."""
         self.add_custom_semantic_strategy(
@@ -1731,9 +1731,9 @@ class MemoryClient:
         reflection_config: Dict[str, Any],
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
-        namespace_templates: Optional[List[str]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a custom episodic strategy and wait for memory to return to ACTIVE state."""
         self.add_custom_episodic_strategy(
@@ -1754,8 +1754,8 @@ class MemoryClient:
         strategy_id: str,
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
-        namespace_templates: Optional[List[str]] = None,
         configuration: Optional[Dict[str, Any]] = None,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Modify a strategy with full control over configuration.
 

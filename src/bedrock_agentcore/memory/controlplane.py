@@ -415,11 +415,11 @@ class MemoryControlPlaneClient:
         strategy_id: str,
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
-        namespace_templates: Optional[List[str]] = None,
         configuration: Optional[Dict[str, Any]] = None,
         wait_for_active: bool = False,
         max_wait: int = 300,
         poll_interval: int = 10,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Update a strategy in a memory resource.
 
