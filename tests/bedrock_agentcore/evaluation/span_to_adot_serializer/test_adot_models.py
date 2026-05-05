@@ -1,5 +1,6 @@
 """Tests for framework-agnostic ADOT models and builders."""
 
+import warnings
 from unittest.mock import Mock
 
 import pytest
@@ -12,93 +13,6 @@ from bedrock_agentcore.evaluation.span_to_adot_serializer.adot_models import (
     SpanParser,
     ToolExecution,
 )
-
-# ==============================================================================
-# Fixtures
-# ==============================================================================
-
-
-@pytest.fixture
-def mock_span_context():
-    """Create a mock span context."""
-    context = Mock()
-    context.trace_id = 0x1234567890ABCDEF1234567890ABCDEF
-    context.span_id = 0x1234567890ABCDEF
-    context.trace_flags = 1
-    return context
-
-
-@pytest.fixture
-def mock_resource():
-    """Create a mock resource."""
-    resource = Mock()
-    resource.attributes = {"service.name": "test-service"}
-    return resource
-
-
-@pytest.fixture
-def mock_instrumentation_scope():
-    """Create a mock instrumentation scope."""
-    scope = Mock()
-    scope.name = "strands.agent"
-    scope.version = "1.0.0"
-    return scope
-
-
-@pytest.fixture
-def mock_status():
-    """Create a mock status."""
-    status = Mock()
-    status.status_code = Mock()
-    status.status_code.__str__ = Mock(return_value="StatusCode.OK")
-    return status
-
-
-@pytest.fixture
-def mock_span(mock_span_context, mock_resource, mock_instrumentation_scope, mock_status):
-    """Create a mock OTel span."""
-    span = Mock()
-    span.context = mock_span_context
-    span.resource = mock_resource
-    span.instrumentation_scope = mock_instrumentation_scope
-    span.status = mock_status
-    span.parent = None
-    span.name = "test-span"
-    span.start_time = 1000000000
-    span.end_time = 2000000000
-    span.kind = Mock()
-    span.kind.__str__ = Mock(return_value="SpanKind.INTERNAL")
-    span.attributes = {"gen_ai.operation.name": "chat"}
-    span.events = []
-    return span
-
-
-@pytest.fixture
-def span_metadata():
-    """Create test SpanMetadata."""
-    return SpanMetadata(
-        trace_id="1234567890abcdef1234567890abcdef",
-        span_id="1234567890abcdef",
-        parent_span_id=None,
-        name="test-span",
-        start_time=1000000000,
-        end_time=2000000000,
-        duration=1000000000,
-        kind="INTERNAL",
-        flags=1,
-        status_code="OK",
-    )
-
-
-@pytest.fixture
-def resource_info():
-    """Create test ResourceInfo."""
-    return ResourceInfo(
-        resource_attributes={"service.name": "test-service"},
-        scope_name="strands.agent",
-        scope_version="1.0.0",
-    )
-
 
 # ==============================================================================
 # Domain Model Tests
@@ -160,18 +74,76 @@ class TestResourceInfo:
 
 
 class TestConversationTurn:
-    """Test ConversationTurn dataclass."""
+    """Test ConversationTurn class."""
 
-    def test_creation(self):
-        """Test ConversationTurn creation."""
+    def test_creation_legacy_scalar(self):
+        """Legacy ``user_message`` scalar becomes a single-entry input_messages list."""
         turn = ConversationTurn(
             user_message="Hello",
             assistant_messages=[{"content": {"message": "Hi"}, "role": "assistant"}],
             tool_results=["result1"],
         )
         assert turn.user_message == "Hello"
+        assert turn.input_messages == [{"content": {"content": "Hello"}, "role": "user"}]
         assert len(turn.assistant_messages) == 1
         assert len(turn.tool_results) == 1
+
+    def test_creation_with_input_messages(self):
+        """ConversationTurn accepts a chronological input_messages list."""
+        input_msgs = [
+            {"content": {"content": "first"}, "role": "user"},
+            {"content": {"content": "prior"}, "role": "assistant"},
+            {"content": {"content": "second"}, "role": "user"},
+        ]
+        turn = ConversationTurn(
+            input_messages=input_msgs,
+            assistant_messages=[{"content": {"message": "ok"}, "role": "assistant"}],
+        )
+        assert turn.input_messages == input_msgs
+
+    def test_user_message_alias_returns_latest_user_entry(self):
+        """user_message returns the last user entry and warns when history is present."""
+        turn = ConversationTurn(
+            input_messages=[
+                {"content": {"content": "a"}, "role": "user"},
+                {"content": {"content": "prior"}, "role": "assistant"},
+                {"content": {"content": "b"}, "role": "user"},
+            ],
+            assistant_messages=[{}],
+        )
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            assert turn.user_message == "b"
+            assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+
+    def test_user_message_and_input_messages_rejected(self):
+        """Supplying both user_message and input_messages is an error."""
+        with pytest.raises(ValueError):
+            ConversationTurn(
+                user_message="x",
+                input_messages=[{"content": {"content": "y"}, "role": "user"}],
+            )
+
+    def test_equality_compares_full_instance_state(self):
+        """__eq__ compares input_messages, assistant_messages, and tool_results."""
+        a = ConversationTurn(
+            input_messages=[{"content": {"content": "u"}, "role": "user"}],
+            assistant_messages=[{"content": {"message": "out"}, "role": "assistant"}],
+            tool_results=["t"],
+        )
+        b = ConversationTurn(
+            input_messages=[{"content": {"content": "u"}, "role": "user"}],
+            assistant_messages=[{"content": {"message": "out"}, "role": "assistant"}],
+            tool_results=["t"],
+        )
+        c = ConversationTurn(
+            input_messages=[{"content": {"content": "different"}, "role": "user"}],
+            assistant_messages=[{"content": {"message": "out"}, "role": "assistant"}],
+            tool_results=["t"],
+        )
+        assert a == b
+        assert a != c
 
 
 class TestToolExecution:
@@ -307,6 +279,41 @@ class TestADOTDocumentBuilder:
         assert doc["severityNumber"] == 9
         assert doc["body"]["input"]["messages"][0]["content"]["content"] == "Hello"
         assert doc["body"]["output"]["messages"][0]["content"]["message"] == "Hi"
+
+    def test_build_conversation_log_record_preserves_chronological_order(self, span_metadata, resource_info):
+        """Builder emits input_messages in event arrival order (user/assistant interleaved)."""
+        conversation = ConversationTurn(
+            input_messages=[
+                {"content": {"content": "u1"}, "role": "user"},
+                {"content": {"content": "prior-1"}, "role": "assistant"},
+                {"content": {"content": "u2"}, "role": "user"},
+                {"content": {"content": "prior-2"}, "role": "assistant"},
+                {"content": {"content": "u3"}, "role": "user"},
+            ],
+            assistant_messages=[{"content": {"message": "new-output"}, "role": "assistant"}],
+        )
+
+        doc = ADOTDocumentBuilder.build_conversation_log_record(conversation, span_metadata, resource_info)
+
+        input_msgs = doc["body"]["input"]["messages"]
+        assert [m.get("role") for m in input_msgs] == [
+            "user",
+            "assistant",
+            "user",
+            "assistant",
+            "user",
+        ]
+        assert [m["content"].get("content") for m in input_msgs] == [
+            "u1",
+            "prior-1",
+            "u2",
+            "prior-2",
+            "u3",
+        ]
+
+        output_msgs = doc["body"]["output"]["messages"]
+        assert len(output_msgs) == 1
+        assert output_msgs[0]["content"]["message"] == "new-output"
 
     def test_build_conversation_log_record_with_tool_results(self, span_metadata, resource_info):
         """Test building conversation log record with tool results."""

@@ -10,6 +10,7 @@ telemetry frameworks (Strands, LangGraph, etc.).
 """
 
 import logging
+import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -46,13 +47,89 @@ class ResourceInfo:
     scope_version: str
 
 
-@dataclass
 class ConversationTurn:
-    """A single user-assistant conversation turn."""
+    """A single user-assistant conversation turn, with prior history preserved.
 
-    user_message: str
-    assistant_messages: List[Dict[str, Any]]
-    tool_results: List[str]
+    ``input_messages`` holds every input event (``gen_ai.user.message`` and
+    ``gen_ai.assistant.message``) in the order observed on the span, so
+    downstream consumers can reconstruct the actual conversation flow.
+    ``assistant_messages`` holds only the current turn's output, derived from
+    ``gen_ai.choice`` events. ``tool_results`` holds any tool outputs observed
+    on the span.
+
+    The ``user_message`` attribute is retained as a backwards-compatible alias
+    returning the most recent user turn's content; new code should iterate
+    ``input_messages`` filtered by role.
+    """
+
+    def __init__(
+        self,
+        user_message: Optional[str] = None,
+        assistant_messages: Optional[List[Dict[str, Any]]] = None,
+        tool_results: Optional[List[str]] = None,
+        input_messages: Optional[List[Dict[str, Any]]] = None,
+    ):
+        """Initialize a conversation turn.
+
+        ``input_messages`` is the chronological list of input events
+        (``{"role": "user"|"assistant", "content": {...}}``). For backwards
+        compatibility, callers may instead pass a legacy ``user_message``
+        scalar, which is converted into a single-entry ``input_messages``
+        list. Supplying both is an error.
+        """
+        if input_messages is not None and user_message is not None:
+            raise ValueError("Provide either input_messages or user_message, not both")
+        if input_messages is not None:
+            self.input_messages = list(input_messages)
+        elif user_message is not None:
+            self.input_messages = [{"content": {"content": user_message}, "role": "user"}]
+        else:
+            self.input_messages = []
+        self.assistant_messages = list(assistant_messages or [])
+        self.tool_results = list(tool_results or [])
+
+    def __repr__(self) -> str:
+        """Return a debug representation listing every stored field."""
+        return (
+            f"ConversationTurn(input_messages={self.input_messages!r}, "
+            f"assistant_messages={self.assistant_messages!r}, "
+            f"tool_results={self.tool_results!r})"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        """Compare turns by the full set of instance fields."""
+        if not isinstance(other, ConversationTurn):
+            return NotImplemented
+        return (
+            self.input_messages == other.input_messages
+            and self.assistant_messages == other.assistant_messages
+            and self.tool_results == other.tool_results
+        )
+
+    @property
+    def user_message(self) -> str:
+        """Return the most recent user turn's content (backwards-compatible alias).
+
+        Deprecated: iterate ``input_messages`` to access the full conversation
+        history. This alias returns only the last user entry.
+        """
+        user_entries = [m for m in self.input_messages if m.get("role") == "user"]
+        if not user_entries:
+            return ""
+        if len(user_entries) > 1 or any(m.get("role") == "assistant" for m in self.input_messages):
+            warnings.warn(
+                "ConversationTurn.user_message drops prior user turns and history "
+                "when the span carries multiple input events. Iterate "
+                "ConversationTurn.input_messages for the full conversation.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        last = user_entries[-1]
+        content = last.get("content")
+        if isinstance(content, dict):
+            inner = content.get("content", "")
+            return inner if isinstance(inner, str) else ""
+        return content if isinstance(content, str) else ""
 
 
 @dataclass
@@ -191,7 +268,14 @@ class ADOTDocumentBuilder:
         metadata: SpanMetadata,
         resource_info: ResourceInfo,
     ) -> Dict[str, Any]:
-        """Build ADOT log record for conversation turn."""
+        """Build ADOT log record for conversation turn.
+
+        ``body.input.messages`` carries ``ConversationTurn.input_messages`` in
+        event arrival order, so downstream consumers reconstruct the exact
+        conversation the model received (user and prior assistant turns
+        interleaved). ``body.output.messages`` carries only the current turn's
+        output.
+        """
         output_messages = []
         for i, msg in enumerate(conversation.assistant_messages):
             output_msg = msg.copy()
@@ -206,7 +290,7 @@ class ADOTDocumentBuilder:
 
         body = {
             "output": {"messages": output_messages},
-            "input": {"messages": [{"content": {"content": conversation.user_message}, "role": "user"}]},
+            "input": {"messages": list(conversation.input_messages)},
         }
 
         return cls._build_log_record_base(metadata, resource_info, body)

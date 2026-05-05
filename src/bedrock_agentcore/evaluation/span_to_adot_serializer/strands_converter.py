@@ -37,17 +37,29 @@ class StrandsEventParser:
 
     @classmethod
     def extract_conversation_turn(cls, events: List[Any]) -> Optional[ConversationTurn]:
-        """Extract conversation turn from Strands span events."""
-        user_message = None
-        assistant_messages = []
-        tool_results = []
+        """Extract conversation turn from Strands span events.
+
+        Per OTel GenAI semantic conventions, ``gen_ai.{user,assistant,tool}.message``
+        events describe input context (including prior assistant turns replayed
+        as history), while ``gen_ai.choice`` describes the model's current-turn
+        output. ``input_messages`` preserves event arrival order so downstream
+        consumers can reconstruct the actual conversation flow (``[user,
+        assistant, user, assistant, user]`` rather than role-grouped).
+        """
+        input_messages: List[Dict[str, Any]] = []
+        assistant_messages: List[Dict[str, Any]] = []
+        tool_results: List[str] = []
 
         for event in events:
             event_attrs = dict(event.attributes) if hasattr(event, "attributes") and event.attributes else {}
 
             match event.name:
                 case cls.EVENT_USER_MESSAGE:
-                    user_message = event_attrs.get("content", "")
+                    content = event_attrs.get("content", "")
+                    if content:
+                        input_messages.append({"content": {"content": content}, "role": "user"})
+                    else:
+                        logger.debug("Skipping gen_ai.user.message with empty content")
 
                 case cls.EVENT_CHOICE:
                     message = event_attrs.get("message", "")
@@ -66,16 +78,21 @@ class StrandsEventParser:
                 case cls.EVENT_ASSISTANT_MESSAGE:
                     content = event_attrs.get("content", "")
                     if content:
-                        assistant_messages.append({"content": {"content": content}, "role": "assistant"})
+                        input_messages.append({"content": {"content": content}, "role": "assistant"})
+                    else:
+                        logger.debug("Skipping gen_ai.assistant.message with empty content")
 
                 case cls.EVENT_TOOL_MESSAGE:
                     content = event_attrs.get("content", "")
                     if content:
                         tool_results.append(content)
+                    else:
+                        logger.debug("Skipping gen_ai.tool.message with empty content")
 
-        if user_message and assistant_messages:
+        has_user_input = any(m.get("role") == "user" for m in input_messages)
+        if has_user_input and assistant_messages:
             return ConversationTurn(
-                user_message=user_message,
+                input_messages=input_messages,
                 assistant_messages=assistant_messages,
                 tool_results=tool_results,
             )
