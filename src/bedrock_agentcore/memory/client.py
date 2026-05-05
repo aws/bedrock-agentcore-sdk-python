@@ -20,7 +20,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-from bedrock_agentcore._utils.namespace import resolve_namespace_templates
+from bedrock_agentcore._utils.namespace import build_namespace_params, resolve_namespace_templates
 from bedrock_agentcore._utils.snake_case import accept_snake_case_kwargs
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
@@ -127,8 +127,11 @@ class MemoryClient:
             # Access any boto3 method directly
             client = MemoryClient()
 
-            # These calls are forwarded to the appropriate boto3 client
-            response = client.list_memory_records(memoryId="mem-123", namespace="test/")
+            # These calls are forwarded to the appropriate boto3 client.
+            # Use `namespace` for exact match, or `namespace_path` for
+            # hierarchical path-prefix retrieval.
+            response = client.list_memory_records(memoryId="mem-123", namespace="/actor/Jane/")
+            response = client.list_memory_records(memoryId="mem-123", namespace_path="/org/MyOrg/")
             metadata = client.get_memory_metadata(memoryId="mem-123")
         """
         if name in self._ALLOWED_GMDP_METHODS and hasattr(self.gmdp_client, name):
@@ -308,46 +311,48 @@ class MemoryClient:
         raise TimeoutError("Memory %s did not become ACTIVE within %d seconds" % (memory_id, max_wait))
 
     def retrieve_memories(
-        self, memory_id: str, namespace: str, query: str, actor_id: Optional[str] = None, top_k: int = 3
+        self,
+        memory_id: str,
+        namespace: Optional[str] = None,
+        query: str = None,
+        actor_id: Optional[str] = None,
+        top_k: int = 3,
+        namespace_path: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Retrieve relevant memories from a namespace.
+        """Retrieve relevant memories using exact match or hierarchical path prefix.
 
-        Note: Wildcards (*) are NOT supported in namespaces. You must provide the
-        exact namespace path with all variables resolved.
+        Exactly one of ``namespace`` or ``namespace_path`` must be provided.
 
         Args:
             memory_id: Memory resource ID
-            namespace: Exact namespace path (no wildcards)
-            query: Search query
+            namespace: Exact namespace to match (e.g., "/actor/Jane/")
+            query: Search query (required)
             actor_id: Optional actor ID (deprecated, use namespace)
             top_k: Number of results to return
+            namespace_path: Hierarchical path prefix (e.g., "/org/team/")
 
         Returns:
-            List of memory records
-
-        Example:
-            # Correct - exact namespace
-            memories = client.retrieve_memories(
-                memory_id="mem-123",
-                namespace="support/facts/session-456/",
-                query="customer preferences"
-            )
-
-            # Incorrect - wildcards not supported
-            # memories = client.retrieve_memories(..., namespace="support/facts/*/", ...)
+            List of memory records. Returns an empty list if the namespace
+            arguments are invalid (both provided, neither provided, or contain
+            wildcards) or if the service call fails.
         """
-        if "*" in namespace:
-            logger.error("Wildcards are not supported in namespaces. Please provide exact namespace.")
-            return []
+        if query is None:
+            raise TypeError("retrieve_memories() missing required argument: 'query'")
 
         try:
-            # Let service handle all namespace validation
-            response = self.gmdp_client.retrieve_memory_records(
-                memoryId=memory_id, namespace=namespace, searchCriteria={"searchQuery": query, "topK": top_k}
-            )
+            ns_params = build_namespace_params(namespace, namespace_path)
+        except ValueError as e:
+            logger.error(str(e))
+            return []
 
+        ns_value = namespace or namespace_path
+
+        try:
+            response = self.gmdp_client.retrieve_memory_records(
+                memoryId=memory_id, searchCriteria={"searchQuery": query, "topK": top_k}, **ns_params
+            )
             memories = response.get("memoryRecordSummaries", [])
-            logger.info("Retrieved %d memories from namespace: %s", len(memories), namespace)
+            logger.info("Retrieved %d memories from namespace: %s", len(memories), ns_value)
             return memories
 
         except ClientError as e:
@@ -358,7 +363,7 @@ class MemoryClient:
                 logger.warning(
                     "Memory or namespace not found. Ensure memory %s exists and namespace '%s' is configured",
                     memory_id,
-                    namespace,
+                    ns_value,
                 )
             elif error_code == "ValidationException":
                 logger.warning("Invalid search parameters: %s", error_msg)
@@ -663,6 +668,7 @@ class MemoryClient:
         retrieval_query: Optional[str] = None,
         top_k: int = 3,
         event_timestamp: Optional[datetime] = None,
+        retrieval_namespace_path: Optional[str] = None,
     ) -> Tuple[List[Dict[str, Any]], str, Dict[str, Any]]:
         r"""Complete conversation turn with LLM callback integration.
 
@@ -677,10 +683,11 @@ class MemoryClient:
             llm_callback: Function that takes (user_input, memories) and returns agent_response
                          The callback receives the user input and retrieved memories,
                          and should return the agent's response string
-            retrieval_namespace: Namespace to search for memories (optional)
+            retrieval_namespace: Namespace for exact match retrieval (optional)
             retrieval_query: Custom search query (defaults to user_input)
             top_k: Number of memories to retrieve
             event_timestamp: Optional timestamp for the event
+            retrieval_namespace_path: Namespace path for hierarchical prefix retrieval (optional)
 
         Returns:
             Tuple of (retrieved_memories, agent_response, created_event)
@@ -710,10 +717,14 @@ class MemoryClient:
         """
         # Step 1: Retrieve relevant memories
         retrieved_memories = []
-        if retrieval_namespace:
+        if retrieval_namespace or retrieval_namespace_path:
             search_query = retrieval_query or user_input
             retrieved_memories = self.retrieve_memories(
-                memory_id=memory_id, namespace=retrieval_namespace, query=search_query, top_k=top_k
+                memory_id=memory_id,
+                namespace=retrieval_namespace,
+                namespace_path=retrieval_namespace_path,
+                query=search_query,
+                top_k=top_k,
             )
             logger.info("Retrieved %d memories for LLM context", len(retrieved_memories))
 
