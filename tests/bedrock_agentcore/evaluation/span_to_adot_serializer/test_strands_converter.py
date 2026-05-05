@@ -2,86 +2,11 @@
 
 from unittest.mock import Mock
 
-import pytest
-
 from bedrock_agentcore.evaluation.span_to_adot_serializer import convert_strands_to_adot
 from bedrock_agentcore.evaluation.span_to_adot_serializer.strands_converter import (
     StrandsEventParser,
     StrandsToADOTConverter,
 )
-
-# ==============================================================================
-# Fixtures
-# ==============================================================================
-
-
-@pytest.fixture
-def mock_span_context():
-    """Create a mock span context."""
-    context = Mock()
-    context.trace_id = 0x1234567890ABCDEF1234567890ABCDEF
-    context.span_id = 0x1234567890ABCDEF
-    context.trace_flags = 1
-    return context
-
-
-@pytest.fixture
-def mock_resource():
-    """Create a mock resource."""
-    resource = Mock()
-    resource.attributes = {"service.name": "test-service"}
-    return resource
-
-
-@pytest.fixture
-def mock_instrumentation_scope():
-    """Create a mock instrumentation scope."""
-    scope = Mock()
-    scope.name = "strands.agent"
-    scope.version = "1.0.0"
-    return scope
-
-
-@pytest.fixture
-def mock_status():
-    """Create a mock status."""
-    status = Mock()
-    status.status_code = Mock()
-    status.status_code.__str__ = Mock(return_value="StatusCode.OK")
-    return status
-
-
-@pytest.fixture
-def mock_span(mock_span_context, mock_resource, mock_instrumentation_scope, mock_status):
-    """Create a mock OTel span."""
-    span = Mock()
-    span.context = mock_span_context
-    span.resource = mock_resource
-    span.instrumentation_scope = mock_instrumentation_scope
-    span.status = mock_status
-    span.parent = None
-    span.name = "test-span"
-    span.start_time = 1000000000
-    span.end_time = 2000000000
-    span.kind = Mock()
-    span.kind.__str__ = Mock(return_value="SpanKind.INTERNAL")
-    span.attributes = {"gen_ai.operation.name": "chat"}
-    span.events = []
-    return span
-
-
-@pytest.fixture
-def mock_event():
-    """Create a mock span event."""
-
-    def _create_event(name, attributes):
-        event = Mock()
-        event.name = name
-        event.attributes = attributes
-        return event
-
-    return _create_event
-
 
 # ==============================================================================
 # Strands Event Parser Tests
@@ -101,7 +26,7 @@ class TestStrandsEventParser:
         turn = StrandsEventParser.extract_conversation_turn(events)
 
         assert turn is not None
-        assert turn.user_message == "Hello"
+        assert turn.input_messages == [{"content": {"content": "Hello"}, "role": "user"}]
         assert len(turn.assistant_messages) == 1
         assert turn.assistant_messages[0]["content"]["message"] == "Hi there"
         assert turn.assistant_messages[0]["content"]["finish_reason"] == "stop"
@@ -119,8 +44,8 @@ class TestStrandsEventParser:
         assert len(turn.tool_results) == 1
         assert turn.tool_results[0] == "4"
 
-    def test_extract_conversation_turn_assistant_message(self, mock_event):
-        """gen_ai.assistant.message events are history input, not current output."""
+    def test_extract_conversation_turn_assistant_message_only_returns_none(self, mock_event):
+        """No gen_ai.choice means no current-turn output, so no ConversationTurn is emitted."""
         events = [
             mock_event("gen_ai.user.message", {"content": "Hello"}),
             mock_event("gen_ai.assistant.message", {"content": "Hi there"}),
@@ -128,9 +53,18 @@ class TestStrandsEventParser:
 
         turn = StrandsEventParser.extract_conversation_turn(events)
 
-        assert turn is not None
-        assert turn.assistant_messages == []
-        assert turn.history_messages[0]["content"]["content"] == "Hi there"
+        assert turn is None
+
+    def test_extract_conversation_turn_tool_results_only_returns_none(self, mock_event):
+        """User + tool_result with no choice and no history must not emit a record."""
+        events = [
+            mock_event("gen_ai.user.message", {"content": "Hello"}),
+            mock_event("gen_ai.tool.message", {"content": "tool output"}),
+        ]
+
+        turn = StrandsEventParser.extract_conversation_turn(events)
+
+        assert turn is None
 
     def test_extract_conversation_turn_preserves_all_user_messages(self, mock_event):
         """Multiple gen_ai.user.message events are all preserved, not deduped."""
@@ -144,10 +78,11 @@ class TestStrandsEventParser:
         turn = StrandsEventParser.extract_conversation_turn(events)
 
         assert turn is not None
-        assert turn.user_messages == ["first", "second", "third"]
+        user_contents = [m["content"]["content"] for m in turn.input_messages if m["role"] == "user"]
+        assert user_contents == ["first", "second", "third"]
 
-    def test_extract_conversation_turn_separates_history_from_choice(self, mock_event):
-        """Prior assistant turns land in history_messages; choice lands in assistant_messages."""
+    def test_extract_conversation_turn_preserves_chronological_order(self, mock_event):
+        """input_messages must interleave user and prior assistant turns in event arrival order."""
         events = [
             mock_event("gen_ai.user.message", {"content": "u1"}),
             mock_event("gen_ai.assistant.message", {"content": "prior-assistant-1"}),
@@ -160,10 +95,20 @@ class TestStrandsEventParser:
         turn = StrandsEventParser.extract_conversation_turn(events)
 
         assert turn is not None
-        assert turn.user_messages == ["u1", "u2", "u3"]
-        assert len(turn.history_messages) == 2
-        assert turn.history_messages[0]["content"]["content"] == "prior-assistant-1"
-        assert turn.history_messages[1]["content"]["content"] == "prior-assistant-2"
+        assert [m["role"] for m in turn.input_messages] == [
+            "user",
+            "assistant",
+            "user",
+            "assistant",
+            "user",
+        ]
+        assert [m["content"]["content"] for m in turn.input_messages] == [
+            "u1",
+            "prior-assistant-1",
+            "u2",
+            "prior-assistant-2",
+            "u3",
+        ]
         assert len(turn.assistant_messages) == 1
         assert turn.assistant_messages[0]["content"]["message"] == "new-model-output"
 

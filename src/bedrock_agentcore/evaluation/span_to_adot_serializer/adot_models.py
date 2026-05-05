@@ -11,7 +11,7 @@ telemetry frameworks (Strands, LangGraph, etc.).
 
 import logging
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -47,69 +47,89 @@ class ResourceInfo:
     scope_version: str
 
 
-@dataclass
 class ConversationTurn:
     """A single user-assistant conversation turn, with prior history preserved.
 
-    ``user_messages`` holds every ``gen_ai.user.message`` event observed on the
-    span (conversation history + the current user turn). ``history_messages``
-    holds every ``gen_ai.assistant.message`` event — these are prior assistant
-    turns replayed as input context, not the current model output.
+    ``input_messages`` holds every input event (``gen_ai.user.message`` and
+    ``gen_ai.assistant.message``) in the order observed on the span, so
+    downstream consumers can reconstruct the actual conversation flow.
     ``assistant_messages`` holds only the current turn's output, derived from
-    ``gen_ai.choice`` events.
+    ``gen_ai.choice`` events. ``tool_results`` holds any tool outputs observed
+    on the span.
 
     The ``user_message`` attribute is retained as a backwards-compatible alias
-    returning the most recent user turn; new code should read ``user_messages``.
+    returning the most recent user turn's content; new code should iterate
+    ``input_messages`` filtered by role.
     """
-
-    user_messages: List[str] = field(default_factory=list)
-    assistant_messages: List[Dict[str, Any]] = field(default_factory=list)
-    tool_results: List[str] = field(default_factory=list)
-    history_messages: List[Dict[str, Any]] = field(default_factory=list)
 
     def __init__(
         self,
         user_message: Optional[str] = None,
         assistant_messages: Optional[List[Dict[str, Any]]] = None,
         tool_results: Optional[List[str]] = None,
-        user_messages: Optional[List[str]] = None,
-        history_messages: Optional[List[Dict[str, Any]]] = None,
+        input_messages: Optional[List[Dict[str, Any]]] = None,
     ):
         """Initialize a conversation turn.
 
-        Accepts either the new ``user_messages`` list or the legacy
-        ``user_message`` scalar for backwards compatibility.
+        ``input_messages`` is the chronological list of input events
+        (``{"role": "user"|"assistant", "content": {...}}``). For backwards
+        compatibility, callers may instead pass a legacy ``user_message``
+        scalar, which is converted into a single-entry ``input_messages``
+        list. Supplying both is an error.
         """
-        if user_messages is not None and user_message is not None:
-            raise ValueError("Provide either user_messages or user_message, not both")
-        if user_messages is not None:
-            self.user_messages = list(user_messages)
+        if input_messages is not None and user_message is not None:
+            raise ValueError("Provide either input_messages or user_message, not both")
+        if input_messages is not None:
+            self.input_messages = list(input_messages)
         elif user_message is not None:
-            self.user_messages = [user_message]
+            self.input_messages = [{"content": {"content": user_message}, "role": "user"}]
         else:
-            self.user_messages = []
-        self.assistant_messages = list(assistant_messages) if assistant_messages is not None else []
-        self.tool_results = list(tool_results) if tool_results is not None else []
-        self.history_messages = list(history_messages) if history_messages is not None else []
+            self.input_messages = []
+        self.assistant_messages = list(assistant_messages or [])
+        self.tool_results = list(tool_results or [])
+
+    def __repr__(self) -> str:
+        """Return a debug representation listing every stored field."""
+        return (
+            f"ConversationTurn(input_messages={self.input_messages!r}, "
+            f"assistant_messages={self.assistant_messages!r}, "
+            f"tool_results={self.tool_results!r})"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        """Compare turns by the full set of instance fields."""
+        if not isinstance(other, ConversationTurn):
+            return NotImplemented
+        return (
+            self.input_messages == other.input_messages
+            and self.assistant_messages == other.assistant_messages
+            and self.tool_results == other.tool_results
+        )
 
     @property
     def user_message(self) -> str:
-        """Return the most recent user turn (backwards-compatible alias).
+        """Return the most recent user turn's content (backwards-compatible alias).
 
-        Deprecated: read ``user_messages`` to access the full list of user
-        turns on the span. This alias drops all but the last entry.
+        Deprecated: iterate ``input_messages`` to access the full conversation
+        history. This alias returns only the last user entry.
         """
-        if not self.user_messages:
+        user_entries = [m for m in self.input_messages if m.get("role") == "user"]
+        if not user_entries:
             return ""
-        if len(self.user_messages) > 1:
+        if len(user_entries) > 1 or any(m.get("role") == "assistant" for m in self.input_messages):
             warnings.warn(
-                "ConversationTurn.user_message drops prior turns when the span "
-                "carries multiple gen_ai.user.message events. Read "
-                "ConversationTurn.user_messages for the full list.",
+                "ConversationTurn.user_message drops prior user turns and history "
+                "when the span carries multiple input events. Iterate "
+                "ConversationTurn.input_messages for the full conversation.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-        return self.user_messages[-1]
+        last = user_entries[-1]
+        content = last.get("content")
+        if isinstance(content, dict):
+            inner = content.get("content", "")
+            return inner if isinstance(inner, str) else ""
+        return content if isinstance(content, str) else ""
 
 
 @dataclass
@@ -250,10 +270,11 @@ class ADOTDocumentBuilder:
     ) -> Dict[str, Any]:
         """Build ADOT log record for conversation turn.
 
-        Input messages preserve conversation history: user turns and prior
-        assistant turns (``history_messages``) are merged in the order they
-        were observed on the span so downstream consumers see the full context
-        the model received. Output messages carry only the current turn.
+        ``body.input.messages`` carries ``ConversationTurn.input_messages`` in
+        event arrival order, so downstream consumers reconstruct the exact
+        conversation the model received (user and prior assistant turns
+        interleaved). ``body.output.messages`` carries only the current turn's
+        output.
         """
         output_messages = []
         for i, msg in enumerate(conversation.assistant_messages):
@@ -267,14 +288,9 @@ class ADOTDocumentBuilder:
         for tool_result in conversation.tool_results:
             output_messages.append({"content": tool_result, "role": "assistant"})
 
-        input_messages: List[Dict[str, Any]] = [
-            {"content": {"content": user_msg}, "role": "user"} for user_msg in conversation.user_messages
-        ]
-        input_messages.extend(conversation.history_messages)
-
         body = {
             "output": {"messages": output_messages},
-            "input": {"messages": input_messages},
+            "input": {"messages": list(conversation.input_messages)},
         }
 
         return cls._build_log_record_base(metadata, resource_info, body)
