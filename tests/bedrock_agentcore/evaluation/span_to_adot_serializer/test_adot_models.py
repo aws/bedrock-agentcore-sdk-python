@@ -163,15 +163,53 @@ class TestConversationTurn:
     """Test ConversationTurn dataclass."""
 
     def test_creation(self):
-        """Test ConversationTurn creation."""
+        """Test ConversationTurn creation via legacy scalar user_message."""
         turn = ConversationTurn(
             user_message="Hello",
             assistant_messages=[{"content": {"message": "Hi"}, "role": "assistant"}],
             tool_results=["result1"],
         )
         assert turn.user_message == "Hello"
+        assert turn.user_messages == ["Hello"]
         assert len(turn.assistant_messages) == 1
         assert len(turn.tool_results) == 1
+        assert turn.history_messages == []
+
+    def test_creation_with_user_messages_list(self):
+        """ConversationTurn accepts a list of user messages preserving order."""
+        turn = ConversationTurn(
+            user_messages=["first", "second", "third"],
+            assistant_messages=[{"content": {"message": "ok"}, "role": "assistant"}],
+        )
+        assert turn.user_messages == ["first", "second", "third"]
+
+    def test_user_message_alias_returns_latest(self):
+        """user_message returns the latest entry; accessing it with history emits a DeprecationWarning."""
+        import warnings
+
+        turn = ConversationTurn(user_messages=["a", "b", "c"], assistant_messages=[{}])
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            assert turn.user_message == "c"
+            assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+
+    def test_user_message_and_user_messages_rejected(self):
+        """Supplying both user_message and user_messages is an error."""
+        import pytest
+
+        with pytest.raises(ValueError):
+            ConversationTurn(user_message="x", user_messages=["y"])
+
+    def test_history_messages_preserved(self):
+        """history_messages are kept distinct from assistant_messages."""
+        turn = ConversationTurn(
+            user_messages=["u"],
+            assistant_messages=[{"content": {"message": "out"}, "role": "assistant"}],
+            history_messages=[{"content": {"content": "prior"}, "role": "assistant"}],
+        )
+        assert turn.assistant_messages[0]["content"]["message"] == "out"
+        assert turn.history_messages[0]["content"]["content"] == "prior"
 
 
 class TestToolExecution:
@@ -307,6 +345,33 @@ class TestADOTDocumentBuilder:
         assert doc["severityNumber"] == 9
         assert doc["body"]["input"]["messages"][0]["content"]["content"] == "Hello"
         assert doc["body"]["output"]["messages"][0]["content"]["message"] == "Hi"
+
+    def test_build_conversation_log_record_multi_turn_history(self, span_metadata, resource_info):
+        """Builder emits all user turns + prior assistant history as input messages."""
+        conversation = ConversationTurn(
+            user_messages=["u1", "u2", "u3"],
+            assistant_messages=[{"content": {"message": "new-output"}, "role": "assistant"}],
+            history_messages=[
+                {"content": {"content": "prior-1"}, "role": "assistant"},
+                {"content": {"content": "prior-2"}, "role": "assistant"},
+            ],
+        )
+
+        doc = ADOTDocumentBuilder.build_conversation_log_record(conversation, span_metadata, resource_info)
+
+        input_msgs = doc["body"]["input"]["messages"]
+        assert [m.get("role") for m in input_msgs] == ["user", "user", "user", "assistant", "assistant"]
+        assert [m["content"].get("content") for m in input_msgs] == [
+            "u1",
+            "u2",
+            "u3",
+            "prior-1",
+            "prior-2",
+        ]
+
+        output_msgs = doc["body"]["output"]["messages"]
+        assert len(output_msgs) == 1
+        assert output_msgs[0]["content"]["message"] == "new-output"
 
     def test_build_conversation_log_record_with_tool_results(self, span_metadata, resource_info):
         """Test building conversation log record with tool results."""

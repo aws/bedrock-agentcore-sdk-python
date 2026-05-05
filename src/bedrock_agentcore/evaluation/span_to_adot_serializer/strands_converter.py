@@ -37,17 +37,29 @@ class StrandsEventParser:
 
     @classmethod
     def extract_conversation_turn(cls, events: List[Any]) -> Optional[ConversationTurn]:
-        """Extract conversation turn from Strands span events."""
-        user_message = None
-        assistant_messages = []
-        tool_results = []
+        """Extract conversation turn from Strands span events.
+
+        Per OTel GenAI semantic conventions, ``gen_ai.{user,assistant,tool}.message``
+        events describe input context (including prior assistant turns replayed
+        as history), while ``gen_ai.choice`` describes the model's current-turn
+        output. This parser preserves every event it sees: multiple
+        ``gen_ai.user.message`` events are all captured in ``user_messages``,
+        and ``gen_ai.assistant.message`` events land in ``history_messages``
+        so they are not mixed with the current-turn choice output.
+        """
+        user_messages: List[str] = []
+        assistant_messages: List[Dict[str, Any]] = []
+        history_messages: List[Dict[str, Any]] = []
+        tool_results: List[str] = []
 
         for event in events:
             event_attrs = dict(event.attributes) if hasattr(event, "attributes") and event.attributes else {}
 
             match event.name:
                 case cls.EVENT_USER_MESSAGE:
-                    user_message = event_attrs.get("content", "")
+                    content = event_attrs.get("content", "")
+                    if content:
+                        user_messages.append(content)
 
                 case cls.EVENT_CHOICE:
                     message = event_attrs.get("message", "")
@@ -66,18 +78,19 @@ class StrandsEventParser:
                 case cls.EVENT_ASSISTANT_MESSAGE:
                     content = event_attrs.get("content", "")
                     if content:
-                        assistant_messages.append({"content": {"content": content}, "role": "assistant"})
+                        history_messages.append({"content": {"content": content}, "role": "assistant"})
 
                 case cls.EVENT_TOOL_MESSAGE:
                     content = event_attrs.get("content", "")
                     if content:
                         tool_results.append(content)
 
-        if user_message and assistant_messages:
+        if user_messages and (assistant_messages or history_messages):
             return ConversationTurn(
-                user_message=user_message,
+                user_messages=user_messages,
                 assistant_messages=assistant_messages,
                 tool_results=tool_results,
+                history_messages=history_messages,
             )
 
         return None

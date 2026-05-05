@@ -120,7 +120,7 @@ class TestStrandsEventParser:
         assert turn.tool_results[0] == "4"
 
     def test_extract_conversation_turn_assistant_message(self, mock_event):
-        """Test extracting assistant message event."""
+        """gen_ai.assistant.message events are history input, not current output."""
         events = [
             mock_event("gen_ai.user.message", {"content": "Hello"}),
             mock_event("gen_ai.assistant.message", {"content": "Hi there"}),
@@ -129,7 +129,43 @@ class TestStrandsEventParser:
         turn = StrandsEventParser.extract_conversation_turn(events)
 
         assert turn is not None
-        assert turn.assistant_messages[0]["content"]["content"] == "Hi there"
+        assert turn.assistant_messages == []
+        assert turn.history_messages[0]["content"]["content"] == "Hi there"
+
+    def test_extract_conversation_turn_preserves_all_user_messages(self, mock_event):
+        """Multiple gen_ai.user.message events are all preserved, not deduped."""
+        events = [
+            mock_event("gen_ai.user.message", {"content": "first"}),
+            mock_event("gen_ai.user.message", {"content": "second"}),
+            mock_event("gen_ai.user.message", {"content": "third"}),
+            mock_event("gen_ai.choice", {"message": "ok"}),
+        ]
+
+        turn = StrandsEventParser.extract_conversation_turn(events)
+
+        assert turn is not None
+        assert turn.user_messages == ["first", "second", "third"]
+
+    def test_extract_conversation_turn_separates_history_from_choice(self, mock_event):
+        """Prior assistant turns land in history_messages; choice lands in assistant_messages."""
+        events = [
+            mock_event("gen_ai.user.message", {"content": "u1"}),
+            mock_event("gen_ai.assistant.message", {"content": "prior-assistant-1"}),
+            mock_event("gen_ai.user.message", {"content": "u2"}),
+            mock_event("gen_ai.assistant.message", {"content": "prior-assistant-2"}),
+            mock_event("gen_ai.user.message", {"content": "u3"}),
+            mock_event("gen_ai.choice", {"message": "new-model-output", "finish_reason": "end_turn"}),
+        ]
+
+        turn = StrandsEventParser.extract_conversation_turn(events)
+
+        assert turn is not None
+        assert turn.user_messages == ["u1", "u2", "u3"]
+        assert len(turn.history_messages) == 2
+        assert turn.history_messages[0]["content"]["content"] == "prior-assistant-1"
+        assert turn.history_messages[1]["content"]["content"] == "prior-assistant-2"
+        assert len(turn.assistant_messages) == 1
+        assert turn.assistant_messages[0]["content"]["message"] == "new-model-output"
 
     def test_extract_conversation_turn_tool_message(self, mock_event):
         """Test extracting tool message as tool result."""

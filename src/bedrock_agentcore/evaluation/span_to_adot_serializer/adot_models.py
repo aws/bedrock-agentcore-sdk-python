@@ -10,7 +10,8 @@ telemetry frameworks (Strands, LangGraph, etc.).
 """
 
 import logging
-from dataclasses import dataclass
+import warnings
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -48,11 +49,67 @@ class ResourceInfo:
 
 @dataclass
 class ConversationTurn:
-    """A single user-assistant conversation turn."""
+    """A single user-assistant conversation turn, with prior history preserved.
 
-    user_message: str
-    assistant_messages: List[Dict[str, Any]]
-    tool_results: List[str]
+    ``user_messages`` holds every ``gen_ai.user.message`` event observed on the
+    span (conversation history + the current user turn). ``history_messages``
+    holds every ``gen_ai.assistant.message`` event — these are prior assistant
+    turns replayed as input context, not the current model output.
+    ``assistant_messages`` holds only the current turn's output, derived from
+    ``gen_ai.choice`` events.
+
+    The ``user_message`` attribute is retained as a backwards-compatible alias
+    returning the most recent user turn; new code should read ``user_messages``.
+    """
+
+    user_messages: List[str] = field(default_factory=list)
+    assistant_messages: List[Dict[str, Any]] = field(default_factory=list)
+    tool_results: List[str] = field(default_factory=list)
+    history_messages: List[Dict[str, Any]] = field(default_factory=list)
+
+    def __init__(
+        self,
+        user_message: Optional[str] = None,
+        assistant_messages: Optional[List[Dict[str, Any]]] = None,
+        tool_results: Optional[List[str]] = None,
+        user_messages: Optional[List[str]] = None,
+        history_messages: Optional[List[Dict[str, Any]]] = None,
+    ):
+        """Initialize a conversation turn.
+
+        Accepts either the new ``user_messages`` list or the legacy
+        ``user_message`` scalar for backwards compatibility.
+        """
+        if user_messages is not None and user_message is not None:
+            raise ValueError("Provide either user_messages or user_message, not both")
+        if user_messages is not None:
+            self.user_messages = list(user_messages)
+        elif user_message is not None:
+            self.user_messages = [user_message]
+        else:
+            self.user_messages = []
+        self.assistant_messages = list(assistant_messages) if assistant_messages is not None else []
+        self.tool_results = list(tool_results) if tool_results is not None else []
+        self.history_messages = list(history_messages) if history_messages is not None else []
+
+    @property
+    def user_message(self) -> str:
+        """Return the most recent user turn (backwards-compatible alias).
+
+        Deprecated: read ``user_messages`` to access the full list of user
+        turns on the span. This alias drops all but the last entry.
+        """
+        if not self.user_messages:
+            return ""
+        if len(self.user_messages) > 1:
+            warnings.warn(
+                "ConversationTurn.user_message drops prior turns when the span "
+                "carries multiple gen_ai.user.message events. Read "
+                "ConversationTurn.user_messages for the full list.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        return self.user_messages[-1]
 
 
 @dataclass
@@ -191,7 +248,13 @@ class ADOTDocumentBuilder:
         metadata: SpanMetadata,
         resource_info: ResourceInfo,
     ) -> Dict[str, Any]:
-        """Build ADOT log record for conversation turn."""
+        """Build ADOT log record for conversation turn.
+
+        Input messages preserve conversation history: user turns and prior
+        assistant turns (``history_messages``) are merged in the order they
+        were observed on the span so downstream consumers see the full context
+        the model received. Output messages carry only the current turn.
+        """
         output_messages = []
         for i, msg in enumerate(conversation.assistant_messages):
             output_msg = msg.copy()
@@ -204,9 +267,14 @@ class ADOTDocumentBuilder:
         for tool_result in conversation.tool_results:
             output_messages.append({"content": tool_result, "role": "assistant"})
 
+        input_messages: List[Dict[str, Any]] = [
+            {"content": {"content": user_msg}, "role": "user"} for user_msg in conversation.user_messages
+        ]
+        input_messages.extend(conversation.history_messages)
+
         body = {
             "output": {"messages": output_messages},
-            "input": {"messages": [{"content": {"content": conversation.user_message}, "role": "user"}]},
+            "input": {"messages": input_messages},
         }
 
         return cls._build_log_record_base(metadata, resource_info, body)
