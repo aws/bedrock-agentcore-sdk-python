@@ -150,6 +150,7 @@ class TestPaymentClientControlPlane:
 
         assert update_result.get("paymentManagerId") == payment_manager_id
 
+    @pytest.mark.skip(reason="Requires real CDP credential provider - needs CDP credentials configured")
     def test_create_and_get_payment_connector(self):
         """Test creating and retrieving a payment connector."""
         # First create a payment manager
@@ -219,6 +220,7 @@ class TestPaymentClientControlPlane:
             assert "name" in connector
             assert "status" in connector
 
+    @pytest.mark.skip(reason="Requires real CDP credential provider - needs CDP credentials configured")
     def test_update_payment_connector(self):
         """Test updating a payment connector."""
         # First create a payment manager
