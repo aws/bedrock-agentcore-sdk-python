@@ -64,21 +64,14 @@ class TestPaymentClientControlPlane:
     def setup_class(cls):
         """Set up test environment."""
         cls.region = os.environ.get("BEDROCK_TEST_REGION", "us-west-2")
-        cls.role_arn = os.environ.get(
-            "TEST_PAYMENT_ROLE_ARN",
-            "arn:aws:iam::123456789012:role/bedrock-payment-role",
-        )
+        cls.role_arn = os.environ.get("RUNTIME_ROLE_ARN")
+        if not cls.role_arn:
+            pytest.skip("RUNTIME_ROLE_ARN must be set")
         cls.client = PaymentClient(region_name=cls.region)
-        # Use timestamp with microseconds for uniqueness
         cls.test_prefix = f"t{int(time.time() * 1000000)}"
         cls.created_managers = []
         cls.created_connectors = []
-        cls.role_arn = os.environ.get(
-            "TEST_PAYMENT_ROLE_ARN",
-            "arn:aws:iam::123456789012:role/bedrock-payment-role",
-        )
 
-    @classmethod
     @classmethod
     def teardown_class(cls):
         """Clean up test resources."""
@@ -284,11 +277,8 @@ class TestCreatePaymentManagerWithConnectorIntegration:
         # Read credentials from environment variables
         cls.api_key_secret = os.environ.get("PAYMENT_TEST_API_KEY_SECRET")
         cls.wallet_secret = os.environ.get("PAYMENT_TEST_WALLET_SECRET")
-        cls.skip_tests = not (cls.api_key_secret and cls.wallet_secret)
-        cls.role_arn = os.environ.get(
-            "TEST_PAYMENT_ROLE_ARN",
-            "arn:aws:iam::123456789012:role/bedrock-payment-role",
-        )
+        cls.role_arn = os.environ.get("RUNTIME_ROLE_ARN")
+        cls.skip_tests = not (cls.api_key_secret and cls.wallet_secret and cls.role_arn)
 
     @classmethod
     def teardown_class(cls):
