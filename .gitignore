@@ -228,3 +228,4 @@ local_settings.py
 .dockerignore
 Dockerfile
 CLAUDE.md
+.omc/
