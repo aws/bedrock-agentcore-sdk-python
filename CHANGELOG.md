@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.9.0] - 2026-05-07
+
+### Fixed
+- fix: preserve multi-turn history in Strands ConversationTurn (#454) (10da345)
+
+### Other Changes
+- fix(payments): skip connector integ tests that require CDP credentials (#462) (1086f94)
+- fix(payments): use RUNTIME_ROLE_ARN for CP integ tests (#461) (65df922)
+- ci: add payments group to integration test matrix (#460) (2be8a6a)
+- feat(payments): add AgentCore Payments module (#457) (a4d73c7)
+
 ## [1.8.0] - 2026-04-30
 
 ### Added
