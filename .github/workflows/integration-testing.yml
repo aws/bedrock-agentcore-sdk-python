@@ -33,7 +33,7 @@ jobs:
 
       - name: Safety Check - Prevent Workflow Modification Attacks
         id: safety-check
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           result-encoding: string
           script: |
@@ -70,7 +70,7 @@ jobs:
             return 'true';
 
       - name: Collaborator Check
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         id: collab-check
         with:
           result-encoding: string
