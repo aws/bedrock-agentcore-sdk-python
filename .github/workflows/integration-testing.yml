@@ -153,6 +153,11 @@ jobs:
             timeout: 15
             extra-deps: ""
             ignore: ""
+          - group: payments
+            path: tests_integ/payments
+            timeout: 15
+            extra-deps: "strands-agents"
+            ignore: ""
     steps:
       - name: Configure Credentials
         uses: aws-actions/configure-aws-credentials@v6
