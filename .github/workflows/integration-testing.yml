@@ -156,7 +156,7 @@ jobs:
           - group: payments
             path: tests_integ/payments
             timeout: 15
-            extra-deps: "strands-agents"
+            extra-deps: "strands-agents strands-agents-tools"
             ignore: ""
     steps:
       - name: Configure Credentials
