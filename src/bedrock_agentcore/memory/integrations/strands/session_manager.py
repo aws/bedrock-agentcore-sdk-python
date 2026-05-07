@@ -158,6 +158,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         # Cache for agent created_at timestamps to avoid fetching on every update
         self._agent_created_at_cache: dict[str, datetime] = {}
 
+        # Track last synced internal state for each agent (required by parent RepositorySessionManager)
+        self._last_synced_internal_state: dict[str, Any] = {}
+
+        # Track if this is a new session (required by parent RepositorySessionManager)
+        self._is_new_session: bool = True
+
         # Interval-based flushing support
         self._flush_timer: Optional[threading.Timer] = None
         self._timer_lock = threading.Lock()

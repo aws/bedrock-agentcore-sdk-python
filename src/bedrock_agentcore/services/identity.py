@@ -298,3 +298,119 @@ class IdentityClient:
         req = {"resourceCredentialProviderName": provider_name, "workloadIdentityToken": agent_identity_token}
 
         return self.dp_client.get_resource_api_key(**req)["apiKey"]
+
+    def create_payment_credential_provider(
+        self, name: str, credential_provider_vendor: str, provider_configuration_input: Dict
+    ) -> Dict:
+        """Create a payment credential provider.
+
+        Args:
+            name: Unique name for the payment credential provider
+            credential_provider_vendor: The vendor type (e.g., CoinbaseCDP, StripePrivy)
+            provider_configuration_input: Configuration specific to the vendor, including API credentials
+
+        Returns:
+            Response containing the created payment credential provider details
+
+        Raises:
+            botocore.exceptions.ClientError: If the service request fails (e.g., permission denied,
+                invalid configuration, resource already exists)
+        """
+        self.logger.info(
+            "Creating payment credential provider '%s' for vendor '%s'...",
+            name,
+            credential_provider_vendor,
+        )
+        return self.cp_client.create_payment_credential_provider(
+            name=name,
+            credentialProviderVendor=credential_provider_vendor,
+            providerConfigurationInput=provider_configuration_input,
+        )
+
+    def update_payment_credential_provider(
+        self, name: str, credential_provider_vendor: str, provider_configuration_input: Dict
+    ) -> Dict:
+        """Update an existing payment credential provider.
+
+        Args:
+            name: Name of the payment credential provider to update
+            credential_provider_vendor: The vendor type (e.g., CoinbaseCDP, StripePrivy)
+            provider_configuration_input: Updated configuration specific to the vendor
+
+        Returns:
+            Response containing the updated payment credential provider details
+
+        Raises:
+            botocore.exceptions.ClientError: If the service request fails (e.g., provider not found,
+                permission denied, invalid configuration)
+        """
+        self.logger.info(
+            "Updating payment credential provider '%s' for vendor '%s'...",
+            name,
+            credential_provider_vendor,
+        )
+        return self.cp_client.update_payment_credential_provider(
+            name=name,
+            credentialProviderVendor=credential_provider_vendor,
+            providerConfigurationInput=provider_configuration_input,
+        )
+
+    def delete_payment_credential_provider(self, name: str) -> Dict:
+        """Delete a payment credential provider.
+
+        Args:
+            name: Name of the payment credential provider to delete
+
+        Returns:
+            Response confirming the deletion
+
+        Raises:
+            botocore.exceptions.ClientError: If the service request fails (e.g., provider not found,
+                permission denied)
+        """
+        self.logger.info("Deleting payment credential provider '%s'...", name)
+        return self.cp_client.delete_payment_credential_provider(name=name)
+
+    def get_payment_credential_provider(self, name: str) -> Dict:
+        """Retrieve information about a payment credential provider.
+
+        Args:
+            name: Name of the payment credential provider to retrieve
+
+        Returns:
+            Response containing the payment credential provider details
+
+        Raises:
+            botocore.exceptions.ClientError: If the service request fails (e.g., provider not found,
+                permission denied)
+        """
+        self.logger.info("Fetching payment credential provider '%s'...", name)
+        return self.cp_client.get_payment_credential_provider(name=name)
+
+    def list_payment_credential_providers(
+        self, next_token: Optional[str] = None, max_results: Optional[int] = None
+    ) -> Dict:
+        """List all payment credential providers.
+
+        Args:
+            next_token: Token for pagination to retrieve the next set of results
+            max_results: Maximum number of results to return (1-20)
+
+        Returns:
+            Response containing a list of payment credential providers
+
+        Raises:
+            ValueError: If max_results is not in the valid range (1-20)
+            botocore.exceptions.ClientError: If the service request fails (e.g., permission denied,
+                service unavailable)
+        """
+        if max_results is not None and (max_results < 1 or max_results > 20):
+            raise ValueError(f"max_results must be between 1 and 20, got: {max_results}")
+
+        self.logger.info("Listing payment credential providers...")
+        req = {}
+        if next_token is not None:
+            req["nextToken"] = next_token
+        if max_results is not None:
+            req["maxResults"] = max_results
+        return self.cp_client.list_payment_credential_providers(**req)
