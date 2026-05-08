@@ -4,7 +4,6 @@ This module provides a client for the AWS Code Interpreter sandbox, allowing
 applications to start, stop, and invoke code execution in a managed sandbox environment.
 """
 
-import base64
 import logging
 import re
 import uuid
@@ -482,7 +481,7 @@ class CodeInterpreter:
                 'scripts/analysis.py'). Must be relative to the working directory.
                 Absolute paths starting with '/' are not allowed.
             content: File content as string (text files) or bytes (binary files).
-                    Binary content will be base64 encoded automatically.
+                    Binary content will be encoded automatically by botocore.
             description: Optional semantic description of the file contents.
                         This is stored as metadata and can help LLMs understand
                         the data structure (e.g., "CSV with columns: date, revenue, product_id").
@@ -514,7 +513,7 @@ class CodeInterpreter:
 
         # Handle binary content
         if isinstance(content, bytes):
-            file_content = {"path": path, "blob": base64.b64encode(content).decode("utf-8")}
+            file_content = {"path": path, "blob": content}
         else:
             file_content = {"path": path, "text": content}
 
@@ -564,7 +563,7 @@ class CodeInterpreter:
                 raise ValueError(f"Path must be relative, not absolute. Got: {path}")
 
             if isinstance(content, bytes):
-                file_contents.append({"path": path, "blob": base64.b64encode(content).decode("utf-8")})
+                file_contents.append({"path": path, "blob": content})
             else:
                 file_contents.append({"path": path, "text": content})
 
@@ -649,7 +648,7 @@ class CodeInterpreter:
                             if "text" in resource:
                                 return resource["text"]
                             elif "blob" in resource:
-                                raw = base64.b64decode(resource["blob"])
+                                raw = resource["blob"]
                                 try:
                                     return raw.decode("utf-8")
                                 except (UnicodeDecodeError, ValueError):
@@ -690,7 +689,7 @@ class CodeInterpreter:
                             if "text" in resource:
                                 files[file_path] = resource["text"]
                             elif "blob" in resource:
-                                raw = base64.b64decode(resource["blob"])
+                                raw = resource["blob"]
                                 try:
                                     files[file_path] = raw.decode("utf-8")
                                 except (UnicodeDecodeError, ValueError):
