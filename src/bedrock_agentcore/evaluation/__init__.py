@@ -20,9 +20,11 @@ from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_runner import (
     BatchEvaluationRunner,
 )
+from bedrock_agentcore.evaluation.dataset_client import DatasetClient
 from bedrock_agentcore.evaluation.runner.dataset_providers import (
     DatasetProvider,
     FileDatasetProvider,
+    ServiceDatasetProvider,
 )
 from bedrock_agentcore.evaluation.runner.dataset_types import (
     ActorProfile,
@@ -77,6 +79,7 @@ __all__ = [
     "AgentInvokerOutput",
     "CloudWatchAgentSpanCollector",
     "Dataset",
+    "DatasetClient",
     "DatasetProvider",
     "EvaluationClient",
     "EvaluationResult",
@@ -86,6 +89,7 @@ __all__ = [
     "EvaluatorOutput",
     "EvaluatorResult",
     "FileDatasetProvider",
+    "ServiceDatasetProvider",
     "Input",
     "OnDemandEvaluationDatasetRunner",
     "ReferenceInputs",
