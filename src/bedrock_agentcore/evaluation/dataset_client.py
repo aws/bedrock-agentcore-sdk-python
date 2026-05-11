@@ -13,8 +13,6 @@ from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
 logger = logging.getLogger(__name__)
 
-_DATASET_FAILED_STATUSES = {"CREATE_FAILED", "UPDATE_FAILED"}
-
 
 class DatasetClient:
     """Client for managing evaluation datasets.
