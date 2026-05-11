@@ -66,42 +66,66 @@ class FileDatasetProvider(DatasetProvider):
         )
 
 
+SUPPORTED_SCHEMA_TYPES = {
+    "AGENTCORE_EVALUATION_PREDEFINED_V1",
+    "AGENTCORE_EVALUATION_SIMULATED_V1",
+}
+
+
 class ServiceDatasetProvider(DatasetProvider):
     """A dataset provider that loads a Dataset from the Dataset Management service."""
 
-    def __init__(self, dataset_id: str, version_id: Optional[str] = None, region_name: Optional[str] = None):
+    def __init__(self, dataset_id: str, version_id: Optional[str] = None, client=None):
         """Initialize with a dataset ID and optional version.
 
         Args:
             dataset_id: The dataset ID to fetch.
             version_id: Optional version ID. If omitted, fetches DRAFT.
-            region_name: AWS region. Falls back to boto3 session region or us-west-2.
+            client: Optional DatasetClient instance. If not provided, a default is created.
         """
         self._dataset_id = dataset_id
         self._version_id = version_id
-        self._region_name = region_name
+        self._client = client
 
     def get_dataset(self) -> Dataset:
         """Load and return the dataset from the Dataset Management service.
 
         Fetches the dataset via the presigned download URL returned by GetDataset.
         The URL points to a JSONL file where each line is one example.
-        """
-        from bedrock_agentcore.evaluation.dataset_client import DatasetClient
 
-        client = DatasetClient(region_name=self._region_name)
+        Raises:
+            ValueError: If the dataset has no downloadUrl or has an unsupported schemaType.
+            RuntimeError: If the dataset content cannot be downloaded.
+        """
+        if self._client is None:
+            from bedrock_agentcore.evaluation.dataset_client import DatasetClient
+
+            self._client = DatasetClient()
 
         kwargs: Dict[str, Any] = {"datasetId": self._dataset_id}
         if self._version_id:
             kwargs["datasetVersion"] = self._version_id
 
-        response = client.get_dataset(**kwargs)
+        response = self._client.get_dataset(**kwargs)
+
+        schema_type = response.get("schemaType")
+        if schema_type and schema_type not in SUPPORTED_SCHEMA_TYPES:
+            raise ValueError(
+                f"Dataset schema type '{schema_type}' is not supported by the evaluation runners. "
+                f"Supported types: {sorted(SUPPORTED_SCHEMA_TYPES)}"
+            )
+
         download_url = response.get("downloadUrl")
         if not download_url:
             raise ValueError(f"Dataset {self._dataset_id} has no downloadUrl. Status: {response.get('status')}")
 
-        r = requests.get(download_url)
-        r.raise_for_status()
+        try:
+            r = requests.get(download_url)
+            r.raise_for_status()
+        except requests.RequestException as e:
+            raise RuntimeError(
+                f"Couldn't download dataset from S3 bucket: {e}"
+            ) from e
 
         all_examples: List[Dict[str, Any]] = []
         for line in r.text.strip().split("\n"):

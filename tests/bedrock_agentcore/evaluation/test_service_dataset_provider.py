@@ -11,7 +11,6 @@ from bedrock_agentcore.evaluation.runner.dataset_types import (
     SimulatedScenario,
 )
 
-PATCH_CLIENT = "bedrock_agentcore.evaluation.dataset_client.DatasetClient"
 PATCH_REQUESTS = "bedrock_agentcore.evaluation.runner.dataset_providers.requests"
 
 
@@ -22,20 +21,30 @@ def _jsonl(*examples):
     return "\n".join(json.dumps(e) for e in examples)
 
 
+def _mock_client(get_response, jsonl_content):
+    """Create a mock DatasetClient and mock requests."""
+    mock_client = MagicMock()
+    mock_client.get_dataset.return_value = get_response
+    return mock_client, jsonl_content
+
+
 class TestServiceDatasetProvider:
-    def _make_provider(self, jsonl_content, dataset_id="ds-123", version_id=None, get_response=None):
+    def _run_provider(self, jsonl_content, dataset_id="ds-123", version_id=None, schema_type="AGENTCORE_EVALUATION_PREDEFINED_V1"):
         mock_client = MagicMock()
-        if get_response is None:
-            get_response = {"datasetId": dataset_id, "status": "ACTIVE", "downloadUrl": "https://example.com/dataset.jsonl"}
-        mock_client.get_dataset.return_value = get_response
+        mock_client.get_dataset.return_value = {
+            "datasetId": dataset_id,
+            "status": "ACTIVE",
+            "schemaType": schema_type,
+            "downloadUrl": "https://example.com/dataset.jsonl",
+        }
 
         mock_response = MagicMock()
         mock_response.text = jsonl_content
         mock_response.raise_for_status = MagicMock()
 
-        with patch(PATCH_CLIENT, return_value=mock_client), patch(PATCH_REQUESTS) as mock_requests:
+        with patch(PATCH_REQUESTS) as mock_requests:
             mock_requests.get.return_value = mock_response
-            provider = ServiceDatasetProvider(dataset_id=dataset_id, version_id=version_id, region_name="us-west-2")
+            provider = ServiceDatasetProvider(dataset_id=dataset_id, version_id=version_id, client=mock_client)
             return provider.get_dataset(), mock_client, mock_requests
 
     def test_get_dataset_predefined(self):
@@ -54,7 +63,7 @@ class TestServiceDatasetProvider:
             },
         )
 
-        dataset, mock_client, mock_requests = self._make_provider(content)
+        dataset, mock_client, mock_requests = self._run_provider(content)
 
         assert isinstance(dataset, Dataset)
         assert len(dataset.scenarios) == 2
@@ -88,7 +97,7 @@ class TestServiceDatasetProvider:
             },
         )
 
-        dataset, _, _ = self._make_provider(content, dataset_id="ds-456")
+        dataset, _, _ = self._run_provider(content, dataset_id="ds-456", schema_type="AGENTCORE_EVALUATION_SIMULATED_V1")
 
         assert isinstance(dataset, Dataset)
         assert len(dataset.scenarios) == 1
@@ -102,7 +111,7 @@ class TestServiceDatasetProvider:
     def test_downloads_from_presigned_url(self):
         content = _jsonl({"scenario_id": "s1", "turns": [{"input": "hi"}]})
 
-        _, mock_client, mock_requests = self._make_provider(content)
+        _, mock_client, mock_requests = self._run_provider(content)
 
         mock_client.get_dataset.assert_called_once_with(datasetId="ds-123")
         mock_requests.get.assert_called_once_with("https://example.com/dataset.jsonl")
@@ -110,19 +119,71 @@ class TestServiceDatasetProvider:
     def test_get_dataset_with_version_id(self):
         content = _jsonl({"scenario_id": "s1", "turns": [{"input": "hi"}]})
 
-        _, mock_client, _ = self._make_provider(content, dataset_id="ds-123", version_id="1")
+        _, mock_client, _ = self._run_provider(content, dataset_id="ds-123", version_id="1")
 
         mock_client.get_dataset.assert_called_once_with(datasetId="ds-123", datasetVersion="1")
 
     def test_get_dataset_no_download_url_raises(self):
         mock_client = MagicMock()
-        mock_client.get_dataset.return_value = {"datasetId": "ds-123", "status": "CREATING"}
+        mock_client.get_dataset.return_value = {
+            "datasetId": "ds-123",
+            "status": "CREATING",
+            "schemaType": "AGENTCORE_EVALUATION_PREDEFINED_V1",
+        }
 
-        with patch(PATCH_CLIENT, return_value=mock_client), patch(PATCH_REQUESTS):
-            provider = ServiceDatasetProvider(dataset_id="ds-123")
-            with pytest.raises(ValueError, match="no downloadUrl"):
-                provider.get_dataset()
+        provider = ServiceDatasetProvider(dataset_id="ds-123", client=mock_client)
+        with pytest.raises(ValueError, match="no downloadUrl"):
+            provider.get_dataset()
 
     def test_get_dataset_empty_raises(self):
-        with pytest.raises(ValueError, match="scenarios must not be empty"):
-            self._make_provider("", dataset_id="ds-empty")
+        mock_client = MagicMock()
+        mock_client.get_dataset.return_value = {
+            "datasetId": "ds-empty",
+            "status": "ACTIVE",
+            "schemaType": "AGENTCORE_EVALUATION_PREDEFINED_V1",
+            "downloadUrl": "https://example.com/dataset.jsonl",
+        }
+
+        mock_response = MagicMock()
+        mock_response.text = ""
+        mock_response.raise_for_status = MagicMock()
+
+        with patch(PATCH_REQUESTS) as mock_requests:
+            mock_requests.get.return_value = mock_response
+            provider = ServiceDatasetProvider(dataset_id="ds-empty", client=mock_client)
+            with pytest.raises(ValueError, match="scenarios must not be empty"):
+                provider.get_dataset()
+
+    def test_unsupported_schema_type_raises(self):
+        mock_client = MagicMock()
+        mock_client.get_dataset.return_value = {
+            "datasetId": "ds-123",
+            "status": "ACTIVE",
+            "schemaType": "RAGAS_V1",
+            "downloadUrl": "https://example.com/dataset.jsonl",
+        }
+
+        provider = ServiceDatasetProvider(dataset_id="ds-123", client=mock_client)
+        with pytest.raises(ValueError, match="not supported by the evaluation runners"):
+            provider.get_dataset()
+
+    def test_download_failure_raises_runtime_error(self):
+        import requests as real_requests
+
+        mock_client = MagicMock()
+        mock_client.get_dataset.return_value = {
+            "datasetId": "ds-123",
+            "status": "ACTIVE",
+            "schemaType": "AGENTCORE_EVALUATION_PREDEFINED_V1",
+            "downloadUrl": "https://example.com/dataset.jsonl",
+        }
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = real_requests.HTTPError("403 Forbidden")
+
+        with patch(PATCH_REQUESTS) as mock_requests:
+            mock_requests.get.return_value = mock_response
+            mock_requests.RequestException = real_requests.RequestException
+            provider = ServiceDatasetProvider(dataset_id="ds-123", client=mock_client)
+            with pytest.raises(RuntimeError, match="Couldn't download dataset"):
+                provider.get_dataset()

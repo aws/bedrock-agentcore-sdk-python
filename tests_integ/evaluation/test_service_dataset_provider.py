@@ -105,7 +105,7 @@ class TestServiceDatasetProvider:
         """ServiceDatasetProvider returns a valid SDK Dataset with PredefinedScenarios."""
         provider = ServiceDatasetProvider(
             dataset_id=self.predefined_dataset_id,
-            region_name=self.region,
+            client=self.client,
         )
         dataset = provider.get_dataset()
 
@@ -119,7 +119,7 @@ class TestServiceDatasetProvider:
         """Scenario fields (turns, assertions, trajectory) are preserved."""
         provider = ServiceDatasetProvider(
             dataset_id=self.predefined_dataset_id,
-            region_name=self.region,
+            client=self.client,
         )
         dataset = provider.get_dataset()
 
@@ -139,7 +139,7 @@ class TestServiceDatasetProvider:
         provider = ServiceDatasetProvider(
             dataset_id=self.predefined_dataset_id,
             version_id=version_id,
-            region_name=self.region,
+            client=self.client,
         )
         dataset = provider.get_dataset()
 
@@ -153,7 +153,7 @@ class TestServiceDatasetProvider:
         """ServiceDatasetProvider returns SimulatedScenarios for SYNTHETIC schema."""
         provider = ServiceDatasetProvider(
             dataset_id=self.synthetic_dataset_id,
-            region_name=self.region,
+            client=self.client,
         )
         dataset = provider.get_dataset()
 

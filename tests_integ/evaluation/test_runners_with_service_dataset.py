@@ -35,7 +35,7 @@ REGION = RUNTIME_ARN.split(":")[3] if RUNTIME_ARN else os.environ.get("BEDROCK_T
 
 
 def _make_invoker(runtime_arn: str, region: str):
-    """Create an invoker that sends {prompt: ...} to the agent."""
+    """Create an invoker compatible with the hosted echo agent."""
     dp = boto3.client("bedrock-agentcore", region_name=region)
 
     def invoker(input: AgentInvokerInput) -> AgentInvokerOutput:
@@ -61,7 +61,7 @@ class TestOnDemandRunnerWithServiceDataset:
     def setup_class(cls):
         cls.region = REGION
         cls.runtime_arn = RUNTIME_ARN
-        cls.runtime_id = cls.runtime_arn.split("/")[-1]
+        cls.runtime_id = cls.runtime_arn.split("/")[-1]  # type: ignore[union-attr]
 
         cls.log_group = os.environ.get(
             "INTEG_AGENT_LOG_GROUP",
@@ -107,7 +107,7 @@ class TestOnDemandRunnerWithServiceDataset:
         """OnDemandRunner invokes agent for each scenario from ServiceDatasetProvider."""
         provider = ServiceDatasetProvider(
             dataset_id=self.dataset_id,
-            region_name=self.region,
+            client=self.client,
         )
         dataset = provider.get_dataset()
         assert len(dataset.scenarios) == 2
