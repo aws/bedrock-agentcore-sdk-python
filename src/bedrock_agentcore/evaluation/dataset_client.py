@@ -84,6 +84,9 @@ class DatasetClient:
 
     def __getattr__(self, name: str):
         """Dynamically forward allowlisted method calls to the boto3 client."""
+        if "_cp_client" not in self.__dict__:
+            raise AttributeError(name)
+
         if name in self._ALLOWED_CP_METHODS and hasattr(self._cp_client, name):
             method = getattr(self._cp_client, name)
             logger.debug("Forwarding method '%s' to _cp_client", name)

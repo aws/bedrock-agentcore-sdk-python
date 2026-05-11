@@ -18,10 +18,9 @@ from .dataset_types import (
 )
 
 SUPPORTED_SCHEMA_TYPES = {
-    PredefinedScenario.model_fields["schema_type"].default,
-    SimulatedScenario.model_fields["schema_type"].default,
+    "AGENTCORE_EVALUATION_PREDEFINED_V1",
+    "AGENTCORE_EVALUATION_SIMULATED_V1",
 }
-
 
 def _parse_scenario(raw: Dict[str, Any]) -> PredefinedScenario | SimulatedScenario:
     """Parse a raw dict into a PredefinedScenario or SimulatedScenario."""
@@ -76,7 +75,12 @@ class FileDatasetProvider(DatasetProvider):
 class ServiceDatasetProvider(DatasetProvider):
     """A dataset provider that loads a Dataset from the Dataset Management service."""
 
-    def __init__(self, dataset_id: str, version_id: Optional[str] = None, client: Optional[DatasetClient] = None):
+    def __init__(
+        self,
+        dataset_id: str,
+        version_id: Optional[str] = None,
+        client: Optional[DatasetClient] = None,
+    ):
         """Initialize with a dataset ID and optional version.
 
         Args:
@@ -107,8 +111,8 @@ class ServiceDatasetProvider(DatasetProvider):
         schema_type = response.get("schemaType")
         if schema_type and schema_type not in SUPPORTED_SCHEMA_TYPES:
             raise ValueError(
-                f"Dataset schema type '{schema_type}' is not supported by the evaluation runners. "
-                f"Supported types: {sorted(SUPPORTED_SCHEMA_TYPES)}"
+                f"Dataset schema type '{schema_type}' is not supported by the "
+                f"evaluation runners. Supported types: {sorted(SUPPORTED_SCHEMA_TYPES)}"
             )
 
         download_url = response.get("downloadUrl")
@@ -116,13 +120,13 @@ class ServiceDatasetProvider(DatasetProvider):
             raise ValueError(f"Dataset {self._dataset_id} has no downloadUrl. Status: {response.get('status')}")
 
         try:
-            r = requests.get(download_url)
+            r = requests.get(download_url, timeout=60)
             r.raise_for_status()
         except requests.RequestException as e:
             raise RuntimeError(f"Couldn't download dataset from S3 bucket: {e}") from e
 
         all_examples: List[Dict[str, Any]] = []
-        for line in r.text.strip().split("\n"):
+        for line in r.content.decode("utf-8").strip().split("\n"):
             if line:
                 all_examples.append(json.loads(line))
 

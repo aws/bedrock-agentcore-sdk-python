@@ -21,13 +21,6 @@ def _jsonl(*examples):
     return "\n".join(json.dumps(e) for e in examples)
 
 
-def _mock_client(get_response, jsonl_content):
-    """Create a mock DatasetClient and mock requests."""
-    mock_client = MagicMock()
-    mock_client.get_dataset.return_value = get_response
-    return mock_client, jsonl_content
-
-
 class TestServiceDatasetProvider:
     def _run_provider(
         self, jsonl_content, dataset_id="ds-123", version_id=None, schema_type="AGENTCORE_EVALUATION_PREDEFINED_V1"
@@ -41,7 +34,7 @@ class TestServiceDatasetProvider:
         }
 
         mock_response = MagicMock()
-        mock_response.text = jsonl_content
+        mock_response.content = jsonl_content.encode("utf-8")
         mock_response.raise_for_status = MagicMock()
 
         with patch(PATCH_REQUESTS) as mock_requests:
@@ -118,7 +111,7 @@ class TestServiceDatasetProvider:
         _, mock_client, mock_requests = self._run_provider(content)
 
         mock_client.get_dataset.assert_called_once_with(datasetId="ds-123")
-        mock_requests.get.assert_called_once_with("https://example.com/dataset.jsonl")
+        mock_requests.get.assert_called_once_with("https://example.com/dataset.jsonl", timeout=60)
 
     def test_get_dataset_with_version_id(self):
         content = _jsonl({"scenario_id": "s1", "turns": [{"input": "hi"}]})
