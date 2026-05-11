@@ -25,7 +25,7 @@
   <p>
   <a href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html">Documentation</a>
     ◆ <a href="https://github.com/awslabs/amazon-bedrock-agentcore-samples">Samples</a>
-    ◆ <a href="https://discord.gg/bedrockagentcore-preview">Discord</a>
+    ◆ <a href="https://discord.gg/strands">Discord</a>
     ◆ <a href="https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-agentcore-control.html">Boto3 Python SDK</a>
     ◆ <a href="https://github.com/aws/bedrock-agentcore-sdk-python">Runtime Python SDK</a>
 
