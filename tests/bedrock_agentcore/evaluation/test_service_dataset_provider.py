@@ -11,35 +11,50 @@ from bedrock_agentcore.evaluation.runner.dataset_types import (
     SimulatedScenario,
 )
 
-PATCH_TARGET = "bedrock_agentcore.evaluation.dataset_client.DatasetClient"
+PATCH_CLIENT = "bedrock_agentcore.evaluation.dataset_client.DatasetClient"
+PATCH_REQUESTS = "bedrock_agentcore.evaluation.runner.dataset_providers.requests"
+
+
+def _jsonl(*examples):
+    """Build a JSONL string from example dicts."""
+    import json
+
+    return "\n".join(json.dumps(e) for e in examples)
 
 
 class TestServiceDatasetProvider:
-    def _make_provider(self, mock_client_instance, dataset_id="ds-123", version_id=None, region_name="us-west-2"):
-        with patch(PATCH_TARGET, return_value=mock_client_instance):
-            provider = ServiceDatasetProvider(dataset_id=dataset_id, version_id=version_id, region_name=region_name)
-            return provider.get_dataset()
+    def _make_provider(self, jsonl_content, dataset_id="ds-123", version_id=None, get_response=None):
+        mock_client = MagicMock()
+        if get_response is None:
+            get_response = {"datasetId": dataset_id, "status": "ACTIVE", "downloadUrl": "https://example.com/dataset.jsonl"}
+        mock_client.get_dataset.return_value = get_response
+
+        mock_response = MagicMock()
+        mock_response.text = jsonl_content
+        mock_response.raise_for_status = MagicMock()
+
+        with patch(PATCH_CLIENT, return_value=mock_client), patch(PATCH_REQUESTS) as mock_requests:
+            mock_requests.get.return_value = mock_response
+            provider = ServiceDatasetProvider(dataset_id=dataset_id, version_id=version_id, region_name="us-west-2")
+            return provider.get_dataset(), mock_client, mock_requests
 
     def test_get_dataset_predefined(self):
-        mock_client = MagicMock()
-        mock_client.list_dataset_examples.return_value = {
-            "examples": [
-                {
-                    "scenario_id": "s1",
-                    "turns": [
-                        {"input": "Hello", "expected_response": "Hi!"},
-                    ],
-                    "assertions": ["Be polite"],
-                    "expected_trajectory": ["greet"],
-                },
-                {
-                    "scenario_id": "s2",
-                    "turns": [{"input": "What is 2+2?"}],
-                },
-            ],
-        }
+        content = _jsonl(
+            {
+                "exampleId": "e1",
+                "scenario_id": "s1",
+                "turns": [{"input": "Hello", "expected_response": "Hi!"}],
+                "assertions": ["Be polite"],
+                "expected_trajectory": ["greet"],
+            },
+            {
+                "exampleId": "e2",
+                "scenario_id": "s2",
+                "turns": [{"input": "What is 2+2?"}],
+            },
+        )
 
-        dataset = self._make_provider(mock_client)
+        dataset, mock_client, mock_requests = self._make_provider(content)
 
         assert isinstance(dataset, Dataset)
         assert len(dataset.scenarios) == 2
@@ -47,7 +62,6 @@ class TestServiceDatasetProvider:
         s1 = dataset.scenarios[0]
         assert isinstance(s1, PredefinedScenario)
         assert s1.scenario_id == "s1"
-        assert len(s1.turns) == 1
         assert s1.turns[0].input == "Hello"
         assert s1.turns[0].expected_response == "Hi!"
         assert s1.assertions == ["Be polite"]
@@ -58,25 +72,23 @@ class TestServiceDatasetProvider:
         assert s2.scenario_id == "s2"
 
     def test_get_dataset_simulated(self):
-        mock_client = MagicMock()
-        mock_client.list_dataset_examples.return_value = {
-            "examples": [
-                {
-                    "scenario_id": "sim-1",
-                    "scenario_description": "Frustrated customer",
-                    "actor_profile": {
-                        "traits": {"personality": "impatient"},
-                        "context": "Waiting 3 days",
-                        "goal": "Get a refund",
-                    },
-                    "input": "I want my money back!",
-                    "max_turns": 5,
-                    "assertions": ["Agent should empathize"],
+        content = _jsonl(
+            {
+                "exampleId": "e1",
+                "scenario_id": "sim-1",
+                "scenario_description": "Frustrated customer",
+                "actor_profile": {
+                    "traits": {"personality": "impatient"},
+                    "context": "Waiting 3 days",
+                    "goal": "Get a refund",
                 },
-            ],
-        }
+                "input": "I want my money back!",
+                "max_turns": 5,
+                "assertions": ["Agent should empathize"],
+            },
+        )
 
-        dataset = self._make_provider(mock_client, dataset_id="ds-456")
+        dataset, _, _ = self._make_provider(content, dataset_id="ds-456")
 
         assert isinstance(dataset, Dataset)
         assert len(dataset.scenarios) == 1
@@ -87,44 +99,30 @@ class TestServiceDatasetProvider:
         assert scenario.max_turns == 5
         assert scenario.assertions == ["Agent should empathize"]
 
-    def test_get_dataset_with_pagination(self):
-        mock_client = MagicMock()
-        mock_client.list_dataset_examples.side_effect = [
-            {
-                "examples": [{"scenario_id": "s1", "turns": [{"input": "a"}]}],
-                "nextToken": "token-1",
-            },
-            {
-                "examples": [{"scenario_id": "s2", "turns": [{"input": "b"}]}],
-            },
-        ]
+    def test_downloads_from_presigned_url(self):
+        content = _jsonl({"scenario_id": "s1", "turns": [{"input": "hi"}]})
 
-        dataset = self._make_provider(mock_client, dataset_id="ds-789")
+        _, mock_client, mock_requests = self._make_provider(content)
 
-        assert len(dataset.scenarios) == 2
-        assert mock_client.list_dataset_examples.call_count == 2
+        mock_client.get_dataset.assert_called_once_with(datasetId="ds-123")
+        mock_requests.get.assert_called_once_with("https://example.com/dataset.jsonl")
 
     def test_get_dataset_with_version_id(self):
+        content = _jsonl({"scenario_id": "s1", "turns": [{"input": "hi"}]})
+
+        _, mock_client, _ = self._make_provider(content, dataset_id="ds-123", version_id="1")
+
+        mock_client.get_dataset.assert_called_once_with(datasetId="ds-123", datasetVersion="1")
+
+    def test_get_dataset_no_download_url_raises(self):
         mock_client = MagicMock()
-        mock_client.list_dataset_examples.return_value = {
-            "examples": [{"scenario_id": "s1", "turns": [{"input": "hi"}]}],
-        }
+        mock_client.get_dataset.return_value = {"datasetId": "ds-123", "status": "CREATING"}
 
-        with patch(PATCH_TARGET, return_value=mock_client):
-            provider = ServiceDatasetProvider(
-                dataset_id="ds-123",
-                version_id="v-1",
-                region_name="us-west-2",
-            )
-            provider.get_dataset()
-
-        call_kwargs = mock_client.list_dataset_examples.call_args[1]
-        assert call_kwargs["datasetId"] == "ds-123"
-        assert call_kwargs["datasetVersion"] == "v-1"
+        with patch(PATCH_CLIENT, return_value=mock_client), patch(PATCH_REQUESTS):
+            provider = ServiceDatasetProvider(dataset_id="ds-123")
+            with pytest.raises(ValueError, match="no downloadUrl"):
+                provider.get_dataset()
 
     def test_get_dataset_empty_raises(self):
-        mock_client = MagicMock()
-        mock_client.list_dataset_examples.return_value = {"examples": []}
-
         with pytest.raises(ValueError, match="scenarios must not be empty"):
-            self._make_provider(mock_client, dataset_id="ds-empty")
+            self._make_provider("", dataset_id="ds-empty")

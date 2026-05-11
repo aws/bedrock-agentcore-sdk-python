@@ -4,6 +4,8 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+import requests
+
 from .dataset_types import ActorProfile, Dataset, PredefinedScenario, Scenario, SimulatedScenario, Turn
 
 
@@ -80,24 +82,31 @@ class ServiceDatasetProvider(DatasetProvider):
         self._region_name = region_name
 
     def get_dataset(self) -> Dataset:
-        """Load and return the dataset from the Dataset Management service."""
+        """Load and return the dataset from the Dataset Management service.
+
+        Fetches the dataset via the presigned download URL returned by GetDataset.
+        The URL points to a JSONL file where each line is one example.
+        """
         from bedrock_agentcore.evaluation.dataset_client import DatasetClient
 
         client = DatasetClient(region_name=self._region_name)
 
-        # Fetch all examples via pagination
-        all_examples: List[Dict[str, Any]] = []
         kwargs: Dict[str, Any] = {"datasetId": self._dataset_id}
         if self._version_id:
             kwargs["datasetVersion"] = self._version_id
 
-        while True:
-            response = client.list_dataset_examples(**kwargs)
-            all_examples.extend(response.get("examples", []))
-            next_token = response.get("nextToken")
-            if not next_token:
-                break
-            kwargs["nextToken"] = next_token
+        response = client.get_dataset(**kwargs)
+        download_url = response.get("downloadUrl")
+        if not download_url:
+            raise ValueError(f"Dataset {self._dataset_id} has no downloadUrl. Status: {response.get('status')}")
+
+        r = requests.get(download_url)
+        r.raise_for_status()
+
+        all_examples: List[Dict[str, Any]] = []
+        for line in r.text.strip().split("\n"):
+            if line:
+                all_examples.append(json.loads(line))
 
         scenarios: List[Scenario] = [FileDatasetProvider._parse_scenario(example) for example in all_examples]
         return Dataset(scenarios=scenarios)
