@@ -5,7 +5,7 @@ These tests verify the full pipeline:
 
 Required env vars:
     INTEG_AGENT_RUNTIME_ARN: ARN of a deployed, invokable agent runtime
-    BEDROCK_TEST_REGION: AWS region (must match the agent's region)
+        (region is extracted from the ARN automatically)
 
 Optional env vars:
     INTEG_AGENT_LOG_GROUP: CloudWatch log group for the agent's spans
@@ -13,7 +13,6 @@ Optional env vars:
 
 Run with:
     export INTEG_AGENT_RUNTIME_ARN=arn:aws:bedrock-agentcore:us-east-1:619071331382:runtime/hosted_agent_j135m-HDtuIw2zSo
-    export BEDROCK_TEST_REGION=us-east-1
     uv run pytest tests_integ/evaluation/test_runners_with_service_dataset.py -xvs --log-cli-level=INFO
 """
 
@@ -32,7 +31,7 @@ from bedrock_agentcore.evaluation.runner.on_demand.config import EvaluationRunCo
 from bedrock_agentcore.evaluation.runner.on_demand.on_demand_runner import OnDemandEvaluationDatasetRunner
 
 RUNTIME_ARN = os.environ.get("INTEG_AGENT_RUNTIME_ARN")
-REGION = os.environ.get("BEDROCK_TEST_REGION", "us-west-2")
+REGION = RUNTIME_ARN.split(":")[3] if RUNTIME_ARN else os.environ.get("BEDROCK_TEST_REGION", "us-west-2")
 
 
 def _make_invoker(runtime_arn: str, region: str):
