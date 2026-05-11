@@ -72,7 +72,11 @@ def _get_supported_schema_types() -> set:
     """Collect supported schema types from all ScenarioExecutor subclasses."""
     from .scenario_executor import ScenarioExecutor
 
-    return {cls.model_fields["schema_type"].default for cls in ScenarioExecutor.__subclasses__() if cls.model_fields["schema_type"].default}
+    return {
+        cls.model_fields["schema_type"].default
+        for cls in ScenarioExecutor.__subclasses__()
+        if cls.model_fields["schema_type"].default
+    }
 
 
 class ServiceDatasetProvider(DatasetProvider):
@@ -122,9 +126,7 @@ class ServiceDatasetProvider(DatasetProvider):
             r = requests.get(download_url)
             r.raise_for_status()
         except requests.RequestException as e:
-            raise RuntimeError(
-                f"Couldn't download dataset from S3 bucket: {e}"
-            ) from e
+            raise RuntimeError(f"Couldn't download dataset from S3 bucket: {e}") from e
 
         all_examples: List[Dict[str, Any]] = []
         for line in r.text.strip().split("\n"):
