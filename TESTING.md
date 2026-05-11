@@ -87,3 +87,7 @@ Stream delivery tests fail in CI unless `MEMORY_KINESIS_ARN` and `MEMORY_ROLE_AR
 - Each test class should correspond to the object under test (e.g. `TestMemoryClient`).
 - Expensive resources (e.g. memories) should be created the minimum number of times, ideally once in `setup_class`.
 - All resources created during tests must be cleaned up in `teardown_class`.
+
+## Anti-Patterns
+
+**Excessive mocking.** Over-mocking weakens correctness guarantees and couples tests to implementation details. Functionality that requires mocking should have integration or e2e test coverage.
