@@ -12,8 +12,8 @@ Optional env vars:
         (defaults to /aws/bedrock-agentcore/runtimes/{runtime_id}-DEFAULT)
 
 Run with:
-    export INTEG_AGENT_RUNTIME_ARN=arn:aws:bedrock-agentcore:us-east-1:619071331382:runtime/hosted_agent_j135m-HDtuIw2zSo
-    uv run pytest tests_integ/evaluation/test_runners_with_service_dataset.py -xvs --log-cli-level=INFO
+    export INTEG_AGENT_RUNTIME_ARN=<agent-runtime-arn>
+    uv run pytest tests_integ/evaluation/test_runners_with_service_dataset.py -xvs
 """
 
 import json
@@ -43,7 +43,9 @@ def _make_invoker(runtime_arn: str, region: str):
         resp = dp.invoke_agent_runtime(
             agentRuntimeArn=runtime_arn,
             payload=json.dumps({"prompt": prompt}).encode(),
-            runtimeSessionId=input.session_id if input.session_id and len(input.session_id) >= 33 else str(uuid.uuid4()),
+            runtimeSessionId=(
+                input.session_id if input.session_id and len(input.session_id) >= 33 else str(uuid.uuid4())
+            ),
         )
         body = resp["response"].read().decode()
         result = json.loads(body) if body else {}

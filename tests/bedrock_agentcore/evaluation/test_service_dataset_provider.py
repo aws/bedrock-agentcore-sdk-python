@@ -29,7 +29,9 @@ def _mock_client(get_response, jsonl_content):
 
 
 class TestServiceDatasetProvider:
-    def _run_provider(self, jsonl_content, dataset_id="ds-123", version_id=None, schema_type="AGENTCORE_EVALUATION_PREDEFINED_V1"):
+    def _run_provider(
+        self, jsonl_content, dataset_id="ds-123", version_id=None, schema_type="AGENTCORE_EVALUATION_PREDEFINED_V1"
+    ):
         mock_client = MagicMock()
         mock_client.get_dataset.return_value = {
             "datasetId": dataset_id,
@@ -97,7 +99,9 @@ class TestServiceDatasetProvider:
             },
         )
 
-        dataset, _, _ = self._run_provider(content, dataset_id="ds-456", schema_type="AGENTCORE_EVALUATION_SIMULATED_V1")
+        dataset, _, _ = self._run_provider(
+            content, dataset_id="ds-456", schema_type="AGENTCORE_EVALUATION_SIMULATED_V1"
+        )
 
         assert isinstance(dataset, Dataset)
         assert len(dataset.scenarios) == 1
