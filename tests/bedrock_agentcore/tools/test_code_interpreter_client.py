@@ -1,4 +1,3 @@
-import base64
 import datetime
 from unittest.mock import ANY, MagicMock, patch
 
@@ -657,7 +656,6 @@ class TestCodeInterpreterClient:
         client.data_plane_client.invoke_code_interpreter.return_value = mock_response
 
         binary_content = b"\x89PNG\r\n\x1a\n"  # PNG header bytes
-        expected_b64 = base64.b64encode(binary_content).decode("utf-8")
 
         # Act
         result = client.upload_file(path="image.png", content=binary_content)
@@ -667,7 +665,7 @@ class TestCodeInterpreterClient:
             codeInterpreterIdentifier="test.identifier",
             sessionId="test-session-id",
             name="writeFiles",
-            arguments={"content": [{"path": "image.png", "blob": expected_b64}]},
+            arguments={"content": [{"path": "image.png", "blob": binary_content}]},
         )
         assert result == mock_response
 
@@ -758,7 +756,6 @@ class TestCodeInterpreterClient:
         client.data_plane_client.invoke_code_interpreter.return_value = mock_response
 
         binary_content = b"\x00\x01\x02\x03"
-        expected_b64 = base64.b64encode(binary_content).decode("utf-8")
 
         files = [
             {"path": "text.txt", "content": "hello world"},
@@ -776,7 +773,7 @@ class TestCodeInterpreterClient:
             arguments={
                 "content": [
                     {"path": "text.txt", "text": "hello world"},
-                    {"path": "binary.bin", "blob": expected_b64},
+                    {"path": "binary.bin", "blob": binary_content},
                 ]
             },
         )
@@ -963,14 +960,13 @@ class TestCodeInterpreterClient:
         client.session_id = "test-session-id"
 
         binary_content = b"\x89PNG\r\n\x1a\n"  # PNG header bytes
-        encoded_content = base64.b64encode(binary_content).decode("utf-8")
 
         mock_response = {
             "stream": [
                 {
                     "result": {
                         "content": [
-                            {"type": "resource", "resource": {"uri": "file://image.png", "blob": encoded_content}}
+                            {"type": "resource", "resource": {"uri": "file://image.png", "blob": binary_content}}
                         ]
                     }
                 }
@@ -997,14 +993,16 @@ class TestCodeInterpreterClient:
         client.session_id = "test-session-id"
 
         text_content = "hello world"
-        encoded_content = base64.b64encode(text_content.encode("utf-8")).decode("utf-8")
 
         mock_response = {
             "stream": [
                 {
                     "result": {
                         "content": [
-                            {"type": "resource", "resource": {"uri": "file://data.bin", "blob": encoded_content}}
+                            {
+                                "type": "resource",
+                                "resource": {"uri": "file://data.bin", "blob": text_content.encode("utf-8")},
+                            }
                         ]
                     }
                 }
@@ -1102,7 +1100,6 @@ class TestCodeInterpreterClient:
         client.session_id = "test-session-id"
 
         binary_content = b"\x89PNG\r\n\x1a\n"  # PNG header bytes
-        encoded_binary = base64.b64encode(binary_content).decode("utf-8")
 
         mock_response = {
             "stream": [
@@ -1120,7 +1117,7 @@ class TestCodeInterpreterClient:
                                 "type": "resource",
                                 "resource": {
                                     "uri": "file:///opt/amazon/genesis1p-tools/var/chart.png",
-                                    "blob": encoded_binary,
+                                    "blob": binary_content,
                                 },
                             },
                         ]
@@ -1150,9 +1147,7 @@ class TestCodeInterpreterClient:
         client.session_id = "test-session-id"
 
         text_content = "some utf-8 blob content"
-        encoded_text = base64.b64encode(text_content.encode("utf-8")).decode("utf-8")
         binary_content = b"\x89PNG\r\n\x1a\n"
-        encoded_binary = base64.b64encode(binary_content).decode("utf-8")
 
         mock_response = {
             "stream": [
@@ -1163,14 +1158,14 @@ class TestCodeInterpreterClient:
                                 "type": "resource",
                                 "resource": {
                                     "uri": "file:///opt/amazon/genesis1p-tools/var/data.bin",
-                                    "blob": encoded_text,
+                                    "blob": text_content.encode("utf-8"),
                                 },
                             },
                             {
                                 "type": "resource",
                                 "resource": {
                                     "uri": "file:///opt/amazon/genesis1p-tools/var/chart.png",
-                                    "blob": encoded_binary,
+                                    "blob": binary_content,
                                 },
                             },
                         ]
