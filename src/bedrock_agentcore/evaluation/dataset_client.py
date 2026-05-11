@@ -146,6 +146,7 @@ class DatasetClient:
         dataset_id = response["datasetId"]
         wait_until_deleted(
             lambda: self._cp_client.get_dataset(datasetId=dataset_id),
+            failed={"DELETE_FAILED"},
             wait_config=wait_config,
         )
 

@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from bedrock_agentcore.evaluation.dataset_client import DatasetClient
+
 from .dataset_types import ActorProfile, Dataset, PredefinedScenario, Scenario, SimulatedScenario, Turn
 
 
@@ -66,16 +68,17 @@ class FileDatasetProvider(DatasetProvider):
         )
 
 
-SUPPORTED_SCHEMA_TYPES = {
-    "AGENTCORE_EVALUATION_PREDEFINED_V1",
-    "AGENTCORE_EVALUATION_SIMULATED_V1",
-}
+def _get_supported_schema_types() -> set:
+    """Collect supported schema types from all ScenarioExecutor subclasses."""
+    from .scenario_executor import ScenarioExecutor
+
+    return {cls.model_fields["schema_type"].default for cls in ScenarioExecutor.__subclasses__() if cls.model_fields["schema_type"].default}
 
 
 class ServiceDatasetProvider(DatasetProvider):
     """A dataset provider that loads a Dataset from the Dataset Management service."""
 
-    def __init__(self, dataset_id: str, version_id: Optional[str] = None, client=None):
+    def __init__(self, dataset_id: str, version_id: Optional[str] = None, client: Optional[DatasetClient] = None):
         """Initialize with a dataset ID and optional version.
 
         Args:
@@ -85,7 +88,7 @@ class ServiceDatasetProvider(DatasetProvider):
         """
         self._dataset_id = dataset_id
         self._version_id = version_id
-        self._client = client
+        self._client = client if client is not None else DatasetClient()
 
     def get_dataset(self) -> Dataset:
         """Load and return the dataset from the Dataset Management service.
@@ -97,11 +100,6 @@ class ServiceDatasetProvider(DatasetProvider):
             ValueError: If the dataset has no downloadUrl or has an unsupported schemaType.
             RuntimeError: If the dataset content cannot be downloaded.
         """
-        if self._client is None:
-            from bedrock_agentcore.evaluation.dataset_client import DatasetClient
-
-            self._client = DatasetClient()
-
         kwargs: Dict[str, Any] = {"datasetId": self._dataset_id}
         if self._version_id:
             kwargs["datasetVersion"] = self._version_id
@@ -109,10 +107,11 @@ class ServiceDatasetProvider(DatasetProvider):
         response = self._client.get_dataset(**kwargs)
 
         schema_type = response.get("schemaType")
-        if schema_type and schema_type not in SUPPORTED_SCHEMA_TYPES:
+        supported = _get_supported_schema_types()
+        if schema_type and schema_type not in supported:
             raise ValueError(
                 f"Dataset schema type '{schema_type}' is not supported by the evaluation runners. "
-                f"Supported types: {sorted(SUPPORTED_SCHEMA_TYPES)}"
+                f"Supported types: {sorted(supported)}"
             )
 
         download_url = response.get("downloadUrl")
