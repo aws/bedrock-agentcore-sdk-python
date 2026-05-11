@@ -34,7 +34,7 @@ class TestServiceDatasetProvider:
         }
 
         mock_response = MagicMock()
-        mock_response.content = jsonl_content.encode("utf-8")
+        mock_response.iter_lines.return_value = [line.encode("utf-8") for line in jsonl_content.split("\n") if line]
         mock_response.raise_for_status = MagicMock()
 
         with patch(PATCH_REQUESTS) as mock_requests:
@@ -111,7 +111,7 @@ class TestServiceDatasetProvider:
         _, mock_client, mock_requests = self._run_provider(content)
 
         mock_client.get_dataset.assert_called_once_with(datasetId="ds-123")
-        mock_requests.get.assert_called_once_with("https://example.com/dataset.jsonl", timeout=60)
+        mock_requests.get.assert_called_once_with("https://example.com/dataset.jsonl", timeout=60, stream=True)
 
     def test_get_dataset_with_version_id(self):
         content = _jsonl({"scenario_id": "s1", "turns": [{"input": "hi"}]})
@@ -142,7 +142,7 @@ class TestServiceDatasetProvider:
         }
 
         mock_response = MagicMock()
-        mock_response.text = ""
+        mock_response.iter_lines.return_value = []
         mock_response.raise_for_status = MagicMock()
 
         with patch(PATCH_REQUESTS) as mock_requests:

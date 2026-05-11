@@ -22,6 +22,7 @@ SUPPORTED_SCHEMA_TYPES = {
     "AGENTCORE_EVALUATION_SIMULATED_V1",
 }
 
+
 def _parse_scenario(raw: Dict[str, Any]) -> PredefinedScenario | SimulatedScenario:
     """Parse a raw dict into a PredefinedScenario or SimulatedScenario."""
     if "turns" in raw:
@@ -120,15 +121,15 @@ class ServiceDatasetProvider(DatasetProvider):
             raise ValueError(f"Dataset {self._dataset_id} has no downloadUrl. Status: {response.get('status')}")
 
         try:
-            r = requests.get(download_url, timeout=60)
+            r = requests.get(download_url, timeout=60, stream=True)
             r.raise_for_status()
         except requests.RequestException as e:
             raise RuntimeError(f"Couldn't download dataset from S3 bucket: {e}") from e
 
         all_examples: List[Dict[str, Any]] = []
-        for line in r.content.decode("utf-8").strip().split("\n"):
+        for line in r.iter_lines(decode_unicode=False):
             if line:
-                all_examples.append(json.loads(line))
+                all_examples.append(json.loads(line.decode("utf-8")))
 
         scenarios: List[Scenario] = [_parse_scenario(example) for example in all_examples]
         return Dataset(scenarios=scenarios)

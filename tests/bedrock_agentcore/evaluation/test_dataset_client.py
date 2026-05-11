@@ -8,8 +8,23 @@ from bedrock_agentcore._utils.config import WaitConfig
 from bedrock_agentcore.evaluation.dataset_client import DatasetClient
 
 
+@pytest.fixture
+def mock_boto3():
+    with patch("bedrock_agentcore.evaluation.dataset_client.boto3") as m:
+        yield m
+
+
+@pytest.fixture
+def client_and_cp(mock_boto3):
+    """Return a (DatasetClient, mock_cp_client) tuple."""
+    mock_session = MagicMock()
+    mock_boto3.Session.return_value = mock_session
+    mock_cp = mock_session.client.return_value
+    client = DatasetClient()
+    return client, mock_cp
+
+
 class TestDatasetClientInit:
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
     def test_default_region(self, mock_boto3):
         mock_session = MagicMock()
         mock_session.region_name = "us-east-1"
@@ -19,7 +34,6 @@ class TestDatasetClientInit:
         assert client.region_name == "us-east-1"
         mock_session.client.assert_called_once()
 
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
     def test_explicit_region(self, mock_boto3):
         mock_session = MagicMock()
         mock_boto3.Session.return_value = mock_session
@@ -27,7 +41,6 @@ class TestDatasetClientInit:
         client = DatasetClient(region_name="eu-west-1")
         assert client.region_name == "eu-west-1"
 
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
     def test_custom_session(self, mock_boto3):
         custom_session = MagicMock()
         custom_session.region_name = "ap-southeast-1"
@@ -38,49 +51,32 @@ class TestDatasetClientInit:
 
 
 class TestDatasetClientPassthrough:
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
-    def test_allowed_method_forwarded(self, mock_boto3):
-        mock_session = MagicMock()
-        mock_boto3.Session.return_value = mock_session
-        mock_cp = mock_session.client.return_value
+    def test_allowed_method_forwarded(self, client_and_cp):
+        client, mock_cp = client_and_cp
         mock_cp.list_datasets.return_value = {"datasets": []}
 
-        client = DatasetClient()
         client.list_datasets(maxResults=10)
         mock_cp.list_datasets.assert_called_once_with(maxResults=10)
 
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
-    def test_snake_case_converted(self, mock_boto3):
-        mock_session = MagicMock()
-        mock_boto3.Session.return_value = mock_session
-        mock_cp = mock_session.client.return_value
+    def test_snake_case_converted(self, client_and_cp):
+        client, mock_cp = client_and_cp
         mock_cp.list_datasets.return_value = {"datasets": []}
 
-        client = DatasetClient()
         client.list_datasets(max_results=5)
         mock_cp.list_datasets.assert_called_once_with(maxResults=5)
 
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
-    def test_non_allowed_method_raises(self, mock_boto3):
-        mock_session = MagicMock()
-        mock_boto3.Session.return_value = mock_session
-
-        client = DatasetClient()
+    def test_non_allowed_method_raises(self, client_and_cp):
+        client, _ = client_and_cp
         with pytest.raises(AttributeError, match="not_a_real_method"):
             client.not_a_real_method()
 
 
 class TestDatasetClientCreateAndWait:
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
-    def test_create_dataset_and_wait_success(self, mock_boto3):
-        mock_session = MagicMock()
-        mock_boto3.Session.return_value = mock_session
-        mock_cp = mock_session.client.return_value
-
+    def test_create_dataset_and_wait_success(self, client_and_cp):
+        client, mock_cp = client_and_cp
         mock_cp.create_dataset.return_value = {"datasetId": "ds-123"}
         mock_cp.get_dataset.return_value = {"datasetId": "ds-123", "status": "ACTIVE"}
 
-        client = DatasetClient()
         result = client.create_dataset_and_wait(
             wait_config=WaitConfig(max_wait=10, poll_interval=1),
             datasetName="test",
@@ -91,12 +87,8 @@ class TestDatasetClientCreateAndWait:
         mock_cp.create_dataset.assert_called_once()
         mock_cp.get_dataset.assert_called_with(datasetId="ds-123")
 
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
-    def test_create_dataset_and_wait_failure(self, mock_boto3):
-        mock_session = MagicMock()
-        mock_boto3.Session.return_value = mock_session
-        mock_cp = mock_session.client.return_value
-
+    def test_create_dataset_and_wait_failure(self, client_and_cp):
+        client, mock_cp = client_and_cp
         mock_cp.create_dataset.return_value = {"datasetId": "ds-123"}
         mock_cp.get_dataset.return_value = {
             "datasetId": "ds-123",
@@ -104,23 +96,17 @@ class TestDatasetClientCreateAndWait:
             "statusReasons": "Invalid source",
         }
 
-        client = DatasetClient()
         with pytest.raises(RuntimeError, match="CREATE_FAILED"):
             client.create_dataset_and_wait(
                 wait_config=WaitConfig(max_wait=5, poll_interval=1),
                 datasetName="test",
             )
 
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
-    def test_create_dataset_and_wait_timeout(self, mock_boto3):
-        mock_session = MagicMock()
-        mock_boto3.Session.return_value = mock_session
-        mock_cp = mock_session.client.return_value
-
+    def test_create_dataset_and_wait_timeout(self, client_and_cp):
+        client, mock_cp = client_and_cp
         mock_cp.create_dataset.return_value = {"datasetId": "ds-123"}
         mock_cp.get_dataset.return_value = {"datasetId": "ds-123", "status": "CREATING"}
 
-        client = DatasetClient()
         with pytest.raises(TimeoutError):
             client.create_dataset_and_wait(
                 wait_config=WaitConfig(max_wait=1, poll_interval=1),
@@ -129,21 +115,16 @@ class TestDatasetClientCreateAndWait:
 
 
 class TestDatasetClientDeleteAndWait:
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
-    def test_delete_dataset_and_wait_success(self, mock_boto3):
+    def test_delete_dataset_and_wait_success(self, client_and_cp):
         from botocore.exceptions import ClientError
 
-        mock_session = MagicMock()
-        mock_boto3.Session.return_value = mock_session
-        mock_cp = mock_session.client.return_value
-
+        client, mock_cp = client_and_cp
         mock_cp.delete_dataset.return_value = {"datasetId": "ds-123"}
         mock_cp.get_dataset.side_effect = ClientError(
             {"Error": {"Code": "ResourceNotFoundException", "Message": "Not found"}},
             "GetDataset",
         )
 
-        client = DatasetClient()
         client.delete_dataset_and_wait(
             wait_config=WaitConfig(max_wait=10, poll_interval=1),
             datasetId="ds-123",
@@ -153,16 +134,11 @@ class TestDatasetClientDeleteAndWait:
 
 
 class TestDatasetClientVersionAndWait:
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
-    def test_create_version_and_wait_success(self, mock_boto3):
-        mock_session = MagicMock()
-        mock_boto3.Session.return_value = mock_session
-        mock_cp = mock_session.client.return_value
-
+    def test_create_version_and_wait_success(self, client_and_cp):
+        client, mock_cp = client_and_cp
         mock_cp.create_dataset_version.return_value = {"datasetId": "ds-123"}
         mock_cp.get_dataset.return_value = {"datasetId": "ds-123", "status": "ACTIVE"}
 
-        client = DatasetClient()
         result = client.create_dataset_version_and_wait(
             wait_config=WaitConfig(max_wait=10, poll_interval=1),
             datasetId="ds-123",
@@ -172,16 +148,11 @@ class TestDatasetClientVersionAndWait:
 
 
 class TestDatasetClientExamplesAndWait:
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
-    def test_add_examples_and_wait_success(self, mock_boto3):
-        mock_session = MagicMock()
-        mock_boto3.Session.return_value = mock_session
-        mock_cp = mock_session.client.return_value
-
+    def test_add_examples_and_wait_success(self, client_and_cp):
+        client, mock_cp = client_and_cp
         mock_cp.add_dataset_examples.return_value = {"datasetId": "ds-123"}
         mock_cp.get_dataset.return_value = {"datasetId": "ds-123", "status": "ACTIVE"}
 
-        client = DatasetClient()
         result = client.add_examples_and_wait(
             wait_config=WaitConfig(max_wait=10, poll_interval=1),
             datasetId="ds-123",
@@ -190,16 +161,11 @@ class TestDatasetClientExamplesAndWait:
 
         assert result["status"] == "ACTIVE"
 
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
-    def test_update_examples_and_wait_success(self, mock_boto3):
-        mock_session = MagicMock()
-        mock_boto3.Session.return_value = mock_session
-        mock_cp = mock_session.client.return_value
-
+    def test_update_examples_and_wait_success(self, client_and_cp):
+        client, mock_cp = client_and_cp
         mock_cp.update_dataset_examples.return_value = {"datasetId": "ds-123"}
         mock_cp.get_dataset.return_value = {"datasetId": "ds-123", "status": "ACTIVE"}
 
-        client = DatasetClient()
         result = client.update_examples_and_wait(
             wait_config=WaitConfig(max_wait=10, poll_interval=1),
             datasetId="ds-123",
@@ -208,16 +174,11 @@ class TestDatasetClientExamplesAndWait:
 
         assert result["status"] == "ACTIVE"
 
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
-    def test_delete_examples_and_wait_success(self, mock_boto3):
-        mock_session = MagicMock()
-        mock_boto3.Session.return_value = mock_session
-        mock_cp = mock_session.client.return_value
-
+    def test_delete_examples_and_wait_success(self, client_and_cp):
+        client, mock_cp = client_and_cp
         mock_cp.delete_dataset_examples.return_value = {"datasetId": "ds-123"}
         mock_cp.get_dataset.return_value = {"datasetId": "ds-123", "status": "ACTIVE"}
 
-        client = DatasetClient()
         result = client.delete_examples_and_wait(
             wait_config=WaitConfig(max_wait=10, poll_interval=1),
             datasetId="ds-123",
@@ -226,12 +187,8 @@ class TestDatasetClientExamplesAndWait:
 
         assert result["status"] == "ACTIVE"
 
-    @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
-    def test_add_examples_and_wait_failure(self, mock_boto3):
-        mock_session = MagicMock()
-        mock_boto3.Session.return_value = mock_session
-        mock_cp = mock_session.client.return_value
-
+    def test_add_examples_and_wait_failure(self, client_and_cp):
+        client, mock_cp = client_and_cp
         mock_cp.add_dataset_examples.return_value = {"datasetId": "ds-123"}
         mock_cp.get_dataset.return_value = {
             "datasetId": "ds-123",
@@ -239,7 +196,6 @@ class TestDatasetClientExamplesAndWait:
             "statusReasons": "Schema validation failed",
         }
 
-        client = DatasetClient()
         with pytest.raises(RuntimeError, match="UPDATE_FAILED"):
             client.add_examples_and_wait(
                 wait_config=WaitConfig(max_wait=5, poll_interval=1),
