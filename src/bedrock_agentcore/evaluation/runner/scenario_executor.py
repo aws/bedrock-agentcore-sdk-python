@@ -70,7 +70,6 @@ class ScenarioExecutor(BaseModel, ABC):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     agent_invoker: AgentInvokerFn
-    schema_type: str = ""
 
     @abstractmethod
     def run_scenario(self, scenario: Scenario) -> ScenarioExecutionResult:
@@ -79,8 +78,6 @@ class ScenarioExecutor(BaseModel, ABC):
 
 class PredefinedScenarioExecutor(ScenarioExecutor):
     """Runs a PredefinedScenario by iterating its explicit turns."""
-
-    schema_type: str = "AGENTCORE_EVALUATION_PREDEFINED_V1"
 
     def run_scenario(self, scenario: Scenario) -> ScenarioExecutionResult:
         """Execute a predefined scenario by invoking the agent for each turn."""
@@ -140,8 +137,6 @@ class SimulatedScenarioExecutor(ScenarioExecutor):
     via tool-use enforcement to produce correctly-typed messages, eliminating the need
     for JSON parsing heuristics.
     """
-
-    schema_type: str = "AGENTCORE_EVALUATION_SIMULATED_V1"
 
     simulation_config: Optional[SimulationConfig] = None
 
