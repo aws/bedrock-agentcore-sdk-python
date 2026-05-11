@@ -1,46 +1,73 @@
-"""Integration tests for OnDemandEvaluationDatasetRunner and BatchEvaluationRunner
-using ServiceDatasetProvider.
+"""Integration tests for OnDemandEvaluationDatasetRunner using ServiceDatasetProvider.
 
 These tests verify the full pipeline:
   ServiceDatasetProvider → Dataset → Runner → Agent Invocation → Evaluation
 
-Requires a deployed agent runtime. Set INTEG_AGENT_NAME env var to the name of a
-READY agent runtime, or the test will attempt to create one using defaults in helpers.py.
+Required env vars:
+    INTEG_AGENT_RUNTIME_ARN: ARN of a deployed, invokable agent runtime
+    BEDROCK_TEST_REGION: AWS region (must match the agent's region)
+
+Optional env vars:
+    INTEG_AGENT_LOG_GROUP: CloudWatch log group for the agent's spans
+        (defaults to /aws/bedrock-agentcore/runtimes/{runtime_id}-DEFAULT)
 
 Run with:
+    export INTEG_AGENT_RUNTIME_ARN=arn:aws:bedrock-agentcore:us-east-1:619071331382:runtime/hosted_agent_j135m-HDtuIw2zSo
+    export BEDROCK_TEST_REGION=us-east-1
     uv run pytest tests_integ/evaluation/test_runners_with_service_dataset.py -xvs --log-cli-level=INFO
 """
 
+import json
 import os
 import time
+import uuid
 
+import boto3
 import pytest
 
 from bedrock_agentcore.evaluation.dataset_client import DatasetClient
 from bedrock_agentcore.evaluation.runner.dataset_providers import ServiceDatasetProvider
+from bedrock_agentcore.evaluation.runner.invoker_types import AgentInvokerInput, AgentInvokerOutput
 from bedrock_agentcore.evaluation.runner.on_demand.config import EvaluationRunConfig, EvaluatorConfig
 from bedrock_agentcore.evaluation.runner.on_demand.on_demand_runner import OnDemandEvaluationDatasetRunner
 
-from .helpers import get_or_create_agent_runtime, make_agent_invoker
+RUNTIME_ARN = os.environ.get("INTEG_AGENT_RUNTIME_ARN")
+REGION = os.environ.get("BEDROCK_TEST_REGION", "us-west-2")
+
+
+def _make_invoker(runtime_arn: str, region: str):
+    """Create an invoker that sends {prompt: ...} to the agent."""
+    dp = boto3.client("bedrock-agentcore", region_name=region)
+
+    def invoker(input: AgentInvokerInput) -> AgentInvokerOutput:
+        prompt = input.payload if isinstance(input.payload, str) else json.dumps(input.payload)
+        resp = dp.invoke_agent_runtime(
+            agentRuntimeArn=runtime_arn,
+            payload=json.dumps({"prompt": prompt}).encode(),
+            runtimeSessionId=input.session_id if input.session_id and len(input.session_id) >= 33 else str(uuid.uuid4()),
+        )
+        body = resp["response"].read().decode()
+        result = json.loads(body) if body else {}
+        return AgentInvokerOutput(agent_output=result.get("result", result))
+
+    return invoker
 
 
 @pytest.mark.integration
-@pytest.mark.skip(reason="Requires a warm deployed agent runtime. See helpers.py for setup.")
+@pytest.mark.skipif(not RUNTIME_ARN, reason="INTEG_AGENT_RUNTIME_ARN not set")
 class TestOnDemandRunnerWithServiceDataset:
     """OnDemandEvaluationDatasetRunner + ServiceDatasetProvider end-to-end."""
 
     @classmethod
     def setup_class(cls):
-        cls.region = os.environ.get("BEDROCK_TEST_REGION", "us-west-2")
-        agent_name = os.environ.get("INTEG_AGENT_NAME", None)
+        cls.region = REGION
+        cls.runtime_arn = RUNTIME_ARN
+        cls.runtime_id = cls.runtime_arn.split("/")[-1]
 
-        kwargs = {"region": cls.region}
-        if agent_name:
-            kwargs["agent_name"] = agent_name
-
-        agent_info = get_or_create_agent_runtime(**kwargs)
-        cls.runtime_arn = agent_info["runtime_arn"]
-        cls.runtime_id = agent_info["runtime_id"]
+        cls.log_group = os.environ.get(
+            "INTEG_AGENT_LOG_GROUP",
+            f"/aws/bedrock-agentcore/runtimes/{cls.runtime_id}-DEFAULT",
+        )
 
         cls.client = DatasetClient(region_name=cls.region)
         cls.test_prefix = f"sdk_integ_runner_{int(time.time())}"
@@ -54,16 +81,12 @@ class TestOnDemandRunnerWithServiceDataset:
                     "examples": [
                         {
                             "scenario_id": "greeting",
-                            "turns": [
-                                {"input": "Hello", "expected_response": "Hi there!"}
-                            ],
+                            "turns": [{"input": "Hello", "expected_response": "Hi there!"}],
                             "assertions": ["Agent should respond politely"],
                         },
                         {
                             "scenario_id": "math",
-                            "turns": [
-                                {"input": "What is 2+2?", "expected_response": "4"}
-                            ],
+                            "turns": [{"input": "What is 2+2?", "expected_response": "4"}],
                         },
                     ]
                 }
@@ -80,6 +103,7 @@ class TestOnDemandRunnerWithServiceDataset:
             except Exception as e:
                 print(f"Failed to delete dataset {did}: {e}")
 
+    @pytest.mark.order(1)
     def test_on_demand_runner_executes_scenarios(self):
         """OnDemandRunner invokes agent for each scenario from ServiceDatasetProvider."""
         provider = ServiceDatasetProvider(
@@ -87,20 +111,21 @@ class TestOnDemandRunnerWithServiceDataset:
             region_name=self.region,
         )
         dataset = provider.get_dataset()
+        assert len(dataset.scenarios) == 2
 
         runner = OnDemandEvaluationDatasetRunner(region=self.region)
-        invoker = make_agent_invoker(self.runtime_arn, self.region)
+        invoker = _make_invoker(self.runtime_arn, self.region)
 
         from bedrock_agentcore.evaluation.agent_span_collector import CloudWatchAgentSpanCollector
 
         collector = CloudWatchAgentSpanCollector(
-            log_group_name=f"/aws/bedrock-agentcore/runtimes/{self.runtime_id}-DEFAULT",
+            log_group_name=self.log_group,
             region=self.region,
         )
 
         config = EvaluationRunConfig(
             evaluator_config=EvaluatorConfig(evaluator_ids=["Builtin.Helpfulness"]),
-            evaluation_delay_seconds=60,
+            evaluation_delay_seconds=30,
             max_concurrent_scenarios=2,
         )
 
@@ -111,7 +136,11 @@ class TestOnDemandRunnerWithServiceDataset:
             span_collector=collector,
         )
 
+        # Both scenarios should have been executed
         assert len(result.scenario_results) == 2
         scenario_ids = {r.scenario_id for r in result.scenario_results}
         assert "greeting" in scenario_ids
         assert "math" in scenario_ids
+        # Both should complete (agent invocation succeeded)
+        for sr in result.scenario_results:
+            assert sr.status == "COMPLETED", f"Scenario {sr.scenario_id} failed: {sr.error}"
