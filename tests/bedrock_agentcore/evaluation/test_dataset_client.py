@@ -46,7 +46,7 @@ class TestDatasetClientPassthrough:
         mock_cp.list_datasets.return_value = {"datasets": []}
 
         client = DatasetClient()
-        result = client.list_datasets(maxResults=10)
+        client.list_datasets(maxResults=10)
         mock_cp.list_datasets.assert_called_once_with(maxResults=10)
 
     @patch("bedrock_agentcore.evaluation.dataset_client.boto3")
