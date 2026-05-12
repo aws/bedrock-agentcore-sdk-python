@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.9.1] - 2026-05-12
+
+### Fixed
+- fix: skip browser proxy tests (#476) (3cbcf22)
+- fix: allow bound methods in entrypoint() registration (#474) (932db42)
+- fix: update Discord invite link to strands community (#470) (eddc27c)
+- fix: remove double-base64 encoding in upload_file/download_file (#458) (#464) (9831602)
+
+### Documentation
+- docs: add AGENTS.md and testing anti-patterns section (#465) (8695aa9)
+
+### Other Changes
+- Update DP APIs to support namespace re-design (#449) (691a1fb)
+- chore: update CP APIs to support namespace re-design (#450) (23fd7dc)
+- fix(runtime): distinguish request parse errors from handler JSON errors (#472) (2e8a50a)
+
 ## [1.9.0] - 2026-05-07
 
 ### Added
