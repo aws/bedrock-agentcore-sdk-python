@@ -61,6 +61,21 @@ class TestBedrockAgentCoreApp:
         assert hasattr(test_handler, "run")
         assert callable(test_handler.run)
 
+    def test_entrypoint_bound_method(self):
+        """Test entrypoint accepts a bound method without raising AttributeError."""
+
+        class MyAgent:
+            def __init__(self):
+                self.app = BedrockAgentCoreApp()
+                self.app.entrypoint(self.handle)
+
+            def handle(self, payload):
+                return {"result": "success"}
+
+        agent = MyAgent()
+        assert "main" in agent.app.handlers
+        assert agent.app.handlers["main"] == agent.handle
+
     def test_invocation_without_context(self):
         """Test handler without context parameter works correctly."""
         bedrock_agentcore = BedrockAgentCoreApp()
