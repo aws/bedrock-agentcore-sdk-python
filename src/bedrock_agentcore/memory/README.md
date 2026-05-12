@@ -186,14 +186,14 @@ session.add_turns([
 # Search long-term memories (after memory extraction has occurred)
 memories = session.search_long_term_memories(
     query="what food does the user like",
-    namespace_prefix="/food/user-123/",
+    namespace_path="/food/user-123/",
     top_k=5
 )
 
 # Or search across multiple users
 memories = manager.search_long_term_memories(
     query="Food preferences",
-    namespace_prefix="/food/",  # Search all food-related memories
+    namespace_path="/food/",  # Search all food-related memories
     top_k=10
 )
 ```
@@ -301,7 +301,7 @@ session2 = manager.create_memory_session(
 ```python
 # List all memory records in a namespace
 records = session.list_long_term_memory_records(
-    namespace_prefix="/user/preferences/user-123/",
+    namespace_path="/user/preferences/user-123/",
     max_results=20
 )
 
@@ -327,7 +327,7 @@ Learn more here!: [Working example](metadata-workflow.ipynb)
 # Step 1: Retrieve relevant memories
 memories = session.search_long_term_memories(
     query="previous discussion",
-    namespace_prefix="support/facts/session-456/",
+    namespace_path="support/facts/session-456/",
     top_k=5
 )
 
