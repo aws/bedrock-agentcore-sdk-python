@@ -20,7 +20,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-from bedrock_agentcore._utils.namespace import build_namespace_params
+from bedrock_agentcore._utils.namespace import build_namespace_params, resolve_namespace_templates
 from bedrock_agentcore._utils.snake_case import accept_snake_case_kwargs
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
@@ -1341,11 +1341,21 @@ class MemoryClient:
         name: str,
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a semantic memory strategy.
 
         Note: Configuration is no longer provided for built-in strategies as per API changes.
+
+        Args:
+            memory_id: The memory resource ID.
+            name: Strategy name.
+            description: Optional strategy description.
+            namespaces: DEPRECATED. Use ``namespace_templates`` instead.
+            namespace_templates: List of namespace templates for this strategy.
         """
+        resolved_templates = resolve_namespace_templates(namespaces, namespace_templates)
+
         strategy: Dict = {
             StrategyType.SEMANTIC.value: {
                 "name": name,
@@ -1354,8 +1364,8 @@ class MemoryClient:
 
         if description:
             strategy[StrategyType.SEMANTIC.value]["description"] = description
-        if namespaces:
-            strategy[StrategyType.SEMANTIC.value]["namespaces"] = namespaces
+        if resolved_templates:
+            strategy[StrategyType.SEMANTIC.value]["namespaceTemplates"] = resolved_templates
 
         return self._add_strategy(memory_id, strategy)
 
@@ -1367,14 +1377,30 @@ class MemoryClient:
         namespaces: Optional[List[str]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a semantic strategy and wait for memory to return to ACTIVE state.
 
         This addresses the issue where adding a strategy puts the memory into
         CREATING state temporarily, preventing subsequent operations.
+
+        Args:
+            memory_id: The memory resource ID.
+            name: Strategy name.
+            description: Optional strategy description.
+            namespaces: DEPRECATED. Use ``namespace_templates`` instead.
+            namespace_templates: List of namespace templates for this strategy.
+            max_wait: Maximum seconds to wait for ACTIVE state.
+            poll_interval: Seconds between polling attempts.
         """
         # Add the strategy
-        self.add_semantic_strategy(memory_id, name, description, namespaces)
+        self.add_semantic_strategy(
+            memory_id,
+            name,
+            description,
+            namespaces=namespaces,
+            namespace_templates=namespace_templates,
+        )
 
         # Wait for memory to return to ACTIVE
         return self._wait_for_memory_active(memory_id, max_wait, poll_interval)
@@ -1385,11 +1411,21 @@ class MemoryClient:
         name: str,
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a summary memory strategy.
 
         Note: Configuration is no longer provided for built-in strategies as per API changes.
+
+        Args:
+            memory_id: The memory resource ID.
+            name: Strategy name.
+            description: Optional strategy description.
+            namespaces: DEPRECATED. Use ``namespace_templates`` instead.
+            namespace_templates: List of namespace templates for this strategy.
         """
+        resolved_templates = resolve_namespace_templates(namespaces, namespace_templates)
+
         strategy: Dict = {
             StrategyType.SUMMARY.value: {
                 "name": name,
@@ -1398,8 +1434,8 @@ class MemoryClient:
 
         if description:
             strategy[StrategyType.SUMMARY.value]["description"] = description
-        if namespaces:
-            strategy[StrategyType.SUMMARY.value]["namespaces"] = namespaces
+        if resolved_templates:
+            strategy[StrategyType.SUMMARY.value]["namespaceTemplates"] = resolved_templates
 
         return self._add_strategy(memory_id, strategy)
 
@@ -1411,9 +1447,16 @@ class MemoryClient:
         namespaces: Optional[List[str]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a summary strategy and wait for memory to return to ACTIVE state."""
-        self.add_summary_strategy(memory_id, name, description, namespaces)
+        self.add_summary_strategy(
+            memory_id,
+            name,
+            description,
+            namespaces=namespaces,
+            namespace_templates=namespace_templates,
+        )
         return self._wait_for_memory_active(memory_id, max_wait, poll_interval)
 
     def add_user_preference_strategy(
@@ -1422,11 +1465,21 @@ class MemoryClient:
         name: str,
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a user preference memory strategy.
 
         Note: Configuration is no longer provided for built-in strategies as per API changes.
+
+        Args:
+            memory_id: The memory resource ID.
+            name: Strategy name.
+            description: Optional strategy description.
+            namespaces: DEPRECATED. Use ``namespace_templates`` instead.
+            namespace_templates: List of namespace templates for this strategy.
         """
+        resolved_templates = resolve_namespace_templates(namespaces, namespace_templates)
+
         strategy: Dict = {
             StrategyType.USER_PREFERENCE.value: {
                 "name": name,
@@ -1435,8 +1488,8 @@ class MemoryClient:
 
         if description:
             strategy[StrategyType.USER_PREFERENCE.value]["description"] = description
-        if namespaces:
-            strategy[StrategyType.USER_PREFERENCE.value]["namespaces"] = namespaces
+        if resolved_templates:
+            strategy[StrategyType.USER_PREFERENCE.value]["namespaceTemplates"] = resolved_templates
 
         return self._add_strategy(memory_id, strategy)
 
@@ -1448,39 +1501,62 @@ class MemoryClient:
         namespaces: Optional[List[str]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a user preference strategy and wait for memory to return to ACTIVE state."""
-        self.add_user_preference_strategy(memory_id, name, description, namespaces)
+        self.add_user_preference_strategy(
+            memory_id,
+            name,
+            description,
+            namespaces=namespaces,
+            namespace_templates=namespace_templates,
+        )
         return self._wait_for_memory_active(memory_id, max_wait, poll_interval)
 
     def add_episodic_strategy(
         self,
         memory_id: str,
         name: str,
-        reflection_namespaces: List[str],
+        reflection_namespaces: Optional[List[str]] = None,
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
+        namespace_templates: Optional[List[str]] = None,
+        reflection_namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add an episodic memory strategy.
 
         Args:
             memory_id: Memory resource ID
             name: Strategy name
-            reflection_namespaces: Namespaces for reflections (can be less nested than episode namespaces)
+            reflection_namespaces: DEPRECATED. Use ``reflection_namespace_templates`` instead.
             description: Optional description
-            namespaces: Optional namespaces for episodes
+            namespaces: DEPRECATED. Use ``namespace_templates`` instead.
+            namespace_templates: List of namespace templates for episodes.
+            reflection_namespace_templates: List of namespace templates for reflections (can be
+                less nested than episode namespace templates).
         """
+        resolved_templates = resolve_namespace_templates(namespaces, namespace_templates)
+        resolved_reflection_templates = resolve_namespace_templates(
+            reflection_namespaces, reflection_namespace_templates, param_name="reflection_namespaces"
+        )
+
+        if resolved_reflection_templates is None:
+            raise ValueError(
+                "add_episodic_strategy requires 'reflection_namespace_templates' (or the deprecated "
+                "'reflection_namespaces')."
+            )
+
         strategy: Dict = {
             StrategyType.EPISODIC.value: {
                 "name": name,
-                "reflectionConfiguration": {"namespaces": reflection_namespaces},
+                "reflectionConfiguration": {"namespaceTemplates": resolved_reflection_templates},
             }
         }
 
         if description:
             strategy[StrategyType.EPISODIC.value]["description"] = description
-        if namespaces:
-            strategy[StrategyType.EPISODIC.value]["namespaces"] = namespaces
+        if resolved_templates:
+            strategy[StrategyType.EPISODIC.value]["namespaceTemplates"] = resolved_templates
 
         return self._add_strategy(memory_id, strategy)
 
@@ -1488,14 +1564,24 @@ class MemoryClient:
         self,
         memory_id: str,
         name: str,
-        reflection_namespaces: List[str],
+        reflection_namespaces: Optional[List[str]] = None,
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        namespace_templates: Optional[List[str]] = None,
+        reflection_namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add an episodic strategy and wait for memory to return to ACTIVE state."""
-        self.add_episodic_strategy(memory_id, name, reflection_namespaces, description, namespaces)
+        self.add_episodic_strategy(
+            memory_id,
+            name,
+            reflection_namespaces=reflection_namespaces,
+            description=description,
+            namespaces=namespaces,
+            namespace_templates=namespace_templates,
+            reflection_namespace_templates=reflection_namespace_templates,
+        )
         return self._wait_for_memory_active(memory_id, max_wait, poll_interval)
 
     def add_custom_semantic_strategy(
@@ -1506,6 +1592,7 @@ class MemoryClient:
         consolidation_config: Dict[str, Any],
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a custom semantic strategy with prompts.
 
@@ -1517,8 +1604,11 @@ class MemoryClient:
             consolidation_config: Consolidation configuration with prompt and model:
                 {"prompt": "...", "modelId": "..."}
             description: Optional description
-            namespaces: Optional namespaces list
+            namespaces: DEPRECATED. Use ``namespace_templates`` instead.
+            namespace_templates: Optional list of namespace templates for this strategy.
         """
+        resolved_templates = resolve_namespace_templates(namespaces, namespace_templates)
+
         strategy = {
             StrategyType.CUSTOM.value: {
                 "name": name,
@@ -1539,8 +1629,8 @@ class MemoryClient:
 
         if description:
             strategy[StrategyType.CUSTOM.value]["description"] = description
-        if namespaces:
-            strategy[StrategyType.CUSTOM.value]["namespaces"] = namespaces
+        if resolved_templates:
+            strategy[StrategyType.CUSTOM.value]["namespaceTemplates"] = resolved_templates
 
         return self._add_strategy(memory_id, strategy)
 
@@ -1554,10 +1644,17 @@ class MemoryClient:
         namespaces: Optional[List[str]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a custom semantic strategy and wait for memory to return to ACTIVE state."""
         self.add_custom_semantic_strategy(
-            memory_id, name, extraction_config, consolidation_config, description, namespaces
+            memory_id,
+            name,
+            extraction_config,
+            consolidation_config,
+            description,
+            namespaces=namespaces,
+            namespace_templates=namespace_templates,
         )
         return self._wait_for_memory_active(memory_id, max_wait, poll_interval)
 
@@ -1570,6 +1667,7 @@ class MemoryClient:
         reflection_config: Dict[str, Any],
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a custom episodic strategy with prompts.
 
@@ -1578,9 +1676,12 @@ class MemoryClient:
             name: Strategy name
             extraction_config: {"prompt": "...", "modelId": "..."}
             consolidation_config: {"prompt": "...", "modelId": "..."}
-            reflection_config: {"prompt": "...", "modelId": "...", "namespaces": [...]}
+            reflection_config: {"prompt": "...", "modelId": "...",
+                "namespaceTemplates": [...]} — legacy ``"namespaces"`` key is also accepted
+                but deprecated.
             description: Optional description
-            namespaces: Optional namespaces list
+            namespaces: DEPRECATED. Use ``namespace_templates`` instead.
+            namespace_templates: Optional list of namespace templates for this strategy.
         """
         for config, config_name in [
             (extraction_config, "extraction_config"),
@@ -1590,6 +1691,21 @@ class MemoryClient:
             for key in ("prompt", "modelId"):
                 if key not in config:
                     raise ValueError(f"{config_name} missing required key: {key}")
+
+        resolved_templates = resolve_namespace_templates(namespaces, namespace_templates)
+        resolved_reflection_templates = resolve_namespace_templates(
+            reflection_config.get("namespaces"),
+            reflection_config.get("namespaceTemplates"),
+            param_name="reflection_config['namespaces']",
+            new_param_name="reflection_config['namespaceTemplates']",
+        )
+
+        reflection_block: Dict[str, Any] = {
+            "appendToPrompt": reflection_config["prompt"],
+            "modelId": reflection_config["modelId"],
+        }
+        if resolved_reflection_templates is not None:
+            reflection_block["namespaceTemplates"] = resolved_reflection_templates
 
         strategy = {
             StrategyType.CUSTOM.value: {
@@ -1604,15 +1720,7 @@ class MemoryClient:
                             "appendToPrompt": consolidation_config["prompt"],
                             "modelId": consolidation_config["modelId"],
                         },
-                        "reflection": {
-                            "appendToPrompt": reflection_config["prompt"],
-                            "modelId": reflection_config["modelId"],
-                            **(
-                                {"namespaces": reflection_config["namespaces"]}
-                                if "namespaces" in reflection_config
-                                else {}
-                            ),
-                        },
+                        "reflection": reflection_block,
                     }
                 },
             }
@@ -1620,8 +1728,8 @@ class MemoryClient:
 
         if description:
             strategy[StrategyType.CUSTOM.value]["description"] = description
-        if namespaces:
-            strategy[StrategyType.CUSTOM.value]["namespaces"] = namespaces
+        if resolved_templates:
+            strategy[StrategyType.CUSTOM.value]["namespaceTemplates"] = resolved_templates
 
         return self._add_strategy(memory_id, strategy)
 
@@ -1636,10 +1744,18 @@ class MemoryClient:
         namespaces: Optional[List[str]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Add a custom episodic strategy and wait for memory to return to ACTIVE state."""
         self.add_custom_episodic_strategy(
-            memory_id, name, extraction_config, consolidation_config, reflection_config, description, namespaces
+            memory_id,
+            name,
+            extraction_config,
+            consolidation_config,
+            reflection_config,
+            description,
+            namespaces=namespaces,
+            namespace_templates=namespace_templates,
         )
         return self._wait_for_memory_active(memory_id, max_wait, poll_interval)
 
@@ -1650,14 +1766,26 @@ class MemoryClient:
         description: Optional[str] = None,
         namespaces: Optional[List[str]] = None,
         configuration: Optional[Dict[str, Any]] = None,
+        namespace_templates: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """Modify a strategy with full control over configuration."""
+        """Modify a strategy with full control over configuration.
+
+        Args:
+            memory_id: Memory resource ID
+            strategy_id: Strategy ID to modify
+            description: Optional new description
+            namespaces: DEPRECATED. Use ``namespace_templates`` instead.
+            namespace_templates: Optional new list of namespace templates.
+            configuration: Optional new configuration.
+        """
+        resolved_templates = resolve_namespace_templates(namespaces, namespace_templates)
+
         modify_config: Dict = {"memoryStrategyId": strategy_id}  # Using old field name for input
 
         if description is not None:
             modify_config["description"] = description
-        if namespaces is not None:
-            modify_config["namespaces"] = namespaces
+        if resolved_templates is not None:
+            modify_config["namespaceTemplates"] = resolved_templates
         if configuration is not None:
             modify_config["configuration"] = configuration
 
@@ -1882,6 +2010,14 @@ class MemoryClient:
                 elif "memoryStrategyType" in strategy and "type" not in normalized:
                     normalized["type"] = strategy["memoryStrategyType"]
 
+                # Ensure both field name versions exist for namespace templates.
+                # The service may return either `namespaceTemplates` (new) or `namespaces`
+                # (deprecated); populate both so caller code reading either key still works.
+                if "namespaceTemplates" in strategy and "namespaces" not in normalized:
+                    normalized["namespaces"] = strategy["namespaceTemplates"]
+                elif "namespaces" in strategy and "namespaceTemplates" not in normalized:
+                    normalized["namespaceTemplates"] = strategy["namespaces"]
+
                 normalized_strategies.append(normalized)
 
             memory["strategies"] = normalized_strategies
@@ -1925,7 +2061,11 @@ class MemoryClient:
         raise TimeoutError("Memory %s did not return to ACTIVE state within %d seconds" % (memory_id, max_wait))
 
     def _add_default_namespaces(self, strategies: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Add default namespaces to strategies that don't have them."""
+        """Add default namespace templates to strategies that don't have them.
+
+        Respects either ``namespaceTemplates`` (preferred) or the deprecated
+        ``namespaces`` key if the caller already provided one.
+        """
         processed = []
 
         for strategy in strategies:
@@ -1934,9 +2074,11 @@ class MemoryClient:
             strategy_type_key = list(strategy.keys())[0]
             strategy_config = strategy_copy[strategy_type_key]
 
-            if "namespaces" not in strategy_config:
+            if "namespaceTemplates" not in strategy_config and "namespaces" not in strategy_config:
                 strategy_type = StrategyType(strategy_type_key)
-                strategy_config["namespaces"] = DEFAULT_NAMESPACES.get(strategy_type, ["custom/{actorId}/{sessionId}/"])
+                strategy_config["namespaceTemplates"] = DEFAULT_NAMESPACES.get(
+                    strategy_type, ["custom/{actorId}/{sessionId}/"]
+                )
 
             self._validate_strategy_config(strategy_copy, strategy_type_key)
 
@@ -1959,7 +2101,8 @@ class MemoryClient:
         """Validate strategy configuration parameters."""
         strategy_config = strategy[strategy_type]
 
-        namespaces = strategy_config.get("namespaces", [])
+        # Support both the new `namespaceTemplates` field and the deprecated `namespaces` field
+        namespaces = strategy_config.get("namespaceTemplates") or strategy_config.get("namespaces", [])
         for namespace in namespaces:
             self._validate_namespace(namespace)
 

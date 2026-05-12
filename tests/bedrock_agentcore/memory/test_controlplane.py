@@ -451,7 +451,7 @@ def test_update_strategy():
             modify_strategy = kwargs["memoryStrategies"]["modifyMemoryStrategies"][0]
             assert modify_strategy["memoryStrategyId"] == "strat-456"
             assert modify_strategy["description"] == "Updated strategy description"
-            assert modify_strategy["namespaces"] == ["custom/namespace1/", "custom/namespace2/"]
+            assert modify_strategy["namespaceTemplates"] == ["custom/namespace1/", "custom/namespace2/"]
             assert modify_strategy["configuration"] == {"modelId": "test-model"}
 
 

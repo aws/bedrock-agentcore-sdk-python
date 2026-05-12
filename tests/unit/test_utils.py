@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-from bedrock_agentcore._utils.namespace import build_namespace_params
+from bedrock_agentcore._utils.namespace import build_namespace_params, resolve_namespace_templates
 from bedrock_agentcore._utils.polling import wait_until, wait_until_deleted
 
 
@@ -139,3 +139,32 @@ class TestBuildNamespaceParams:
     def test_wildcard_in_namespace_path_raises(self):
         with pytest.raises(ValueError, match="[Ww]ildcard"):
             build_namespace_params(namespace_path="/org/*/team/")
+
+
+class TestResolveNamespaceTemplates:
+    """Tests for resolve_namespace_templates utility (CP deprecation handling)."""
+
+    def test_namespace_templates_only(self):
+        assert resolve_namespace_templates(namespace_templates=["/a/", "/b/"]) == ["/a/", "/b/"]
+
+    def test_namespaces_only_emits_deprecation_warning(self):
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            result = resolve_namespace_templates(namespaces=["/a/"])
+        assert result == ["/a/"]
+
+    def test_neither_returns_none(self):
+        assert resolve_namespace_templates() is None
+
+    def test_both_raises(self):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            resolve_namespace_templates(namespaces=["/a/"], namespace_templates=["/b/"])
+
+    def test_custom_param_name_in_error(self):
+        with pytest.raises(ValueError, match="reflection_namespaces.*reflection_namespace_templates"):
+            resolve_namespace_templates(
+                namespaces=["/a/"], namespace_templates=["/b/"], param_name="reflection_namespaces"
+            )
+
+    def test_custom_param_name_in_warning(self):
+        with pytest.warns(DeprecationWarning, match="reflection_namespaces"):
+            resolve_namespace_templates(namespaces=["/a/"], param_name="reflection_namespaces")

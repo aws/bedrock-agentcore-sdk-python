@@ -72,16 +72,16 @@ class TestAgentCoreMemorySessionManager:
                 {
                     "summaryMemoryStrategy": {
                         "name": "SessionSummarizer",
-                        "namespaces": ["/summaries/{actorId}/{sessionId}/"],
+                        "namespaceTemplates": ["/summaries/{actorId}/{sessionId}/"],
                     }
                 },
                 {
                     "userPreferenceMemoryStrategy": {
                         "name": "PreferenceLearner",
-                        "namespaces": ["/preferences/{actorId}/"],
+                        "namespaceTemplates": ["/preferences/{actorId}/"],
                     }
                 },
-                {"semanticMemoryStrategy": {"name": "FactExtractor", "namespaces": ["/facts/{actorId}/"]}},
+                {"semanticMemoryStrategy": {"name": "FactExtractor", "namespaceTemplates": ["/facts/{actorId}/"]}},
             ],
         )
         yield memory
