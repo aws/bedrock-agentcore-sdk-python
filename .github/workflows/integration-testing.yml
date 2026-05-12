@@ -158,11 +158,12 @@ jobs:
             timeout: 15
             extra-deps: "strands-agents strands-agents-tools"
             ignore: ""
+          # TODO: expand to full tools tests once test resources are setup
           - group: tools
             path: tests_integ/tools
             timeout: 15
             extra-deps: ""
-            ignore: ""
+            ignore: "--ignore=tests_integ/tools/test_browser_proxy.py"
     steps:
       - name: Configure Credentials
         uses: aws-actions/configure-aws-credentials@v6
