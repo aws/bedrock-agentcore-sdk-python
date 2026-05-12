@@ -73,3 +73,37 @@ def resolve_namespace_templates(
         return namespaces
 
     return namespace_templates
+
+
+def resolve_namespace_prefix_deprecation(
+    namespace_prefix: Optional[str] = None,
+    namespace: Optional[str] = None,
+) -> Optional[str]:
+    """Collapse the deprecated ``namespace_prefix`` kwarg into ``namespace``.
+
+    Used by high-level session-manager retrieval helpers that historically took a
+    ``namespace_prefix`` parameter. During the service redesign's grace period,
+    ``namespace`` preserves the pre-redesign string-prefix behavior, so migrating
+    ``namespace_prefix`` callers to ``namespace`` keeps results identical until
+    allowlisting is removed.
+
+    Returns the effective ``namespace`` value (or ``None`` if neither was provided
+    and the caller supplied ``namespace_path`` instead). When ``namespace_prefix``
+    is used, emits a ``DeprecationWarning``.
+
+    Raises:
+        ValueError: if both ``namespace_prefix`` and ``namespace`` are provided.
+    """
+    if namespace_prefix is not None and namespace is not None:
+        raise ValueError("'namespace' and 'namespace_prefix' (deprecated) are mutually exclusive.")
+    if namespace_prefix is not None:
+        warnings.warn(
+            "The 'namespace_prefix' parameter is deprecated and will be removed in a future "
+            "release. Use 'namespace' for exact-match retrieval (current pre-redesign behavior "
+            "during the service grace period) or 'namespace_path' for hierarchical path-prefix "
+            "retrieval.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return namespace_prefix
+    return namespace

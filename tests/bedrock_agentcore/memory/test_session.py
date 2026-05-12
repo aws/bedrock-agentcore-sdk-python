@@ -1197,7 +1197,44 @@ class TestSessionManager:
             assert call_args["memoryId"] == "testMemory-1234567890"
             assert call_args["searchCriteria"]["searchQuery"] == "test query"
             assert call_args["searchCriteria"]["topK"] == 5
-            assert call_args["namespacePath"] == "test/namespace/"
+            # namespace_prefix (deprecated) now routes to `namespace` on the wire
+            # (preserves pre-redesign behavior during the service grace period).
+            assert call_args["namespace"] == "test/namespace/"
+
+    def test_search_long_term_memories_with_namespace_path(self):
+        """namespace_path kwarg routes to namespacePath on the wire."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+            mock_client_instance.retrieve_memory_records.return_value = {"memoryRecordSummaries": []}
+
+            manager.search_long_term_memories(query="q", namespace_path="/org/team/")
+
+            call_args = mock_client_instance.retrieve_memory_records.call_args[1]
+            assert call_args["namespacePath"] == "/org/team/"
+            assert "namespace" not in call_args
+
+    def test_search_long_term_memories_mutual_exclusivity(self):
+        """Providing namespace_prefix alongside namespace (or namespace_path) raises."""
+        with patch("boto3.Session"):
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            with pytest.raises(ValueError, match="mutually exclusive"):
+                manager.search_long_term_memories(query="q", namespace_prefix="/a/", namespace="/b/")
+            with pytest.raises(ValueError, match="mutually exclusive"):
+                manager.search_long_term_memories(query="q", namespace="/a/", namespace_path="/b/")
+
+    def test_search_long_term_memories_requires_one(self):
+        """Calling without any namespace kwarg raises."""
+        with patch("boto3.Session"):
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+            with pytest.raises(ValueError, match="At least one"):
+                manager.search_long_term_memories(query="q")
 
     def test_search_long_term_memories_with_strategy(self):
         """Test search_long_term_memories with strategy_id."""
@@ -1857,10 +1894,16 @@ class TestSession:
             # Mock manager method
             mock_records = [MemoryRecord({"memoryRecordId": "rec-123"})]
             with patch.object(manager, "search_long_term_memories", return_value=mock_records) as mock_search:
-                result = session.search_long_term_memories(query="test query", namespace_prefix="test/namespace/")
+                import warnings
+
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", DeprecationWarning)
+                    result = session.search_long_term_memories(query="test query", namespace_prefix="test/namespace/")
 
                 assert result == mock_records
-                mock_search.assert_called_once_with("test query", "test/namespace/", 3, None, 20)
+                mock_search.assert_called_once_with(
+                    "test query", "test/namespace/", 3, None, 20, namespace=None, namespace_path=None
+                )
 
     def test_session_list_long_term_memory_records_delegation(self):
         """Test MemorySession.list_long_term_memory_records delegates to manager."""
@@ -1873,10 +1916,14 @@ class TestSession:
             # Mock manager method
             mock_records = [MemoryRecord({"memoryRecordId": "rec-123"})]
             with patch.object(manager, "list_long_term_memory_records", return_value=mock_records) as mock_list:
-                result = session.list_long_term_memory_records(namespace_prefix="test/namespace/")
+                import warnings
+
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", DeprecationWarning)
+                    result = session.list_long_term_memory_records(namespace_prefix="test/namespace/")
 
                 assert result == mock_records
-                mock_list.assert_called_once_with("test/namespace/", None, 10)
+                mock_list.assert_called_once_with("test/namespace/", None, 10, namespace=None, namespace_path=None)
 
     def test_session_list_actors_delegation(self):
         """Test MemorySession.list_actors delegates to manager."""
@@ -2037,9 +2084,10 @@ class TestEdgeCases:
                         retrieval_config=retrieval_config,
                     )
 
-                    # Verify custom query was used
+                    # Verify custom query was used. The internal caller now passes `namespace=`
+                    # (previously `namespace_prefix=`, which is deprecated).
                     mock_search.assert_called_once_with(
-                        query="custom query Hello", namespace_prefix="test/namespace/", top_k=5
+                        query="custom query Hello", namespace="test/namespace/", top_k=5
                     )
 
     def test_list_events_max_results_respected(self):
@@ -2722,8 +2770,9 @@ class TestAdditionalCoverage:
                         retrieval_config=retrieval_config,
                     )
 
-                    # Verify user_input was used as query
-                    mock_search.assert_called_once_with(query="Hello", namespace_prefix="test/namespace/", top_k=3)
+                    # Verify user_input was used as query. The internal caller now passes `namespace=`
+                    # (previously `namespace_prefix=`, which is deprecated).
+                    mock_search.assert_called_once_with(query="Hello", namespace="test/namespace/", top_k=3)
 
     def test_add_turns_with_custom_timestamp(self):
         """Test add_turns with custom timestamp."""

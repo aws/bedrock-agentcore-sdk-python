@@ -10,6 +10,7 @@ import boto3
 from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 
+from bedrock_agentcore._utils.namespace import build_namespace_params, resolve_namespace_prefix_deprecation
 from bedrock_agentcore._utils.snake_case import accept_snake_case_kwargs
 
 from .constants import BlobMessage, ConversationalMessage, MessageRole, RetrievalConfig
@@ -398,8 +399,9 @@ class MemorySessionManager:
                     strategyId=config.strategy_id or "",
                 )
                 search_query = f"{config.retrieval_query} {user_input}" if config.retrieval_query else user_input
+                # TODO: revisit after full deprecation of namespace fields
                 memory_records = self.search_long_term_memories(
-                    query=search_query, namespace_prefix=resolved_namespace, top_k=config.top_k
+                    query=search_query, namespace=resolved_namespace, top_k=config.top_k
                 )
                 # Filter memory records with a relevance score which is lower than config.relevance_score
                 if config.relevance_score:
@@ -895,26 +897,45 @@ class MemorySessionManager:
     def search_long_term_memories(
         self,
         query: str,
-        namespace_prefix: str,
+        namespace_prefix: Optional[str] = None,
         top_k: int = 3,
         strategy_id: str = None,
         max_results: int = 20,
+        namespace: Optional[str] = None,
+        namespace_path: Optional[str] = None,
     ) -> List[MemoryRecord]:
         """Performs a semantic search against the long-term memory for this actor.
 
         Maps to: bedrock-agentcore.retrieve_memory_records.
+
+        Exactly one of ``namespace`` (exact match), ``namespace_path`` (hierarchical
+        path prefix), or ``namespace_prefix`` (DEPRECATED alias for ``namespace``)
+        must be provided.
+
+        Args:
+            query: Search query
+            namespace_prefix: DEPRECATED. Use ``namespace`` or ``namespace_path`` instead.
+            top_k: Number of top-scoring records to return
+            strategy_id: Optional strategy filter
+            max_results: Maximum records to return
+            namespace: Exact-match namespace (preserves pre-redesign behavior during the
+                service grace period)
+            namespace_path: Hierarchical path-prefix namespace
         """
-        logger.info("  -> Querying long-term memory in namespace '%s' with query: '%s'...", namespace_prefix, query)
+        resolved_namespace = resolve_namespace_prefix_deprecation(namespace_prefix, namespace)
+        ns_params = build_namespace_params(resolved_namespace, namespace_path)
+        ns_value = resolved_namespace or namespace_path
+
+        logger.info("  -> Querying long-term memory in namespace '%s' with query: '%s'...", ns_value, query)
         search_criteria = {"searchQuery": query, "topK": top_k}
         if strategy_id:
             search_criteria["memoryStrategyId"] = strategy_id
 
-        namespace = namespace_prefix
         params = {
             "memoryId": self._memory_id,
             "searchCriteria": search_criteria,
-            "namespacePath": namespace,
             "maxResults": max_results,
+            **ns_params,
         }
 
         try:
@@ -927,20 +948,41 @@ class MemorySessionManager:
             raise
 
     def list_long_term_memory_records(
-        self, namespace_prefix: str, strategy_id: Optional[str] = None, max_results: int = 10
+        self,
+        namespace_prefix: Optional[str] = None,
+        strategy_id: Optional[str] = None,
+        max_results: int = 10,
+        namespace: Optional[str] = None,
+        namespace_path: Optional[str] = None,
     ) -> List[MemoryRecord]:
         """Lists all long-term memory records for this actor without a semantic query.
 
         Maps to: bedrock-agentcore.list_memory_records.
+
+        Exactly one of ``namespace`` (exact match), ``namespace_path`` (hierarchical
+        path prefix), or ``namespace_prefix`` (DEPRECATED alias for ``namespace``)
+        must be provided.
+
+        Args:
+            namespace_prefix: DEPRECATED. Use ``namespace`` or ``namespace_path`` instead.
+            strategy_id: Optional strategy filter
+            max_results: Maximum records to return
+            namespace: Exact-match namespace (preserves pre-redesign behavior during the
+                service grace period)
+            namespace_path: Hierarchical path-prefix namespace
         """
-        logger.info("  -> Listing all long-term records in namespace '%s'...", namespace_prefix)
+        resolved_namespace = resolve_namespace_prefix_deprecation(namespace_prefix, namespace)
+        ns_params = build_namespace_params(resolved_namespace, namespace_path)
+        ns_value = resolved_namespace or namespace_path
+
+        logger.info("  -> Listing all long-term records in namespace '%s'...", ns_value)
 
         try:
             paginator = self._data_plane_client.get_paginator("list_memory_records")
 
             params = {
                 "memoryId": self._memory_id,
-                "namespacePath": namespace_prefix,
+                **ns_params,
             }
 
             if strategy_id:
@@ -1049,7 +1091,8 @@ class MemorySessionManager:
         logger.info("🗑️ Deleting all long-term memories in namespace '%s'...", namespace)
 
         # Retrieve all memory records in the specified namespace
-        memory_records = self.list_long_term_memory_records(namespace_prefix=namespace)
+        # TODO: revisit after full deprecation of namespace fields
+        memory_records = self.list_long_term_memory_records(namespace=namespace)
         logger.info("  -> Found %d memory records to delete", len(memory_records))
 
         if not memory_records:
@@ -1203,19 +1246,40 @@ class MemorySession(DictWrapper):
     def search_long_term_memories(
         self,
         query: str,
-        namespace_prefix: str,
+        namespace_prefix: Optional[str] = None,
         top_k: int = 3,
         strategy_id: Optional[str] = None,
         max_results: int = 20,
+        namespace: Optional[str] = None,
+        namespace_path: Optional[str] = None,
     ) -> List[MemoryRecord]:
         """Delegates to manager.search_long_term_memories."""
-        return self._manager.search_long_term_memories(query, namespace_prefix, top_k, strategy_id, max_results)
+        return self._manager.search_long_term_memories(
+            query,
+            namespace_prefix,
+            top_k,
+            strategy_id,
+            max_results,
+            namespace=namespace,
+            namespace_path=namespace_path,
+        )
 
     def list_long_term_memory_records(
-        self, namespace_prefix: str, strategy_id: Optional[str] = None, max_results: int = 10
+        self,
+        namespace_prefix: Optional[str] = None,
+        strategy_id: Optional[str] = None,
+        max_results: int = 10,
+        namespace: Optional[str] = None,
+        namespace_path: Optional[str] = None,
     ) -> List[MemoryRecord]:
         """Delegates to manager.list_long_term_memory_records."""
-        return self._manager.list_long_term_memory_records(namespace_prefix, strategy_id, max_results)
+        return self._manager.list_long_term_memory_records(
+            namespace_prefix,
+            strategy_id,
+            max_results,
+            namespace=namespace,
+            namespace_path=namespace_path,
+        )
 
     def list_actors(self) -> List[ActorSummary]:
         """Delegates to manager.list_actors."""

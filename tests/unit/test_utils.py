@@ -5,7 +5,11 @@ from unittest.mock import Mock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-from bedrock_agentcore._utils.namespace import build_namespace_params, resolve_namespace_templates
+from bedrock_agentcore._utils.namespace import (
+    build_namespace_params,
+    resolve_namespace_prefix_deprecation,
+    resolve_namespace_templates,
+)
 from bedrock_agentcore._utils.polling import wait_until, wait_until_deleted
 
 
@@ -168,3 +172,24 @@ class TestResolveNamespaceTemplates:
     def test_custom_param_name_in_warning(self):
         with pytest.warns(DeprecationWarning, match="reflection_namespaces"):
             resolve_namespace_templates(namespaces=["/a/"], param_name="reflection_namespaces")
+
+
+class TestResolveNamespacePrefixDeprecation:
+    """Tests for resolve_namespace_prefix_deprecation helper."""
+
+    def test_namespace_only_returns_namespace(self):
+        assert resolve_namespace_prefix_deprecation(namespace="/a/") == "/a/"
+
+    def test_namespace_prefix_returns_value_and_warns(self):
+        with pytest.warns(DeprecationWarning, match="namespace_prefix"):
+            result = resolve_namespace_prefix_deprecation(namespace_prefix="/a/")
+        assert result == "/a/"
+
+    def test_both_raises(self):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            resolve_namespace_prefix_deprecation(namespace_prefix="/a/", namespace="/b/")
+
+    def test_neither_returns_none(self):
+        # Caller is responsible for combining this with namespace_path; helper just
+        # reports "no legacy/exact value was provided."
+        assert resolve_namespace_prefix_deprecation() is None
