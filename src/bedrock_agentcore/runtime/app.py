@@ -540,6 +540,16 @@ class BedrockAgentCoreApp(Starlette):
 
         try:
             payload = await request.json()
+        except json.JSONDecodeError as e:
+            duration = time.time() - start_time
+            self.logger.warning("Invalid JSON in request (%.3fs): %s", duration, e)
+            return JSONResponse({"error": "Invalid JSON", "details": str(e)}, status_code=400)
+        except UnicodeDecodeError as e:
+            duration = time.time() - start_time
+            self.logger.warning("Invalid encoding in request (%.3fs): %s", duration, e)
+            return JSONResponse({"error": "Invalid encoding", "details": str(e)}, status_code=400)
+
+        try:
             self.logger.debug("Processing invocation request")
 
             if self.debug:
@@ -584,15 +594,6 @@ class BedrockAgentCoreApp(Starlette):
             # Use safe serialization for consistency with streaming paths
             safe_json_string = self._safe_serialize_to_json_string(result)
             return Response(safe_json_string, media_type="application/json")
-
-        except json.JSONDecodeError as e:
-            duration = time.time() - start_time
-            self.logger.warning("Invalid JSON in request (%.3fs): %s", duration, e)
-            return JSONResponse({"error": "Invalid JSON", "details": str(e)}, status_code=400)
-        except UnicodeDecodeError as e:
-            duration = time.time() - start_time
-            self.logger.warning("Invalid encoding in request (%.3fs): %s", duration, e)
-            return JSONResponse({"error": "Invalid encoding", "details": str(e)}, status_code=400)
         except HTTPException as e:
             duration = time.time() - start_time
             # Use error level for 5xx to match the generic Exception handler's severity,
