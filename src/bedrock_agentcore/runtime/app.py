@@ -220,7 +220,10 @@ class BedrockAgentCoreApp(Starlette):
             The decorated function with added serve method
         """
         self.handlers["main"] = func
-        func.run = lambda port=8080, host=None: self.run(port, host)
+        try:
+            func.run = lambda port=8080, host=None: self.run(port, host)
+        except AttributeError:
+            pass
         return func
 
     def ping(self, func: Callable) -> Callable:
