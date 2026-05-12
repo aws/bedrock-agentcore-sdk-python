@@ -1,5 +1,7 @@
 """Tests for AgentCoreMemorySessionManager."""
 
+import asyncio
+import inspect
 import logging
 import time
 from datetime import datetime, timezone
@@ -9,6 +11,11 @@ import pytest
 from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 from strands.agent.agent import Agent
+from strands.experimental.hooks.multiagent.events import (
+    AfterMultiAgentInvocationEvent,
+    AfterNodeCallEvent,
+    MultiAgentInitializedEvent,
+)
 from strands.hooks import AfterInvocationEvent, MessageAddedEvent
 from strands.hooks.registry import HookRegistry
 from strands.types.exceptions import SessionException
@@ -3580,3 +3587,123 @@ class TestPersistenceMode:
 
         mock_memory_client.retrieve_memories.assert_called_once()
         assert "<user_context>" in mock_agent.messages[0]["content"][0]["text"]
+
+
+class TestAsyncMode:
+    """Tests for async_mode: callbacks must not block the event loop."""
+
+    def test_async_mode_defaults_to_false(self, agentcore_config):
+        assert agentcore_config.async_mode is False
+
+    def test_sync_mode_registers_sync_callbacks(self, mock_memory_client):
+        """async_mode=False: all MessageAddedEvent/AfterInvocationEvent callbacks are sync."""
+        config = AgentCoreMemoryConfig(memory_id="m", session_id="s", actor_id="a", batch_size=5, async_mode=False)
+        manager = _create_session_manager(config, mock_memory_client)
+        registry = HookRegistry()
+        manager.register_hooks(registry)
+
+        for event_type in (MessageAddedEvent, AfterInvocationEvent):
+            for cb in registry.get_callbacks_for(
+                event_type(agent=Mock(), message={"role": "user", "content": [{"text": "x"}]})
+                if event_type is MessageAddedEvent
+                else event_type(agent=Mock())
+            ):
+                assert not inspect.iscoroutinefunction(cb), f"Sync mode leaked an async callback for {event_type}"
+
+    def test_async_mode_registers_async_callbacks(self, mock_memory_client):
+        """async_mode=True: MessageAddedEvent and AfterInvocationEvent callbacks are coroutine functions."""
+        config = AgentCoreMemoryConfig(memory_id="m", session_id="s", actor_id="a", batch_size=5, async_mode=True)
+        manager = _create_session_manager(config, mock_memory_client)
+        registry = HookRegistry()
+        manager.register_hooks(registry)
+
+        msg_callbacks = registry.get_callbacks_for(
+            MessageAddedEvent(agent=Mock(), message={"role": "user", "content": [{"text": "x"}]})
+        )
+        assert msg_callbacks, "No MessageAddedEvent callbacks registered in async mode"
+        assert all(inspect.iscoroutinefunction(cb) for cb in msg_callbacks)
+
+        after_callbacks = registry.get_callbacks_for(AfterInvocationEvent(agent=Mock()))
+        assert after_callbacks, "No AfterInvocationEvent callbacks registered in async mode"
+        assert all(inspect.iscoroutinefunction(cb) for cb in after_callbacks)
+
+    async def test_async_mode_does_not_block_event_loop(self, mock_memory_client):
+        """The async hooks run boto3 on a worker thread, so the event loop can make progress concurrently."""
+        config = AgentCoreMemoryConfig(memory_id="m", session_id="s", actor_id="a", async_mode=True)
+        manager = _create_session_manager(config, mock_memory_client)
+
+        # Simulate each sync session-manager method blocking on boto3.
+        def slow_append_message(message, agent, **kwargs):
+            time.sleep(0.2)
+
+        def slow_sync_agent(agent, **kwargs):
+            time.sleep(0.2)
+
+        manager.append_message = slow_append_message
+        manager.sync_agent = slow_sync_agent
+
+        registry = HookRegistry()
+        manager.register_hooks(registry)
+
+        persist_callbacks = [
+            cb
+            for cb in registry.get_callbacks_for(
+                MessageAddedEvent(agent=Mock(), message={"role": "user", "content": [{"text": "x"}]})
+            )
+            if asyncio.iscoroutinefunction(cb)
+        ]
+        assert persist_callbacks
+
+        event = MessageAddedEvent(agent=Mock(), message={"role": "user", "content": [{"text": "hello"}]})
+
+        # Ticker proves the event loop made progress while the hook awaited to_thread.
+        ticks = 0
+
+        async def ticker():
+            nonlocal ticks
+            while True:
+                await asyncio.sleep(0.01)
+                ticks += 1
+
+        ticker_task = asyncio.create_task(ticker())
+        try:
+            # Run the persist callback (append_message + sync_agent); both sleep 0.2s on a worker thread.
+            await persist_callbacks[0](event)
+        finally:
+            ticker_task.cancel()
+
+        assert ticks > 5, f"Event loop was blocked; only {ticks} ticks recorded"
+
+    async def test_async_mode_batching_registers_flush_callback(self, mock_memory_client):
+        """async_mode=True with batch_size>1: AfterInvocationEvent gets both sync_agent and flush callbacks."""
+        config = AgentCoreMemoryConfig(memory_id="m", session_id="s", actor_id="a", batch_size=5, async_mode=True)
+        manager = _create_session_manager(config, mock_memory_client)
+        registry = HookRegistry()
+        manager.register_hooks(registry)
+
+        after_callbacks = list(registry.get_callbacks_for(AfterInvocationEvent(agent=Mock())))
+        assert len(after_callbacks) == 2
+        assert all(asyncio.iscoroutinefunction(cb) for cb in after_callbacks)
+
+    def test_async_mode_registers_multi_agent_callbacks(self, mock_memory_client):
+        """async_mode=True: multi-agent events get async callbacks (parity with sync mode)."""
+        config = AgentCoreMemoryConfig(memory_id="m", session_id="s", actor_id="a", async_mode=True)
+        manager = _create_session_manager(config, mock_memory_client)
+        registry = HookRegistry()
+        manager.register_hooks(registry)
+
+        for event_type in (MultiAgentInitializedEvent, AfterNodeCallEvent, AfterMultiAgentInvocationEvent):
+            callbacks = registry._registered_callbacks.get(event_type, [])
+            assert callbacks, f"No callbacks registered for {event_type.__name__}"
+            assert all(asyncio.iscoroutinefunction(cb) for cb in callbacks)
+
+    def test_async_mode_logs_sync_invocation_warning(self, mock_memory_client, caplog):
+        """async_mode=True emits a WARNING at register_hooks time pointing users to stream_async/invoke_async."""
+        config = AgentCoreMemoryConfig(memory_id="m", session_id="s", actor_id="a", async_mode=True)
+        manager = _create_session_manager(config, mock_memory_client)
+        registry = HookRegistry()
+
+        with caplog.at_level(logging.WARNING, logger="bedrock_agentcore.memory.integrations.strands.session_manager"):
+            manager.register_hooks(registry)
+
+        assert any("async_mode=True" in rec.message and "stream_async" in rec.message for rec in caplog.records)
