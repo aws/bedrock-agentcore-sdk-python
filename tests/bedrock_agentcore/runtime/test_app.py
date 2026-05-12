@@ -494,6 +494,48 @@ class TestCustomStatusCodes:
         assert response.status_code == 400
         assert "Invalid encoding" in response.json()["error"]
 
+    def test_handler_json_decode_error_returns_500_not_400(self):
+        """Test that JSONDecodeError raised inside the handler returns 500, not 400.
+
+        Regression test: previously, a broad except caught JSONDecodeError from
+        both request parsing and handler logic, returning a misleading 400
+        "Invalid JSON in request" for application-level parse failures.
+        """
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            import json
+
+            # Simulate parsing model output that isn't valid JSON
+            json.loads("not valid json from model")
+
+        client = TestClient(app, raise_server_exceptions=False)
+        response = client.post("/invocations", json={"input": "test"})
+
+        assert response.status_code == 500, f"Handler JSONDecodeError should return 500, got {response.status_code}"
+        assert "Invalid JSON" not in response.json().get("error", ""), (
+            "Handler JSONDecodeError should not say 'Invalid JSON' (that implies bad request)"
+        )
+
+    def test_invalid_request_json_returns_400(self):
+        """Test that malformed JSON in the request body returns 400 with 'Invalid JSON'."""
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            return payload
+
+        client = TestClient(app, raise_server_exceptions=False)
+        response = client.post(
+            "/invocations",
+            content=b"not valid json",
+            headers={"content-type": "application/json"},
+        )
+
+        assert response.status_code == 400
+        assert "Invalid JSON" in response.json()["error"]
+
     def test_return_response_passthrough(self):
         """Test returning a Response object passes it through without wrapping."""
         from starlette.responses import JSONResponse
