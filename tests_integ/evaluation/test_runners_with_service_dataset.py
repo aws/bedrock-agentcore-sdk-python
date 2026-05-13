@@ -1,7 +1,7 @@
-"""Integration tests for OnDemandEvaluationDatasetRunner using ServiceDatasetProvider.
+"""Integration tests for OnDemandEvaluationDatasetRunner using DatasetManagementServiceProvider.
 
 These tests verify the full pipeline:
-  ServiceDatasetProvider → Dataset → Runner → Agent Invocation → Evaluation
+  DatasetManagementServiceProvider → Dataset → Runner → Agent Invocation → Evaluation
 
 Required env vars:
     INTEG_AGENT_RUNTIME_ARN: ARN of a deployed, invokable agent runtime
@@ -25,7 +25,7 @@ import boto3
 import pytest
 
 from bedrock_agentcore.evaluation.dataset_client import DatasetClient
-from bedrock_agentcore.evaluation.runner.dataset_providers import ServiceDatasetProvider
+from bedrock_agentcore.evaluation.runner.dataset_providers import DatasetManagementServiceProvider
 from bedrock_agentcore.evaluation.runner.invoker_types import AgentInvokerInput, AgentInvokerOutput
 from bedrock_agentcore.evaluation.runner.on_demand.config import EvaluationRunConfig, EvaluatorConfig
 from bedrock_agentcore.evaluation.runner.on_demand.on_demand_runner import OnDemandEvaluationDatasetRunner
@@ -57,7 +57,7 @@ def _make_invoker(runtime_arn: str, region: str):
 @pytest.mark.integration
 @pytest.mark.skipif(not RUNTIME_ARN, reason="INTEG_AGENT_RUNTIME_ARN not set")
 class TestOnDemandRunnerWithServiceDataset:
-    """OnDemandEvaluationDatasetRunner + ServiceDatasetProvider end-to-end."""
+    """OnDemandEvaluationDatasetRunner + DatasetManagementServiceProvider end-to-end."""
 
     @classmethod
     def setup_class(cls):
@@ -106,8 +106,8 @@ class TestOnDemandRunnerWithServiceDataset:
 
     @pytest.mark.order(1)
     def test_on_demand_runner_executes_scenarios(self):
-        """OnDemandRunner invokes agent for each scenario from ServiceDatasetProvider."""
-        provider = ServiceDatasetProvider(
+        """OnDemandRunner invokes agent for each scenario from DatasetManagementServiceProvider."""
+        provider = DatasetManagementServiceProvider(
             dataset_id=self.dataset_id,
             client=self.client,
         )

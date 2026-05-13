@@ -1,10 +1,10 @@
-"""Tests for ServiceDatasetProvider."""
+"""Tests for DatasetManagementServiceProvider."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bedrock_agentcore.evaluation.runner.dataset_providers import ServiceDatasetProvider
+from bedrock_agentcore.evaluation.runner.dataset_providers import DatasetManagementServiceProvider
 from bedrock_agentcore.evaluation.runner.dataset_types import (
     Dataset,
     PredefinedScenario,
@@ -21,7 +21,7 @@ def _jsonl(*examples):
     return "\n".join(json.dumps(e) for e in examples)
 
 
-class TestServiceDatasetProvider:
+class TestDatasetManagementServiceProvider:
     def _run_provider(
         self, jsonl_content, dataset_id="ds-123", version_id=None, schema_type="AGENTCORE_EVALUATION_PREDEFINED_V1"
     ):
@@ -39,7 +39,9 @@ class TestServiceDatasetProvider:
 
         with patch(PATCH_REQUESTS) as mock_requests:
             mock_requests.get.return_value = mock_response
-            provider = ServiceDatasetProvider(dataset_id=dataset_id, version_id=version_id, client=mock_client)
+            provider = DatasetManagementServiceProvider(
+                dataset_id=dataset_id, version_id=version_id, client=mock_client
+            )
             return provider.get_dataset(), mock_client, mock_requests
 
     def test_get_dataset_predefined(self):
@@ -128,7 +130,7 @@ class TestServiceDatasetProvider:
             "schemaType": "AGENTCORE_EVALUATION_PREDEFINED_V1",
         }
 
-        provider = ServiceDatasetProvider(dataset_id="ds-123", client=mock_client)
+        provider = DatasetManagementServiceProvider(dataset_id="ds-123", client=mock_client)
         with pytest.raises(ValueError, match="no downloadUrl"):
             provider.get_dataset()
 
@@ -147,7 +149,7 @@ class TestServiceDatasetProvider:
 
         with patch(PATCH_REQUESTS) as mock_requests:
             mock_requests.get.return_value = mock_response
-            provider = ServiceDatasetProvider(dataset_id="ds-empty", client=mock_client)
+            provider = DatasetManagementServiceProvider(dataset_id="ds-empty", client=mock_client)
             with pytest.raises(ValueError, match="scenarios must not be empty"):
                 provider.get_dataset()
 
@@ -160,7 +162,7 @@ class TestServiceDatasetProvider:
             "downloadUrl": "https://example.com/dataset.jsonl",
         }
 
-        provider = ServiceDatasetProvider(dataset_id="ds-123", client=mock_client)
+        provider = DatasetManagementServiceProvider(dataset_id="ds-123", client=mock_client)
         with pytest.raises(ValueError, match="not supported by the evaluation runners"):
             provider.get_dataset()
 
@@ -181,6 +183,6 @@ class TestServiceDatasetProvider:
         with patch(PATCH_REQUESTS) as mock_requests:
             mock_requests.get.return_value = mock_response
             mock_requests.RequestException = real_requests.RequestException
-            provider = ServiceDatasetProvider(dataset_id="ds-123", client=mock_client)
+            provider = DatasetManagementServiceProvider(dataset_id="ds-123", client=mock_client)
             with pytest.raises(RuntimeError, match="Couldn't download dataset"):
                 provider.get_dataset()

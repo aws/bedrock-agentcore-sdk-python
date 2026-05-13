@@ -73,7 +73,7 @@ class FileDatasetProvider(DatasetProvider):
         return Dataset(scenarios=scenarios)
 
 
-class ServiceDatasetProvider(DatasetProvider):
+class DatasetManagementServiceProvider(DatasetProvider):
     """A dataset provider that loads a Dataset from the Dataset Management service."""
 
     def __init__(

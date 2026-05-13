@@ -74,9 +74,7 @@ class TestDatasetCrud:
                     "examples": [
                         {
                             "scenario_id": "test-scenario-1",
-                            "turns": [
-                                {"input": "Hello", "expected_response": "Hi there!"}
-                            ],
+                            "turns": [{"input": "Hello", "expected_response": "Hi there!"}],
                         }
                     ]
                 }
@@ -129,9 +127,7 @@ class TestDatasetCrud:
                     "examples": [
                         {
                             "scenario_id": "test-scenario-2",
-                            "turns": [
-                                {"input": "What is 2+2?", "expected_response": "4"}
-                            ],
+                            "turns": [{"input": "What is 2+2?", "expected_response": "4"}],
                         }
                     ]
                 }

@@ -1,6 +1,6 @@
-"""Integration tests for ServiceDatasetProvider.
+"""Integration tests for DatasetManagementServiceProvider.
 
-Tests that ServiceDatasetProvider can fetch a dataset from the service
+Tests that DatasetManagementServiceProvider can fetch a dataset from the service
 and return it as an SDK Dataset object usable by OnDemandEvaluationDatasetRunner.
 
 Run with:
@@ -13,7 +13,7 @@ import time
 import pytest
 
 from bedrock_agentcore.evaluation.dataset_client import DatasetClient
-from bedrock_agentcore.evaluation.runner.dataset_providers import ServiceDatasetProvider
+from bedrock_agentcore.evaluation.runner.dataset_providers import DatasetManagementServiceProvider
 from bedrock_agentcore.evaluation.runner.dataset_types import (
     Dataset,
     PredefinedScenario,
@@ -22,8 +22,8 @@ from bedrock_agentcore.evaluation.runner.dataset_types import (
 
 
 @pytest.mark.integration
-class TestServiceDatasetProvider:
-    """Tests ServiceDatasetProvider with both PREDEFINED and SYNTHETIC schema types."""
+class TestDatasetManagementServiceProvider:
+    """Tests DatasetManagementServiceProvider with both PREDEFINED and SYNTHETIC schema types."""
 
     @classmethod
     def setup_class(cls):
@@ -102,8 +102,8 @@ class TestServiceDatasetProvider:
 
     @pytest.mark.order(1)
     def test_get_predefined_dataset(self):
-        """ServiceDatasetProvider returns a valid SDK Dataset with PredefinedScenarios."""
-        provider = ServiceDatasetProvider(
+        """DatasetManagementServiceProvider returns a valid SDK Dataset with PredefinedScenarios."""
+        provider = DatasetManagementServiceProvider(
             dataset_id=self.predefined_dataset_id,
             client=self.client,
         )
@@ -117,7 +117,7 @@ class TestServiceDatasetProvider:
     @pytest.mark.order(2)
     def test_predefined_fields_preserved(self):
         """Scenario fields (turns, assertions, trajectory) are preserved."""
-        provider = ServiceDatasetProvider(
+        provider = DatasetManagementServiceProvider(
             dataset_id=self.predefined_dataset_id,
             client=self.client,
         )
@@ -132,11 +132,11 @@ class TestServiceDatasetProvider:
 
     @pytest.mark.order(3)
     def test_get_predefined_with_version(self):
-        """ServiceDatasetProvider can fetch a specific version."""
+        """DatasetManagementServiceProvider can fetch a specific version."""
         versions_resp = self.client.list_dataset_versions(datasetId=self.predefined_dataset_id)
         version_id = str(versions_resp["versions"][0]["datasetVersion"])
 
-        provider = ServiceDatasetProvider(
+        provider = DatasetManagementServiceProvider(
             dataset_id=self.predefined_dataset_id,
             version_id=version_id,
             client=self.client,
@@ -150,8 +150,8 @@ class TestServiceDatasetProvider:
 
     @pytest.mark.order(4)
     def test_get_synthetic_dataset(self):
-        """ServiceDatasetProvider returns SimulatedScenarios for SYNTHETIC schema."""
-        provider = ServiceDatasetProvider(
+        """DatasetManagementServiceProvider returns SimulatedScenarios for SYNTHETIC schema."""
+        provider = DatasetManagementServiceProvider(
             dataset_id=self.synthetic_dataset_id,
             client=self.client,
         )
