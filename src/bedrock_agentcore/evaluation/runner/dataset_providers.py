@@ -59,17 +59,26 @@ class DatasetProvider(ABC):
 
 
 class FileDatasetProvider(DatasetProvider):
-    """A dataset provider that loads a Dataset from a JSON file."""
+    """A dataset provider that loads a Dataset from a JSON or JSONL file.
+
+    JSON format:  {"scenarios": [{...}, {...}]}
+    JSONL format: one scenario JSON object per line.
+    Format is selected by file extension (".jsonl" → JSONL, otherwise JSON).
+    """
 
     def __init__(self, file_path: str):
-        """Initialize with a path to a JSON dataset file."""
+        """Initialize with a path to a JSON or JSONL dataset file."""
         self._file_path = file_path
 
     def get_dataset(self) -> Dataset:
-        """Load and return the dataset from the JSON file."""
-        with open(self._file_path) as f:
-            data = json.load(f)
-        scenarios: List[Scenario] = [_parse_scenario(s) for s in data["scenarios"]]
+        """Load and return the dataset from the file."""
+        if self._file_path.endswith(".jsonl"):
+            with open(self._file_path) as f:
+                raw_examples = [json.loads(line) for line in f if line.strip()]
+        else:
+            with open(self._file_path) as f:
+                raw_examples = json.load(f)["scenarios"]
+        scenarios: List[Scenario] = [_parse_scenario(s) for s in raw_examples]
         return Dataset(scenarios=scenarios)
 
 
