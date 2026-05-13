@@ -33,11 +33,18 @@ jobs:
     if: github.actor == 'dependabot[bot]'
 
     steps:
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Fetch Dependabot metadata
         id: metadata
         uses: dependabot/fetch-metadata@v2
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token }}
 
       # patch and minor bumps: enable auto-merge.
       # GitHub holds the merge until all required status checks pass.
@@ -48,7 +55,7 @@ jobs:
           steps.metadata.outputs.update-type == 'version-update:semver-minor'
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           gh pr merge --auto --squash "$PR_URL"
           echo "✓ Auto-merge enabled: ${{ steps.metadata.outputs.dependency-names }} \
