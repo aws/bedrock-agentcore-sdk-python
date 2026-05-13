@@ -46,7 +46,6 @@ class DatasetClient:
         # Version management
         "create_dataset_version",
         "list_dataset_versions",
-        "delete_dataset_version",
         # Examples management
         "add_dataset_examples",
         "update_dataset_examples",
