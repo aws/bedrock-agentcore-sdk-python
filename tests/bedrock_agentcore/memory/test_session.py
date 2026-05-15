@@ -1902,8 +1902,42 @@ class TestSession:
 
                 assert result == mock_records
                 mock_search.assert_called_once_with(
-                    "test query", "test/namespace/", 3, None, 20, namespace=None, namespace_path=None
+                    "test query",
+                    "test/namespace/",
+                    3,
+                    None,
+                    20,
+                    namespace=None,
+                    namespace_path=None,
+                    metadata_filters=None,
                 )
+
+    def test_session_search_long_term_memories_forwards_metadata_filters(self):
+        """MemorySession.search_long_term_memories forwards metadata_filters to the manager."""
+        from bedrock_agentcore.memory.models import (
+            MemoryMetadataFilter,
+            MemoryRecordLeftExpression,
+            MemoryRecordOperatorType,
+            MemoryRecordRightExpression,
+        )
+
+        with patch("boto3.Session"):
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+            session = MemorySession(
+                memory_id="testMemory-1234567890", actor_id="user-123", session_id="session-456", manager=manager
+            )
+
+            built_filter = MemoryMetadataFilter.build_expression(
+                MemoryRecordLeftExpression.build("priority"),
+                MemoryRecordOperatorType.EQUALS_TO,
+                MemoryRecordRightExpression.build_string("high"),
+            )
+
+            with patch.object(manager, "search_long_term_memories", return_value=[]) as mock_search:
+                session.search_long_term_memories(query="q", namespace="test/", metadata_filters=[built_filter])
+
+                _, kwargs = mock_search.call_args
+                assert kwargs["metadata_filters"] == [built_filter]
 
     def test_session_list_long_term_memory_records_delegation(self):
         """Test MemorySession.list_long_term_memory_records delegates to manager."""
