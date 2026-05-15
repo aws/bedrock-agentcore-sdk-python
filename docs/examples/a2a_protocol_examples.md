@@ -142,7 +142,12 @@ Builds a Starlette ASGI application without starting a server. Useful for testin
 Returns a `Starlette` application with routes:
 - `POST /` — A2A JSON-RPC endpoint (`message/send`, `message/stream`, `tasks/get`, `tasks/cancel`)
 - `GET /.well-known/agent-card.json` — Agent card discovery
-- `GET /ping` — Bedrock health check
+- `GET /ping` — Bedrock health check. Returns JSON:
+  ```json
+  {"status": "Healthy" | "HealthyBusy", "time_of_last_update": 1715000000}
+  ```
+  - `status` — current health status from the `ping_handler` (or `"Healthy"` by default)
+  - `time_of_last_update` — Unix timestamp (seconds) indicating when the status was last updated
 
 ### `build_runtime_url(agent_arn, region=None)`
 
@@ -192,3 +197,5 @@ serve_a2a(executor, ping_handler=my_ping)
 ```
 
 If the ping handler raises an exception, the server falls back to `PingStatus.HEALTHY`.
+
+The `/ping` response always includes a `time_of_last_update` field (Unix timestamp in seconds) reflecting when the status last changed. Clients can use this to detect stale health state.
