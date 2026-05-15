@@ -2881,9 +2881,9 @@ class TestAdditionalCoverage:
 
             # Mock search_long_term_memories to return records with different relevance scores
             mock_memories = [
-                {"content": {"text": "High relevance"}, "memoryRecordId": "rec-1", "relevanceScore": 0.8},
-                {"content": {"text": "Low relevance"}, "memoryRecordId": "rec-2", "relevanceScore": 0.2},
-                {"content": {"text": "Medium relevance"}, "memoryRecordId": "rec-3", "relevanceScore": 0.5},
+                {"content": {"text": "High relevance"}, "memoryRecordId": "rec-1", "score": 0.8},
+                {"content": {"text": "Low relevance"}, "memoryRecordId": "rec-2", "score": 0.2},
+                {"content": {"text": "Medium relevance"}, "memoryRecordId": "rec-3", "score": 0.5},
             ]
             with patch.object(manager, "search_long_term_memories", return_value=mock_memories):
                 # Mock add_turns

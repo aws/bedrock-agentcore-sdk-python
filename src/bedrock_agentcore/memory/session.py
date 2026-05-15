@@ -408,7 +408,7 @@ class MemorySessionManager:
                     memory_records = [
                         record
                         for record in memory_records
-                        if record.get("relevanceScore", config.relevance_score) >= config.relevance_score
+                        if record.get("score", 0.0) >= config.relevance_score
                     ]
                 retrieved_memories.extend(memory_records)
 
