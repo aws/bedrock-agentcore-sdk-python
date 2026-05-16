@@ -274,9 +274,9 @@ class MemoryClient:
         event_expiry_days: int = 90,
         memory_execution_role_arn: Optional[str] = None,
         stream_delivery_resources: Optional[Dict[str, Any]] = None,
-        indexed_keys: Optional[List[IndexedKey]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        indexed_keys: Optional[List[IndexedKey]] = None,
     ) -> Dict[str, Any]:
         """Create a memory and wait for it to become ACTIVE.
 
