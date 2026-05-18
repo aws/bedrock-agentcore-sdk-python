@@ -24,15 +24,16 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from ..config_bundle.baggage import _extract_baggage
 from .context import BedrockAgentCoreContext, RequestContext
 from .models import (
+    _AUTHORIZATION_HEADER_LOWER,
     ACCESS_TOKEN_HEADER,
     AUTHORIZATION_HEADER,
     BAGGAGE_KEY_EXPERIMENT_ARN,
     BAGGAGE_KEY_EXPERIMENT_VARIANT,
-    CUSTOM_HEADER_PREFIX,
     OAUTH2_CALLBACK_URL_HEADER,
     REQUEST_ID_HEADER,
     SESSION_HEADER,
     PingStatus,
+    is_forwardable_header,
 )
 from .tracing import _ensure_baggage_processor_registered
 
@@ -169,12 +170,15 @@ class AGUIApp(Starlette):
         if oauth2_callback_url:
             BedrockAgentCoreContext.set_oauth2_callback_url(oauth2_callback_url)
 
+        # Collect forwardable request headers.
+        # Authorization is normalised to a canonical key regardless of wire casing
+        # (HTTP/2 always lowercases headers; HTTP/1.1 may preserve mixed case).
+        # All other headers are checked against the runtime header allowlist rules.
         request_headers: dict[str, str] = {}
-        authorization_header = headers.get(AUTHORIZATION_HEADER)
-        if authorization_header is not None:
-            request_headers[AUTHORIZATION_HEADER] = authorization_header
         for header_name, header_value in headers.items():
-            if header_name.lower().startswith(CUSTOM_HEADER_PREFIX.lower()):
+            if header_name.lower() == _AUTHORIZATION_HEADER_LOWER:
+                request_headers[AUTHORIZATION_HEADER] = header_value
+            elif is_forwardable_header(header_name):
                 request_headers[header_name] = header_value
         if request_headers:
             BedrockAgentCoreContext.set_request_headers(request_headers)

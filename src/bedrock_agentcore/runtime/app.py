@@ -31,11 +31,11 @@ from ..config_bundle.bundle import ConfigBundleRef
 from ..config_bundle.client import ConfigBundleClient
 from .context import BedrockAgentCoreContext, RequestContext
 from .models import (
+    _AUTHORIZATION_HEADER_LOWER,
     ACCESS_TOKEN_HEADER,
     AUTHORIZATION_HEADER,
     BAGGAGE_KEY_EXPERIMENT_ARN,
     BAGGAGE_KEY_EXPERIMENT_VARIANT,
-    CUSTOM_HEADER_PREFIX,
     OAUTH2_CALLBACK_URL_HEADER,
     REQUEST_ID_HEADER,
     SESSION_HEADER,
@@ -45,6 +45,7 @@ from .models import (
     TASK_ACTION_JOB_STATUS,
     TASK_ACTION_PING_STATUS,
     PingStatus,
+    is_forwardable_header,
 )
 from .tracing import _ensure_baggage_processor_registered
 from .utils import convert_complex_objects
@@ -415,17 +416,16 @@ class BedrockAgentCoreApp(Starlette):
             if oauth2_callback_url:
                 BedrockAgentCoreContext.set_oauth2_callback_url(oauth2_callback_url)
 
-            # Collect relevant request headers (Authorization + Custom headers)
+            # Collect forwardable request headers.
+            # Authorization is normalised to a canonical key regardless of wire casing
+            # (HTTP/2 always lowercases headers; HTTP/1.1 may preserve mixed case).
+            # All other headers are checked against the runtime header allowlist rules.
             request_headers = {}
 
-            # Add Authorization header if present
-            authorization_header = headers.get(AUTHORIZATION_HEADER)
-            if authorization_header is not None:
-                request_headers[AUTHORIZATION_HEADER] = authorization_header
-
-            # Add custom headers with the specified prefix
             for header_name, header_value in headers.items():
-                if header_name.lower().startswith(CUSTOM_HEADER_PREFIX.lower()):
+                if header_name.lower() == _AUTHORIZATION_HEADER_LOWER:
+                    request_headers[AUTHORIZATION_HEADER] = header_value
+                elif is_forwardable_header(header_name):
                     request_headers[header_name] = header_value
 
             # Set in context if any headers were found
