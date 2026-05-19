@@ -16,6 +16,7 @@ from bedrock_agentcore.config_bundle.bundle import ConfigBundleRef
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from bedrock_agentcore.runtime.app import _parse_runtime_arn
 from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+from bedrock_agentcore.runtime.models import is_forwardable_header
 
 
 class TestBedrockAgentCoreApp:
@@ -1830,10 +1831,10 @@ class TestRequestHeadersExtraction:
 
         assert context.request_headers is not None
         assert context.request_headers["Authorization"] == "Bearer test-auth-token"
-        assert "Content-Type" not in context.request_headers  # Only Auth and Custom headers
+        assert "Content-Type" not in context.request_headers  # restricted header
 
     def test_build_request_context_with_custom_headers(self):
-        """Test _build_request_context extracts custom headers with correct prefix."""
+        """Test _build_request_context forwards non-restricted headers and blocks restricted ones."""
         app = BedrockAgentCoreApp()
 
         class MockRequest:
@@ -1841,8 +1842,8 @@ class TestRequestHeadersExtraction:
                 self.headers = {
                     "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Header1": "value1",
                     "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Header2": "value2",
-                    "X-Other-Header": "should-not-include",
-                    "Content-Type": "application/json",
+                    "X-Other-Header": "should-include",
+                    "Content-Type": "application/json",  # restricted
                 }
                 self.state = type("State", (), {})()
 
@@ -1852,11 +1853,11 @@ class TestRequestHeadersExtraction:
         assert context.request_headers is not None
         assert context.request_headers["X-Amzn-Bedrock-AgentCore-Runtime-Custom-Header1"] == "value1"
         assert context.request_headers["X-Amzn-Bedrock-AgentCore-Runtime-Custom-Header2"] == "value2"
-        assert "X-Other-Header" not in context.request_headers
+        assert context.request_headers["X-Other-Header"] == "should-include"
         assert "Content-Type" not in context.request_headers
 
     def test_build_request_context_with_both_auth_and_custom_headers(self):
-        """Test _build_request_context with both Authorization and custom headers."""
+        """Test _build_request_context with both Authorization and non-restricted headers."""
         app = BedrockAgentCoreApp()
 
         class MockRequest:
@@ -1865,25 +1866,24 @@ class TestRequestHeadersExtraction:
                     "Authorization": "Bearer combined-token",
                     "X-Amzn-Bedrock-AgentCore-Runtime-Custom-UserAgent": "test-agent/1.0",
                     "X-Amzn-Bedrock-AgentCore-Runtime-Custom-ClientId": "client-123",
-                    "Content-Type": "application/json",
-                    "X-Other-Header": "ignored",
+                    "Content-Type": "application/json",  # restricted
+                    "X-Other-Header": "forwarded",
                 }
                 self.state = type("State", (), {})()
 
         mock_request = MockRequest()
         context = app._build_request_context(mock_request)
 
-        expected_headers = {
-            "Authorization": "Bearer combined-token",
-            "X-Amzn-Bedrock-AgentCore-Runtime-Custom-UserAgent": "test-agent/1.0",
-            "X-Amzn-Bedrock-AgentCore-Runtime-Custom-ClientId": "client-123",
-        }
+        assert context.request_headers is not None
+        assert context.request_headers["Authorization"] == "Bearer combined-token"
+        assert context.request_headers["X-Amzn-Bedrock-AgentCore-Runtime-Custom-UserAgent"] == "test-agent/1.0"
+        assert context.request_headers["X-Amzn-Bedrock-AgentCore-Runtime-Custom-ClientId"] == "client-123"
+        assert context.request_headers["X-Other-Header"] == "forwarded"
+        assert "Content-Type" not in context.request_headers
+        assert len(context.request_headers) == 4
 
-        assert context.request_headers == expected_headers
-        assert len(context.request_headers) == 3
-
-    def test_build_request_context_with_no_relevant_headers(self):
-        """Test _build_request_context when no Authorization or custom headers present."""
+    def test_build_request_context_with_only_restricted_headers(self):
+        """Test _build_request_context when only restricted headers are present."""
         import contextvars
 
         # Run in fresh context to avoid cross-test contamination
@@ -1895,9 +1895,9 @@ class TestRequestHeadersExtraction:
             class MockRequest:
                 def __init__(self):
                     self.headers = {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json",
-                        "X-Other-Header": "not-relevant",
+                        "Content-Type": "application/json",  # restricted
+                        "Accept": "application/json",  # restricted
+                        "Cache-Control": "no-cache",  # restricted
                     }
                     self.state = type("State", (), {})()
 
@@ -2082,21 +2082,20 @@ class TestRequestHeadersExtraction:
         assert context.request_headers["X-Amzn-Bedrock-AgentCore-Runtime-Custom-Quotes"] == 'value-with-"quotes"'
 
     def test_header_prefix_boundary_cases(self):
-        """Test edge cases for header prefix matching."""
+        """Test edge cases for x-amzn- prefix handling."""
         app = BedrockAgentCoreApp()
 
         class MockRequest:
             def __init__(self):
                 self.headers = {
-                    # Exact prefix match - should be included
+                    # Allowed x-amzn- exception: AgentCore custom prefix - included
                     "X-Amzn-Bedrock-AgentCore-Runtime-Custom-": "empty-suffix",
-                    # Prefix with additional content - should be included
                     "X-Amzn-Bedrock-AgentCore-Runtime-Custom-LongHeaderName": "long-name",
-                    # Similar but not exact prefix - should NOT be included
-                    "X-Amzn-Bedrock-AgentCore-Runtime-Custo": "not-exact",
-                    "X-Amzn-Bedrock-AgentCore-Runtime-Custom": "missing-dash",
-                    # Prefix as substring - should NOT be included
-                    "PrefixX-Amzn-Bedrock-AgentCore-Runtime-Custom-": "has-prefix",
+                    # x-amzn- without the allowed exception - blocked
+                    "X-Amzn-Bedrock-AgentCore-Runtime-Custo": "blocked",
+                    "X-Amzn-Bedrock-AgentCore-Runtime-Custom": "blocked",
+                    # Does NOT start with x-amzn-, so allowed
+                    "PrefixX-Amzn-Bedrock-AgentCore-Runtime-Custom-": "allowed",
                 }
                 self.state = type("State", (), {})()
 
@@ -2104,16 +2103,14 @@ class TestRequestHeadersExtraction:
         context = app._build_request_context(mock_request)
 
         assert context.request_headers is not None
-        # Should include headers with exact prefix match
         assert "X-Amzn-Bedrock-AgentCore-Runtime-Custom-" in context.request_headers
         assert "X-Amzn-Bedrock-AgentCore-Runtime-Custom-LongHeaderName" in context.request_headers
+        assert "PrefixX-Amzn-Bedrock-AgentCore-Runtime-Custom-" in context.request_headers
 
-        # Should NOT include headers without exact prefix match
         assert "X-Amzn-Bedrock-AgentCore-Runtime-Custo" not in context.request_headers
         assert "X-Amzn-Bedrock-AgentCore-Runtime-Custom" not in context.request_headers
-        assert "PrefixX-Amzn-Bedrock-AgentCore-Runtime-Custom-" not in context.request_headers
 
-        assert len(context.request_headers) == 2
+        assert len(context.request_headers) == 3
 
     def test_multiple_authorization_headers_scenario(self):
         """Test scenario with multiple authorization-like headers."""
@@ -2123,9 +2120,9 @@ class TestRequestHeadersExtraction:
             def __init__(self):
                 self.headers = {
                     "Authorization": "Bearer primary-token",
-                    "X-Authorization": "Bearer secondary-token",  # Should NOT be included
-                    "Proxy-Authorization": "Bearer proxy-token",  # Should NOT be included
-                    "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Auth": "Bearer custom-token",  # Should be included
+                    "X-Authorization": "Bearer secondary-token",  # not restricted — included
+                    "Proxy-Authorization": "Bearer proxy-token",  # restricted — blocked
+                    "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Auth": "Bearer custom-token",
                 }
                 self.state = type("State", (), {})()
 
@@ -2134,12 +2131,10 @@ class TestRequestHeadersExtraction:
 
         assert context.request_headers is not None
         assert context.request_headers["Authorization"] == "Bearer primary-token"
+        assert context.request_headers["X-Authorization"] == "Bearer secondary-token"
         assert context.request_headers["X-Amzn-Bedrock-AgentCore-Runtime-Custom-Auth"] == "Bearer custom-token"
-
-        # Only standard Authorization and custom headers should be included
-        assert "X-Authorization" not in context.request_headers
         assert "Proxy-Authorization" not in context.request_headers
-        assert len(context.request_headers) == 2
+        assert len(context.request_headers) == 3
 
     def test_empty_header_values(self):
         """Test handling of empty header values."""
@@ -3025,3 +3020,44 @@ class TestResolveBundleConfig:
         app._resolve_bundle_config(ref_v2)
 
         assert mock_client.get_configuration_bundle_version.call_count == 2
+
+
+class TestIsForwardableHeader:
+    """Unit tests for is_forwardable_header()."""
+
+    def test_generic_custom_headers_are_allowed(self):
+        assert is_forwardable_header("X-Api-Key") is True
+        assert is_forwardable_header("X-Custom-Signature") is True
+        assert is_forwardable_header("X-Trace-Id") is True
+
+    def test_legacy_agentcore_prefix_is_allowed(self):
+        assert is_forwardable_header("X-Amzn-Bedrock-AgentCore-Runtime-Custom-Foo") is True
+        assert is_forwardable_header("X-Amzn-Bedrock-AgentCore-Runtime-Custom-") is True
+
+    def test_restricted_headers_are_blocked(self):
+        assert is_forwardable_header("Content-Type") is False
+        assert is_forwardable_header("Accept") is False
+        assert is_forwardable_header("Cookie") is False
+        assert is_forwardable_header("Proxy-Authorization") is False
+        assert is_forwardable_header("Host") is False
+        assert is_forwardable_header("User-Agent") is False
+
+    def test_restricted_headers_are_case_insensitive(self):
+        assert is_forwardable_header("content-type") is False
+        assert is_forwardable_header("CONTENT-TYPE") is False
+        assert is_forwardable_header("Content-type") is False
+
+    def test_x_amz_prefix_is_blocked(self):
+        assert is_forwardable_header("X-Amz-Date") is False
+        assert is_forwardable_header("X-Amz-Security-Token") is False
+        assert is_forwardable_header("x-amz-content-sha256") is False
+
+    def test_x_amzn_prefix_is_blocked(self):
+        assert is_forwardable_header("X-Amzn-Trace-Id") is False
+        assert is_forwardable_header("x-amzn-requestid") is False
+        # x-amzn- without the AgentCore custom prefix exception
+        assert is_forwardable_header("X-Amzn-Bedrock-AgentCore-Runtime-Session-Id") is False
+
+    def test_authorization_is_allowed(self):
+        # Authorization is normalized to canonical casing by the loop, but is_forwardable_header must not block it
+        assert is_forwardable_header("Authorization") is True
