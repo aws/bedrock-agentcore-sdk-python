@@ -263,6 +263,39 @@ class TestBedrockHeaderExtraction:
 
         self._run_in_isolated_context(_test)
 
+    def test_forwards_non_restricted_custom_headers(self):
+        """Non-restricted headers (e.g. X-Api-Key) are forwarded; restricted ones are not."""
+
+        def _test():
+            from starlette.requests import Request
+
+            scope = {
+                "type": "http",
+                "method": "POST",
+                "path": "/invocations",
+                "headers": [
+                    (b"x-api-key", b"my-key"),
+                    (b"x-custom-signature", b"sha256=abc"),
+                    (b"content-type", b"application/json"),  # restricted
+                    (b"x-amz-date", b"20250101T000000Z"),  # restricted (x-amz-)
+                    (b"x-amzn-trace-id", b"trace-123"),  # restricted (x-amzn-)
+                ],
+                "query_string": b"",
+            }
+            request = Request(scope)
+            app = AGUIApp()
+            app._build_request_context(request)
+
+            headers = BedrockAgentCoreContext.get_request_headers()
+            assert headers is not None
+            assert any(k.lower() == "x-api-key" for k in headers)
+            assert any(k.lower() == "x-custom-signature" for k in headers)
+            assert not any(k.lower() == "content-type" for k in headers)
+            assert not any(k.lower() == "x-amz-date" for k in headers)
+            assert not any(k.lower() == "x-amzn-trace-id" for k in headers)
+
+        self._run_in_isolated_context(_test)
+
     def test_auto_generates_request_id_when_missing(self):
         def _test():
             from starlette.requests import Request
