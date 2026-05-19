@@ -107,5 +107,3 @@ class TestBedrockAgentCoreAppNoUserContent:
         assert response.status_code == 200
         spans = otel_exporter.get_finished_spans()
         _assert_no_sentinel_in_spans(spans, [SENTINEL_PROMPT, SENTINEL_RESPONSE])
-
-
