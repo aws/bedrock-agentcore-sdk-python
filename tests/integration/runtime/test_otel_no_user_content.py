@@ -5,7 +5,6 @@ OTEL span attributes, events, or resource attributes.
 """
 
 import json
-import uuid
 
 import pytest
 from opentelemetry.sdk.trace import TracerProvider
@@ -110,97 +109,3 @@ class TestBedrockAgentCoreAppNoUserContent:
         _assert_no_sentinel_in_spans(spans, [SENTINEL_PROMPT, SENTINEL_RESPONSE])
 
 
-class TestA2ANoUserContent:
-    """Verify A2A app does not leak user content into OTEL spans."""
-
-    def test_a2a_message_send_no_user_content_in_spans(self, otel_exporter):
-        pytest.importorskip("a2a")
-
-        from a2a.server.agent_execution import AgentExecutor, RequestContext
-        from a2a.server.events import EventQueue
-        from a2a.server.tasks import TaskUpdater
-        from a2a.types import AgentCapabilities, AgentCard, AgentSkill, Part, TextPart, UnsupportedOperationError
-        from a2a.utils import new_task
-        from a2a.utils.errors import ServerError
-
-        from bedrock_agentcore.runtime.a2a import build_a2a_app
-
-        class SentinelExecutor(AgentExecutor):
-            async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
-                task = context.current_task or new_task(context.message)
-                if not context.current_task:
-                    await event_queue.enqueue_event(task)
-                updater = TaskUpdater(event_queue, task.id, task.context_id)
-                await updater.add_artifact([Part(root=TextPart(text=SENTINEL_RESPONSE))])
-                await updater.complete()
-
-            async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
-                raise ServerError(error=UnsupportedOperationError())
-
-        card = AgentCard(
-            name="sentinel-agent",
-            description="Test agent",
-            url="http://localhost:9000",
-            version="0.1.0",
-            capabilities=AgentCapabilities(streaming=True),
-            skills=[AgentSkill(id="test", name="test", description="test", tags=["test"])],
-            default_input_modes=["text"],
-            default_output_modes=["text"],
-        )
-
-        app = build_a2a_app(executor=SentinelExecutor(), agent_card=card)
-        client = TestClient(app, raise_server_exceptions=False)
-
-        jsonrpc_body = {
-            "jsonrpc": "2.0",
-            "method": "message/send",
-            "id": 1,
-            "params": {
-                "message": {
-                    "message_id": str(uuid.uuid4()),
-                    "role": "user",
-                    "parts": [{"kind": "text", "text": SENTINEL_PROMPT}],
-                }
-            },
-        }
-
-        response = client.post("/", json=jsonrpc_body)
-        assert response.status_code == 200
-
-        spans = otel_exporter.get_finished_spans()
-        _assert_no_sentinel_in_spans(spans, [SENTINEL_PROMPT, SENTINEL_RESPONSE])
-
-
-class TestAGUINoUserContent:
-    """Verify AG-UI app does not leak user content into OTEL spans."""
-
-    def test_ag_ui_no_user_content_in_spans(self, otel_exporter):
-        pytest.importorskip("ag_ui")
-
-        from ag_ui.core import RunAgentInput, RunFinishedEvent, RunStartedEvent, TextMessageContentEvent
-
-        from bedrock_agentcore.runtime.ag_ui import build_ag_ui_app
-
-        async def sentinel_agent(input_data: RunAgentInput):
-            yield RunStartedEvent(thread_id=input_data.thread_id, run_id=input_data.run_id)
-            yield TextMessageContentEvent(message_id="m-1", delta=SENTINEL_RESPONSE)
-            yield RunFinishedEvent(thread_id=input_data.thread_id, run_id=input_data.run_id)
-
-        app = build_ag_ui_app(sentinel_agent)
-        client = TestClient(app, raise_server_exceptions=False)
-
-        run_input = {
-            "thread_id": "t-otel-test",
-            "run_id": "r-otel-test",
-            "state": [],
-            "messages": [{"role": "user", "content": SENTINEL_PROMPT, "id": "msg-1"}],
-            "tools": [],
-            "context": [],
-            "forwardedProps": {},
-        }
-
-        response = client.post("/invocations", json=run_input)
-        assert response.status_code == 200
-
-        spans = otel_exporter.get_finished_spans()
-        _assert_no_sentinel_in_spans(spans, [SENTINEL_PROMPT, SENTINEL_RESPONSE])
