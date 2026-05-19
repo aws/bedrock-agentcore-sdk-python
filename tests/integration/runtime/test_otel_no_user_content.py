@@ -114,12 +114,12 @@ class TestA2ANoUserContent:
     """Verify A2A app does not leak user content into OTEL spans."""
 
     def test_a2a_message_send_no_user_content_in_spans(self, otel_exporter):
-        a2a_sdk = pytest.importorskip("a2a")
+        pytest.importorskip("a2a")
 
         from a2a.server.agent_execution import AgentExecutor, RequestContext
         from a2a.server.events import EventQueue
         from a2a.server.tasks import TaskUpdater
-        from a2a.types import AgentCapabilities, AgentCard, AgentSkill, Part, TextPart
+        from a2a.types import AgentCapabilities, AgentCard, AgentSkill, Part, TextPart, UnsupportedOperationError
         from a2a.utils import new_task
         from a2a.utils.errors import ServerError
 
@@ -135,7 +135,7 @@ class TestA2ANoUserContent:
                 await updater.complete()
 
             async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
-                raise ServerError(error=a2a.types.UnsupportedOperationError())
+                raise ServerError(error=UnsupportedOperationError())
 
         card = AgentCard(
             name="sentinel-agent",
