@@ -6,6 +6,7 @@ OTEL span attributes, events, or resource attributes.
 
 import json
 
+import opentelemetry.trace
 import pytest
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -52,8 +53,6 @@ def otel_exporter():
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
-
-    import opentelemetry.trace
 
     original_provider = opentelemetry.trace.get_tracer_provider()
     opentelemetry.trace.set_tracer_provider(provider)
