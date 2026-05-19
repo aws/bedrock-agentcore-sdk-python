@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.0] - 2026-05-19
+
+### Added
+- feat: expandi custom request header forwarding to match runtime allowlist (#483) (5fde434)
+
+### Other Changes
+- chore: replace all github.token/GITHUB_TOKEN with GitHub App token (#475) (b64a0d9)
+
 ## [1.9.1] - 2026-05-12
 
 ### Fixed
