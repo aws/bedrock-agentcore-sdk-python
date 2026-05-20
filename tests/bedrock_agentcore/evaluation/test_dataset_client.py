@@ -132,6 +132,37 @@ class TestDatasetClientDeleteAndWait:
 
         mock_cp.delete_dataset.assert_called_once_with(datasetId="ds-123")
 
+    def test_delete_dataset_version_and_wait_returns_active(self, client_and_cp):
+        client, mock_cp = client_and_cp
+        mock_cp.delete_dataset.return_value = {"datasetId": "ds-123"}
+        mock_cp.get_dataset.return_value = {"datasetId": "ds-123", "status": "ACTIVE"}
+
+        result = client.delete_dataset_and_wait(
+            wait_config=WaitConfig(max_wait=10, poll_interval=1),
+            datasetId="ds-123",
+            datasetVersion="1",
+        )
+
+        assert result is not None
+        assert result["status"] == "ACTIVE"
+        mock_cp.delete_dataset.assert_called_once_with(datasetId="ds-123", datasetVersion="1")
+
+    def test_delete_dataset_version_and_wait_failure(self, client_and_cp):
+        client, mock_cp = client_and_cp
+        mock_cp.delete_dataset.return_value = {"datasetId": "ds-123"}
+        mock_cp.get_dataset.return_value = {
+            "datasetId": "ds-123",
+            "status": "UPDATE_FAILED",
+            "statusReasons": "Workflow failed",
+        }
+
+        with pytest.raises(RuntimeError, match="UPDATE_FAILED"):
+            client.delete_dataset_and_wait(
+                wait_config=WaitConfig(max_wait=5, poll_interval=1),
+                datasetId="ds-123",
+                datasetVersion="1",
+            )
+
 
 class TestDatasetClientVersionAndWait:
     def test_create_version_and_wait_success(self, client_and_cp):

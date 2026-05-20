@@ -132,23 +132,41 @@ class DatasetClient:
         self,
         wait_config: Optional[WaitConfig] = None,
         **kwargs,
-    ) -> None:
-        """Delete a dataset and wait for deletion to complete.
+    ) -> Optional[Dict[str, Any]]:
+        """Delete a dataset (or a single version) and wait for completion.
+
+        - Full delete (no ``datasetVersion``): polls until ``GetDataset``
+          raises ``ResourceNotFoundException``. Fails on ``DELETE_FAILED``.
+        - Version-specific delete (``datasetVersion`` provided): the dataset
+          itself is not removed. Polls ``GetDataset`` until status returns to
+          ``ACTIVE``. Fails on ``UPDATE_FAILED``. Returns the dataset details.
 
         Args:
             wait_config: Optional WaitConfig for polling behavior.
             **kwargs: Arguments forwarded to the delete_dataset API.
 
         Raises:
-            TimeoutError: If the dataset isn't deleted within max_wait.
+            RuntimeError: On ``DELETE_FAILED`` or ``UPDATE_FAILED``.
+            TimeoutError: If the operation does not finish within ``max_wait``.
         """
-        response = self._cp_client.delete_dataset(**convert_kwargs(kwargs))
+        converted = convert_kwargs(kwargs)
+        response = self._cp_client.delete_dataset(**converted)
         dataset_id = response["datasetId"]
+
+        if "datasetVersion" in converted:
+            return wait_until(
+                lambda: self._cp_client.get_dataset(datasetId=dataset_id),
+                "ACTIVE",
+                {"UPDATE_FAILED"},
+                wait_config,
+            )
+
         wait_until_deleted(
             lambda: self._cp_client.get_dataset(datasetId=dataset_id),
             failed={"DELETE_FAILED"},
             wait_config=wait_config,
         )
+        return None
 
     def create_dataset_version_and_wait(
         self,

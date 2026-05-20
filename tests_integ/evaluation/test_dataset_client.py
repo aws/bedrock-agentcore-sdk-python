@@ -164,12 +164,60 @@ class TestDatasetCrud:
         assert len(response["versions"]) >= 1
 
     @pytest.mark.order(13)
+    def test_delete_dataset_version_and_wait(self):
+        """Version-specific delete returns the dataset to ACTIVE, dataset still exists.
+
+        Requires at least 2 versions. Creates a second version first so the deletion
+        does not target the last remaining version (which the service rejects).
+        """
+        if not self.dataset_ids:
+            pytest.skip("prerequisite test did not create dataset")
+        did = self.dataset_ids[0]
+
+        # Make a second version so we have something we can safely delete.
+        self.client.add_examples_and_wait(
+            datasetId=did,
+            source={
+                "inlineExamples": {
+                    "examples": [
+                        {
+                            "scenario_id": "version-delete-fixture",
+                            "turns": [{"input": "filler", "expected_response": "ok"}],
+                        }
+                    ]
+                }
+            },
+        )
+        self.client.create_dataset_version_and_wait(datasetId=did)
+
+        versions_before = self.client.list_dataset_versions(datasetId=did)["versions"]
+        assert len(versions_before) >= 2, "need >= 2 versions for version-specific delete"
+        # Delete the oldest version to keep the most recent one.
+        target_version = str(min(int(v["datasetVersion"]) for v in versions_before))
+
+        result = self.client.delete_dataset_and_wait(datasetId=did, datasetVersion=target_version)
+
+        # Version-specific delete returns the dataset (not None) at ACTIVE.
+        assert result is not None
+        assert result["status"] == "ACTIVE"
+
+        # Dataset itself is still present.
+        ds = self.client.get_dataset(datasetId=did)
+        assert ds["datasetId"] == did
+
+        # Target version is gone.
+        versions_after = self.client.list_dataset_versions(datasetId=did)["versions"]
+        remaining = [str(v["datasetVersion"]) for v in versions_after]
+        assert target_version not in remaining
+
+    @pytest.mark.order(14)
     def test_delete_dataset_and_wait(self):
-        """Delete dataset and wait for removal."""
+        """Full delete (no datasetVersion) removes the dataset."""
         if not self.dataset_ids:
             pytest.skip("prerequisite test did not create dataset")
         did = self.dataset_ids.pop(0)
-        self.client.delete_dataset_and_wait(datasetId=did)
+        result = self.client.delete_dataset_and_wait(datasetId=did)
+        assert result is None
         with pytest.raises(ClientError) as exc_info:
             self.client.get_dataset(datasetId=did)
         assert exc_info.value.response["Error"]["Code"] == "ResourceNotFoundException"
