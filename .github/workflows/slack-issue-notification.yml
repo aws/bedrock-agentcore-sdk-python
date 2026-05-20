@@ -4,20 +4,50 @@ on:
   issues:
     types: [opened]
 
+permissions: {}
+
 jobs:
   notify-slack:
     runs-on: ubuntu-latest
     steps:
       - name: Send issue details to Slack
+        # Attacker-controlled fields are passed through env: rather than
+        # interpolated into the YAML payload, to prevent workflow injection.
+        # Schema is uniform across event types: every workflow sends the
+        # same 20 keys so Slack-side branching on event_type is reliable.
+        # For issue_opened, the issue_* fields carry the data and the
+        # pr_*/comment_* fields are empty.
+        env:
+          REPOSITORY: ${{ github.repository }}
+          CREATED_AT: ${{ github.event.issue.created_at }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          LABELS: ${{ join(github.event.issue.labels.*.name, ', ') }}
         uses: slackapi/slack-github-action@v3.0.1
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: webhook-trigger
           payload: |
-            issue_title: "${{ github.event.issue.title }}"
-            issue_number: "${{ github.event.issue.number }}"
-            issue_url: "${{ github.event.issue.html_url }}"
-            issue_author: "${{ github.event.issue.user.login }}"
-            issue_body: ${{ toJSON(github.event.issue.body) }}
-            repository: "${{ github.repository }}"
-            created_at: "${{ github.event.issue.created_at }}"
+            event_type: "issue_opened"
+            repository: "${{ env.REPOSITORY }}"
+            created_at: "${{ env.CREATED_AT }}"
+            issue_number: "${{ env.ISSUE_NUMBER }}"
+            issue_title: ${{ toJSON(env.ISSUE_TITLE) }}
+            issue_url: "${{ env.ISSUE_URL }}"
+            issue_author: "${{ env.ISSUE_AUTHOR }}"
+            issue_body: ${{ toJSON(env.ISSUE_BODY) }}
+            labels: ${{ toJSON(env.LABELS) }}
+            pr_number: ""
+            pr_title: ""
+            pr_url: ""
+            pr_author: ""
+            pr_state: ""
+            pr_closed_at: ""
+            pr_merged_at: ""
+            comment_id: ""
+            comment_url: ""
+            comment_author: ""
+            comment_body: ""
