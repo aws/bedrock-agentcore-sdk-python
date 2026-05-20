@@ -1,5 +1,6 @@
 """AgentCore Memory-based session manager for Bedrock AgentCore Memory integration."""
 
+import asyncio
 import json
 import logging
 import threading
@@ -10,7 +11,13 @@ from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional
 
 import boto3
 from botocore.config import Config as BotocoreConfig
+from strands.experimental.hooks.multiagent.events import (
+    AfterMultiAgentInvocationEvent,
+    AfterNodeCallEvent,
+    MultiAgentInitializedEvent,
+)
 from strands.hooks import AfterInvocationEvent, MessageAddedEvent
+from strands.hooks.events import AgentInitializedEvent
 from strands.hooks.registry import HookRegistry
 from strands.session.repository_session_manager import RepositorySessionManager
 from strands.session.session_repository import SessionRepository
@@ -906,16 +913,79 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
         """Register additional hooks.
 
+        In sync mode (the default), delegates to the base class and adds the
+        retrieve_customer_context + batching callbacks synchronously, preserving
+        existing behavior exactly.
+
+        In async mode, registers async callbacks that wrap every per-turn
+        boto3-backed operation (append_message, sync_agent, buffer flushes,
+        customer-context retrieval) with asyncio.to_thread, so the asyncio
+        event loop stays free while boto3 is blocking on the network.
+
+        Note: AgentInitializedEvent cannot be async per Strands' HookRegistry,
+        so agent restoration (read_session / read_agent / list_messages) still
+        blocks the calling thread in async mode — see AgentCoreMemoryConfig
+        docstring for mitigations.
+
         Args:
             registry (HookRegistry): The hook registry to register callbacks with.
             **kwargs: Additional keyword arguments.
         """
-        RepositorySessionManager.register_hooks(self, registry, **kwargs)
-        registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
+        if not self.config.async_mode:
+            RepositorySessionManager.register_hooks(self, registry, **kwargs)
+            registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
 
-        # Only register AfterInvocationEvent hook when batching is enabled
+            # Only register AfterInvocationEvent hook when batching is enabled
+            if self.config.batch_size > 1:
+                registry.add_callback(AfterInvocationEvent, lambda event: self._flush_messages())
+            return
+
+        # Async mode: register async callbacks that offload the existing sync
+        # methods to a worker thread via asyncio.to_thread. AgentInitializedEvent
+        # must stay sync (Strands disallows async callbacks on this event; see
+        # strands/hooks/registry.py:174).
+        logger.warning(
+            "AgentCoreMemorySessionManager async_mode=True: the agent must be invoked "
+            "via the async path (e.g. agent.stream_async(...) or agent.invoke_async(...)). "
+            "Sync invocation will raise RuntimeError from Strands' hook registry."
+        )
+
+        registry.add_callback(AgentInitializedEvent, lambda event: self.initialize(event.agent))
+
+        async def _on_message_added_persist(event: MessageAddedEvent) -> None:
+            await asyncio.to_thread(self.append_message, event.message, event.agent)
+            await asyncio.to_thread(self.sync_agent, event.agent)
+
+        async def _on_message_added_retrieve(event: MessageAddedEvent) -> None:
+            await asyncio.to_thread(self.retrieve_customer_context, event)
+
+        async def _on_after_invocation_sync(event: AfterInvocationEvent) -> None:
+            await asyncio.to_thread(self.sync_agent, event.agent)
+
+        registry.add_callback(MessageAddedEvent, _on_message_added_persist)
+        registry.add_callback(AfterInvocationEvent, _on_after_invocation_sync)
+        registry.add_callback(MessageAddedEvent, _on_message_added_retrieve)
+
         if self.config.batch_size > 1:
-            registry.add_callback(AfterInvocationEvent, lambda event: self._flush_messages())
+
+            async def _on_after_invocation_flush(event: AfterInvocationEvent) -> None:
+                await asyncio.to_thread(self._flush_messages)
+
+            registry.add_callback(AfterInvocationEvent, _on_after_invocation_flush)
+
+        # Register multi-agent callbacks so async-mode parity matches sync-mode
+        async def _on_multi_agent_initialized(event: MultiAgentInitializedEvent) -> None:
+            await asyncio.to_thread(self.initialize_multi_agent, event.source)
+
+        async def _on_after_node_call(event: AfterNodeCallEvent) -> None:
+            await asyncio.to_thread(self.sync_multi_agent, event.source)
+
+        async def _on_after_multi_agent_invocation(event: AfterMultiAgentInvocationEvent) -> None:
+            await asyncio.to_thread(self.sync_multi_agent, event.source)
+
+        registry.add_callback(MultiAgentInitializedEvent, _on_multi_agent_initialized)
+        registry.add_callback(AfterNodeCallEvent, _on_after_node_call)
+        registry.add_callback(AfterMultiAgentInvocationEvent, _on_after_multi_agent_invocation)
 
     @override
     def initialize(self, agent: "Agent", **kwargs: Any) -> None:
