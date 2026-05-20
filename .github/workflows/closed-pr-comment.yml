@@ -17,14 +17,21 @@ permissions:
   pull-requests: write
   issues: read
 
+# Serialize per-PR so the marker-comment dedup is race-free (otherwise two
+# rapid-fire comments could both see "no marker" and both post a redirect).
+# cancel-in-progress is false so the second run still executes after the
+# first finishes — we want to evaluate dedup against the just-posted marker.
+concurrency:
+  group: closed-pr-comment-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
   redirect:
     runs-on: ubuntu-latest
     # Only fire on PRs (issue_comment fires for issues too) that are closed.
     if: >-
-      github.event.issue.pull_request != null &&
-      github.event.issue.state == 'closed' &&
-      github.event.comment.user.type != 'Bot'
+      github.event.issue.pull_request != null && github.event.issue.state == 'closed' && github.event.comment.user.type
+      != 'Bot'
     steps:
       - name: Check commenter permission
         id: perm
@@ -117,7 +124,12 @@ jobs:
             core.setOutput('state', mergedAt ? 'merged' : 'closed');
 
       - name: Notify Slack
-        if: steps.perm.outputs.skip != 'true'
+        # Page oncall only on the FIRST external comment per PR (gated by
+        # already_posted). Subsequent comments on the same PR don't page —
+        # the redirect comment has already told the commenter to open an
+        # issue, and issues page oncall via the issue path. This bounds
+        # paging volume regardless of how chatty a thread becomes.
+        if: steps.perm.outputs.skip != 'true' && steps.existing.outputs.already_posted != 'true'
         # Attacker-controlled fields are passed through env: rather than
         # interpolated into the YAML payload, to prevent workflow injection.
         # Schema is uniform across event types: every workflow sends the
@@ -131,7 +143,6 @@ jobs:
           PR_TITLE: ${{ github.event.issue.title }}
           PR_URL: ${{ github.event.issue.html_url }}
           PR_AUTHOR: ${{ github.event.issue.user.login }}
-          PR_STATE: ${{ steps.pr_state.outputs.state }}
           PR_CLOSED_AT: ${{ github.event.issue.closed_at }}
           PR_MERGED_AT: ${{ github.event.issue.pull_request.merged_at }}
           COMMENT_ID: ${{ github.event.comment.id }}
@@ -156,7 +167,7 @@ jobs:
             pr_title: ${{ toJSON(env.PR_TITLE) }}
             pr_url: "${{ env.PR_URL }}"
             pr_author: "${{ env.PR_AUTHOR }}"
-            pr_state: "${{ env.PR_STATE }}"
+            pr_state: "${{ steps.pr_state.outputs.state }}"
             pr_closed_at: "${{ env.PR_CLOSED_AT }}"
             pr_merged_at: "${{ env.PR_MERGED_AT }}"
             comment_id: "${{ env.COMMENT_ID }}"
