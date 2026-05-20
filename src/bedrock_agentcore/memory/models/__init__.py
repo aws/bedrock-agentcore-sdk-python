@@ -5,9 +5,15 @@ from typing import Any, Dict
 from .DictWrapper import DictWrapper
 from .filters import (
     EventMetadataFilter,
+    IndexedKey,
     LeftExpression,
+    MemoryMetadataFilter,
+    MemoryRecordLeftExpression,
+    MemoryRecordOperatorType,
+    MemoryRecordRightExpression,
     MetadataKey,
     MetadataValue,
+    MetadataValueType,
     OperatorType,
     RightExpression,
     StringValue,
@@ -101,4 +107,10 @@ __all__ = [
     "OperatorType",
     "RightExpression",
     "EventMetadataFilter",
+    "MemoryRecordOperatorType",
+    "MemoryRecordLeftExpression",
+    "MemoryRecordRightExpression",
+    "MemoryMetadataFilter",
+    "MetadataValueType",
+    "IndexedKey",
 ]
