@@ -218,7 +218,6 @@ class AgentCorePaymentsPlugin(Plugin):
             self._increment_payment_retry_count(event)
 
             # Validate tool input before processing payment
-            tool_input = event.tool_use.get("input", {})
             if not handler.validate_tool_input(tool_input):
                 logger.error("Tool input validation failed, cannot apply payment header")
                 self._store_payment_failure_state(event, Exception("Tool input validation failed"))
@@ -316,6 +315,11 @@ class AgentCorePaymentsPlugin(Plugin):
         Called after generate_payment_header and apply_payment_header both succeed,
         right before setting event.retry. If a subsequent 402 is received,
         _has_successful_signing will return True indicating the failure is server-side.
+
+        Note: payment_signed_*, payment_retry_count_*, and payment_failure_* keys are
+        intentionally not cleared. invocation_state is scoped to a single agent
+        invocation and is discarded by Strands when the invocation ends, so these
+        per-tool-use markers do not accumulate across invocations.
 
         Args:
             event: The after tool call event

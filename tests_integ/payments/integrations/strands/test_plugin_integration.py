@@ -8,6 +8,7 @@ import logging
 import os
 import uuid
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 from strands import Agent
@@ -16,6 +17,7 @@ from strands_tools import http_request
 from bedrock_agentcore.payments.integrations.config import AgentCorePaymentsPluginConfig
 from bedrock_agentcore.payments.integrations.strands.plugin import AgentCorePaymentsPlugin
 from bedrock_agentcore.payments.manager import (
+    PaymentError,
     PaymentInstrumentConfigurationRequired,
     PaymentManager,
     PaymentSessionConfigurationRequired,
@@ -714,10 +716,12 @@ class TestAgentCorePaymentsPluginAgentName:
 
 @pytest.mark.integration
 class TestPostPaymentFailureFlow:
-    """Hook-level integration tests for post-payment failure behavior.
+    """Hook-flow scenarios for post-payment failure behavior.
 
-    Exercises the plugin's after_tool_call hook directly to verify the
-    retry logic end-to-end without requiring an LLM.
+    These are mock-driven tests that exercise the plugin's after_tool_call hook
+    directly. They fully mock PaymentManager, do not hit AWS, and require no
+    credentials — they live here alongside the real-AWS integration tests only
+    because they cover end-to-end hook flow rather than a single helper method.
     """
 
     @classmethod
@@ -728,8 +732,6 @@ class TestPostPaymentFailureFlow:
 
     def _make_402_event(self, tool_use_id, body, invocation_state=None, tool_input=None):
         """Create a mock AfterToolCallEvent with a 402 PAYMENT_REQUIRED result."""
-        from unittest.mock import MagicMock
-
         payment_required = {
             "statusCode": 402,
             "headers": {"content-type": "application/json"},
@@ -760,8 +762,6 @@ class TestPostPaymentFailureFlow:
         1. First after_tool_call with 402 → plugin signs and sets retry=True
         2. Second after_tool_call with 402 (server rejection) → plugin stops, no retry
         """
-        from unittest.mock import MagicMock, patch
-
         mock_pm = MagicMock()
         mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "signed-proof-base64"}
 
@@ -825,10 +825,6 @@ class TestPostPaymentFailureFlow:
         Simulates multiple after_tool_call invocations where signing always fails.
         Verifies that MAX_PAYMENT_RETRIES is respected.
         """
-        from unittest.mock import MagicMock, patch
-
-        from bedrock_agentcore.payments.manager import PaymentError
-
         mock_pm = MagicMock()
         mock_pm.generate_payment_header.side_effect = PaymentError("Signing service unavailable")
 
@@ -891,8 +887,6 @@ class TestPostPaymentFailureFlow:
         After successful signing and retry, if the tool returns a non-402 response,
         the plugin should not interfere.
         """
-        from unittest.mock import MagicMock, patch
-
         mock_pm = MagicMock()
         mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "valid-proof"}
 
@@ -951,8 +945,6 @@ class TestPostPaymentFailureFlow:
         - tool-A signed successfully → subsequent 402 stops
         - tool-B never signed → 402 still attempts signing
         """
-        from unittest.mock import MagicMock, patch
-
         mock_pm = MagicMock()
         mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "signed"}
 
