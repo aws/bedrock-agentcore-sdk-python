@@ -198,12 +198,15 @@ class AgentCorePaymentsPlugin(Plugin):
 
             # If we previously signed successfully and still got a 402, the server
             # rejected the payment for a non-retryable reason (e.g., insufficient balance).
-            # Stop processing — the existing 402 result is already structured for the LLM.
+            # Do not retry — store failure state so the agent is notified via interrupt.
             if self._has_successful_signing(event):
+                error_msg = body.get("error", "unknown error") if body and isinstance(body, dict) else "unknown error"
                 logger.warning(
-                    "Received 402 after successful signing for tool %s — post-payment failure, not retrying",
+                    "Received 402 after successful signing for tool %s — post-payment failure: %s",
                     event.tool_use.get("name", "unknown"),
+                    error_msg,
                 )
+                self._store_payment_failure_state(event, PaymentError(f"Payment rejected after signing: {error_msg}"))
                 return
 
             # Check if signing retry limit has been reached
@@ -211,7 +214,7 @@ class AgentCorePaymentsPlugin(Plugin):
                 logger.warning("Payment signing retry limit reached. Processing skipped.")
                 return
 
-            # Increment retry count for signing attempts
+            # Increment before attempt so limit is enforced even on exception
             self._increment_payment_retry_count(event)
 
             # Validate tool input before processing payment
@@ -320,22 +323,6 @@ class AgentCorePaymentsPlugin(Plugin):
         tool_use_id = event.tool_use.get("toolUseId", "unknown")
         signed_key = f"payment_signed_{tool_use_id}"
         event.invocation_state[signed_key] = True
-
-    @staticmethod
-    def _extract_payment_error_message(body: Optional[Dict[str, Any]]) -> str:
-        """Extract a human-readable error message from a 402 response body.
-
-        Args:
-            body: The extracted response body (may be None)
-
-        Returns:
-            Error message string, or "unknown error" if not extractable
-        """
-        if body and isinstance(body, dict):
-            error = body.get("error")
-            if isinstance(error, str) and error:
-                return error
-        return "unknown error"
 
     def _store_payment_failure_state(self, event: AfterToolCallEvent, exception: Exception) -> None:
         """Store payment failure information in invocation state for agent to handle.

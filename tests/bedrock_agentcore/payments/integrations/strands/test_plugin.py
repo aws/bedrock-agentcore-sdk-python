@@ -1376,34 +1376,6 @@ class TestHasSuccessfulSigning:
         assert plugin._has_successful_signing(event2) is False
 
 
-class TestExtractPaymentErrorMessage:
-    """Tests for _extract_payment_error_message static method."""
-
-    def test_extracts_error_from_body(self):
-        """Test extracting error message from body dict."""
-        body = {"error": "invalid_exact_evm_insufficient_balance"}
-        assert AgentCorePaymentsPlugin._extract_payment_error_message(body) == "invalid_exact_evm_insufficient_balance"
-
-    def test_returns_unknown_for_none_body(self):
-        """Test returns 'unknown error' when body is None."""
-        assert AgentCorePaymentsPlugin._extract_payment_error_message(None) == "unknown error"
-
-    def test_returns_unknown_for_empty_error(self):
-        """Test returns 'unknown error' when error is empty string."""
-        body = {"error": ""}
-        assert AgentCorePaymentsPlugin._extract_payment_error_message(body) == "unknown error"
-
-    def test_returns_unknown_for_missing_error_key(self):
-        """Test returns 'unknown error' when error key is missing."""
-        body = {"statusCode": 402}
-        assert AgentCorePaymentsPlugin._extract_payment_error_message(body) == "unknown error"
-
-    def test_returns_unknown_for_non_string_error(self):
-        """Test returns 'unknown error' when error is not a string."""
-        body = {"error": 42}
-        assert AgentCorePaymentsPlugin._extract_payment_error_message(body) == "unknown error"
-
-
 class TestAfterToolCallPostPaymentFailure:
     """Tests for the post-payment failure path in after_tool_call."""
 
@@ -1443,12 +1415,13 @@ class TestAfterToolCallPostPaymentFailure:
 
         # Should NOT retry
         assert event.retry is False
-        # Should NOT store failure state (no interrupt cycle)
-        assert "payment_failure_tool-123" not in event.invocation_state
+        # Should store failure state so agent is notified via interrupt
+        assert "payment_failure_tool-123" in event.invocation_state
+        failure = event.invocation_state["payment_failure_tool-123"]
+        assert "Payment rejected after signing" in failure["exceptionMessage"]
+        assert "invalid_exact_evm_insufficient_balance" in failure["exceptionMessage"]
         # Should NOT have called generate_payment_header
         mock_pm_instance.generate_payment_header.assert_not_called()
-        # Result should remain unchanged (raw 402 for LLM to reason about)
-        assert event.result == original_result
 
     @patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager")
     def test_first_402_without_prior_signing_proceeds_normally(self, mock_payment_manager_class):
@@ -1556,6 +1529,47 @@ class TestAfterToolCallPostPaymentFailure:
         # Should NOT attempt signing
         mock_pm_instance.generate_payment_header.assert_not_called()
         assert event.retry is False
+
+
+class TestSigningFlagTakesPrecedenceOverRetryLimit:
+    """Tests that _has_successful_signing check takes precedence over retry limit."""
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager")
+    def test_successful_signing_stops_even_when_retry_limit_not_reached(self, mock_payment_manager_class):
+        """Test that post-payment failure stops processing regardless of retry counter state.
+
+        If signing succeeded (payment_signed_ flag is True), a subsequent 402 should
+        stop immediately — even if payment_retry_count is below MAX_PAYMENT_RETRIES.
+        The signing flag takes precedence over the retry counter.
+        """
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+            user_id="test-user",
+            payment_instrument_id="payment-instrument-123",
+            payment_session_id="payment-session-456",
+        )
+
+        mock_pm_instance = MagicMock()
+        plugin = AgentCorePaymentsPlugin(config=config)
+        plugin.payment_manager = mock_pm_instance
+
+        # Signing succeeded but retry counter is only at 1 (below MAX_PAYMENT_RETRIES=3)
+        event, _ = _create_event_with_agent(
+            {
+                "result": [{"text": f"PAYMENT_REQUIRED: {json.dumps({'statusCode': 402, 'headers': {}, 'body': {}})}"}],
+                "tool_use": {"name": "http_request", "toolUseId": "tool-123", "input": {"headers": {}}},
+                "invocation_state": {"payment_signed_tool-123": True, "payment_retry_count_tool-123": 1},
+                "retry": False,
+            }
+        )
+
+        plugin.after_tool_call(event)
+
+        # Should NOT retry — signing flag takes precedence
+        assert event.retry is False
+        mock_pm_instance.generate_payment_header.assert_not_called()
+        # Should store failure state for interrupt notification
+        assert "payment_failure_tool-123" in event.invocation_state
 
 
 class TestAfterToolCallAutoPaymentDisabled:

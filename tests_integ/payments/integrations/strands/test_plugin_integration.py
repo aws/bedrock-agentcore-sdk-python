@@ -797,7 +797,7 @@ class TestPostPaymentFailureFlow:
         mock_pm.generate_payment_header.assert_called_once()
         assert "X-PAYMENT" in tool_input["headers"]
         assert invocation_state.get("payment_signed_tool-abc") is True
-        logger.info("✓ Step 1: First 402 → signed and retry=True")
+        logger.info("Step 1: First 402 - signed and retry=True")
 
         # Step 2: Second 402 — server rejected (insufficient balance)
         event2 = self._make_402_event(
@@ -813,9 +813,11 @@ class TestPostPaymentFailureFlow:
         assert event2.retry is False
         # generate_payment_header should still only have been called once (from step 1)
         assert mock_pm.generate_payment_header.call_count == 1
-        # Should NOT store failure state (no interrupt cycle)
-        assert "payment_failure_tool-abc" not in invocation_state
-        logger.info("✓ Step 2: Second 402 after signing → stopped, no retry")
+        # Should store failure state so agent is notified via interrupt
+        assert "payment_failure_tool-abc" in invocation_state
+        failure = invocation_state["payment_failure_tool-abc"]
+        assert "Payment rejected after signing" in failure["exceptionMessage"]
+        logger.info("Step 2: Second 402 after signing - stopped, failure stored for interrupt")
 
     def test_signing_failure_uses_retry_counter(self):
         """Test that signing failures increment retry counter and stop at limit.
