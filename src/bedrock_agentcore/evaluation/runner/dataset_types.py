@@ -37,6 +37,7 @@ class Turn(BaseModel):
 class Scenario(BaseModel):
     """Base class for evaluation scenarios."""
 
+    schema_type: str = ""
     scenario_id: str
     assertions: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
@@ -45,6 +46,7 @@ class Scenario(BaseModel):
 class PredefinedScenario(Scenario):
     """A scenario with a predefined conversation flow."""
 
+    schema_type: str = "AGENTCORE_EVALUATION_PREDEFINED_V1"
     turns: List[Turn]
     expected_trajectory: Optional[List[str]] = None
 
@@ -71,6 +73,8 @@ class SimulatedScenario(Scenario):
         max_turns: Maximum number of conversation turns before the simulation stops.
             Defaults to 10.
     """
+
+    schema_type: str = "AGENTCORE_EVALUATION_SIMULATED_V1"
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
