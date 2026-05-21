@@ -710,3 +710,298 @@ class TestAgentCorePaymentsPluginAgentName:
         assert agent is not None
 
         logger.info("Plugin with agent_name successfully initialized with real Strands Agent")
+
+
+@pytest.mark.integration
+class TestPostPaymentFailureFlow:
+    """Hook-level integration tests for post-payment failure behavior.
+
+    Exercises the plugin's after_tool_call hook directly to verify the
+    retry logic end-to-end without requiring an LLM.
+    """
+
+    @classmethod
+    def setup_class(cls):
+        """Set up test environment."""
+        cls.region = os.environ.get("BEDROCK_TEST_REGION", "us-west-2")
+        cls.user_id = os.environ.get("TEST_USER_ID", f"test-user-{uuid.uuid4().hex[:8]}")
+
+    def _make_402_event(self, tool_use_id, body, invocation_state=None, tool_input=None):
+        """Create a mock AfterToolCallEvent with a 402 PAYMENT_REQUIRED result."""
+        from unittest.mock import MagicMock
+
+        payment_required = {
+            "statusCode": 402,
+            "headers": {"content-type": "application/json"},
+            "body": body,
+        }
+
+        event = MagicMock()
+        event.tool_use = {
+            "name": "http_request",
+            "toolUseId": tool_use_id,
+            "input": tool_input
+            if tool_input is not None
+            else {"url": "https://api.example.com/resource", "headers": {}},
+        }
+        event.result = [{"text": f"PAYMENT_REQUIRED: {json.dumps(payment_required)}"}]
+        event.invocation_state = invocation_state if invocation_state is not None else {}
+        event.retry = False
+        event.agent = MagicMock()
+        event.agent.state.get = MagicMock(return_value=None)
+        event.agent.state.set = MagicMock()
+        event.agent.state.delete = MagicMock()
+        return event
+
+    def test_full_flow_402_sign_retry_402_stops(self):
+        """Test the full post-payment failure flow through hooks.
+
+        Simulates:
+        1. First after_tool_call with 402 → plugin signs and sets retry=True
+        2. Second after_tool_call with 402 (server rejection) → plugin stops, no retry
+        """
+        from unittest.mock import MagicMock, patch
+
+        mock_pm = MagicMock()
+        mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "signed-proof-base64"}
+
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+            user_id=self.user_id,
+            payment_instrument_id="payment-instrument-123",
+            payment_session_id="payment-session-456",
+            region=self.region,
+        )
+
+        plugin = AgentCorePaymentsPlugin(config=config)
+        with patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager", return_value=mock_pm):
+            plugin.init_agent(MagicMock())
+        plugin.payment_manager = mock_pm
+
+        # Shared invocation state across retries (persists within a single tool use)
+        invocation_state = {}
+        tool_input = {"url": "https://api.example.com/resource", "headers": {}}
+
+        # Step 1: First 402 — payment required
+        event1 = self._make_402_event(
+            "tool-abc",
+            body={"error": "Payment required", "x402Version": 1, "accepts": [{"scheme": "exact"}]},
+            invocation_state=invocation_state,
+            tool_input=tool_input,
+        )
+
+        plugin.after_tool_call(event1)
+
+        # Should sign and request retry
+        assert event1.retry is True
+        mock_pm.generate_payment_header.assert_called_once()
+        assert "X-PAYMENT" in tool_input["headers"]
+        assert invocation_state.get("payment_signed_tool-abc") is True
+        logger.info("✓ Step 1: First 402 → signed and retry=True")
+
+        # Step 2: Second 402 — server rejected (insufficient balance)
+        event2 = self._make_402_event(
+            "tool-abc",
+            body={"error": "invalid_exact_evm_insufficient_balance", "message": "Insufficient USDC"},
+            invocation_state=invocation_state,
+            tool_input=tool_input,
+        )
+
+        plugin.after_tool_call(event2)
+
+        # Should NOT retry — post-payment failure detected
+        assert event2.retry is False
+        # generate_payment_header should still only have been called once (from step 1)
+        assert mock_pm.generate_payment_header.call_count == 1
+        # Should NOT store failure state (no interrupt cycle)
+        assert "payment_failure_tool-abc" not in invocation_state
+        logger.info("✓ Step 2: Second 402 after signing → stopped, no retry")
+
+    def test_signing_failure_uses_retry_counter(self):
+        """Test that signing failures increment retry counter and stop at limit.
+
+        Simulates multiple after_tool_call invocations where signing always fails.
+        Verifies that MAX_PAYMENT_RETRIES is respected.
+        """
+        from unittest.mock import MagicMock, patch
+
+        from bedrock_agentcore.payments.manager import PaymentError
+
+        mock_pm = MagicMock()
+        mock_pm.generate_payment_header.side_effect = PaymentError("Signing service unavailable")
+
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+            user_id=self.user_id,
+            payment_instrument_id="payment-instrument-123",
+            payment_session_id="payment-session-456",
+            region=self.region,
+        )
+
+        plugin = AgentCorePaymentsPlugin(config=config)
+        with patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager", return_value=mock_pm):
+            plugin.init_agent(MagicMock())
+        plugin.payment_manager = mock_pm
+
+        invocation_state = {}
+        body_402 = {"error": "Payment required", "x402Version": 1, "accepts": [{"scheme": "exact"}]}
+
+        # Attempt signing up to MAX_PAYMENT_RETRIES times
+        for i in range(plugin.MAX_PAYMENT_RETRIES):
+            event = self._make_402_event(
+                "tool-xyz",
+                body=body_402,
+                invocation_state=invocation_state,
+                tool_input={"url": "https://api.example.com", "headers": {}},
+            )
+
+            plugin.after_tool_call(event)
+
+            # Each time signing fails, retry should NOT be set
+            assert event.retry is False
+            # Failure should be stored for interrupt
+            assert "payment_failure_tool-xyz" in invocation_state
+            # Clean up failure state (simulating interrupt was handled)
+            del invocation_state["payment_failure_tool-xyz"]
+            logger.info("  Signing attempt %d/%d failed as expected", i + 1, plugin.MAX_PAYMENT_RETRIES)
+
+        # Signing should have been called exactly MAX_PAYMENT_RETRIES times
+        assert mock_pm.generate_payment_header.call_count == plugin.MAX_PAYMENT_RETRIES
+
+        # One more attempt should be blocked by retry limit
+        event_final = self._make_402_event(
+            "tool-xyz",
+            body=body_402,
+            invocation_state=invocation_state,
+            tool_input={"url": "https://api.example.com", "headers": {}},
+        )
+
+        plugin.after_tool_call(event_final)
+
+        # Should NOT attempt signing — limit reached
+        assert mock_pm.generate_payment_header.call_count == plugin.MAX_PAYMENT_RETRIES
+        assert event_final.retry is False
+        logger.info("✓ Signing retry limit (%d) correctly enforced", plugin.MAX_PAYMENT_RETRIES)
+
+    def test_successful_sign_then_success_response(self):
+        """Test happy path: 402 → sign → retry succeeds (no second 402).
+
+        After successful signing and retry, if the tool returns a non-402 response,
+        the plugin should not interfere.
+        """
+        from unittest.mock import MagicMock, patch
+
+        mock_pm = MagicMock()
+        mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "valid-proof"}
+
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+            user_id=self.user_id,
+            payment_instrument_id="payment-instrument-123",
+            payment_session_id="payment-session-456",
+            region=self.region,
+        )
+
+        plugin = AgentCorePaymentsPlugin(config=config)
+        with patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager", return_value=mock_pm):
+            plugin.init_agent(MagicMock())
+        plugin.payment_manager = mock_pm
+
+        invocation_state = {}
+        tool_input = {"url": "https://api.example.com/resource", "headers": {}}
+
+        # Step 1: 402 → plugin signs and sets retry
+        event1 = self._make_402_event(
+            "tool-happy",
+            body={"error": "Payment required", "x402Version": 1, "accepts": [{"scheme": "exact"}]},
+            invocation_state=invocation_state,
+            tool_input=tool_input,
+        )
+
+        plugin.after_tool_call(event1)
+
+        assert event1.retry is True
+        assert invocation_state.get("payment_signed_tool-happy") is True
+        assert "X-PAYMENT" in tool_input["headers"]
+        logger.info("✓ Step 1: Signed and retry set")
+
+        # Step 2: Retry succeeds with 200 — simulate by calling after_tool_call
+        # with a non-402 result
+        event2 = MagicMock()
+        event2.tool_use = {"name": "http_request", "toolUseId": "tool-happy", "input": tool_input}
+        event2.result = [{"text": json.dumps({"status_code": 200, "body": {"data": "success"}})}]
+        event2.invocation_state = invocation_state
+        event2.retry = False
+        event2.agent = MagicMock()
+
+        plugin.after_tool_call(event2)
+
+        # Should not retry (not a 402)
+        assert event2.retry is False
+        # generate_payment_header still only called once
+        assert mock_pm.generate_payment_header.call_count == 1
+        logger.info("✓ Step 2: Non-402 response after retry — plugin did not interfere")
+
+    def test_signing_state_independent_per_tool_use(self):
+        """Test that signing state is tracked independently per tool_use_id.
+
+        Two different tool uses should have independent signing state:
+        - tool-A signed successfully → subsequent 402 stops
+        - tool-B never signed → 402 still attempts signing
+        """
+        from unittest.mock import MagicMock, patch
+
+        mock_pm = MagicMock()
+        mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "signed"}
+
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+            user_id=self.user_id,
+            payment_instrument_id="payment-instrument-123",
+            payment_session_id="payment-session-456",
+            region=self.region,
+        )
+
+        plugin = AgentCorePaymentsPlugin(config=config)
+        with patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager", return_value=mock_pm):
+            plugin.init_agent(MagicMock())
+        plugin.payment_manager = mock_pm
+
+        invocation_state = {}
+        body_402 = {"error": "Payment required", "x402Version": 1, "accepts": [{"scheme": "exact"}]}
+
+        # tool-A: first 402 → signs successfully
+        event_a1 = self._make_402_event(
+            "tool-A",
+            body=body_402,
+            invocation_state=invocation_state,
+            tool_input={"url": "https://a.com", "headers": {}},
+        )
+        plugin.after_tool_call(event_a1)
+        assert event_a1.retry is True
+        assert invocation_state["payment_signed_tool-A"] is True
+
+        # tool-A: second 402 → post-payment failure, stops
+        event_a2 = self._make_402_event(
+            "tool-A",
+            body={"error": "insufficient_balance"},
+            invocation_state=invocation_state,
+            tool_input={"url": "https://a.com", "headers": {}},
+        )
+        plugin.after_tool_call(event_a2)
+        assert event_a2.retry is False
+
+        # tool-B: first 402 → should still sign (independent state)
+        event_b1 = self._make_402_event(
+            "tool-B",
+            body=body_402,
+            invocation_state=invocation_state,
+            tool_input={"url": "https://b.com", "headers": {}},
+        )
+        plugin.after_tool_call(event_b1)
+        assert event_b1.retry is True
+        assert invocation_state["payment_signed_tool-B"] is True
+
+        # Total signing calls: 2 (one for tool-A, one for tool-B)
+        assert mock_pm.generate_payment_header.call_count == 2
+        logger.info("✓ Signing state correctly independent per tool_use_id")

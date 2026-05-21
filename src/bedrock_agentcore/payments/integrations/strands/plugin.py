@@ -163,11 +163,6 @@ class AgentCorePaymentsPlugin(Plugin):
                 )
                 return
 
-        # Check if payment retry limit has been reached
-        if self._check_payment_retry_limit(event):
-            logger.warning("Payment processing retry limit has been reached. Processing skipped.")
-            return
-
         # Check if response is a 402 Payment Required
         if not hasattr(event, "result") or event.result is None:
             return
@@ -192,9 +187,6 @@ class AgentCorePaymentsPlugin(Plugin):
 
             logger.info("Detected 402 Payment Required response from tool: %s", event.tool_use.get("name", "unknown"))
 
-            # Increment retry count in invocation state
-            self._increment_payment_retry_count(event)
-
             # Build payment_required_request dict using handler methods
             headers = handler.extract_headers(event.result)
             body = handler.extract_body(event.result)
@@ -204,17 +196,23 @@ class AgentCorePaymentsPlugin(Plugin):
                 "body": body or {},
             }
 
-            # If we already retried with payment credentials and still got a 402,
-            # this is a post-payment failure (e.g., insufficient balance, invalid signature).
-            # Propagate as an interrupt instead of retrying again to avoid infinite loops.
-            if self._is_post_payment_failure(event, body):
+            # If we previously signed successfully and still got a 402, the server
+            # rejected the payment for a non-retryable reason (e.g., insufficient balance).
+            # Stop processing — the existing 402 result is already structured for the LLM.
+            if self._has_successful_signing(event):
                 logger.warning(
-                    "Received 402 after payment retry for tool %s — treating as payment failure",
+                    "Received 402 after successful signing for tool %s — post-payment failure, not retrying",
                     event.tool_use.get("name", "unknown"),
                 )
-                error_msg = self._extract_payment_error_message(body)
-                self._store_payment_failure_state(event, PaymentError(f"Payment failed after retry: {error_msg}"))
                 return
+
+            # Check if signing retry limit has been reached
+            if self._check_payment_retry_limit(event):
+                logger.warning("Payment signing retry limit reached. Processing skipped.")
+                return
+
+            # Increment retry count for signing attempts
+            self._increment_payment_retry_count(event)
 
             # Validate tool input before processing payment
             tool_input = event.tool_use.get("input", {})
@@ -232,10 +230,11 @@ class AgentCorePaymentsPlugin(Plugin):
                 self._store_payment_failure_state(event, Exception("Failed to apply payment header"))
                 return
 
+            # Mark that signing succeeded for this tool use — if we get another 402
+            # after this retry, we know it's a server-side rejection, not a signing failure.
+            self._mark_successful_signing(event)
+
             # Set retry flag to re-execute the tool with payment credentials.
-            # Do NOT reset the payment retry counter here — it must persist across
-            # retries so that _is_post_payment_failure and _check_payment_retry_limit
-            # can detect repeated 402s and break the loop.
             event.retry = True
             self._reset_interrupt_retry_count(event)
             logger.info("Set retry flag to re-execute tool with payment credentials")
@@ -295,47 +294,32 @@ class AgentCorePaymentsPlugin(Plugin):
             "Payment retry attempt %d/%d for tool use %s", retry_count + 1, self.MAX_PAYMENT_RETRIES, tool_use_id
         )
 
-    def _is_post_payment_failure(self, event: AfterToolCallEvent, body: Optional[Dict[str, Any]]) -> bool:
-        """Check if this 402 response is a failure after we already retried with payment credentials.
-
-        A post-payment failure occurs when:
-        1. We already sent a payment header (retry count > 0 before this increment), AND
-        2. The 402 response body contains an error that is NOT the initial "payment required"
-           (e.g., "invalid_exact_evm_insufficient_balance", "payment_rejected", etc.)
-
-        This prevents infinite loops where the plugin keeps signing and retrying
-        against a server that keeps rejecting the payment for non-retryable reasons.
+    def _has_successful_signing(self, event: AfterToolCallEvent) -> bool:
+        """Check if we previously signed a payment successfully for this tool use.
 
         Args:
             event: The after tool call event
-            body: The extracted response body (may be None)
 
         Returns:
-            True if this is a post-payment failure that should be propagated as an interrupt
+            True if signing was previously successful (meaning this 402 is a server-side rejection)
         """
         tool_use_id = event.tool_use.get("toolUseId", "unknown")
-        payment_retry_key = f"payment_retry_count_{tool_use_id}"
-        # retry count was already incremented before this check, so > 1 means
-        # we already attempted at least one payment retry
-        retry_count = event.invocation_state.get(payment_retry_key, 0)
+        signed_key = f"payment_signed_{tool_use_id}"
+        return event.invocation_state.get(signed_key, False)
 
-        if retry_count <= 1:
-            return False
+    def _mark_successful_signing(self, event: AfterToolCallEvent) -> None:
+        """Mark that signing succeeded for this tool use.
 
-        # If the body contains an error field that is NOT the initial "payment required",
-        # this is a post-payment failure
-        if body and isinstance(body, dict):
-            error = body.get("error", "")
-            if isinstance(error, str) and error.lower() not in ("", "payment required"):
-                logger.info(
-                    "Post-payment failure detected for tool %s: error=%s (retry_count=%d)",
-                    tool_use_id,
-                    error,
-                    retry_count,
-                )
-                return True
+        Called after generate_payment_header and apply_payment_header both succeed,
+        right before setting event.retry. If a subsequent 402 is received,
+        _has_successful_signing will return True indicating the failure is server-side.
 
-        return False
+        Args:
+            event: The after tool call event
+        """
+        tool_use_id = event.tool_use.get("toolUseId", "unknown")
+        signed_key = f"payment_signed_{tool_use_id}"
+        event.invocation_state[signed_key] = True
 
     @staticmethod
     def _extract_payment_error_message(body: Optional[Dict[str, Any]]) -> str:
