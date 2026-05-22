@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 import uuid
 from typing import Any, Dict, Optional, Union
 
@@ -250,6 +251,20 @@ class AgentCorePaymentsPlugin(Plugin):
             # Mark that signing succeeded for this tool use — if we get another 402
             # after this retry, we know it's a server-side rejection, not a signing failure.
             self._mark_successful_signing(event)
+
+            # Wait one chain-block before letting the tool retry, so the merchant's
+            # facilitator has time to see block.timestamp > validAfter when it submits
+            # transferWithAuthorization to USDC. Without this delay, fast facilitators
+            # can submit in the same second the signature was minted, hitting the
+            # contract's strict ``block.timestamp > validAfter`` check and producing
+            # a misleading "invalid_payload" 402 from the seller.
+            delay = self.config.post_payment_retry_delay_seconds
+            if delay > 0:
+                logger.info(
+                    "Waiting %.1fs before retry to allow chain to advance past validAfter",
+                    delay,
+                )
+                time.sleep(delay)
 
             # Set retry flag to re-execute the tool with payment credentials.
             event.retry = True
