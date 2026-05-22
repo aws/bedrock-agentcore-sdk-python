@@ -1800,3 +1800,168 @@ class TestPaymentToolAllowlist:
 
             mock_handler.extract_status_code.assert_called_once()
             mock_pm_instance.generate_payment_header.assert_called_once()
+
+
+class TestPostPaymentRetryDelay:
+    """Tests for post_payment_retry_delay_seconds backoff before tool retry.
+
+    The x402 EIP-3009 transferWithAuthorization contract requires
+    block.timestamp > validAfter (strict greater-than). When the signing
+    service sets validAfter near the current time, fast facilitators submit
+    in the same second the signature was minted and hit a deterministic
+    revert. The plugin sleeps post_payment_retry_delay_seconds between
+    signing and re-invoking the tool to let the chain advance.
+    """
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.time.sleep")
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager")
+    def test_default_delay_is_three_seconds(self, mock_payment_manager_class, mock_sleep):
+        """Default post_payment_retry_delay_seconds is 3.0 — sleep is called with 3.0."""
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+            user_id="test-user",
+            payment_instrument_id="payment-instrument-123",
+            payment_session_id="payment-session-456",
+        )
+        assert config.post_payment_retry_delay_seconds == 3.0
+
+        mock_pm_instance = MagicMock()
+        mock_pm_instance.generate_payment_header.return_value = {"X-PAYMENT": "base64"}
+        plugin = AgentCorePaymentsPlugin(config=config)
+        plugin.payment_manager = mock_pm_instance
+
+        event, agent = _create_event_with_agent(
+            {
+                "result": [{"text": f"PAYMENT_REQUIRED: {json.dumps({'statusCode': 402, 'headers': {}, 'body': {}})}"}],
+                "tool_use": {"name": "http_request", "toolUseId": "tool-123", "input": {"headers": {}}},
+                "invocation_state": {},
+                "retry": False,
+            }
+        )
+        plugin.after_tool_call(event)
+
+        assert event.retry is True
+        mock_sleep.assert_called_once_with(3.0)
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.time.sleep")
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager")
+    def test_custom_delay_value(self, mock_payment_manager_class, mock_sleep):
+        """A custom positive delay is honored verbatim."""
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+            user_id="test-user",
+            payment_instrument_id="payment-instrument-123",
+            payment_session_id="payment-session-456",
+            post_payment_retry_delay_seconds=1.5,
+        )
+
+        mock_pm_instance = MagicMock()
+        mock_pm_instance.generate_payment_header.return_value = {"X-PAYMENT": "base64"}
+        plugin = AgentCorePaymentsPlugin(config=config)
+        plugin.payment_manager = mock_pm_instance
+
+        event, agent = _create_event_with_agent(
+            {
+                "result": [{"text": f"PAYMENT_REQUIRED: {json.dumps({'statusCode': 402, 'headers': {}, 'body': {}})}"}],
+                "tool_use": {"name": "http_request", "toolUseId": "tool-123", "input": {"headers": {}}},
+                "invocation_state": {},
+                "retry": False,
+            }
+        )
+        plugin.after_tool_call(event)
+
+        mock_sleep.assert_called_once_with(1.5)
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.time.sleep")
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager")
+    def test_zero_delay_skips_sleep(self, mock_payment_manager_class, mock_sleep):
+        """post_payment_retry_delay_seconds=0 skips the sleep entirely."""
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+            user_id="test-user",
+            payment_instrument_id="payment-instrument-123",
+            payment_session_id="payment-session-456",
+            post_payment_retry_delay_seconds=0,
+        )
+
+        mock_pm_instance = MagicMock()
+        mock_pm_instance.generate_payment_header.return_value = {"X-PAYMENT": "base64"}
+        plugin = AgentCorePaymentsPlugin(config=config)
+        plugin.payment_manager = mock_pm_instance
+
+        event, agent = _create_event_with_agent(
+            {
+                "result": [{"text": f"PAYMENT_REQUIRED: {json.dumps({'statusCode': 402, 'headers': {}, 'body': {}})}"}],
+                "tool_use": {"name": "http_request", "toolUseId": "tool-123", "input": {"headers": {}}},
+                "invocation_state": {},
+                "retry": False,
+            }
+        )
+        plugin.after_tool_call(event)
+
+        # Tool should still be set to retry — sleep is the only thing skipped.
+        assert event.retry is True
+        mock_sleep.assert_not_called()
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.time.sleep")
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager")
+    def test_sleep_does_not_fire_when_payment_fails(self, mock_payment_manager_class, mock_sleep):
+        """If signing fails, no sleep should run — we never reach the retry path."""
+        from bedrock_agentcore.payments.manager import PaymentInstrumentNotFound
+
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+            user_id="test-user",
+            payment_instrument_id="payment-instrument-123",
+            payment_session_id="payment-session-456",
+        )
+
+        mock_pm_instance = MagicMock()
+        mock_pm_instance.generate_payment_header.side_effect = PaymentInstrumentNotFound("missing")
+        plugin = AgentCorePaymentsPlugin(config=config)
+        plugin.payment_manager = mock_pm_instance
+
+        event, agent = _create_event_with_agent(
+            {
+                "result": [{"text": f"PAYMENT_REQUIRED: {json.dumps({'statusCode': 402, 'headers': {}, 'body': {}})}"}],
+                "tool_use": {"name": "http_request", "toolUseId": "tool-123", "input": {"headers": {}}},
+                "invocation_state": {},
+                "retry": False,
+            }
+        )
+        plugin.after_tool_call(event)
+
+        mock_sleep.assert_not_called()
+
+    def test_validator_rejects_negative_delay(self):
+        """post_payment_retry_delay_seconds cannot be negative."""
+        import pytest
+
+        with pytest.raises(ValueError, match="post_payment_retry_delay_seconds must be >= 0"):
+            AgentCorePaymentsPluginConfig(
+                payment_manager_arn="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+                user_id="test-user",
+                post_payment_retry_delay_seconds=-1.0,
+            )
+
+    def test_validator_rejects_non_numeric_delay(self):
+        """post_payment_retry_delay_seconds must be int/float, not bool/str."""
+        import pytest
+
+        with pytest.raises(ValueError, match="post_payment_retry_delay_seconds must be a number"):
+            AgentCorePaymentsPluginConfig(
+                payment_manager_arn="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+                user_id="test-user",
+                post_payment_retry_delay_seconds="3",  # type: ignore[arg-type]
+            )
+
+    def test_validator_rejects_bool_delay(self):
+        """bool sneaks through isinstance(int) — explicitly reject."""
+        import pytest
+
+        with pytest.raises(ValueError, match="post_payment_retry_delay_seconds must be a number"):
+            AgentCorePaymentsPluginConfig(
+                payment_manager_arn="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+                user_id="test-user",
+                post_payment_retry_delay_seconds=True,  # type: ignore[arg-type]
+            )
