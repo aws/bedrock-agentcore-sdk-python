@@ -1,9 +1,11 @@
 """AgentCorePaymentsPlugin for Strands Agents framework."""
 
+import json
 import logging
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
+import httpx
 from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent
 from strands.plugins import Plugin, hook
 from strands.tools import tool
@@ -25,7 +27,8 @@ logger = logging.getLogger(__name__)
 class AgentCorePaymentsPlugin(Plugin):
     """Plugin for handling X402 payment requirements and providing payment tools in Strands Agents.
 
-    This plugin provides three tools for querying payment information:
+    This plugin provides tools for querying payment information and making paid HTTP calls:
+    - http_request: Call a (paid) HTTP endpoint; 402 responses are settled automatically
     - getPaymentInstrument: Retrieve details about a specific payment instrument
     - listPaymentInstruments: List all payment instruments for a user
     - getPaymentSession: Retrieve details about a specific payment session
@@ -726,3 +729,81 @@ class AgentCorePaymentsPlugin(Plugin):
                 str(e),
             )
             raise
+
+    @tool
+    def http_request(
+        self,
+        url: str,
+        method: str = "GET",
+        headers: Optional[Dict[str, str]] = None,
+        body: Optional[Union[Dict[str, Any], str]] = None,
+    ) -> Dict[str, Any]:
+        """Call an HTTP endpoint. 402 Payment Required responses are settled automatically.
+
+        When the endpoint responds with HTTP 402, this plugin's after_tool_call hook
+        intercepts the result, generates an x402 payment header via the configured
+        PaymentManager, mutates ``headers`` with the X-PAYMENT (v1) or
+        PAYMENT-SIGNATURE (v2) header, and Strands re-invokes this tool — yielding
+        the final 200 response and (when applicable) a settle hash in the
+        PAYMENT-RESPONSE header.
+
+        Returns a Strands ToolResult dict: ``status`` is always ``success`` (HTTP
+        errors are returned in the body, not raised), and ``content`` is a single
+        text block. On 402 the text is prefixed with ``PAYMENT_REQUIRED:`` so the
+        SDK's payment handlers can extract the x402 payload.
+
+        Args:
+            url: The full URL to request.
+            method: HTTP method. Defaults to ``GET``.
+            headers: Optional request headers. The plugin mutates this dict to add
+                the payment header on retry.
+            body: Optional request body. ``dict`` is sent as JSON; ``str`` is sent
+                as-is. Ignored for ``GET``/``HEAD``.
+
+        Returns:
+            Strands ToolResult dict with ``status`` and ``content``.
+        """
+        request_headers = dict(headers) if headers else {}
+        method_upper = method.upper()
+
+        try:
+            with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+                if body is None or method_upper in ("GET", "HEAD"):
+                    resp = client.request(method_upper, url, headers=request_headers)
+                elif isinstance(body, str):
+                    resp = client.request(method_upper, url, headers=request_headers, content=body)
+                else:
+                    resp = client.request(method_upper, url, headers=request_headers, json=body)
+        except httpx.RequestError as exc:
+            logger.error("http_request failed for %s: %s", url, exc)
+            return {
+                "status": "error",
+                "content": [{"text": json.dumps({
+                    "statusCode": 0,
+                    "error": f"Request failed: {exc}",
+                    "url": url,
+                })}],
+            }
+
+        response_headers = dict(resp.headers)
+        try:
+            response_body: Any = resp.json()
+        except Exception:
+            response_body = {"text": resp.text}
+
+        payload = {
+            "statusCode": resp.status_code,
+            "headers": response_headers,
+            "body": response_body,
+        }
+
+        if resp.status_code == 402:
+            return {
+                "status": "success",
+                "content": [{"text": f"PAYMENT_REQUIRED: {json.dumps(payload)}"}],
+            }
+
+        return {
+            "status": "success",
+            "content": [{"text": json.dumps(payload)}],
+        }
