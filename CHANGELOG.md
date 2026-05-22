@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.11.0] - 2026-05-22
+
+### Fixed
+- fix: stop retrying after successful payment signing is rejected by merchant (#492) (0b2b34f)
+
+### Other Changes
+- fix(payments): drop unsupported paymentConnectorId + add http_request plugin tool + EIP-3009 timing fix (#493) (d5428b2)
+- feat(evaluation): add DatasetClient and dataset management service provider (#491) (29287c2)
+- test: add OTEL span content leakage integration tests (#485) (c311682)
+
 ## [1.10.0] - 2026-05-19
 
 ### Added
