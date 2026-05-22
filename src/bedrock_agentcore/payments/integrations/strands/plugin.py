@@ -778,11 +778,17 @@ class AgentCorePaymentsPlugin(Plugin):
             logger.error("http_request failed for %s: %s", url, exc)
             return {
                 "status": "error",
-                "content": [{"text": json.dumps({
-                    "statusCode": 0,
-                    "error": f"Request failed: {exc}",
-                    "url": url,
-                })}],
+                "content": [
+                    {
+                        "text": json.dumps(
+                            {
+                                "statusCode": 0,
+                                "error": f"Request failed: {exc}",
+                                "url": url,
+                            }
+                        )
+                    }
+                ],
             }
 
         response_headers = dict(resp.headers)

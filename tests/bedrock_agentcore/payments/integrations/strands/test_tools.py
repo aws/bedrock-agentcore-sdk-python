@@ -1747,15 +1747,17 @@ class TestHttpRequestTool:
         x402_body = {
             "x402Version": 2,
             "error": "Payment required",
-            "accepts": [{
-                "scheme": "exact",
-                "network": "eip155:84532",
-                "amount": "1000",
-                "asset": "0x036C",
-                "payTo": "0xabc",
-                "maxTimeoutSeconds": 300,
-                "extra": {"name": "USDC", "version": "2"},
-            }],
+            "accepts": [
+                {
+                    "scheme": "exact",
+                    "network": "eip155:84532",
+                    "amount": "1000",
+                    "asset": "0x036C",
+                    "payTo": "0xabc",
+                    "maxTimeoutSeconds": 300,
+                    "extra": {"name": "USDC", "version": "2"},
+                }
+            ],
         }
         mock_client.request.return_value = self._mock_response(
             402, headers={"PAYMENT-REQUIRED": "base64..."}, json_body=x402_body
@@ -1766,7 +1768,7 @@ class TestHttpRequestTool:
         assert result["status"] == "success"
         text = result["content"][0]["text"]
         assert text.startswith("PAYMENT_REQUIRED: ")
-        payload = json.loads(text[len("PAYMENT_REQUIRED: "):])
+        payload = json.loads(text[len("PAYMENT_REQUIRED: ") :])
         assert payload["statusCode"] == 402
         assert payload["body"]["x402Version"] == 2
         assert payload["body"]["accepts"][0]["network"] == "eip155:84532"
