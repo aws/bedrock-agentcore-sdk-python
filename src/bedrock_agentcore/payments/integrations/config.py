@@ -39,6 +39,14 @@ class AgentCorePaymentsPluginConfig:
             eligible (preserving existing behavior). When set, only tool calls whose
             name appears in this list will trigger payment processing; all others are
             skipped.
+        provide_http_request: Whether the plugin should register its built-in
+            ``http_request`` ``@tool`` on the agent. Defaults to True so adding the
+            plugin gives a turnkey paid-HTTP experience. Set to False if you want
+            to ship your own ``http_request`` tool — Strands raises a ValueError
+            on duplicate tool names, so you must opt out of the plugin's version
+            before passing your own. Auto-payment of 402 responses still works
+            against any tool whose output carries the ``PAYMENT_REQUIRED:``
+            content marker, so disabling this flag does not disable interception.
     """
 
     payment_manager_arn: str
@@ -54,6 +62,7 @@ class AgentCorePaymentsPluginConfig:
     bearer_token: Optional[str] = None
     token_provider: Optional[Callable[[], str]] = None
     payment_tool_allowlist: Optional[List[str]] = None
+    provide_http_request: bool = True
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -86,6 +95,9 @@ class AgentCorePaymentsPluginConfig:
                 raise ValueError("payment_tool_allowlist must be a list of tool name strings")
             if not all(isinstance(t, str) for t in self.payment_tool_allowlist):
                 raise ValueError("All entries in payment_tool_allowlist must be strings")
+
+        if not isinstance(self.provide_http_request, bool):
+            raise ValueError(f"provide_http_request must be a boolean, got {type(self.provide_http_request).__name__}")
 
     def update_payment_session_id(self, payment_session_id: str) -> None:
         """Update the payment session ID.

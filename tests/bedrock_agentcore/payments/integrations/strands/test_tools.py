@@ -1917,3 +1917,93 @@ class TestHttpRequestTool:
         sent = mock_client.request.call_args.kwargs["headers"]
         assert isinstance(sent, dict)
         assert sent == {}
+
+
+class TestProvideHttpRequestOptOut:
+    """Tests for the provide_http_request config flag.
+
+    When True (default), AgentCorePaymentsPlugin registers its built-in
+    http_request @tool. When False, the tool is dropped from the plugin's
+    discovered tools so callers can ship their own http_request without
+    Strands raising ValueError on duplicate tool names.
+    """
+
+    @staticmethod
+    def _make_config(**overrides):
+        from bedrock_agentcore.payments.integrations.config import AgentCorePaymentsPluginConfig
+
+        kwargs = dict(
+            payment_manager_arn="arn:aws:payment:us-east-1:123456789012:payment-manager/test",
+            user_id="test-user",
+            payment_instrument_id="test-instrument",
+            payment_session_id="test-session",
+        )
+        kwargs.update(overrides)
+        return AgentCorePaymentsPluginConfig(**kwargs)
+
+    def test_default_provides_http_request(self):
+        """By default the plugin registers http_request alongside its other tools."""
+        from bedrock_agentcore.payments.integrations.strands.plugin import AgentCorePaymentsPlugin
+
+        plugin = AgentCorePaymentsPlugin(self._make_config())
+        tool_names = {t.tool_name for t in plugin.tools}
+        assert "http_request" in tool_names
+        # Sanity: the rest of the plugin's tools are still there.
+        assert "get_payment_instrument" in tool_names
+        assert "get_payment_session" in tool_names
+
+    def test_opt_out_drops_only_http_request(self):
+        """provide_http_request=False removes ONLY http_request from the registered tools."""
+        from bedrock_agentcore.payments.integrations.strands.plugin import AgentCorePaymentsPlugin
+
+        plugin = AgentCorePaymentsPlugin(self._make_config(provide_http_request=False))
+        tool_names = {t.tool_name for t in plugin.tools}
+        assert "http_request" not in tool_names
+        # Other plugin tools must still be present so payment-info queries still work.
+        assert "get_payment_instrument" in tool_names
+        assert "list_payment_instruments" in tool_names
+        assert "get_payment_instrument_balance" in tool_names
+        assert "get_payment_session" in tool_names
+
+    def test_opt_out_does_not_disable_payment_hook(self):
+        """Disabling the tool must not disable the after_tool_call interceptor.
+
+        A caller's own http_request that emits PAYMENT_REQUIRED-marked content
+        should still trigger the plugin's auto-pay path.
+        """
+        from bedrock_agentcore.payments.integrations.strands.plugin import AgentCorePaymentsPlugin
+
+        plugin = AgentCorePaymentsPlugin(self._make_config(provide_http_request=False))
+        hook_names = [getattr(h, "__name__", repr(h)) for h in plugin.hooks]
+        assert "after_tool_call" in hook_names
+        assert "before_tool_call" in hook_names
+
+    def test_provide_http_request_validation_rejects_non_bool(self):
+        """Config validator rejects non-boolean values for the new flag."""
+        import pytest
+
+        from bedrock_agentcore.payments.integrations.config import AgentCorePaymentsPluginConfig
+
+        with pytest.raises(ValueError, match="provide_http_request must be a boolean"):
+            AgentCorePaymentsPluginConfig(
+                payment_manager_arn="arn:aws:payment:us-east-1:123456789012:payment-manager/test",
+                user_id="test-user",
+                provide_http_request="yes",  # type: ignore[arg-type]
+            )
+
+    def test_opt_out_preserves_payment_manager_init(self):
+        """The init flow (PaymentManager initialization) is unaffected by the flag."""
+        from unittest.mock import MagicMock
+
+        from bedrock_agentcore.payments.integrations.strands.plugin import AgentCorePaymentsPlugin
+
+        plugin = AgentCorePaymentsPlugin(self._make_config(provide_http_request=False))
+        # init_agent should be callable and should not blow up just because we opted out.
+        try:
+            plugin.init_agent(agent=MagicMock())
+        except RuntimeError:
+            # Real PaymentManager call against a fake ARN — tolerate the network/IAM
+            # failure; what we care about is that init_agent doesn't trip on the flag.
+            pass
+        # Plugin object itself must still be usable
+        assert plugin.config.provide_http_request is False

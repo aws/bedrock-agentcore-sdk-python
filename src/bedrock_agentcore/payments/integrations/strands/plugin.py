@@ -58,6 +58,18 @@ class AgentCorePaymentsPlugin(Plugin):
         super().__init__()
         self.config = config
         self.payment_manager: Optional[PaymentManager] = None
+
+        # Honor the provide_http_request opt-out: Strands' Plugin base auto-discovers
+        # every @tool method into self._tools at super().__init__(). If the caller
+        # wants to ship their own http_request, drop ours so Strands' tool registry
+        # doesn't raise ValueError on duplicate tool name.
+        if not self.config.provide_http_request:
+            self._tools = [t for t in self._tools if t.tool_name != "http_request"]
+            logger.info(
+                "provide_http_request=False — plugin's http_request tool will not be registered. "
+                "Auto-payment still triggers on any tool emitting a PAYMENT_REQUIRED: marker."
+            )
+
         logger.info("Initialized AgentCorePaymentsPlugin")
 
     def init_agent(self, agent) -> None:
