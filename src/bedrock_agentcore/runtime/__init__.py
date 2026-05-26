@@ -10,15 +10,33 @@ from .agent_core_runtime_client import AgentCoreRuntimeClient
 from .app import BedrockAgentCoreApp
 from .context import BedrockAgentCoreContext, RequestContext
 from .models import PingStatus
+from .shell import (
+    AuthMode,
+    OAuthAuth,
+    PresignedAuth,
+    ReconnectConfig,
+    ShellChannel,
+    ShellFrame,
+    ShellFramer,
+    ShellSession,
+)
 
 __all__ = [
     "AgentCoreRuntimeClient",
     "AGUIApp",
+    "AuthMode",
     "BedrockAgentCoreApp",
     "BedrockCallContextBuilder",
-    "RequestContext",
     "BedrockAgentCoreContext",
+    "OAuthAuth",
+    "PresignedAuth",
+    "ReconnectConfig",
+    "RequestContext",
     "PingStatus",
+    "ShellChannel",
+    "ShellFrame",
+    "ShellFramer",
+    "ShellSession",
     "build_a2a_app",
     "build_ag_ui_app",
     "build_runtime_url",
