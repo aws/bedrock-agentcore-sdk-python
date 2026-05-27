@@ -11,6 +11,11 @@ import pytest
 from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 from strands.agent.agent import Agent
+from strands.experimental.hooks.events import (
+    BidiAfterInvocationEvent,
+    BidiAgentInitializedEvent,
+    BidiMessageAddedEvent,
+)
 from strands.experimental.hooks.multiagent.events import (
     AfterMultiAgentInvocationEvent,
     AfterNodeCallEvent,
@@ -3707,3 +3712,76 @@ class TestAsyncMode:
             manager.register_hooks(registry)
 
         assert any("async_mode=True" in rec.message and "stream_async" in rec.message for rec in caplog.records)
+
+    def test_async_mode_registers_bidi_agent_callbacks(self, mock_memory_client):
+        """async_mode=True: BidiAgent events get callbacks; init stays sync, others are async."""
+        config = AgentCoreMemoryConfig(memory_id="m", session_id="s", actor_id="a", async_mode=True)
+        manager = _create_session_manager(config, mock_memory_client)
+        registry = HookRegistry()
+        manager.register_hooks(registry)
+
+        # BidiAgentInitializedEvent dispatches via the sync hook path, so its callback must NOT be a coroutine.
+        init_callbacks = registry._registered_callbacks.get(BidiAgentInitializedEvent, [])
+        assert init_callbacks, "No callbacks registered for BidiAgentInitializedEvent"
+        assert not any(asyncio.iscoroutinefunction(cb) for cb in init_callbacks)
+
+        # BidiMessageAddedEvent and BidiAfterInvocationEvent dispatch via invoke_callbacks_async,
+        # so their callbacks should be async to keep the event loop unblocked.
+        for event_type in (BidiMessageAddedEvent, BidiAfterInvocationEvent):
+            callbacks = registry._registered_callbacks.get(event_type, [])
+            assert callbacks, f"No callbacks registered for {event_type.__name__}"
+            assert all(asyncio.iscoroutinefunction(cb) for cb in callbacks)
+
+
+class TestFlushAgentStatesRaceCondition:
+    """Tests for the copy-and-clear-under-one-lock fix in _flush_agent_states_only."""
+
+    def test_flush_agent_states_does_not_drop_concurrent_appends(self, batching_session_manager, mock_memory_client):
+        """States appended during the network I/O window must survive the flush."""
+        states_appended_during_flush = []
+
+        # Pre-populate the buffer with one state to force a flush.
+        initial_agent = SessionAgent(
+            agent_id="agent-1",
+            state={"description": "initial"},
+            conversation_manager_state={},
+        )
+        batching_session_manager.create_agent("test-session-456", initial_agent)
+        assert batching_session_manager.pending_agent_state_count() == 1
+
+        # Simulate a concurrent create_agent during the boto3 call. The mock fires
+        # while the buffer is being flushed — i.e. between the copy and any clear —
+        # so a second append must NOT be lost.
+        def create_event_and_append_concurrently(**kwargs):
+            new_agent = SessionAgent(
+                agent_id="agent-2",
+                state={"description": "appended-mid-flush"},
+                conversation_manager_state={},
+            )
+            batching_session_manager.create_agent("test-session-456", new_agent)
+            states_appended_during_flush.append(new_agent)
+            return {"eventId": "event_during_flush"}
+
+        mock_memory_client.gmdp_client.create_event.side_effect = create_event_and_append_concurrently
+
+        batching_session_manager._flush_agent_states_only()
+
+        # The state appended during the flush must still be in the buffer afterwards.
+        assert states_appended_during_flush, "Test setup error: concurrent append did not run"
+        assert batching_session_manager.pending_agent_state_count() == 1, (
+            "State appended during flush was dropped — copy/clear is not atomic"
+        )
+
+    def test_flush_agent_states_failure_restores_buffer(self, batching_session_manager, mock_memory_client):
+        """A failed flush must restore the originally-buffered states (no data loss)."""
+        mock_memory_client.gmdp_client.create_event.side_effect = Exception("API Error")
+
+        agent = SessionAgent(agent_id="agent-1", state={"description": "v1"}, conversation_manager_state={})
+        batching_session_manager.create_agent("test-session-456", agent)
+        assert batching_session_manager.pending_agent_state_count() == 1
+
+        with pytest.raises(SessionException):
+            batching_session_manager._flush_agent_states_only()
+
+        # State must be back in the buffer for retry.
+        assert batching_session_manager.pending_agent_state_count() == 1

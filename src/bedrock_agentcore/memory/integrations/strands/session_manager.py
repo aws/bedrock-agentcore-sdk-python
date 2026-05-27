@@ -11,6 +11,11 @@ from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional
 
 import boto3
 from botocore.config import Config as BotocoreConfig
+from strands.experimental.hooks.events import (
+    BidiAfterInvocationEvent,
+    BidiAgentInitializedEvent,
+    BidiMessageAddedEvent,
+)
 from strands.experimental.hooks.multiagent.events import (
     AfterMultiAgentInvocationEvent,
     AfterNodeCallEvent,
@@ -942,13 +947,25 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         # Async mode: register async callbacks that offload the existing sync
         # methods to a worker thread via asyncio.to_thread. AgentInitializedEvent
-        # must stay sync (Strands disallows async callbacks on this event; see
-        # strands/hooks/registry.py:174).
+        # and BidiAgentInitializedEvent must stay sync (Strands disallows async
+        # callbacks for AgentInitializedEvent — see strands/hooks/registry.py:227).
         logger.warning(
             "AgentCoreMemorySessionManager async_mode=True: the agent must be invoked "
             "via the async path (e.g. agent.stream_async(...) or agent.invoke_async(...)). "
             "Sync invocation will raise RuntimeError from Strands' hook registry."
         )
+
+        def _offload(method, *event_args):
+            """Build an async callback that offloads `method(*[a(event) for a in event_args])` to a thread.
+
+            Each entry in `event_args` is a callable that extracts an argument from the event;
+            pass none for a zero-arg method.
+            """
+
+            async def _callback(event):
+                await asyncio.to_thread(method, *(extract(event) for extract in event_args))
+
+            return _callback
 
         registry.add_callback(AgentInitializedEvent, lambda event: self.initialize(event.agent))
 
@@ -956,36 +973,30 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             await asyncio.to_thread(self.append_message, event.message, event.agent)
             await asyncio.to_thread(self.sync_agent, event.agent)
 
-        async def _on_message_added_retrieve(event: MessageAddedEvent) -> None:
-            await asyncio.to_thread(self.retrieve_customer_context, event)
-
-        async def _on_after_invocation_sync(event: AfterInvocationEvent) -> None:
-            await asyncio.to_thread(self.sync_agent, event.agent)
-
         registry.add_callback(MessageAddedEvent, _on_message_added_persist)
-        registry.add_callback(AfterInvocationEvent, _on_after_invocation_sync)
-        registry.add_callback(MessageAddedEvent, _on_message_added_retrieve)
+        registry.add_callback(AfterInvocationEvent, _offload(self.sync_agent, lambda e: e.agent))
+        registry.add_callback(MessageAddedEvent, _offload(self.retrieve_customer_context, lambda e: e))
 
         if self.config.batch_size > 1:
-
-            async def _on_after_invocation_flush(event: AfterInvocationEvent) -> None:
-                await asyncio.to_thread(self._flush_messages)
-
-            registry.add_callback(AfterInvocationEvent, _on_after_invocation_flush)
+            registry.add_callback(AfterInvocationEvent, _offload(self._flush_messages))
 
         # Register multi-agent callbacks so async-mode parity matches sync-mode
-        async def _on_multi_agent_initialized(event: MultiAgentInitializedEvent) -> None:
-            await asyncio.to_thread(self.initialize_multi_agent, event.source)
+        registry.add_callback(MultiAgentInitializedEvent, _offload(self.initialize_multi_agent, lambda e: e.source))
+        registry.add_callback(AfterNodeCallEvent, _offload(self.sync_multi_agent, lambda e: e.source))
+        registry.add_callback(AfterMultiAgentInvocationEvent, _offload(self.sync_multi_agent, lambda e: e.source))
 
-        async def _on_after_node_call(event: AfterNodeCallEvent) -> None:
-            await asyncio.to_thread(self.sync_multi_agent, event.source)
+        # Register BidiAgent callbacks so async-mode parity matches sync-mode.
+        # BidiAgentInitializedEvent dispatches through invoke_callbacks (sync),
+        # so its callback must stay sync; the other two dispatch through
+        # invoke_callbacks_async, so async wrappers are safe.
+        registry.add_callback(BidiAgentInitializedEvent, lambda event: self.initialize_bidi_agent(event.agent))
 
-        async def _on_after_multi_agent_invocation(event: AfterMultiAgentInvocationEvent) -> None:
-            await asyncio.to_thread(self.sync_multi_agent, event.source)
+        async def _on_bidi_message_added(event: BidiMessageAddedEvent) -> None:
+            await asyncio.to_thread(self.append_bidi_message, event.message, event.agent)
+            await asyncio.to_thread(self.sync_bidi_agent, event.agent)
 
-        registry.add_callback(MultiAgentInitializedEvent, _on_multi_agent_initialized)
-        registry.add_callback(AfterNodeCallEvent, _on_after_node_call)
-        registry.add_callback(AfterMultiAgentInvocationEvent, _on_after_multi_agent_invocation)
+        registry.add_callback(BidiMessageAddedEvent, _on_bidi_message_added)
+        registry.add_callback(BidiAfterInvocationEvent, _offload(self.sync_bidi_agent, lambda e: e.agent))
 
     @override
     def initialize(self, agent: "Agent", **kwargs: Any) -> None:
@@ -1141,6 +1152,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         with self._agent_state_lock:
             agent_states_to_send = list(self._agent_state_buffer)
+            self._agent_state_buffer.clear()
 
         if not agent_states_to_send:
             return []
@@ -1171,11 +1183,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 results.append(event)
                 logger.debug("Flushed %d agent states for agent %s: %s", len(payloads), agent_id, event.get("eventId"))
 
-            # Clear agent state buffer only after ALL events succeed
-            with self._agent_state_lock:
-                self._agent_state_buffer.clear()
-
         except Exception as e:
+            # Restore agent states to buffer so they aren't lost
+            with self._agent_state_lock:
+                self._agent_state_buffer.extend(agent_states_to_send)
             logger.error("Failed to flush agent states to AgentCore Memory: %s", e)
             raise SessionException(f"Failed to flush agent states: {e}") from e
 
