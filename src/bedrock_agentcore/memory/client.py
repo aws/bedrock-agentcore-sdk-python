@@ -37,7 +37,7 @@ from .constants import (
     Role,
     StrategyType,
 )
-from .models.filters import EventMetadataFilter, MetadataValue
+from .models.filters import EventMetadataFilter, IndexedKey, MemoryMetadataFilter, MetadataValue
 
 logger = logging.getLogger(__name__)
 
@@ -160,8 +160,25 @@ class MemoryClient:
         event_expiry_days: int = 90,
         memory_execution_role_arn: Optional[str] = None,
         stream_delivery_resources: Optional[Dict[str, Any]] = None,
+        indexed_keys: Optional[List[IndexedKey]] = None,
     ) -> Dict[str, Any]:
-        """Create a memory with simplified configuration."""
+        """Create a memory with simplified configuration.
+
+        Args:
+            name: Name for the memory resource
+            strategies: Optional list of strategy configurations
+            description: Optional description
+            event_expiry_days: How long to retain events (default: 90 days)
+            memory_execution_role_arn: IAM role ARN for memory execution
+            stream_delivery_resources: Optional delivery configuration for streaming memory records
+            indexed_keys: Optional list of metadata keys to index for filtering.
+                Each entry should have 'key' (str) and 'type' ('STRING', 'STRINGLIST', or 'NUMBER').
+                Once declared, indexed keys cannot be removed.
+                Example: [{"key": "priority", "type": "NUMBER"}, {"key": "agent_type", "type": "STRING"}]
+
+        Returns:
+            Created memory object
+        """
         if strategies is None:
             strategies = []
 
@@ -184,6 +201,9 @@ class MemoryClient:
             if stream_delivery_resources is not None:
                 params["streamDeliveryResources"] = stream_delivery_resources
 
+            if indexed_keys is not None:
+                params["indexedKeys"] = indexed_keys
+
             response = self.gmcp_client.create_memory(**params)
 
             memory = response["memory"]
@@ -205,8 +225,20 @@ class MemoryClient:
         event_expiry_days: int = 90,
         memory_execution_role_arn: Optional[str] = None,
         stream_delivery_resources: Optional[Dict[str, Any]] = None,
+        indexed_keys: Optional[List[IndexedKey]] = None,
     ) -> Dict[str, Any]:
         """Create a memory resource or fetch the existing memory details if it already exists.
+
+        Args:
+            name: Name for the memory resource
+            strategies: Optional list of strategy configurations
+            description: Optional description
+            event_expiry_days: How long to retain events (default: 90 days)
+            memory_execution_role_arn: IAM role ARN for memory execution
+            stream_delivery_resources: Optional delivery configuration for streaming memory records
+            indexed_keys: Optional list of metadata keys to index for filtering.
+                Once declared, indexed keys cannot be removed; new keys can be added
+                via `update_memory(addIndexedKeys=...)`.
 
         Returns:
             Memory object, either newly created or existing
@@ -219,6 +251,7 @@ class MemoryClient:
                 event_expiry_days=event_expiry_days,
                 memory_execution_role_arn=memory_execution_role_arn,
                 stream_delivery_resources=stream_delivery_resources,
+                indexed_keys=indexed_keys,
             )
             return memory
         except ClientError as e:
@@ -243,6 +276,7 @@ class MemoryClient:
         stream_delivery_resources: Optional[Dict[str, Any]] = None,
         max_wait: int = 300,
         poll_interval: int = 10,
+        indexed_keys: Optional[List[IndexedKey]] = None,
     ) -> Dict[str, Any]:
         """Create a memory and wait for it to become ACTIVE.
 
@@ -256,6 +290,10 @@ class MemoryClient:
             event_expiry_days: How long to retain events (default: 90 days)
             memory_execution_role_arn: IAM role ARN for memory execution
             stream_delivery_resources: Optional delivery configuration for streaming memory records
+            indexed_keys: Optional list of metadata keys to index for filtering.
+                Each entry should have 'key' (str) and 'type' ('STRING', 'STRINGLIST', or 'NUMBER').
+                Once declared, indexed keys cannot be removed; new keys can be added
+                via `update_memory(addIndexedKeys=...)`.
             max_wait: Maximum seconds to wait (default: 300)
             poll_interval: Seconds between status checks (default: 10)
 
@@ -274,6 +312,7 @@ class MemoryClient:
             event_expiry_days=event_expiry_days,
             memory_execution_role_arn=memory_execution_role_arn,
             stream_delivery_resources=stream_delivery_resources,
+            indexed_keys=indexed_keys,
         )
 
         memory_id = memory.get("memoryId", memory.get("id"))  # Handle both field names
@@ -318,6 +357,7 @@ class MemoryClient:
         actor_id: Optional[str] = None,
         top_k: int = 3,
         namespace_path: Optional[str] = None,
+        metadata_filters: Optional[List[MemoryMetadataFilter]] = None,
     ) -> List[Dict[str, Any]]:
         """Retrieve relevant memories using exact match or hierarchical path prefix.
 
@@ -330,14 +370,28 @@ class MemoryClient:
             actor_id: Optional actor ID (deprecated, use namespace)
             top_k: Number of results to return
             namespace_path: Hierarchical path prefix (e.g., "/org/team/")
+            metadata_filters: Optional list of metadata filter expressions to scope results.
+                Use MemoryMetadataFilter.build_expression() to construct filters.
+                The service accepts 1-5 filters. An empty list is treated as no filter.
+                Example: [MemoryMetadataFilter.build_expression(
+                    MemoryRecordLeftExpression.build("priority"),
+                    MemoryRecordOperatorType.EQUALS_TO,
+                    MemoryRecordRightExpression.build_string("high"),
+                )]
 
         Returns:
             List of memory records. Returns an empty list if the namespace
             arguments are invalid (both provided, neither provided, or contain
             wildcards) or if the service call fails.
+
+        Raises:
+            ValueError: If `metadata_filters` exceeds the service maximum of 5.
         """
         if query is None:
             raise TypeError("retrieve_memories() missing required argument: 'query'")
+
+        if metadata_filters is not None and len(metadata_filters) > 5:
+            raise ValueError(f"metadata_filters supports a maximum of 5 expressions; received {len(metadata_filters)}.")
 
         try:
             ns_params = build_namespace_params(namespace, namespace_path)
@@ -348,8 +402,13 @@ class MemoryClient:
         ns_value = namespace or namespace_path
 
         try:
+            search_criteria = {"searchQuery": query, "topK": top_k}
+            if metadata_filters:
+                search_criteria["metadataFilters"] = metadata_filters
+                logger.debug("Applying %d metadata filter(s)", len(metadata_filters))
+
             response = self.gmdp_client.retrieve_memory_records(
-                memoryId=memory_id, searchCriteria={"searchQuery": query, "topK": top_k}, **ns_params
+                memoryId=memory_id, searchCriteria=search_criteria, **ns_params
             )
             memories = response.get("memoryRecordSummaries", [])
             logger.info("Retrieved %d memories from namespace: %s", len(memories), ns_value)
