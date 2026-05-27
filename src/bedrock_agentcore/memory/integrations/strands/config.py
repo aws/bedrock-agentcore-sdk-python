@@ -68,6 +68,22 @@ class AgentCoreMemoryConfig(BaseModel):
         persistence_mode: Controls what gets persisted to AgentCore Memory.
             FULL (default): persist everything. NONE: disable all persistence while keeping
             local state management and memory injection working.
+        async_mode: When True, the session manager registers async hook callbacks that
+            offload the per-turn boto3 calls (append_message, sync_agent,
+            retrieve_customer_context, and buffer flushes) to a thread via
+            asyncio.to_thread, keeping the asyncio event loop unblocked. Intended for
+            async agent runtimes (e.g. Agent.stream_async() in a WebSocket server).
+            Default is False (existing synchronous behavior, unchanged).
+
+            Requires async invocation (stream_async / invoke_async). Sync agent() calls
+            will raise RuntimeError from Strands' hook registry because it refuses to
+            dispatch coroutine callbacks through the sync path.
+
+            Note: this does NOT cover agent initialization. Strands disallows async
+            callbacks for AgentInitializedEvent, so the read_session / read_agent /
+            list_messages calls that run during Agent(...) construction still block
+            the calling thread. If that matters, construct the Agent off-loop
+            (e.g. `await asyncio.to_thread(Agent, ...)`).
     """
 
     memory_id: str = Field(min_length=1)
@@ -81,6 +97,7 @@ class AgentCoreMemoryConfig(BaseModel):
     default_metadata: Optional[Dict[str, Any]] = None
     metadata_provider: Optional[Callable[[], Dict[str, Any]]] = None
     persistence_mode: PersistenceMode = Field(default=PersistenceMode.FULL)
+    async_mode: bool = Field(default=False)
 
     @field_validator("default_metadata", mode="before")
     @classmethod
