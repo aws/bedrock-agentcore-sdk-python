@@ -1,3 +1,6 @@
-from .intent_providers import IntentProvider, DefaultIntentProvider
+"""AgentCore Tool Search plugin for Strands Agents."""
 
-__all__ = ["IntentProvider", "DefaultIntentProvider"]
+from .intent_providers import IntentProvider, StrandsIntentProvider
+from .plugin import AgentCoreToolSearchPlugin
+
+__all__ = ["AgentCoreToolSearchPlugin", "IntentProvider", "StrandsIntentProvider"]

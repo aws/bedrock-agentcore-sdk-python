@@ -9,7 +9,7 @@ from strands.plugins import Plugin, hook
 from strands.tools.mcp import MCPClient
 from strands.tools.mcp.mcp_agent_tool import MCPAgentTool
 
-from .intent_providers import DefaultIntentProvider, IntentProvider
+from .intent_providers import IntentProvider, StrandsIntentProvider
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class AgentCoreToolSearchPlugin(Plugin):
 
     Args:
         mcp_client: MCPClient connected to an AgentCore Gateway.
-        intent_provider: Strategy for deriving intent. Defaults to DefaultIntentProvider.
+        intent_provider: Strategy for deriving intent. Defaults to StrandsIntentProvider.
     """
 
     name = "agentcore-tool-search-plugin"
@@ -29,13 +29,20 @@ class AgentCoreToolSearchPlugin(Plugin):
         mcp_client: MCPClient,
         intent_provider: IntentProvider | None = None,
     ):
+        """Initialize the plugin.
+
+        Args:
+            mcp_client: MCPClient connected to an AgentCore Gateway.
+            intent_provider: Strategy for deriving intent. Defaults to StrandsIntentProvider.
+        """
         super().__init__()
-        self._intent_provider = intent_provider or DefaultIntentProvider()
+        self._intent_provider = intent_provider or StrandsIntentProvider()
         self._mcp_client = mcp_client
         self._loaded_tool_names: set[str] = set()
 
     @property
     def tools(self):
+        """Return empty list; tools are loaded dynamically via the hook."""
         return []
 
     @hook
@@ -68,6 +75,13 @@ class AgentCoreToolSearchPlugin(Plugin):
 
         for agent_tool in agent_tools:
             try:
+                # Skip if a non-dynamic tool with this name already exists
+                if (
+                    agent_tool.tool_name in event.agent.tool_registry.registry
+                    and agent_tool.tool_name not in self._loaded_tool_names
+                ):
+                    logger.debug("Skipping tool %s: already registered as a static tool", agent_tool.tool_name)
+                    continue
                 event.agent.tool_registry.register_tool(agent_tool)
                 self._loaded_tool_names.add(agent_tool.tool_name)
             except Exception as e:

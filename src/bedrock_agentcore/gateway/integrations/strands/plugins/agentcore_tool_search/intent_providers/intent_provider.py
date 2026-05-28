@@ -1,3 +1,5 @@
+"""Intent provider abstract interface."""
+
 from abc import ABC, abstractmethod
 
 

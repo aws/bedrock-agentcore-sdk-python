@@ -1,6 +1,6 @@
 """Intent provider interfaces and implementations."""
 
-from .default_intent_provider import DefaultIntentProvider
 from .intent_provider import IntentProvider
+from .strands_intent_provider import StrandsIntentProvider
 
-__all__ = ["DefaultIntentProvider", "IntentProvider"]
+__all__ = ["StrandsIntentProvider", "IntentProvider"]

@@ -13,7 +13,7 @@ A semantic tool discovery plugin for [Strands Agents](https://github.com/strands
 ## Installation
 
 ```bash
-pip install agentcore-tool-search-plugin
+pip install 'bedrock-agentcore[strands-agents]'
 ```
 
 ## Usage
@@ -22,7 +22,7 @@ pip install agentcore-tool-search-plugin
 from mcp_proxy_for_aws.client import aws_iam_streamablehttp_client
 from strands import Agent
 from strands.tools.mcp import MCPClient
-from agentcore_tool_search_plugin import AgentCoreToolSearchPlugin
+from bedrock_agentcore.gateway.integrations.strands.plugins import AgentCoreToolSearchPlugin
 
 mcp_client = MCPClient(lambda: aws_iam_streamablehttp_client(
     endpoint="https://<gateway-id>.gateway.bedrock-agentcore.<region>.amazonaws.com/mcp",
@@ -63,9 +63,9 @@ Previously loaded tools are cleared before each search, so the agent always has 
 
 An `IntentProvider` is responsible for analyzing conversation messages and producing a concise intent string that drives tool search. The plugin calls `derive_intent(messages, model)` before each invocation to determine what tools to load.
 
-### Default Intent Provider
+### StrandsIntentProvider
 
-`DefaultIntentProvider` uses an LLM to classify the last few conversation messages into a concise intent string. By default it uses the agent's model.
+`StrandsIntentProvider` uses a Strands Agent to classify the last few conversation messages into a concise intent string. By default it uses the parent agent's model.
 
 **Basic usage (uses the agent's model automatically):**
 
@@ -82,13 +82,29 @@ agent = Agent(plugins=[
 ```python
 from strands.models.bedrock import BedrockModel
 from bedrock_agentcore.gateway.integrations.strands.plugins import AgentCoreToolSearchPlugin
-from bedrock_agentcore.gateway.integrations.strands.plugins.agentcore_tool_search.intent_providers import DefaultIntentProvider
+from bedrock_agentcore.gateway.integrations.strands.plugins.agentcore_tool_search.intent_providers import StrandsIntentProvider
 
 intent_model = BedrockModel(model_id="us.anthropic.claude-haiku-4-5-20251001-v1:0")
 agent = Agent(plugins=[
     AgentCoreToolSearchPlugin(
         mcp_client=mcp_client,
-        intent_provider=DefaultIntentProvider(model=intent_model),
+        intent_provider=StrandsIntentProvider(model=intent_model),
+    )
+])
+```
+
+**With a custom system prompt:**
+
+```python
+from bedrock_agentcore.gateway.integrations.strands.plugins import AgentCoreToolSearchPlugin
+from bedrock_agentcore.gateway.integrations.strands.plugins.agentcore_tool_search.intent_providers import StrandsIntentProvider
+
+agent = Agent(plugins=[
+    AgentCoreToolSearchPlugin(
+        mcp_client=mcp_client,
+        intent_provider=StrandsIntentProvider(
+            system_prompt="Classify the user's intent in one sentence. Focus on the action, not details."
+        ),
     )
 ])
 ```
