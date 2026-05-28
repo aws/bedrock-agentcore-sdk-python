@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.12.0] - 2026-05-28
+
+### Added
+- feat: add async support to MemorySessionManager (#478) (76edb16)
+
+### Fixed
+- fix: out-of-scope variable in catch block (#497) (4054115)
+
+### Other Changes
+- add metadata support for LTM (#481) (80c4b11)
+
 ## [1.11.0] - 2026-05-22
 
 ### Fixed
