@@ -167,3 +167,98 @@ class TestFileDatasetProvider:
         assert len(dataset.scenarios) == 2
         assert isinstance(dataset.scenarios[0], PredefinedScenario)
         assert isinstance(dataset.scenarios[1], SimulatedScenario)
+
+
+class TestFileDatasetProviderJsonl:
+    def _write_jsonl_and_load(self, tmp_path, scenarios):
+        file_path = tmp_path / "dataset.jsonl"
+        file_path.write_text("\n".join(json.dumps(s) for s in scenarios))
+        return FileDatasetProvider(str(file_path)).get_dataset()
+
+    def test_parse_jsonl_predefined(self, tmp_path):
+        scenarios = [
+            {
+                "scenario_id": "s1",
+                "turns": [{"input": "Hello", "expected_response": "Hi"}],
+            },
+            {
+                "scenario_id": "s2",
+                "turns": [{"input": "What is 2+2?"}],
+            },
+        ]
+        dataset = self._write_jsonl_and_load(tmp_path, scenarios)
+        assert isinstance(dataset, Dataset)
+        assert len(dataset.scenarios) == 2
+        assert all(isinstance(s, PredefinedScenario) for s in dataset.scenarios)
+        assert dataset.scenarios[0].scenario_id == "s1"
+        assert dataset.scenarios[0].turns[0].expected_response == "Hi"
+
+    def test_parse_jsonl_simulated(self, tmp_path):
+        scenarios = [
+            {
+                "scenario_id": "sim-1",
+                "scenario_description": "Customer orders pizza",
+                "actor_profile": {"context": "ctx", "goal": "Order a pizza"},
+                "input": "I'd like a pizza",
+                "max_turns": 5,
+            }
+        ]
+        dataset = self._write_jsonl_and_load(tmp_path, scenarios)
+        assert len(dataset.scenarios) == 1
+        scenario = dataset.scenarios[0]
+        assert isinstance(scenario, SimulatedScenario)
+        assert scenario.actor_profile.goal == "Order a pizza"
+        assert scenario.max_turns == 5
+
+    def test_parse_jsonl_mixed(self, tmp_path):
+        scenarios = [
+            {"scenario_id": "pre-1", "turns": [{"input": "hi"}]},
+            {
+                "scenario_id": "sim-1",
+                "scenario_description": "desc",
+                "actor_profile": {"context": "ctx", "goal": "goal"},
+                "input": "hello",
+            },
+        ]
+        dataset = self._write_jsonl_and_load(tmp_path, scenarios)
+        assert len(dataset.scenarios) == 2
+        assert isinstance(dataset.scenarios[0], PredefinedScenario)
+        assert isinstance(dataset.scenarios[1], SimulatedScenario)
+
+    def test_parse_jsonl_skips_blank_lines(self, tmp_path):
+        file_path = tmp_path / "dataset.jsonl"
+        file_path.write_text(
+            '{"scenario_id": "s1", "turns": [{"input": "hi"}]}\n'
+            "\n"
+            "   \n"
+            '{"scenario_id": "s2", "turns": [{"input": "bye"}]}\n'
+        )
+        dataset = FileDatasetProvider(str(file_path)).get_dataset()
+        assert len(dataset.scenarios) == 2
+        assert {s.scenario_id for s in dataset.scenarios} == {"s1", "s2"}
+
+    def test_parse_jsonl_empty_file_raises(self, tmp_path):
+        file_path = tmp_path / "empty.jsonl"
+        file_path.write_text("")
+        with pytest.raises(ValueError, match="scenarios must not be empty"):
+            FileDatasetProvider(str(file_path)).get_dataset()
+
+    def test_parse_jsonl_invalid_line_raises(self, tmp_path):
+        file_path = tmp_path / "bad.jsonl"
+        file_path.write_text('{"scenario_id": "s1", "turns": [{"input": "hi"}]}\nnot json\n')
+        provider = FileDatasetProvider(str(file_path))
+        with pytest.raises(json.JSONDecodeError):
+            provider.get_dataset()
+
+    def test_parse_jsonl_missing_required_field_raises(self, tmp_path):
+        scenarios = [{"scenario_id": "s1"}]
+        with pytest.raises(ValueError):
+            self._write_jsonl_and_load(tmp_path, scenarios)
+
+    def test_jsonl_extension_dispatch(self, tmp_path):
+        # A .json file with one-line-per-object content should NOT be parsed as JSONL.
+        file_path = tmp_path / "looks-like-jsonl.json"
+        file_path.write_text('{"scenario_id": "s1", "turns": [{"input": "hi"}]}\n')
+        # Without "scenarios" wrapper, JSON parse yields a dict that fails the lookup.
+        with pytest.raises(KeyError):
+            FileDatasetProvider(str(file_path)).get_dataset()

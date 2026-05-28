@@ -75,8 +75,8 @@ jobs:
         with:
           result-encoding: string
           script: |
+            let username;
             try {
-              let username;
               if (context.payload.pull_request) {
                 username = context.payload.pull_request.user.login;
               } else {
@@ -99,7 +99,7 @@ jobs:
                 return "auto-approve"
               }
             } catch (error) {
-              console.log(`${username} does not have write access. Requiring Manual Approval to run PR Checks.`)
+              console.log(`Permission check failed for ${username}. Requiring Manual Approval to run PR Checks. Error: ${error.message}`);
               return "manual-approval"
             }
 

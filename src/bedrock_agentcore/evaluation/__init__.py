@@ -6,6 +6,7 @@ from bedrock_agentcore.evaluation.custom_code_based_evaluators import (
     EvaluatorOutput,
     custom_code_based_evaluator,
 )
+from bedrock_agentcore.evaluation.dataset_client import DatasetClient
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     BatchEvaluationResult,
     BatchEvaluationRunConfig,
@@ -21,6 +22,7 @@ from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_runner import (
     BatchEvaluationRunner,
 )
 from bedrock_agentcore.evaluation.runner.dataset_providers import (
+    DatasetManagementServiceProvider,
     DatasetProvider,
     FileDatasetProvider,
 )
@@ -77,6 +79,7 @@ __all__ = [
     "AgentInvokerOutput",
     "CloudWatchAgentSpanCollector",
     "Dataset",
+    "DatasetClient",
     "DatasetProvider",
     "EvaluationClient",
     "EvaluationResult",
@@ -86,6 +89,7 @@ __all__ = [
     "EvaluatorOutput",
     "EvaluatorResult",
     "FileDatasetProvider",
+    "DatasetManagementServiceProvider",
     "Input",
     "OnDemandEvaluationDatasetRunner",
     "ReferenceInputs",
