@@ -36,8 +36,8 @@ import pytest
 from bedrock_agentcore.gateway.client import GatewayClient
 from bedrock_agentcore.gateway.integrations.strands.plugins import AgentCoreToolSearchPlugin
 from bedrock_agentcore.gateway.integrations.strands.plugins.agentcore_tool_search.intent_providers import (
-    StrandsIntentProvider,
     IntentProvider,
+    StrandsIntentProvider,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

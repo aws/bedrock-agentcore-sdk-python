@@ -5,8 +5,8 @@ from unittest.mock import Mock, patch
 import pytest
 
 from bedrock_agentcore.gateway.integrations.strands.plugins.agentcore_tool_search.intent_providers import (
-    StrandsIntentProvider,
     IntentProvider,
+    StrandsIntentProvider,
 )
 
 
