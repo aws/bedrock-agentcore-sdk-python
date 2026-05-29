@@ -295,6 +295,7 @@ simulation = [
     { name = "strands-agents-evals" },
 ]
 strands-agents = [
+    { name = "mcp" },
     { name = "strands-agents" },
 ]
 strands-agents-evals = [
@@ -328,6 +329,7 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.43.0" },
     { name = "botocore", specifier = ">=1.43.0" },
     { name = "jinja2", marker = "extra == 'simulation'", specifier = ">=3.1.0" },
+    { name = "mcp", marker = "extra == 'strands-agents'", specifier = ">=1.23.0,<2.0.0" },
     { name = "pydantic", specifier = ">=2.0.0,<2.41.3" },
     { name = "starlette", specifier = ">=0.46.2" },
     { name = "strands-agents", marker = "extra == 'strands-agents'", specifier = ">=1.20.0" },
