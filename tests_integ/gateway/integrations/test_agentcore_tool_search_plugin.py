@@ -1,36 +1,23 @@
 """Integration tests for AgentCoreToolSearchPlugin.
 
-Requires environment variables:
+If GATEWAY_ROLE_ARN and GATEWAY_LAMBDA_ARN are set, uses those directly.
+Otherwise, automatically provisions the IAM role and Lambda function,
+and tears them down after the test run.
+
+Environment variables (all optional):
     BEDROCK_TEST_REGION: AWS region (default: us-west-2)
     GATEWAY_ROLE_ARN: IAM role ARN with AgentCore gateway trust policy
-    GATEWAY_LAMBDA_ARN: Lambda ARN for the gateway target (must implement MCP tool handler)
-
-Prerequisites:
-    1. Deploy the Lambda in tests_integ/gateway/integrations/lambda_function/lambda_function.py
-       (Python 3.10+ runtime, handler: lambda_function.lambda_handler)
-
-    2. The GATEWAY_ROLE_ARN must have:
-       - Trust policy for bedrock-agentcore.amazonaws.com
-       - lambda:InvokeFunction permission on the GATEWAY_LAMBDA_ARN
-
-       Example inline policy:
-       {
-           "Version": "2012-10-17",
-           "Statement": [{
-               "Effect": "Allow",
-               "Action": "lambda:InvokeFunction",
-               "Resource": "<GATEWAY_LAMBDA_ARN>"
-           }]
-       }
-
-    3. Install mcp-proxy-for-aws: uv pip install mcp-proxy-for-aws
-
+    GATEWAY_LAMBDA_ARN: Lambda ARN for the gateway target
 """
 
+import io
+import json
 import logging
 import os
 import time
+import zipfile
 
+import boto3
 import pytest
 
 from bedrock_agentcore.gateway.client import GatewayClient
@@ -42,6 +29,109 @@ from bedrock_agentcore.gateway.integrations.strands.plugins.agentcore_tool_searc
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+# Infrastructure constants
+_ROLE_NAME = "integ-test-gateway-role"
+_LAMBDA_NAME = "integ-test-lambda"
+_LAMBDA_HANDLER = "lambda_function.lambda_handler"
+_LAMBDA_RUNTIME = "python3.10"
+
+_TRUST_POLICY = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {"Service": "bedrock-agentcore.amazonaws.com"},
+            "Action": "sts:AssumeRole",
+        },
+        {
+            "Effect": "Allow",
+            "Principal": {"Service": "lambda.amazonaws.com"},
+            "Action": "sts:AssumeRole",
+        },
+    ],
+}
+
+_LAMBDA_INVOKE_POLICY_TEMPLATE = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": "lambda:InvokeFunction",
+            "Resource": None,  # filled in after Lambda creation
+        }
+    ],
+}
+
+
+def _get_lambda_zip() -> bytes:
+    """Package lambda_function.py into a zip archive."""
+    lambda_path = os.path.join(os.path.dirname(__file__), "lambda_function", "lambda_function.py")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(lambda_path, "lambda_function.py")
+    return buf.getvalue()
+
+
+def _ensure_role(iam_client) -> str:
+    """Create the gateway IAM role if it doesn't exist, return its ARN."""
+    try:
+        response = iam_client.get_role(RoleName=_ROLE_NAME)
+        return response["Role"]["Arn"]
+    except iam_client.exceptions.NoSuchEntityException:
+        pass
+
+    response = iam_client.create_role(
+        RoleName=_ROLE_NAME,
+        AssumeRolePolicyDocument=json.dumps(_TRUST_POLICY),
+        Description="Integration test role for AgentCore gateway tests",
+    )
+    role_arn = response["Role"]["Arn"]
+
+    iam_client.attach_role_policy(
+        RoleName=_ROLE_NAME,
+        PolicyArn="arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+    )
+    # Wait for IAM propagation
+    time.sleep(10)
+    logger.info("Created role: %s", role_arn)
+    return role_arn
+
+
+def _attach_lambda_invoke_policy(iam_client, lambda_arn: str):
+    """Attach a scoped lambda:InvokeFunction policy to the gateway role."""
+    policy = _LAMBDA_INVOKE_POLICY_TEMPLATE.copy()
+    policy["Statement"] = [{"Effect": "Allow", "Action": "lambda:InvokeFunction", "Resource": lambda_arn}]
+    iam_client.put_role_policy(
+        RoleName=_ROLE_NAME,
+        PolicyName="lambda-invoke",
+        PolicyDocument=json.dumps(policy),
+    )
+
+
+def _ensure_lambda(lambda_client, role_arn: str) -> str:
+    """Create or update the test Lambda, return its ARN."""
+    zip_bytes = _get_lambda_zip()
+    try:
+        response = lambda_client.get_function(FunctionName=_LAMBDA_NAME)
+        lambda_client.update_function_code(FunctionName=_LAMBDA_NAME, ZipFile=zip_bytes)
+        return response["Configuration"]["FunctionArn"]
+    except lambda_client.exceptions.ResourceNotFoundException:
+        pass
+
+    response = lambda_client.create_function(
+        FunctionName=_LAMBDA_NAME,
+        Runtime=_LAMBDA_RUNTIME,
+        Role=role_arn,
+        Handler=_LAMBDA_HANDLER,
+        Code={"ZipFile": zip_bytes},
+        Timeout=30,
+        Description="MCP test Lambda for AgentCore gateway integration tests",
+    )
+    waiter = lambda_client.get_waiter("function_active_v2")
+    waiter.wait(FunctionName=_LAMBDA_NAME)
+    logger.info("Created Lambda: %s", response["FunctionArn"])
+    return response["FunctionArn"]
 
 
 class FixedIntentProvider(IntentProvider):
@@ -67,9 +157,18 @@ class TestAgentCoreToolSearchPluginIntegration:
         cls.region = os.environ.get("BEDROCK_TEST_REGION", "us-west-2")
         cls.role_arn = os.environ.get("GATEWAY_ROLE_ARN")
         cls.lambda_arn = os.environ.get("GATEWAY_LAMBDA_ARN")
+        cls._provisioned_infra = False
 
         if not cls.role_arn or not cls.lambda_arn:
-            pytest.fail("GATEWAY_ROLE_ARN and GATEWAY_LAMBDA_ARN must be set")
+            # Auto-provision infrastructure
+            session = boto3.Session(region_name=cls.region)
+            iam_client = session.client("iam")
+            lambda_client = session.client("lambda", region_name=cls.region)
+            cls.role_arn = _ensure_role(iam_client)
+            cls.lambda_arn = _ensure_lambda(lambda_client, cls.role_arn)
+            _attach_lambda_invoke_policy(iam_client, cls.lambda_arn)
+            cls._provisioned_infra = True
+            logger.info("Auto-provisioned infrastructure: role=%s, lambda=%s", cls.role_arn, cls.lambda_arn)
 
         cls.gw_client = GatewayClient(region_name=cls.region)
         cls.test_prefix = f"sdk-integ-plugin-{int(time.time())}"
@@ -157,6 +256,33 @@ class TestAgentCoreToolSearchPluginIntegration:
                 )
             except Exception as e:
                 logger.warning("Failed to delete gateway %s: %s", cls.gateway_id, e)
+
+        # Clean up auto-provisioned infrastructure
+        if cls._provisioned_infra:
+            session = boto3.Session(region_name=cls.region)
+            lambda_client = session.client("lambda", region_name=cls.region)
+            iam_client = session.client("iam")
+            try:
+                lambda_client.delete_function(FunctionName=_LAMBDA_NAME)
+                logger.info("Deleted Lambda: %s", _LAMBDA_NAME)
+            except Exception as e:
+                logger.warning("Failed to delete Lambda: %s", e)
+            try:
+                iam_client.delete_role_policy(RoleName=_ROLE_NAME, PolicyName="lambda-invoke")
+            except Exception:
+                pass
+            try:
+                iam_client.detach_role_policy(
+                    RoleName=_ROLE_NAME,
+                    PolicyArn="arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+                )
+            except Exception:
+                pass
+            try:
+                iam_client.delete_role(RoleName=_ROLE_NAME)
+                logger.info("Deleted role: %s", _ROLE_NAME)
+            except Exception as e:
+                logger.warning("Failed to delete role: %s", e)
 
     def _make_mcp_client(self):
         """Create an MCPClient connected to the test gateway via Streamable HTTP with IAM auth."""
