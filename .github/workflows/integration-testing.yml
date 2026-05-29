@@ -146,7 +146,7 @@ jobs:
           - group: gateway
             path: tests_integ/gateway
             timeout: 15
-            extra-deps: ""
+            extra-deps: "mcp-proxy-for-aws"
             ignore: ""
           - group: identity
             path: tests_integ/identity/test_identity_client.py
