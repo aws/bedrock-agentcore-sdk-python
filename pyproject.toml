@@ -156,6 +156,7 @@ dev = [
     "strands-agents-evals>=0.1.0",
     "a2a-sdk[http-server]>=0.3",
     "ag-ui-protocol>=0.1.10",
+    "mcp-proxy-for-aws>=0.1.0",
 ]
 
 [project.optional-dependencies]
