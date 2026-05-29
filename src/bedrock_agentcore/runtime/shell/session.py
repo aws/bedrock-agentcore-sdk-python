@@ -81,8 +81,9 @@ class ShellSession:
             restarts — passing the same ID to ``open_shell`` reconnects to the
             same PTY.
         session_id: Runtime session ID that routes to the VM hosting this shell.
-            Preserve this alongside ``shell_id`` when reconnecting across process
-            restarts — omitting it may cause the platform to provision a fresh VM
+            Auto-generated if not supplied.  Preserve this alongside ``shell_id``
+            when reconnecting across process restarts — passing a different (or
+            omitted) session ID may cause the platform to provision a fresh VM
             where the PTY no longer exists.
         reconnected: ``True`` when the session resumed an existing PTY (buffered
             output will arrive as STDOUT frames immediately after connect);
@@ -135,14 +136,6 @@ class ShellSession:
             )
         self._client = client
         self._runtime_arn = runtime_arn
-        self._session_id = session_id
-        # Auto-generate so callers always have a stable reconnect handle even
-        # when they do not supply one up front.
-        if shell_id is not None:
-            validate_shell_id(shell_id)
-            self._shell_id = shell_id
-        else:
-            self._shell_id = str(uuid.uuid4())
         self._endpoint_name = endpoint_name
         self._auth = auth
         self._reconnect_config = reconnect_config
@@ -153,8 +146,13 @@ class ShellSession:
         # 0x03 confirmation (e.g. first shell prompt on 0x01).
         self._pending_frames: Deque[ShellFrame] = deque()
 
-        self.shell_id: str = self._shell_id
-        self.session_id: Optional[str] = self._session_id
+        if shell_id is not None:
+            validate_shell_id(shell_id)
+        # Auto-generate stable reconnect handles when the caller omits them.
+        # Without a fixed session_id, each _connect() would route to a different
+        # VM and shell_id would never be found → reconnected=False always.
+        self.shell_id: str = shell_id or str(uuid.uuid4())
+        self.session_id: str = session_id or str(uuid.uuid4())
         self.reconnected: bool = False
         self.kicked: bool = False
         self.bytes_dropped: int = 0
@@ -165,7 +163,7 @@ class ShellSession:
         try:
             await self._connect()
         except Exception as exc:
-            logger.error("Failed to connect (shell_id=%r): %s", self._shell_id, exc)
+            logger.error("Failed to connect (shell_id=%r): %s", self.shell_id, exc)
             self._closed = True
             self._ws = None
             raise
@@ -189,17 +187,17 @@ class ShellSession:
                 url, subprotocols = self._client.connect_shell_oauth(
                     self._runtime_arn,
                     bearer_token=auth.bearer_token,
-                    session_id=self._session_id,
+                    session_id=self.session_id,
                     endpoint_name=self._endpoint_name,
-                    shell_id=self._shell_id,
+                    shell_id=self.shell_id,
                 )
                 self._ws = await websockets.connect(url, subprotocols=subprotocols)
             elif isinstance(auth, PresignedAuth):
                 url = self._client.connect_shell_presigned(
                     self._runtime_arn,
-                    session_id=self._session_id,
+                    session_id=self.session_id,
                     endpoint_name=self._endpoint_name,
-                    shell_id=self._shell_id,
+                    shell_id=self.shell_id,
                     expires=auth.expires,
                 )
                 self._ws = await websockets.connect(url)
@@ -207,9 +205,9 @@ class ShellSession:
                 # "sigv4" — default path
                 url, headers = self._client.connect_shell(
                     self._runtime_arn,
-                    session_id=self._session_id,
+                    session_id=self.session_id,
                     endpoint_name=self._endpoint_name,
-                    shell_id=self._shell_id,
+                    shell_id=self.shell_id,
                 )
                 self._ws = await websockets.connect(url, additional_headers=headers)
         except websockets.exceptions.InvalidStatus as exc:
@@ -219,17 +217,22 @@ class ShellSession:
                 exc.response.status_code,
                 exc.response.reason_phrase,
                 f" — {body}" if body else "",
-                self._shell_id,
+                self.shell_id,
             )
             raise
 
         # read commandSessionId from the 101 response header (primary
         # path for non-browser clients). The 0x03 frame is the fallback for
         # browser clients that cannot read 101 headers.
-        header_csid = getattr(self._ws.response, "headers", {}).get("X-Command-Session-Id")
+        response_headers = getattr(self._ws.response, "headers", {})
+        header_csid = response_headers.get("X-Command-Session-Id")
         if header_csid:
             self.shell_id = header_csid
             logger.debug("commandSessionId from 101 header: %r", header_csid)
+        header_sid = response_headers.get("X-Amzn-Bedrock-AgentCore-Runtime-Session-Id")
+        if header_sid:
+            self.session_id = header_sid
+            logger.debug("sessionId from 101 header: %r", header_sid)
 
         await self._read_metadata_frame()
         if self._ws is not None:
@@ -254,7 +257,7 @@ class ShellSession:
                     "processing earlier frames). Proceeding with client-generated "
                     "shell_id=%r — reconnected flag may be incorrect.",
                     _DEFAULT_METADATA_TIMEOUT,
-                    self._shell_id,
+                    self.shell_id,
                 )
                 return
             try:
@@ -265,17 +268,17 @@ class ShellSession:
                     "(server did not respond). Proceeding with client-generated "
                     "shell_id=%r — reconnected flag may be incorrect.",
                     _DEFAULT_METADATA_TIMEOUT,
-                    self._shell_id,
+                    self.shell_id,
                 )
                 return
             except (websockets.exceptions.ConnectionClosedOK, websockets.exceptions.ConnectionClosedError) as exc:
                 # Server closed before sending STATUS confirmation — session never became usable.
-                logger.warning("WebSocket closed before STATUS confirmation (shell_id=%r): %s", self._shell_id, exc)
+                logger.warning("WebSocket closed before STATUS confirmation (shell_id=%r): %s", self.shell_id, exc)
                 self._ws = None
                 self._closed = True
                 raise
             except Exception as exc:
-                logger.error("Unexpected error waiting for STATUS frame (shell_id=%r): %s", self._shell_id, exc)
+                logger.error("Unexpected error waiting for STATUS frame (shell_id=%r): %s", self.shell_id, exc)
                 self._ws = None
                 self._closed = True
                 raise
@@ -311,7 +314,7 @@ class ShellSession:
 
         while attempt < cfg.max_retries:
             attempt += 1
-            logger.info("Reconnect attempt %d (shell_id=%s)", attempt, self._shell_id)
+            logger.info("Reconnect attempt %d (shell_id=%s)", attempt, self.shell_id)
             try:
                 await self._connect()
                 logger.info("Reconnected (reconnected=%s)", self.reconnected)
@@ -349,7 +352,7 @@ class ShellSession:
             logger.warning(
                 "reconnect_window=%.1f — reconnection disabled (shell_id=%s)",
                 cfg.reconnect_window,
-                self._shell_id,
+                self.shell_id,
             )
             return False
 
@@ -363,7 +366,7 @@ class ShellSession:
                 logger.info(
                     "Starting outer retry cycle %d (shell_id=%s)",
                     outer_attempt,
-                    self._shell_id,
+                    self.shell_id,
                 )
             if await self._run_inner_retry_loop(cfg):
                 return True
@@ -376,14 +379,14 @@ class ShellSession:
                         "Reconnection window of %.0fs expired after %.0fs, giving up (shell_id=%s)",
                         cfg.reconnect_window,
                         elapsed,
-                        self._shell_id,
+                        self.shell_id,
                     )
                     return False
 
             logger.info(
                 "Inner loop exhausted, waiting %.0fs before next outer retry cycle (shell_id=%s)",
                 cfg.outer_loop_delay,
-                self._shell_id,
+                self.shell_id,
             )
             await asyncio.sleep(cfg.outer_loop_delay)
 
@@ -396,12 +399,12 @@ class ShellSession:
             data: Text to send.  Encoded as UTF-8 before framing.
         """
         if self._ws is None:
-            logger.error("send() called on a closed ShellSession (shell_id=%r)", self._shell_id)
+            logger.error("send() called on a closed ShellSession (shell_id=%r)", self.shell_id)
             raise RuntimeError("Cannot send on a closed ShellSession")
         try:
             await self._ws.send(self._framer.encode_stdin(data))
         except Exception as exc:
-            logger.error("Failed to send STDIN frame (shell_id=%r): %s", self._shell_id, exc)
+            logger.error("Failed to send STDIN frame (shell_id=%r): %s", self.shell_id, exc)
             raise
 
     async def send_bytes(self, data: bytes) -> None:
@@ -413,7 +416,7 @@ class ShellSession:
         if self._ws is None:
             logger.error(
                 "send_bytes() called on a closed ShellSession (shell_id=%r)",
-                self._shell_id,
+                self.shell_id,
             )
             raise RuntimeError("Cannot send on a closed ShellSession")
         try:
@@ -421,7 +424,7 @@ class ShellSession:
         except Exception as exc:
             logger.error(
                 "Failed to send STDIN (bytes) frame (shell_id=%r): %s",
-                self._shell_id,
+                self.shell_id,
                 exc,
             )
             raise
@@ -436,13 +439,13 @@ class ShellSession:
         if self._ws is None:
             logger.error(
                 "resize() called on a closed ShellSession (shell_id=%r)",
-                self._shell_id,
+                self.shell_id,
             )
             raise RuntimeError("Cannot send on a closed ShellSession")
         try:
             await self._ws.send(self._framer.encode_resize(width, height))
         except Exception as exc:
-            logger.error("Failed to send RESIZE frame (shell_id=%r): %s", self._shell_id, exc)
+            logger.error("Failed to send RESIZE frame (shell_id=%r): %s", self.shell_id, exc)
             raise
 
     async def close(self) -> None:
@@ -453,12 +456,12 @@ class ShellSession:
                 await self._ws.send(self._framer.encode_close())
             except Exception as exc:
                 # Best-effort — the connection may already be gone.
-                logger.debug("Failed to send CLOSE frame during close() (shell_id=%r): %s", self._shell_id, exc)
+                logger.debug("Failed to send CLOSE frame during close() (shell_id=%r): %s", self.shell_id, exc)
             try:
                 await self._ws.close()
             except Exception as exc:
                 # Best-effort — swallow so close() never raises.
-                logger.debug("Failed to close WebSocket during close() (shell_id=%r): %s", self._shell_id, exc)
+                logger.debug("Failed to close WebSocket during close() (shell_id=%r): %s", self.shell_id, exc)
             self._ws = None
 
     # ── Inbound ───────────────────────────────────────────────────────────────
@@ -531,7 +534,7 @@ class ShellSession:
                 if frame.channel == ShellChannel.CLOSE:
                     logger.debug(
                         "CLOSE frame received from pending queue (shell_id=%r)",
-                        self._shell_id,
+                        self.shell_id,
                     )
                     raise StopAsyncIteration from None
                 if frame.channel == ShellChannel.STATUS:
@@ -549,7 +552,7 @@ class ShellSession:
                 return frame
 
             if self._closed or self._ws is None:
-                logger.debug("Session already closed or disconnected (shell_id=%r)", self._shell_id)
+                logger.debug("Session already closed or disconnected (shell_id=%r)", self.shell_id)
                 raise StopAsyncIteration from None
 
             try:
@@ -558,7 +561,7 @@ class ShellSession:
                 if self._closed:
                     logger.debug(
                         "WebSocket error after close() (shell_id=%r): %s",
-                        self._shell_id,
+                        self.shell_id,
                         exc,
                     )
                     raise StopAsyncIteration from None
@@ -571,20 +574,20 @@ class ShellSession:
                                 "Server sent 1001 Going Away but no reconnect_config "
                                 "provided — stopping iteration. Reconnect with the same "
                                 "shell_id=%r to resume the PTY.",
-                                self._shell_id,
+                                self.shell_id,
                             )
                             self._ws = None
                             self._closed = True
                             raise StopAsyncIteration from None
                         logger.info(
                             "WebSocket closed with 1001 Going Away — will reconnect (shell_id=%r)",
-                            self._shell_id,
+                            self.shell_id,
                         )
                     else:
                         # Code 1000 "Normal Closure" — shell exited or graceful shutdown.
                         logger.info(
                             "WebSocket closed cleanly (shell_id=%r): %s",
-                            self._shell_id,
+                            self.shell_id,
                             exc,
                         )
                         self._ws = None
@@ -594,21 +597,21 @@ class ShellSession:
                     if exc.rcvd is not None and exc.rcvd.code == 4000:
                         logger.info(
                             "Shell session kicked (close code 4000) — will not reconnect (shell_id=%r)",
-                            self._shell_id,
+                            self.shell_id,
                         )
                         self._ws = None
                         self.kicked = True
                         raise StopAsyncIteration from None
                     logger.warning(
                         "WebSocket closed unexpectedly (shell_id=%r): %s",
-                        self._shell_id,
+                        self.shell_id,
                         exc,
                     )
                 reconnected = await self._reconnect_with_backoff()
                 if not reconnected:
                     logger.warning(
                         "Reconnect exhausted, stopping iteration (shell_id=%r)",
-                        self._shell_id,
+                        self.shell_id,
                     )
                     self._ws = None
                     self._closed = True
@@ -622,7 +625,7 @@ class ShellSession:
             frame = self._framer.decode(raw)
 
             if frame.channel == ShellChannel.CLOSE:
-                logger.debug("CLOSE frame received (shell_id=%r)", self._shell_id)
+                logger.debug("CLOSE frame received (shell_id=%r)", self.shell_id)
                 raise StopAsyncIteration from None
 
             if frame.channel == ShellChannel.HEARTBEAT:
@@ -642,7 +645,7 @@ class ShellSession:
                             logger.warning(
                                 "%d bytes of PTY output lost during disconnect (ring buffer overflow) (shell_id=%r)",
                                 dropped,
-                                self._shell_id,
+                                self.shell_id,
                             )
                         continue
                     if self._is_termination_status(status):

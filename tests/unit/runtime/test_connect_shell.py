@@ -322,7 +322,7 @@ class TestOpenShell:
     def test_passes_shell_id(self):
         client = _client()
         session = client.open_shell(FAKE_ARN, shell_id="my-shell")
-        assert session._shell_id == "my-shell"
+        assert session.shell_id == "my-shell"
 
     def test_default_auth_is_sigv4(self):
         client = _client()

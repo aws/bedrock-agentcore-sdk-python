@@ -52,6 +52,8 @@ def _make_ws(*frames, end_with=None):
     ws.recv = recv
     ws.send = AsyncMock()
     ws.close = AsyncMock()
+    ws.response = MagicMock()
+    ws.response.headers = {}
     return ws
 
 
@@ -181,6 +183,39 @@ class TestShellSessionConnect:
         assert session._ws is None
 
     @pytest.mark.asyncio
+    async def test_session_id_stable_across_two_connect_calls(self):
+        """session_id must not change between _connect() calls — same value routes to same VM."""
+        client = _make_client()
+        ws1 = _make_ws(_metadata_frame("my-shell"))
+        ws2 = _make_ws(_metadata_frame("my-shell"))
+
+        with patch("websockets.connect", new=AsyncMock(side_effect=[ws1, ws2])):
+            session = ShellSession(client, FAKE_ARN, shell_id="my-shell")
+            first_session_id = session.session_id
+
+            await session._connect()
+            assert session.session_id == first_session_id
+
+            await session._connect()
+            assert session.session_id == first_session_id
+
+    @pytest.mark.asyncio
+    async def test_connect_reads_session_id_from_101_header(self):
+        """X-Amzn-Bedrock-AgentCore-Runtime-Session-Id in 101 response updates session_id."""
+        client = _make_client()
+        ws = _make_ws(_metadata_frame("my-shell"))
+        ws.response.headers = {
+            "X-Command-Session-Id": "my-shell",
+            "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": "server-session-99",
+        }
+
+        with patch("websockets.connect", new=AsyncMock(return_value=ws)):
+            session = ShellSession(client, FAKE_ARN, shell_id="my-shell")
+            await session._connect()
+
+        assert session.session_id == "server-session-99"
+
+    @pytest.mark.asyncio
     async def test_connect_timeout_proceeds_with_warning(self, caplog):
         """TimeoutError waiting for STATUS logs a warning but session stays usable."""
         import logging
@@ -190,6 +225,8 @@ class TestShellSessionConnect:
         ws.recv = AsyncMock(side_effect=asyncio.TimeoutError)
         ws.send = AsyncMock()
         ws.close = AsyncMock()
+        ws.response = MagicMock()
+        ws.response.headers = {}
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             with caplog.at_level(logging.WARNING, logger="bedrock_agentcore.runtime.shell"):
@@ -209,8 +246,26 @@ class TestShellSessionInit:
     def test_none_shell_id_autogenerates_uuid(self):
         client = _make_client()
         session = ShellSession(client, FAKE_ARN, shell_id=None)
-        assert session._shell_id is not None
-        assert len(session._shell_id) > 0
+        assert session.shell_id is not None
+        assert len(session.shell_id) > 0
+
+    def test_none_session_id_autogenerates_uuid(self):
+        client = _make_client()
+        session = ShellSession(client, FAKE_ARN, session_id=None)
+        assert session.session_id is not None
+        assert len(session.session_id) > 0
+
+    def test_empty_string_session_id_autogenerates_uuid(self):
+        """Empty string is treated as omitted — auto-generate a UUID."""
+        client = _make_client()
+        session = ShellSession(client, FAKE_ARN, session_id="")
+        assert session.session_id != ""
+        assert len(session.session_id) > 0
+
+    def test_explicit_session_id_preserved(self):
+        client = _make_client()
+        session = ShellSession(client, FAKE_ARN, session_id="my-session")
+        assert session.session_id == "my-session"
 
     @pytest.mark.parametrize("bad", [0, False, b"", 1.5])
     def test_non_string_shell_id_raises_at_construction(self, bad):
