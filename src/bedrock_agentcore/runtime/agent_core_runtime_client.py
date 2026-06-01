@@ -446,25 +446,25 @@ class AgentCoreRuntimeClient:
         endpoint_name: Optional[str] = None,
         shell_id: Optional[str] = None,
     ) -> str:
-        """Build wss:// URL for /ws/commands (shell op).
+        """Build wss:// URL for /ws/shells (shell op).
 
         Args:
             runtime_arn: Full runtime ARN.
             endpoint_name: Optional qualifier query param.
-            shell_id: Optional commandSessionId query param (wire name unchanged).
+            shell_id: Optional shellId query param.
 
         Returns:
             WebSocket URL (wss://…).
         """
         host = get_data_plane_endpoint(self.region).replace("https://", "")
         encoded_arn = quote(runtime_arn, safe="")
-        path = f"/runtimes/{encoded_arn}/ws/commands"
+        path = f"/runtimes/{encoded_arn}/ws/shells"
 
         params: Dict[str, str] = {}
         if endpoint_name:
             params["qualifier"] = endpoint_name
         if shell_id:
-            params["commandSessionId"] = shell_id
+            params["shellId"] = shell_id
 
         qs = urlencode(params)
         return f"wss://{host}{path}?{qs}" if qs else f"wss://{host}{path}"
@@ -713,8 +713,8 @@ class AgentCoreRuntimeClient:
                     if frame.channel == ShellChannel.STDOUT:
                         print(frame.text, end="")
                     elif frame.channel == ShellChannel.STATUS:
-                        # Termination frames have empty metadata (no commandSessionId).
-                        if not frame.json().get("metadata", {}).get("commandSessionId"):
+                        # Termination frames have empty metadata (no shellId).
+                        if not frame.json().get("metadata", {}).get("shellId"):
                             break
 
         Example — presigned URL:

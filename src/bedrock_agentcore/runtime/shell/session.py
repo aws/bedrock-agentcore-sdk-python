@@ -15,6 +15,7 @@ from ._validation import parse_runtime_arn, validate_shell_id
 from .auth import AuthMode, OAuthAuth, PresignedAuth
 from .config import _DEFAULT_METADATA_TIMEOUT, ReconnectConfig
 from .protocol import ShellChannel, ShellFrame, ShellFramer
+from ..models import SESSION_HEADER, SHELL_ID_HEADER
 
 if TYPE_CHECKING:
     from ..agent_core_runtime_client import AgentCoreRuntimeClient
@@ -26,7 +27,7 @@ class ShellSession:
     r"""Async context manager wrapping a live interactive shell WebSocket session.
 
     Connects on ``__aenter__``, reads the mandatory metadata frame that carries
-    ``commandSessionId`` and ``reconnected``, and exposes typed send/resize/iterate/close.
+    ``shellId`` and ``reconnected``, and exposes typed send/resize/iterate/close.
     When ``reconnect_config`` is provided, transparently reconnects on unexpected
     disconnects using the same ``shell_id`` so the shell's working
     directory, environment, background jobs, and up to 256 KB of buffered output
@@ -40,8 +41,8 @@ class ShellSession:
                 if frame.channel == ShellChannel.STDOUT:
                     print(frame.text, end="", flush=True)
                 elif frame.channel == ShellChannel.STATUS:
-                    # Termination: empty metadata (no commandSessionId).
-                    if not frame.json().get("metadata", {}).get("commandSessionId"):
+                    # Termination: empty metadata (no shellId).
+                    if not frame.json().get("metadata", {}).get("shellId"):
                         break
 
     Usage — presigned URL:
@@ -221,15 +222,15 @@ class ShellSession:
             )
             raise
 
-        # read commandSessionId from the 101 response header (primary
-        # path for non-browser clients). The 0x03 frame is the fallback for
-        # browser clients that cannot read 101 headers.
+        # read shellId from the 101 response header (primary path for
+        # non-browser clients). The 0x03 frame is the fallback for browser
+        # clients that cannot read 101 headers.
         response_headers = getattr(self._ws.response, "headers", {})
-        header_csid = response_headers.get("X-Command-Session-Id")
+        header_csid = response_headers.get(SHELL_ID_HEADER)
         if header_csid:
             self.shell_id = header_csid
-            logger.debug("commandSessionId from 101 header: %r", header_csid)
-        header_sid = response_headers.get("X-Amzn-Bedrock-AgentCore-Runtime-Session-Id")
+            logger.debug("shellId from 101 header: %r", header_csid)
+        header_sid = response_headers.get(SESSION_HEADER)
         if header_sid:
             self.session_id = header_sid
             logger.debug("sessionId from 101 header: %r", header_sid)
@@ -243,7 +244,7 @@ class ShellSession:
 
         Both the 0x03 confirmation and the first 0x01 stdout
         frame are sent after upgrade but their order is non-deterministic.  We
-        wait for a 0x03 frame with metadata.commandSessionId.  Any 0x01 frames
+        wait for a 0x03 frame with metadata.shellId.  Any 0x01 frames
         that arrive first are stashed in self._pending_frames so __anext__ can
         yield them in order.
         """
@@ -289,9 +290,9 @@ class ShellSession:
                 try:
                     status = frame.json()
                     meta = status.get("metadata", {})
-                    if meta.get("commandSessionId"):
+                    if meta.get("shellId"):
                         # This is the connection confirmation frame.
-                        self.shell_id = meta["commandSessionId"]
+                        self.shell_id = meta["shellId"]
                         self.reconnected = bool(meta.get("reconnected", False))
                         return
                     else:
@@ -474,11 +475,11 @@ class ShellSession:
     def _is_termination_status(status: dict) -> bool:
         """Return True if a parsed STATUS frame payload signals shell exit or error.
 
-        Connection confirmation frames have metadata.commandSessionId present.
+        Connection confirmation frames have metadata.shellId present.
         Termination frames have an empty metadata dict.
         """
         meta = status.get("metadata", {})
-        if meta.get("commandSessionId"):
+        if meta.get("shellId"):
             # This is a connection confirmation frame, not a termination.
             return False
         # Empty metadata → shell exit (Success = code 0, Failure = non-zero / error).
@@ -487,7 +488,7 @@ class ShellSession:
     @staticmethod
     def _is_confirmation_status(status: dict) -> bool:
         """Return True if a parsed STATUS frame is a connection confirmation."""
-        return bool(status.get("metadata", {}).get("commandSessionId"))
+        return bool(status.get("metadata", {}).get("shellId"))
 
     @staticmethod
     def _parse_exit_code(status: dict) -> Optional[int]:

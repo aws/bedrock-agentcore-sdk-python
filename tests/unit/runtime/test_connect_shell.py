@@ -30,7 +30,7 @@ class TestBuildShellUrl:
     def test_path_contains_ws_commands(self):
         client = _client()
         url = client._build_shell_url(FAKE_ARN)
-        assert "/ws/commands" in url
+        assert "/ws/shells" in url
         assert url.startswith("wss://")
 
     def test_arn_is_url_encoded(self):
@@ -45,11 +45,11 @@ class TestBuildShellUrl:
         assert qs["qualifier"] == ["prod"]
 
     def test_shell_id_maps_to_command_session_id_param(self):
-        """shell_id must be sent as commandSessionId (wire format unchanged)."""
+        """shell_id must be sent as shellId query param."""
         client = _client()
         url = client._build_shell_url(FAKE_ARN, shell_id="my-shell")
         qs = parse_qs(urlparse(url).query)
-        assert qs["commandSessionId"] == ["my-shell"]
+        assert qs["shellId"] == ["my-shell"]
 
     def test_no_params_no_query_string(self):
         client = _client()
@@ -119,7 +119,7 @@ class TestConnectShell:
                 url, headers = client.connect_shell(FAKE_ARN)
 
         assert url.startswith("wss://")
-        assert "/ws/commands" in url
+        assert "/ws/shells" in url
         assert "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id" in headers
         assert "Authorization" in headers
 
@@ -131,7 +131,7 @@ class TestConnectShell:
                 url, _ = client.connect_shell(FAKE_ARN, shell_id="my-shell")
 
         qs = parse_qs(urlparse(url).query)
-        assert qs["commandSessionId"] == ["my-shell"]
+        assert qs["shellId"] == ["my-shell"]
 
     def test_autogenerates_shell_id_when_absent(self):
         client = _client()
@@ -141,7 +141,7 @@ class TestConnectShell:
                 url, _ = client.connect_shell(FAKE_ARN)
 
         qs = parse_qs(urlparse(url).query)
-        assert "commandSessionId" in qs
+        assert "shellId" in qs
 
     def test_includes_security_token_when_present(self):
         client = _client()
@@ -191,7 +191,7 @@ class TestConnectShellPresigned:
             with patch("bedrock_agentcore.runtime.agent_core_runtime_client.SigV4QueryAuth") as mock_auth:
                 mock_request = MagicMock()
                 mock_request.url = (
-                    "https://bedrock-agentcore.us-west-2.amazonaws.com/runtimes/x/ws/commands?X-Amz-Algorithm=AWS4"
+                    "https://bedrock-agentcore.us-west-2.amazonaws.com/runtimes/x/ws/shells?X-Amz-Algorithm=AWS4"
                 )
                 mock_auth.return_value.add_auth = MagicMock(side_effect=lambda r: setattr(r, "url", mock_request.url))
                 url = client.connect_shell_presigned(FAKE_ARN)
@@ -274,7 +274,7 @@ class TestConnectShellOAuth:
         client = _client()
         url, protos = client.connect_shell_oauth(FAKE_ARN, bearer_token="tok123")
         assert url.startswith("wss://")
-        assert "/ws/commands" in url
+        assert "/ws/shells" in url
         encoded = base64.urlsafe_b64encode(b"tok123").decode().rstrip("=")
         assert f"base64UrlBearerAuthorization.{encoded}" in protos
         assert "base64UrlBearerAuthorization" in protos

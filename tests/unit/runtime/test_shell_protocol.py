@@ -76,14 +76,14 @@ class TestShellFramerDecode:
             {
                 "kind": "Status",
                 "apiVersion": "v1",
-                "metadata": {"commandSessionId": "my-shell", "reconnected": False},
+                "metadata": {"shellId": "my-shell", "reconnected": False},
                 "status": "Success",
             }
         ).encode()
         raw = bytes([ShellChannel.STATUS]) + payload
         frame = self.framer.decode(raw)
         assert frame.channel == ShellChannel.STATUS
-        assert frame.json()["metadata"]["commandSessionId"] == "my-shell"
+        assert frame.json()["metadata"]["shellId"] == "my-shell"
 
     def test_decode_resize(self):
         payload = json.dumps({"width": 80, "height": 24}).encode()

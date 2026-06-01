@@ -8,9 +8,9 @@ Channels:
   0x01  STDOUT     Raw bytes, shell → client
   0x02  STDERR     UTF-8 text (platform diagnostics), shell → client
   0x03  STATUS     metav1.Status JSON (shell → client):
-                     Connection confirmation: metadata.commandSessionId present
+                     Connection confirmation: metadata.shellId present
                      {"kind":"Status","apiVersion":"v1",
-                      "metadata":{"commandSessionId":"…","reconnected":bool},"status":"Success"}
+                      "metadata":{"shellId":"…","reconnected":bool},"status":"Success"}
                      Shell exit (code 0):
                      {"kind":"Status","apiVersion":"v1","metadata":{},"status":"Success"}
                      Shell exit (non-zero):
@@ -99,8 +99,8 @@ class ShellFramer:
             sys.stdout.write(frame.text)
         elif frame.channel == ShellChannel.STATUS:
             status = frame.json()
-            if status.get("metadata", {}).get("commandSessionId"):
-                print(f"connected: {status['metadata']['commandSessionId']}")
+            if status.get("metadata", {}).get("shellId"):
+                print(f"connected: {status['metadata']['shellId']}")
             elif status.get("status") == "Failure":
                 causes = status.get("details", {}).get("causes", [])
                 code = next((c["message"] for c in causes if c["reason"] == "ExitCode"), None)

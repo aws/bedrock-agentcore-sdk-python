@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # websockets.connect is awaited in _connect(), so patches must be AsyncMock.
 import pytest
 
+from bedrock_agentcore.runtime.models import SESSION_HEADER, SHELL_ID_HEADER
 from bedrock_agentcore.runtime.shell import (
     OAuthAuth,
     PresignedAuth,
@@ -17,7 +18,7 @@ from bedrock_agentcore.runtime.shell import (
 )
 
 FAKE_ARN = "arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/my-runtime"
-FAKE_URL = "wss://bedrock-agentcore.us-west-2.amazonaws.com/runtimes/FAKE/ws/commands"
+FAKE_URL = "wss://bedrock-agentcore.us-west-2.amazonaws.com/runtimes/FAKE/ws/shells"
 FAKE_HEADERS = {"Authorization": "AWS4-HMAC…", "Host": "bedrock-agentcore.us-west-2.amazonaws.com"}
 
 
@@ -62,7 +63,7 @@ def _metadata_frame(shell_id: str = "test-session", reconnected: bool = False) -
         {
             "kind": "Status",
             "apiVersion": "v1",
-            "metadata": {"commandSessionId": shell_id, "reconnected": reconnected},
+            "metadata": {"shellId": shell_id, "reconnected": reconnected},
             "status": "Success",
         }
     ).encode()
@@ -205,8 +206,8 @@ class TestShellSessionConnect:
         client = _make_client()
         ws = _make_ws(_metadata_frame("my-shell"))
         ws.response.headers = {
-            "X-Command-Session-Id": "my-shell",
-            "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": "server-session-99",
+            SHELL_ID_HEADER: "my-shell",
+            SESSION_HEADER: "server-session-99",
         }
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
@@ -472,7 +473,7 @@ class TestShellSessionIterate:
         assert ShellChannel.STATUS in channels
         # The exit STATUS frame has empty metadata (not a connection confirmation).
         status_frames = [f for f in frames if f.channel == ShellChannel.STATUS]
-        assert all(not f.json().get("metadata", {}).get("commandSessionId") for f in status_frames)
+        assert all(not f.json().get("metadata", {}).get("shellId") for f in status_frames)
 
     @pytest.mark.asyncio
     async def test_stops_on_close_frame(self):
@@ -1043,7 +1044,7 @@ class TestShellSessionBytesDropped:
             {
                 "kind": "Status",
                 "apiVersion": "v1",
-                "metadata": {"commandSessionId": shell_id, "reconnected": True, "bytesDropped": bytes_dropped},
+                "metadata": {"shellId": shell_id, "reconnected": True, "bytesDropped": bytes_dropped},
                 "status": "Success",
             }
         ).encode()
@@ -1091,7 +1092,7 @@ class TestShellSessionBytesDropped:
             {
                 "kind": "Status",
                 "apiVersion": "v1",
-                "metadata": {"commandSessionId": "s", "reconnected": True},
+                "metadata": {"shellId": "s", "reconnected": True},
                 "status": "Success",
             }
         ).encode()
@@ -1130,7 +1131,7 @@ class TestShellSessionAuthModes:
 
     @pytest.mark.asyncio
     async def test_presigned_uses_connect_shell_presigned(self):
-        presigned_url = "wss://bedrock-agentcore.us-west-2.amazonaws.com/runtimes/X/ws/commands?X-Amz-Signature=abc"
+        presigned_url = "wss://bedrock-agentcore.us-west-2.amazonaws.com/runtimes/X/ws/shells?X-Amz-Signature=abc"
         client = MagicMock()
         client.connect_shell_presigned.return_value = presigned_url
         ws = _make_ws(_metadata_frame())
