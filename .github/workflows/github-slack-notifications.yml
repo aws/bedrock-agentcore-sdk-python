@@ -1,37 +1,83 @@
-name: Closed PR Comment Redirect
+name: GitHub Slack Notifications
 
-# COE AI-7: alert users who comment on closed PRs to open a GitHub issue.
-# An external user reported the v1.4.8 SPII leak by commenting on the
-# already-closed revert PR. Closed-PR comments are not surfaced to oncall,
-# but issues are. This workflow:
-#   1. Replies to the commenter with a link to open a new issue.
-#   2. Notifies oncall via the existing SLACK_WEBHOOK_URL.
-# Maintainers (admin/maintain/write) are skipped so internal back-and-forth
-# doesn't trigger the redirect.
+# Central GitHub -> Slack integration point. Two triggers feed one shared
+# Slack workflow (via SLACK_WEBHOOK_URL), which branches on event_type:
+#   - issues opened           -> notify oncall of a new issue
+#   - comments on closed PRs  -> redirect the commenter to open an issue,
+#                                and notify oncall (closed-PR comments are
+#                                otherwise easy to miss)
+# Every payload sends the same key set so the Slack workflow can branch
+# reliably; fields that don't apply to an event are sent empty.
 
 on:
+  issues:
+    types: [opened]
   issue_comment:
     types: [created]
 
-permissions:
-  pull-requests: write
-  issues: read
-
-# Serialize per-PR so the marker-comment dedup is race-free (otherwise two
-# rapid-fire comments could both see "no marker" and both post a redirect).
-# cancel-in-progress is false so the second run still executes after the
-# first finishes — we want to evaluate dedup against the just-posted marker.
-concurrency:
-  group: closed-pr-comment-${{ github.event.issue.number }}
-  cancel-in-progress: false
-
 jobs:
-  redirect:
+  notify-issue-opened:
+    if: github.event_name == 'issues'
     runs-on: ubuntu-latest
-    # Only fire on PRs (issue_comment fires for issues too) that are closed.
+    permissions: {}
+    steps:
+      - name: Send issue details to Slack
+        # Attacker-controlled fields are passed through env: rather than
+        # interpolated into the YAML payload, to prevent workflow injection.
+        # For issue_opened, the issue_* fields carry the data and the
+        # pr_*/comment_* fields are empty.
+        env:
+          REPOSITORY: ${{ github.repository }}
+          CREATED_AT: ${{ github.event.issue.created_at }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          LABELS: ${{ join(github.event.issue.labels.*.name, ', ') }}
+        uses: slackapi/slack-github-action@v3.0.1
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: webhook-trigger
+          payload: |
+            event_type: "issue_opened"
+            repository: "${{ env.REPOSITORY }}"
+            created_at: "${{ env.CREATED_AT }}"
+            issue_number: "${{ env.ISSUE_NUMBER }}"
+            issue_title: ${{ toJSON(env.ISSUE_TITLE) }}
+            issue_url: "${{ env.ISSUE_URL }}"
+            issue_author: "${{ env.ISSUE_AUTHOR }}"
+            issue_body: ${{ toJSON(env.ISSUE_BODY) }}
+            labels: ${{ toJSON(env.LABELS) }}
+            pr_number: ""
+            pr_title: ""
+            pr_url: ""
+            pr_author: ""
+            pr_state: ""
+            pr_closed_at: ""
+            pr_merged_at: ""
+            comment_id: ""
+            comment_url: ""
+            comment_author: ""
+            comment_body: ""
+
+  closed-pr-comment-redirect:
+    # Only fire on comments left on PRs (issue_comment fires for issues too)
+    # that are already closed, and skip comments left by bots.
     if: >-
-      github.event.issue.pull_request != null && github.event.issue.state == 'closed' && github.event.comment.user.type
-      != 'Bot'
+      github.event_name == 'issue_comment' && github.event.issue.pull_request != null && github.event.issue.state ==
+      'closed' && github.event.comment.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: read
+    # Serialize per-PR so the marker-comment dedup is race-free (otherwise two
+    # rapid-fire comments could both see "no marker" and both post a redirect).
+    # cancel-in-progress is false so the second run still executes after the
+    # first finishes -- we want to evaluate dedup against the just-posted marker.
+    concurrency:
+      group: closed-pr-comment-${{ github.event.issue.number }}
+      cancel-in-progress: false
     steps:
       - name: Check commenter permission
         id: perm
@@ -77,9 +123,9 @@ jobs:
 
       - name: Post redirect comment
         if: steps.perm.outputs.skip != 'true' && steps.existing.outputs.already_posted != 'true'
-        # The Slack alert is the load-bearing part of this workflow (it's
-        # what closes the COE detection gap). If posting the bot reply
-        # fails (rate limit, transient error), don't block oncall paging.
+        # The Slack notification is the load-bearing part of this job. If
+        # posting the bot reply fails (rate limit, transient error), don't
+        # block the Slack notification.
         continue-on-error: true
         uses: actions/github-script@v9
         env:
@@ -124,16 +170,14 @@ jobs:
             core.setOutput('state', mergedAt ? 'merged' : 'closed');
 
       - name: Notify Slack
-        # Page oncall only on the FIRST external comment per PR (gated by
-        # already_posted). Subsequent comments on the same PR don't page —
-        # the redirect comment has already told the commenter to open an
-        # issue, and issues page oncall via the issue path. This bounds
-        # paging volume regardless of how chatty a thread becomes.
+        # Notify oncall only on the FIRST external comment per PR (gated by
+        # already_posted). Subsequent comments on the same PR don't notify --
+        # the redirect comment has already directed the commenter to open an
+        # issue, and issues notify oncall via the issue path. This bounds
+        # notification volume regardless of how chatty a thread becomes.
         if: steps.perm.outputs.skip != 'true' && steps.existing.outputs.already_posted != 'true'
         # Attacker-controlled fields are passed through env: rather than
         # interpolated into the YAML payload, to prevent workflow injection.
-        # Schema is uniform across event types: every workflow sends the
-        # same 20 keys so Slack-side branching on event_type is reliable.
         # For closed-PR comments, the issue_* fields are empty (this isn't
         # an issue) and the pr_*/comment_* fields carry the real data.
         env:
