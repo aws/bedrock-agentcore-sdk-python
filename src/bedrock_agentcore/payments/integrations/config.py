@@ -39,6 +39,24 @@ class AgentCorePaymentsPluginConfig:
             eligible (preserving existing behavior). When set, only tool calls whose
             name appears in this list will trigger payment processing; all others are
             skipped.
+        provide_http_request: Whether the plugin should register its built-in
+            ``http_request`` ``@tool`` on the agent. Defaults to True so adding the
+            plugin gives a turnkey paid-HTTP experience. Set to False if you want
+            to ship your own ``http_request`` tool — Strands raises a ValueError
+            on duplicate tool names, so you must opt out of the plugin's version
+            before passing your own. Auto-payment of 402 responses still works
+            against any tool whose output carries the ``PAYMENT_REQUIRED:``
+            content marker, so disabling this flag does not disable interception.
+        post_payment_retry_delay_seconds: Seconds to wait after generating a
+            payment header before allowing the tool to be retried. The x402
+            EIP-3009 ``transferWithAuthorization`` contract requires
+            ``block.timestamp > validAfter`` (strict greater-than). Some signing
+            services set ``validAfter`` close to the current time, which can
+            cause the merchant facilitator to submit before ``validAfter``
+            elapses, producing a misleading "invalid_payload" response. A small
+            delay between signing and retry lets the chain advance one block so
+            the authorization is valid by the time the seller submits. Defaults
+            to 3.0 seconds (about one Base Sepolia block). Set to 0 to disable.
     """
 
     payment_manager_arn: str
@@ -54,6 +72,8 @@ class AgentCorePaymentsPluginConfig:
     bearer_token: Optional[str] = None
     token_provider: Optional[Callable[[], str]] = None
     payment_tool_allowlist: Optional[List[str]] = None
+    provide_http_request: bool = True
+    post_payment_retry_delay_seconds: float = 3.0
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -86,6 +106,21 @@ class AgentCorePaymentsPluginConfig:
                 raise ValueError("payment_tool_allowlist must be a list of tool name strings")
             if not all(isinstance(t, str) for t in self.payment_tool_allowlist):
                 raise ValueError("All entries in payment_tool_allowlist must be strings")
+
+        if not isinstance(self.provide_http_request, bool):
+            raise ValueError(f"provide_http_request must be a boolean, got {type(self.provide_http_request).__name__}")
+
+        if not isinstance(self.post_payment_retry_delay_seconds, (int, float)) or isinstance(
+            self.post_payment_retry_delay_seconds, bool
+        ):
+            raise ValueError(
+                "post_payment_retry_delay_seconds must be a number, got "
+                f"{type(self.post_payment_retry_delay_seconds).__name__}"
+            )
+        if self.post_payment_retry_delay_seconds < 0:
+            raise ValueError(
+                f"post_payment_retry_delay_seconds must be >= 0, got {self.post_payment_retry_delay_seconds}"
+            )
 
     def update_payment_session_id(self, payment_session_id: str) -> None:
         """Update the payment session ID.

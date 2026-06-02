@@ -12,6 +12,12 @@ from botocore.exceptions import ClientError
 
 from bedrock_agentcore.memory import MemoryClient
 from bedrock_agentcore.memory.constants import StrategyType
+from bedrock_agentcore.memory.models import (
+    MemoryMetadataFilter,
+    MemoryRecordLeftExpression,
+    MemoryRecordOperatorType,
+    MemoryRecordRightExpression,
+)
 
 
 def test_client_initialization():
@@ -3498,3 +3504,242 @@ def test_get_last_k_turns_explicit_max_results():
         # Total events fetched should not exceed max_results
         total_fetched = sum(1 for _ in mock_gmdp.list_events.call_args_list)
         assert total_fetched <= 50  # Should stop after fetching 50 events worth of calls
+
+
+# ============================================================================
+# LTM Metadata: indexed_keys and metadata_filters tests
+# ============================================================================
+
+
+def test_create_memory_with_indexed_keys():
+    """Test create_memory passes indexedKeys to gmcp_client when provided."""
+    with patch("boto3.Session"):
+        client = MemoryClient()
+
+        mock_gmcp = MagicMock()
+        client.gmcp_client = mock_gmcp
+
+        mock_gmcp.create_memory.return_value = {"memory": {"memoryId": "mem-idx-1", "status": "CREATING"}}
+
+        indexed_keys = [
+            {"key": "priority", "type": "NUMBER"},
+            {"key": "agent_type", "type": "STRING"},
+            {"key": "tags", "type": "STRINGLIST"},
+        ]
+
+        with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
+            result = client.create_memory(
+                name="IndexedMemory",
+                strategies=[{StrategyType.SEMANTIC.value: {"name": "TestStrategy"}}],
+                indexed_keys=indexed_keys,
+            )
+
+        assert result["memoryId"] == "mem-idx-1"
+        assert mock_gmcp.create_memory.called
+
+        args, kwargs = mock_gmcp.create_memory.call_args
+        assert kwargs["indexedKeys"] == indexed_keys
+        assert kwargs["name"] == "IndexedMemory"
+
+
+def test_create_memory_without_indexed_keys():
+    """Test create_memory does not include indexedKeys when not provided."""
+    with patch("boto3.Session"):
+        client = MemoryClient()
+
+        mock_gmcp = MagicMock()
+        client.gmcp_client = mock_gmcp
+
+        mock_gmcp.create_memory.return_value = {"memory": {"memoryId": "mem-no-idx", "status": "CREATING"}}
+
+        with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
+            result = client.create_memory(
+                name="NoIndexMemory",
+                strategies=[{StrategyType.SEMANTIC.value: {"name": "TestStrategy"}}],
+            )
+
+        assert result["memoryId"] == "mem-no-idx"
+
+        args, kwargs = mock_gmcp.create_memory.call_args
+        assert "indexedKeys" not in kwargs
+
+
+def test_create_memory_and_wait_with_indexed_keys():
+    """Test create_memory_and_wait passes indexed_keys through to create_memory."""
+    with patch("boto3.Session"):
+        client = MemoryClient()
+
+        mock_gmcp = MagicMock()
+        client.gmcp_client = mock_gmcp
+
+        mock_gmcp.create_memory.return_value = {"memory": {"memoryId": "mem-wait-idx", "status": "CREATING"}}
+        mock_gmcp.get_memory.return_value = {
+            "memory": {"memoryId": "mem-wait-idx", "status": "ACTIVE", "name": "WaitIndexed"}
+        }
+
+        indexed_keys = [{"key": "category", "type": "STRING"}]
+
+        with patch("time.time", return_value=0):
+            with patch("time.sleep"):
+                with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
+                    result = client.create_memory_and_wait(
+                        name="WaitIndexed",
+                        strategies=[{StrategyType.SEMANTIC.value: {"name": "TestStrategy"}}],
+                        indexed_keys=indexed_keys,
+                    )
+
+        assert result["memoryId"] == "mem-wait-idx"
+        assert result["status"] == "ACTIVE"
+
+        args, kwargs = mock_gmcp.create_memory.call_args
+        assert kwargs["indexedKeys"] == indexed_keys
+
+
+def test_create_or_get_memory_with_indexed_keys():
+    """Test create_or_get_memory passes indexed_keys through."""
+    with patch("boto3.Session"):
+        client = MemoryClient()
+
+        mock_gmcp = MagicMock()
+        client.gmcp_client = mock_gmcp
+
+        mock_gmcp.create_memory.return_value = {"memory": {"memoryId": "mem-cog-idx", "status": "CREATING"}}
+        mock_gmcp.get_memory.return_value = {
+            "memory": {"memoryId": "mem-cog-idx", "status": "ACTIVE", "name": "COGIndexed"}
+        }
+
+        indexed_keys = [{"key": "source", "type": "STRING"}]
+
+        with patch("time.time", return_value=0):
+            with patch("time.sleep"):
+                with patch("uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")):
+                    result = client.create_or_get_memory(
+                        name="COGIndexed",
+                        strategies=[{StrategyType.SEMANTIC.value: {"name": "TestStrategy"}}],
+                        indexed_keys=indexed_keys,
+                    )
+
+        assert result["memoryId"] == "mem-cog-idx"
+
+        args, kwargs = mock_gmcp.create_memory.call_args
+        assert kwargs["indexedKeys"] == indexed_keys
+
+
+def test_retrieve_memories_with_metadata_filters():
+    """Test retrieve_memories includes metadataFilters in searchCriteria when provided."""
+    with patch("boto3.Session"):
+        client = MemoryClient()
+
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        mock_gmdp.retrieve_memory_records.return_value = {
+            "memoryRecordSummaries": [{"content": {"text": "Filtered memory"}, "memoryRecordId": "rec-f1"}]
+        }
+
+        metadata_filters = [
+            {
+                "left": {"metadataKey": "priority"},
+                "operator": "EQUALS_TO",
+                "right": {"metadataValue": {"stringValue": "high"}},
+            },
+            {
+                "left": {"metadataKey": "score"},
+                "operator": "GREATER_THAN",
+                "right": {"metadataValue": {"numberValue": 0.8}},
+            },
+        ]
+
+        memories = client.retrieve_memories(
+            memory_id="mem-123",
+            namespace="test/namespace/",
+            query="important items",
+            top_k=5,
+            metadata_filters=metadata_filters,
+        )
+
+        assert len(memories) == 1
+        assert memories[0]["memoryRecordId"] == "rec-f1"
+
+        args, kwargs = mock_gmdp.retrieve_memory_records.call_args
+        assert kwargs["memoryId"] == "mem-123"
+        assert kwargs["searchCriteria"]["searchQuery"] == "important items"
+        assert kwargs["searchCriteria"]["topK"] == 5
+        assert kwargs["searchCriteria"]["metadataFilters"] == metadata_filters
+
+
+def test_retrieve_memories_without_metadata_filters():
+    """Test retrieve_memories does not include metadataFilters when not provided."""
+    with patch("boto3.Session"):
+        client = MemoryClient()
+
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        mock_gmdp.retrieve_memory_records.return_value = {
+            "memoryRecordSummaries": [{"content": {"text": "Unfiltered memory"}, "memoryRecordId": "rec-u1"}]
+        }
+
+        memories = client.retrieve_memories(
+            memory_id="mem-123",
+            namespace="test/namespace/",
+            query="general query",
+            top_k=3,
+        )
+
+        assert len(memories) == 1
+
+        args, kwargs = mock_gmdp.retrieve_memory_records.call_args
+        assert kwargs["searchCriteria"] == {"searchQuery": "general query", "topK": 3}
+        assert "metadataFilters" not in kwargs["searchCriteria"]
+
+
+def test_retrieve_memories_with_builder_constructed_filter():
+    """End-to-end: filter built via MemoryMetadataFilter.build_expression flows through to boto3."""
+    with patch("boto3.Session"):
+        client = MemoryClient()
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+        mock_gmdp.retrieve_memory_records.return_value = {"memoryRecordSummaries": []}
+
+        built_filter = MemoryMetadataFilter.build_expression(
+            MemoryRecordLeftExpression.build("priority"),
+            MemoryRecordOperatorType.EQUALS_TO,
+            MemoryRecordRightExpression.build_string("high"),
+        )
+
+        client.retrieve_memories(
+            memory_id="mem-123",
+            namespace="test/namespace/",
+            query="x",
+            metadata_filters=[built_filter],
+        )
+
+        _, kwargs = mock_gmdp.retrieve_memory_records.call_args
+        assert kwargs["searchCriteria"]["metadataFilters"] == [
+            {
+                "left": {"metadataKey": "priority"},
+                "operator": "EQUALS_TO",
+                "right": {"metadataValue": {"stringValue": "high"}},
+            }
+        ]
+
+
+def test_retrieve_memories_rejects_more_than_five_filters():
+    """retrieve_memories raises ValueError when given more than 5 filters."""
+    with patch("boto3.Session"):
+        client = MemoryClient()
+        client.gmdp_client = MagicMock()
+
+        too_many = [
+            MemoryMetadataFilter.build_expression(
+                MemoryRecordLeftExpression.build(f"k{i}"),
+                MemoryRecordOperatorType.EXISTS,
+            )
+            for i in range(6)
+        ]
+
+        with pytest.raises(ValueError, match="maximum of 5"):
+            client.retrieve_memories(
+                memory_id="mem-123", namespace="test/namespace/", query="x", metadata_filters=too_many
+            )

@@ -944,6 +944,38 @@ class TestProcessPayment:
         assert call_kwargs["paymentManagerArn"] == arn
 
     @patch("bedrock_agentcore.payments.manager.boto3.Session")
+    def test_process_payment_does_not_forward_connector_id(self, mock_session_class):
+        """ProcessPayment must NOT include paymentConnectorId — the live API rejects it.
+
+        Regression: an earlier change forwarded payment_connector_id into the API
+        call, which botocore rejected with "Unknown parameter in input:
+        paymentConnectorId". The connector is resolved server-side from the
+        payment instrument, so the SDK now drops the kwarg before calling boto3.
+        """
+        arn = "arn:aws:bedrock-agentcore:us-east-1:123456789012:payment-manager/pm-123"
+
+        mock_session = MagicMock()
+        mock_session.region_name = "us-east-1"
+        mock_client = MagicMock()
+        mock_session.client.return_value = mock_client
+        mock_session_class.return_value = mock_session
+
+        mock_client.process_payment.return_value = {"processPaymentId": "payment-123"}
+
+        manager = PaymentManager(payment_manager_arn=arn, region_name="us-east-1")
+        manager.process_payment(
+            user_id="user-123",
+            payment_session_id="session-123",
+            payment_instrument_id="instrument-123",
+            payment_type="CRYPTO_X402",
+            payment_input={"cryptoX402": {"version": "2", "payload": {}}},
+            payment_connector_id="connector-456",
+        )
+
+        call_kwargs = mock_client.process_payment.call_args[1]
+        assert "paymentConnectorId" not in call_kwargs
+
+    @patch("bedrock_agentcore.payments.manager.boto3.Session")
     def test_process_payment_insufficient_budget(self, mock_session_class):
         """Test InsufficientBudget error during payment processing."""
         from bedrock_agentcore.payments.manager import InsufficientBudget
