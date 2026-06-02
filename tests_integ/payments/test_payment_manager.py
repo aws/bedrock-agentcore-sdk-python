@@ -1100,7 +1100,6 @@ class TestPaymentManagerBearerTokenAuth:
                     raise
                 time.sleep(initial_delay * (2**attempt))
 
-    @pytest.mark.skip(reason="AgentCredentialProviderService 500 in us-east-1, payments oncall investigating")
     def test_bearer_token_real_api_call(self):
         """Test a real API call using bearer token from Cognito.
 
@@ -1121,7 +1120,6 @@ class TestPaymentManagerBearerTokenAuth:
         assert isinstance(result, dict)
         assert "paymentInstruments" in result
 
-    @pytest.mark.skip(reason="AgentCredentialProviderService 500 in us-east-1, payments oncall investigating")
     def test_token_provider_real_api_call(self):
         """Test a real API call using token_provider with Cognito.
 
@@ -1146,7 +1144,6 @@ class TestPaymentManagerBearerTokenAuth:
         assert "paymentInstruments" in result
         assert call_count["n"] >= 1
 
-    @pytest.mark.skip(reason="AgentCredentialProviderService 500 in us-east-1, payments oncall investigating")
     def test_bearer_create_session_real_api_call(self):
         """Test creating a payment session using bearer token auth.
 
