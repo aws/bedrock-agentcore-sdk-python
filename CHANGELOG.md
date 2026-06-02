@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.12.1] - 2026-06-02
+
+### Added
+- feat: AgentCore tool search plugin for Strands Agents (#494) (1cdc356)
+
+### Other Changes
+- feat(workflows): add closed-PR comment redirect  (#489) (cc10c12)
+- ci: skip bearer token integ tests pending AgentCredentialProviderService fix (#499) (8786b18)
+
 ## [1.12.0] - 2026-05-28
 
 ### Added
