@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.14.0] - 2026-06-05
+
+### Other Changes
+- feat(runtime): add interactive runtime shell support (#505) (cf19e57)
+- Revert "ci: skip bearer token integ tests pending AgentCredentialProviderService fix (#499)" (#502) (69954eb)
+
 ## [1.13.0] - 2026-06-02
 
 ### Added
