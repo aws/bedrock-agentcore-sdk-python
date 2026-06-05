@@ -29,9 +29,9 @@ class ShellSession:
     Connects on ``__aenter__``, reads the mandatory metadata frame that carries
     ``shellId`` and ``reconnected``, and exposes typed send/resize/iterate/close.
     When ``reconnect_config`` is provided, transparently reconnects on unexpected
-    disconnects using the same ``shell_id`` so the shell's working
-    directory, environment, background jobs, and up to 256 KB of buffered output
-    are preserved.
+    disconnects using the same ``shell_id`` and ``session_id`` so the shell's
+    working directory, environment, background jobs, and up to 256 KB of buffered
+    output are preserved.
 
     Usage — SigV4 (default, server-side Python):
         client = AgentCoreRuntimeClient("us-west-2")
@@ -70,8 +70,22 @@ class ShellSession:
                 ...
 
     Usage — manual reconnect after network drop:
-        sid = "debug"   # saved from first session
-        async with client.open_shell(runtime_arn, shell_id=sid) as shell:
+        # Both shell_id AND session_id are required.  shell_id names the PTY;
+        # session_id routes to the VM that hosts it.
+        # After an abrupt drop _ws is None, so __aexit__ skips the CLOSE frame
+        # and the PTY stays alive on the server for the reconnect.
+        shell_id = "debug"
+        session_id = str(uuid.uuid4())   # generate once, reuse on every reconnect
+
+        async with client.open_shell(
+            runtime_arn, shell_id=shell_id, session_id=session_id
+        ) as shell:
+            async for frame in shell:
+                ...   # StopAsyncIteration when the network drops
+
+        async with client.open_shell(
+            runtime_arn, shell_id=shell_id, session_id=session_id
+        ) as shell:
             assert shell.reconnected       # True → up to 256 KB buffered output follows
             async for frame in shell:
                 ...

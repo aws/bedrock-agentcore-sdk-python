@@ -682,8 +682,10 @@ class AgentCoreRuntimeClient:
                 UUID if omitted; a new VM is provisioned.
             shell_id: Client-chosen shell name (1–128 UTF-8 chars, no
                 ``?``, ``#``, or ``&``). Auto-generated if omitted. **Store this
-                value** — passing the same ID reconnects to the same PTY, preserving
-                shell state and up to 256 KB of buffered output across network drops.
+                value alongside** ``session_id`` — both are required to reconnect to
+                the same PTY. ``shell_id`` names the PTY; ``session_id`` routes to
+                the VM that hosts it. Passing either without the other will not
+                reconnect successfully.
             endpoint_name: Endpoint qualifier (default: DEFAULT).
             auth: Authentication mode. One of:
 
