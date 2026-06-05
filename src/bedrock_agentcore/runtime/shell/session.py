@@ -11,11 +11,11 @@ from typing import TYPE_CHECKING, AsyncIterator, Deque, Optional
 import websockets
 import websockets.exceptions
 
+from ..models import SESSION_HEADER, SHELL_ID_HEADER
 from ._validation import parse_runtime_arn, validate_shell_id
 from .auth import AuthMode, OAuthAuth, PresignedAuth
 from .config import _DEFAULT_METADATA_TIMEOUT, ReconnectConfig
 from .protocol import ShellChannel, ShellFrame, ShellFramer
-from ..models import SESSION_HEADER, SHELL_ID_HEADER
 
 if TYPE_CHECKING:
     from ..agent_core_runtime_client import AgentCoreRuntimeClient
