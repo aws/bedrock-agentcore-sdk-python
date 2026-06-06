@@ -4,7 +4,7 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
-import requests
+
 
 from bedrock_agentcore.evaluation.dataset_client import DatasetClient
 
@@ -130,6 +130,7 @@ class DatasetManagementServiceProvider(DatasetProvider):
             raise ValueError(f"Dataset {self._dataset_id} has no downloadUrl. Status: {response.get('status')}")
 
         try:
+            import requests
             r = requests.get(download_url, timeout=60, stream=True)
             r.raise_for_status()
         except requests.RequestException as e:
