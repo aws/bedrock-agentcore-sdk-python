@@ -173,3 +173,6 @@ simulation = [
     "jinja2>=3.1.0",
     "strands-agents-evals>=0.1.0",
 ]
+datasets = [
+    "requests>=2.31.0",
+]

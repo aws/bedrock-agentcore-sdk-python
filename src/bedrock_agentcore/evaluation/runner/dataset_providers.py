@@ -4,8 +4,6 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
-import requests
-
 from bedrock_agentcore.evaluation.dataset_client import DatasetClient
 
 from .dataset_types import (
@@ -128,6 +126,14 @@ class DatasetManagementServiceProvider(DatasetProvider):
         download_url = response.get("downloadUrl")
         if not download_url:
             raise ValueError(f"Dataset {self._dataset_id} has no downloadUrl. Status: {response.get('status')}")
+
+        try:
+            import requests
+        except ImportError as e:
+            raise ImportError(
+                "DatasetManagementServiceProvider requires the 'datasets' extra. "
+                "Install it with: pip install 'bedrock-agentcore[datasets]'"
+            ) from e
 
         try:
             r = requests.get(download_url, timeout=60, stream=True)
