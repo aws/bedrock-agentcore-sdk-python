@@ -11,7 +11,10 @@ from bedrock_agentcore.evaluation.runner.dataset_types import (
     SimulatedScenario,
 )
 
-PATCH_REQUESTS = "bedrock_agentcore.evaluation.runner.dataset_providers.requests"
+# requests is imported lazily inside get_dataset (it's an optional 'datasets'
+# extra), so we patch the real module's attribute rather than a module-level
+# attribute on dataset_providers.
+PATCH_REQUESTS_GET = "requests.get"
 
 
 def _jsonl(*examples):
@@ -37,12 +40,12 @@ class TestDatasetManagementServiceProvider:
         mock_response.iter_lines.return_value = [line.encode("utf-8") for line in jsonl_content.split("\n") if line]
         mock_response.raise_for_status = MagicMock()
 
-        with patch(PATCH_REQUESTS) as mock_requests:
-            mock_requests.get.return_value = mock_response
+        with patch(PATCH_REQUESTS_GET) as mock_get:
+            mock_get.return_value = mock_response
             provider = DatasetManagementServiceProvider(
                 dataset_id=dataset_id, version_id=version_id, client=mock_client
             )
-            return provider.get_dataset(), mock_client, mock_requests
+            return provider.get_dataset(), mock_client, mock_get
 
     def test_get_dataset_predefined(self):
         content = _jsonl(
@@ -60,7 +63,7 @@ class TestDatasetManagementServiceProvider:
             },
         )
 
-        dataset, mock_client, mock_requests = self._run_provider(content)
+        dataset, mock_client, mock_get = self._run_provider(content)
 
         assert isinstance(dataset, Dataset)
         assert len(dataset.scenarios) == 2
@@ -110,10 +113,10 @@ class TestDatasetManagementServiceProvider:
     def test_downloads_from_presigned_url(self):
         content = _jsonl({"scenario_id": "s1", "turns": [{"input": "hi"}]})
 
-        _, mock_client, mock_requests = self._run_provider(content)
+        _, mock_client, mock_get = self._run_provider(content)
 
         mock_client.get_dataset.assert_called_once_with(datasetId="ds-123")
-        mock_requests.get.assert_called_once_with("https://example.com/dataset.jsonl", timeout=60, stream=True)
+        mock_get.assert_called_once_with("https://example.com/dataset.jsonl", timeout=60, stream=True)
 
     def test_get_dataset_with_version_id(self):
         content = _jsonl({"scenario_id": "s1", "turns": [{"input": "hi"}]})
@@ -147,8 +150,8 @@ class TestDatasetManagementServiceProvider:
         mock_response.iter_lines.return_value = []
         mock_response.raise_for_status = MagicMock()
 
-        with patch(PATCH_REQUESTS) as mock_requests:
-            mock_requests.get.return_value = mock_response
+        with patch(PATCH_REQUESTS_GET) as mock_get:
+            mock_get.return_value = mock_response
             provider = DatasetManagementServiceProvider(dataset_id="ds-empty", client=mock_client)
             with pytest.raises(ValueError, match="scenarios must not be empty"):
                 provider.get_dataset()
@@ -166,6 +169,24 @@ class TestDatasetManagementServiceProvider:
         with pytest.raises(ValueError, match="not supported by the evaluation runners"):
             provider.get_dataset()
 
+    def test_missing_requests_raises_helpful_import_error(self):
+        import sys
+
+        mock_client = MagicMock()
+        mock_client.get_dataset.return_value = {
+            "datasetId": "ds-123",
+            "status": "ACTIVE",
+            "schemaType": "AGENTCORE_EVALUATION_PREDEFINED_V1",
+            "downloadUrl": "https://example.com/dataset.jsonl",
+        }
+
+        # Setting the entry to None makes `import requests` raise ImportError,
+        # simulating an install without the optional 'datasets' extra.
+        with patch.dict(sys.modules, {"requests": None}):
+            provider = DatasetManagementServiceProvider(dataset_id="ds-123", client=mock_client)
+            with pytest.raises(ImportError, match=r"bedrock-agentcore\[datasets\]"):
+                provider.get_dataset()
+
     def test_download_failure_raises_runtime_error(self):
         import requests as real_requests
 
@@ -180,9 +201,8 @@ class TestDatasetManagementServiceProvider:
         mock_response = MagicMock()
         mock_response.raise_for_status.side_effect = real_requests.HTTPError("403 Forbidden")
 
-        with patch(PATCH_REQUESTS) as mock_requests:
-            mock_requests.get.return_value = mock_response
-            mock_requests.RequestException = real_requests.RequestException
+        with patch(PATCH_REQUESTS_GET) as mock_get:
+            mock_get.return_value = mock_response
             provider = DatasetManagementServiceProvider(dataset_id="ds-123", client=mock_client)
             with pytest.raises(RuntimeError, match="Couldn't download dataset"):
                 provider.get_dataset()
