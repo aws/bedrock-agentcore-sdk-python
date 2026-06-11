@@ -2524,7 +2524,7 @@ class TestGeneratePaymentHeaderIntegration:
         assert header_json["resource"] == "https://example.com/resource"
         assert header_json["payload"] == "v2-proof"
         assert "accepted" in header_json
-        assert "extension" in header_json
+        assert "extensions" in header_json
 
         # Verify mocks were called correctly
         mock_client.get_payment_instrument.assert_called_once()
