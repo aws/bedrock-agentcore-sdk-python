@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.14.1] - 2026-06-11
+
+### Fixed
+- fix: declare requests as optional 'datasets' extra (#508) (2359137)
+
+### Other Changes
+- fix(payments): correct "extension" typo to "extensions" in x402 v2 he… (#513) (5f9031d)
+- fix(a2a): cap a2a-sdk below 1.0 to restore A2A server startup (#510) (12f0f8b)
+
 ## [1.14.0] - 2026-06-05
 
 ### Other Changes
