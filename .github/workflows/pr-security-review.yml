@@ -1,0 +1,365 @@
+name: Claude Security Review
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, labeled]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description:
+          'PR number to review (note: workflow_dispatch will NOT post inline comments — the action only attaches the
+          inline-comment MCP server on PR-context events. Use this only for end-to-end smoke-testing the prompt
+          plumbing.)'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  pull-requests: write
+  issues: write
+  contents: read
+
+concurrency:
+  # Don't cancel-in-progress: a cancelled run that has already started its labels/checkout
+  # but not the actual review still triggers always() steps and ends up posting a misleading
+  # "no findings" summary (since the inline-comment buffer is empty when the analysis step
+  # was skipped due to cancellation). Letting both runs complete is the safer default.
+  group: pr-security-review-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    # On 'labeled' events, only proceed when the label is exactly 'safe-to-review'.
+    # Other labels (e.g. size/m) are filtered out so we don't spawn API calls.
+    if: |
+      github.event_name != 'pull_request_target' ||
+      github.event.action != 'labeled' ||
+      github.event.label.name == 'safe-to-review'
+    outputs:
+      authorized: ${{ steps.auth.outputs.authorized || steps.dispatch-auth.outputs.authorized }}
+    steps:
+      - name: Check authorization
+        id: auth
+        if: github.event_name == 'pull_request_target'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            // pull_request_target opened/reopened/synchronize: gate on the PR author
+            //   (auto-runs on maintainer-authored PRs; community PRs need the label path below).
+            // pull_request_target labeled (safe-to-review): gate on the labeler (sender)
+            //   so a maintainer applying the label authorizes the run on a community PR.
+            const isLabel = context.payload.action === 'labeled';
+            const user = isLabel
+              ? context.payload.sender.login
+              : context.payload.pull_request.user.login;
+            const reason = isLabel ? `labeler ${user}` : `PR author ${user}`;
+            try {
+              await github.rest.teams.getMembershipForUserInOrg({
+                org: context.repo.owner,
+                team_slug: 'agentcore-cli-devs',
+                username: user,
+              });
+              console.log(`${reason} is a member of agentcore-cli-devs`);
+              core.setOutput('authorized', 'true');
+            } catch (teamError) {
+              try {
+                const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username: user,
+                });
+                const hasWriteAccess = ['write', 'admin'].includes(data.permission);
+                if (hasWriteAccess) {
+                  console.log(`${reason} has write access (${data.permission})`);
+                  core.setOutput('authorized', 'true');
+                } else {
+                  console.log(`${reason} does not have write access (${data.permission}) — skipping review`);
+                  core.setOutput('authorized', 'false');
+                }
+              } catch (collabError) {
+                console.log(`${reason} authorization check failed (${collabError.status}) — skipping review`);
+                core.setOutput('authorized', 'false');
+              }
+            }
+
+      - name: Auto-authorize workflow_dispatch
+        id: dispatch-auth
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "authorized=true" >> "$GITHUB_OUTPUT"
+
+  security-review:
+    needs: authorize
+    if: needs.authorize.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AWS_REGION: us-west-2
+    steps:
+      # Generate the GitHub App token first so every subsequent github-script step can
+      # use it. The default GITHUB_TOKEN is read-only on pull_request_target /
+      # pull_request_review events from forks, which makes label/comment writes 403.
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Resolve PR number
+        id: pr
+        uses: actions/github-script@v9
+        env:
+          PR_NUMBER_INPUT: ${{ inputs.pr_number }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const num =
+              context.eventName === 'workflow_dispatch'
+                ? parseInt(process.env.PR_NUMBER_INPUT, 10)
+                : context.payload.pull_request.number;
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: num,
+            });
+            core.setOutput('number', num);
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('base_ref', pr.base.ref);
+
+      - name: Add claude-security-reviewing label
+        uses: actions/github-script@v9
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'claude-security-reviewing',
+              });
+            } catch (e) {
+              if (e.status === 404) {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: 'claude-security-reviewing',
+                  color: 'D73A4A',
+                  description: 'Claude Code /security-review in progress',
+                });
+              }
+            }
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['claude-security-reviewing'],
+            });
+
+      - name: Checkout PR head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+          # The bundled /security-review skill runs `git diff origin/HEAD...` so we need
+          # the base branch locally too. fetch-depth: 0 grabs the full history.
+          fetch-depth: 0
+
+      - name: Prepare base ref for /security-review skill
+        env:
+          BASE_REF: ${{ steps.pr.outputs.base_ref }}
+        run: |
+          set -euo pipefail
+          # The bundled /security-review skill's SessionStart hook runs
+          # `git diff --name-only origin/HEAD...` as its first command. Two
+          # things have to be true for that to succeed:
+          #   1. origin/HEAD has to be a valid ref. actions/checkout doesn't
+          #      set up the remote's symbolic HEAD, so we point it at the PR's
+          #      base branch.
+          #   2. The PR head and origin/<base> have to share a merge base in
+          #      the local clone. actions/checkout@v6 with `ref: <head_sha>`
+          #      fetches the head's history but on fork PRs may NOT fetch
+          #      origin/<base> into the clone — leaving `git diff origin/HEAD...`
+          #      to fail with "no merge base", which silently bombs the skill
+          #      (num_turns=0, model never invoked) and would otherwise look
+          #      like a clean review with zero findings.
+          # Fetching origin/<base> explicitly closes that gap.
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          git remote set-head origin "$BASE_REF"
+          git symbolic-ref refs/remotes/origin/HEAD
+
+          # Sanity: ensure the merge base actually resolves before we hand off
+          # to the skill. If it doesn't, fail loudly here rather than letting
+          # the skill silently bail.
+          if ! git merge-base "origin/$BASE_REF" HEAD >/dev/null; then
+            echo "::error::No merge base between HEAD and origin/$BASE_REF — /security-review cannot compute a diff."
+            exit 1
+          fi
+          echo "Merge base: $(git merge-base "origin/$BASE_REF" HEAD)"
+          echo "Files changed: $(git diff --name-only "origin/$BASE_REF...HEAD" | wc -l)"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.BEDROCK_SECURITY_REVIEW_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - name: Run Claude Code security review
+        id: review
+        uses: anthropics/claude-code-action@v1
+        with:
+          github_token: ${{ steps.app-token.outputs.token }}
+          use_bedrock: 'true'
+          # The Claude Code SDK that ships with the action has /security-review bundled
+          # as a slash command. Invoking it directly lets the skill drive its own
+          # `git diff origin/HEAD...`, sub-task fan-out, and false-positive filtering
+          # without us re-implementing any of that. We append a short tail telling the
+          # action to use the inline-comment MCP tool for findings.
+          prompt: |
+            /security-review
+
+            For each finding, call mcp__github_inline_comment__create_inline_comment with
+            { path, line, body } pointing at the exact file and line in the diff. Do NOT
+            post a single summary comment listing all findings — the workflow handles a
+            top-level summary after this run completes. If there are no findings, exit
+            without calling any tool.
+          show_full_output: 'true'
+          # Allow-listing this MCP tool name is what tells the action to register the
+          # github_inline_comment MCP server. See anthropics/claude-code-action
+          # src/mcp/install-mcp-server.ts.
+          claude_args: >-
+            --model us.anthropic.claude-opus-4-7 --max-turns 30 --allowedTools
+            mcp__github_inline_comment__create_inline_comment
+
+      - name: Verify model actually ran
+        id: model-ran
+        # The action exits 0 even when the model was never invoked (e.g. a
+        # SessionStart hook errored before the first turn). Treating that as
+        # success would let the workflow falsely report "no high-confidence
+        # findings" — that's exactly what happened on PR #1474, where the
+        # `/security-review` skill's first `git diff origin/HEAD...` hit a
+        # "no merge base" error, the SDK still returned `subtype: success`
+        # with `num_turns: 0` and zero tokens, and the buffer was empty.
+        #
+        # The action writes its full SDK transcript to
+        # ${RUNNER_TEMP}/claude-execution-output.json. We pull the final
+        # result envelope and require that the model actually took turns and
+        # spent tokens. If it didn't, mark the run as not-actually-completed
+        # so the summary comment uses the failure branch instead of pretending
+        # there were no findings.
+        if: steps.review.conclusion == 'success' || steps.review.conclusion == 'failure'
+        env:
+          # The action exposes its full SDK transcript path as the
+          # `execution_file` step output (a JSON array of stream events; the
+          # final element is the result envelope). We fall back to the known
+          # path under RUNNER_TEMP if for some reason the output is missing.
+          OUTPUT_JSON:
+            ${{ steps.review.outputs.execution_file || format('{0}/claude-execution-output.json', runner.temp) }}
+        run: |
+          set -euo pipefail
+          if [ ! -s "$OUTPUT_JSON" ]; then
+            echo "::warning::No claude-execution-output.json found at $OUTPUT_JSON; cannot verify the model ran."
+            echo "ran=unknown" >> "$GITHUB_OUTPUT"
+            echo "num_turns=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          NUM_TURNS=$(jq -r '.[-1].num_turns // 0' "$OUTPUT_JSON")
+          IS_ERROR=$(jq -r '.[-1].is_error // false' "$OUTPUT_JSON")
+          OUTPUT_TOKENS=$(jq -r '.[-1].usage.output_tokens // 0' "$OUTPUT_JSON")
+          echo "num_turns=$NUM_TURNS, is_error=$IS_ERROR, output_tokens=$OUTPUT_TOKENS"
+          echo "num_turns=$NUM_TURNS" >> "$GITHUB_OUTPUT"
+          if [ "$IS_ERROR" = "true" ] || [ "$NUM_TURNS" = "0" ] || [ "$OUTPUT_TOKENS" = "0" ]; then
+            echo "::error::Claude Code SDK reported success but the model never ran productively (num_turns=$NUM_TURNS, output_tokens=$OUTPUT_TOKENS, is_error=$IS_ERROR). The /security-review skill likely bailed before analysis (e.g. SessionStart hook error). Refusing to report 'no findings'."
+            echo "ran=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "ran=true" >> "$GITHUB_OUTPUT"
+
+      - name: Count buffered findings
+        id: findings
+        # Only count if the review step actually ran (success or failure - both produce
+        # a meaningful buffer state). Skip on cancellation/skip so we don't lie about
+        # "no findings" when Bedrock was never invoked.
+        if: steps.review.conclusion == 'success' || steps.review.conclusion == 'failure'
+        run: |
+          set -euo pipefail
+          BUFFER=/tmp/inline-comments-buffer.jsonl
+          if [ -s "$BUFFER" ]; then
+            COUNT=$(wc -l < "$BUFFER" | tr -d ' ')
+          else
+            COUNT=0
+          fi
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Buffered findings: $COUNT"
+
+      - name: Post security review summary comment
+        # Always post some kind of summary so the PR shows the run happened, but branch on
+        # the review step's conclusion so a cancelled/skipped run doesn't get reported as
+        # "no findings".
+        if: always()
+        uses: actions/github-script@v9
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          FINDING_COUNT: ${{ steps.findings.outputs.count }}
+          REVIEW_CONCLUSION: ${{ steps.review.conclusion }}
+          MODEL_RAN: ${{ steps.model-ran.outputs.ran }}
+          NUM_TURNS: ${{ steps.model-ran.outputs.num_turns }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+            const count = parseInt(process.env.FINDING_COUNT || '0', 10);
+            const conclusion = process.env.REVIEW_CONCLUSION || 'skipped';
+            const modelRan = process.env.MODEL_RAN || 'unknown';
+            const numTurns = process.env.NUM_TURNS || '0';
+            const runUrl = process.env.RUN_URL;
+
+            let body;
+            if (modelRan !== 'true') {
+              // Two cases land here, both unsafe to report as "no findings":
+              //   - 'false': SDK exited 0 but transcript shows the model never ran productively
+              //     (e.g. /security-review's SessionStart hook errored before the first turn).
+              //   - 'unknown': claude-execution-output.json was missing, so we couldn't verify
+              //     the model ran at all. Treat as not-verified rather than silently green.
+              body = `**Claude Security Review:** the review did not actually analyze this PR (model took ${numTurns} turn${numTurns === '1' ? '' : 's'} — the skill likely failed during setup). See the [run](${runUrl}) for details; a later push or re-run is needed for a real review.`;
+            } else if (conclusion === 'success') {
+              body =
+                count > 0
+                  ? `**Claude Security Review:** posted ${count} inline finding${count === 1 ? '' : 's'} on this PR. ([run](${runUrl}))`
+                  : `**Claude Security Review:** no high-confidence findings. ([run](${runUrl}))`;
+            } else if (conclusion === 'failure') {
+              body = `**Claude Security Review:** the review run failed before completing. See the [run](${runUrl}) for details.`;
+            } else {
+              // cancelled / skipped — analysis didn't run, do NOT claim "no findings"
+              body = `**Claude Security Review:** the review run was ${conclusion} before the analysis could complete (likely superseded or interrupted). See the [run](${runUrl}); a later run on this PR will replace this status.`;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body,
+            });
+
+      - name: Remove claude-security-reviewing label
+        if: always()
+        uses: actions/github-script@v9
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                name: 'claude-security-reviewing',
+              });
+            } catch (error) {
+              console.log('Label removal failed (may not exist):', error.message);
+            }
