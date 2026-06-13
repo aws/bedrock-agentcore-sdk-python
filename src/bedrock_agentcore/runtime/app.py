@@ -610,6 +610,14 @@ class BedrockAgentCoreApp(Starlette):
             return JSONResponse({"error": str(e)}, status_code=500)
 
     def _handle_ping(self, request):
+        """Handle GET /ping — return status and last-update timestamp.
+
+        Response body: ``{"status": "Healthy|HealthyBusy", "time_of_last_update": <int>}``
+
+        Both fields are required by the platform.  ``time_of_last_update`` is a
+        Unix timestamp (seconds); without it the idle reaper fires even when
+        ``status`` is ``HealthyBusy``.  See :class:`PingStatus` for details.
+        """
         try:
             status = self.get_current_ping_status()
             self.logger.debug("Ping request - status: %s", status.value)
