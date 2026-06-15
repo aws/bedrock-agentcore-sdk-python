@@ -1,5 +1,6 @@
 """Tests for deepeval input_mapper module."""
 
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -7,9 +8,36 @@ from deepeval.test_case import LLMTestCaseParams
 
 from bedrock_agentcore.evaluation.integrations.deepeval.input_mapper import (
     ParsedEvaluationEvent,
+    _extract_fields_from_spans,
     _get_required_params,
     build_test_case,
 )
+
+
+def _make_log_record(
+    input_messages=None,
+    output_messages=None,
+    trace_id=None,
+):
+    """Build a single log record dict."""
+    record = {"body": {}}
+    if input_messages is not None:
+        record["body"]["input"] = {"messages": input_messages}
+    if output_messages is not None:
+        record["body"]["output"] = {"messages": output_messages}
+    if trace_id is not None:
+        record["traceId"] = trace_id
+    return record
+
+
+def _make_span_with_log_records(log_records, span_id="span1", as_json_string=True):
+    """Build a span dict with _eval_log_records in attributes."""
+    value = json.dumps(log_records) if as_json_string else log_records
+    return {
+        "traceId": "abc123",
+        "spanId": span_id,
+        "attributes": {"_eval_log_records": value},
+    }
 
 
 def _make_event(
@@ -20,30 +48,19 @@ def _make_event(
     reference_inputs=None,
 ):
     """Build a raw Lambda event dict for testing."""
+    if spans is None:
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "What is the capital of France?"}],
+                output_messages=[{"role": "assistant", "content": "The capital of France is Paris."}],
+            )
+        ]
+        spans = [_make_span_with_log_records(log_records)]
+
     event = {
         "schemaVersion": "1.0",
         "evaluationLevel": level,
-        "evaluationInput": {
-            "sessionSpans": spans
-            or [
-                {
-                    "traceId": "abc123",
-                    "spanId": "span1",
-                    "attributes": {
-                        "gen_ai.message.role": "user",
-                        "gen_ai.message.content": "What is the capital of France?",
-                    },
-                },
-                {
-                    "traceId": "abc123",
-                    "spanId": "span2",
-                    "attributes": {
-                        "gen_ai.message.role": "assistant",
-                        "gen_ai.message.content": "The capital of France is Paris.",
-                    },
-                },
-            ]
-        },
+        "evaluationInput": {"sessionSpans": spans},
         "evaluationTarget": {},
     }
     if trace_ids is not None:
@@ -82,7 +99,7 @@ class TestParsedEvaluationEvent:
         assert parsed.evaluation_level == "TRACE"
         assert parsed.target_trace_id == "trace-1"
         assert parsed.target_span_id is None
-        assert len(parsed.session_spans) == 2
+        assert len(parsed.session_spans) == 1
 
     def test_from_lambda_event_tool_call_level(self):
         event = _make_event(level="TOOL_CALL", span_ids=["span-42"])
@@ -173,6 +190,250 @@ class TestGetRequiredParams:
         assert result == ["input", "actual_output"]
 
 
+class TestExtractFieldsFromSpans:
+    def test_basic_extraction(self):
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "hello"}],
+                output_messages=[{"role": "assistant", "content": "world"}],
+            )
+        ]
+        spans = [_make_span_with_log_records(log_records)]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="TRACE", session_spans=spans
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields["input"] == "hello"
+        assert fields["actual_output"] == "world"
+
+    def test_tool_messages_become_retrieval_context(self):
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "query"}],
+                output_messages=[
+                    {"role": "tool", "content": "doc chunk 1"},
+                    {"role": "tool", "content": "doc chunk 2"},
+                    {"role": "assistant", "content": "answer"},
+                ],
+            )
+        ]
+        spans = [_make_span_with_log_records(log_records)]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="TRACE", session_spans=spans
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields["retrieval_context"] == ["doc chunk 1", "doc chunk 2"]
+        assert fields["actual_output"] == "answer"
+
+    def test_message_content_as_dict_with_content_key(self):
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": {"content": "nested content"}}],
+                output_messages=[{"role": "assistant", "content": {"content": "nested output"}}],
+            )
+        ]
+        spans = [_make_span_with_log_records(log_records)]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="TRACE", session_spans=spans
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields["input"] == "nested content"
+        assert fields["actual_output"] == "nested output"
+
+    def test_message_content_as_dict_with_message_key(self):
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "message": "msg key input"}],
+                output_messages=[{"role": "assistant", "message": "msg key output"}],
+            )
+        ]
+        spans = [_make_span_with_log_records(log_records)]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="TRACE", session_spans=spans
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields["input"] == "msg key input"
+        assert fields["actual_output"] == "msg key output"
+
+    def test_message_content_as_plain_string_in_content_field(self):
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "plain string"}],
+                output_messages=[{"role": "assistant", "content": "plain response"}],
+            )
+        ]
+        spans = [_make_span_with_log_records(log_records)]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="TRACE", session_spans=spans
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields["input"] == "plain string"
+        assert fields["actual_output"] == "plain response"
+
+    def test_target_trace_id_filters_records(self):
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "relevant"}],
+                output_messages=[{"role": "assistant", "content": "relevant answer"}],
+                trace_id="target-trace",
+            ),
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "irrelevant"}],
+                output_messages=[{"role": "assistant", "content": "irrelevant answer"}],
+                trace_id="other-trace",
+            ),
+        ]
+        spans = [_make_span_with_log_records(log_records)]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="TRACE",
+            session_spans=spans,
+            target_trace_id="target-trace",
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields["input"] == "relevant"
+        assert fields["actual_output"] == "relevant answer"
+
+    def test_no_target_trace_id_includes_all_records(self):
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "first"}],
+                output_messages=[{"role": "assistant", "content": "first answer"}],
+                trace_id="trace-1",
+            ),
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "second"}],
+                output_messages=[{"role": "assistant", "content": "second answer"}],
+                trace_id="trace-2",
+            ),
+        ]
+        spans = [_make_span_with_log_records(log_records)]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="SESSION", session_spans=spans
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields["input"] == "first\nsecond"
+        assert fields["actual_output"] == "first answer\nsecond answer"
+
+    def test_log_records_as_parsed_list(self):
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "from list"}],
+                output_messages=[{"role": "assistant", "content": "from list answer"}],
+            )
+        ]
+        spans = [_make_span_with_log_records(log_records, as_json_string=False)]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="TRACE", session_spans=spans
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields["input"] == "from list"
+        assert fields["actual_output"] == "from list answer"
+
+    def test_invalid_json_log_records_skipped(self):
+        spans = [
+            {
+                "traceId": "t1",
+                "spanId": "s1",
+                "attributes": {"_eval_log_records": "not valid json{{{"},
+            }
+        ]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="TRACE", session_spans=spans
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields == {}
+
+    def test_span_without_log_records_skipped(self):
+        spans = [{"traceId": "t1", "spanId": "s1", "attributes": {}}]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="TRACE", session_spans=spans
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields == {}
+
+    def test_multiple_spans_aggregated(self):
+        log_records_1 = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "q1"}],
+                output_messages=[{"role": "assistant", "content": "a1"}],
+            )
+        ]
+        log_records_2 = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "q2"}],
+                output_messages=[{"role": "assistant", "content": "a2"}],
+            )
+        ]
+        spans = [
+            _make_span_with_log_records(log_records_1, span_id="s1"),
+            _make_span_with_log_records(log_records_2, span_id="s2"),
+        ]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="SESSION", session_spans=spans
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields["input"] == "q1\nq2"
+        assert fields["actual_output"] == "a1\na2"
+
+    def test_reference_inputs_expected_output(self):
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "q"}],
+                output_messages=[{"role": "assistant", "content": "a"}],
+            )
+        ]
+        spans = [_make_span_with_log_records(log_records)]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="TRACE",
+            session_spans=spans,
+            reference_inputs=[{"expectedResponse": "expected answer"}],
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields["expected_output"] == "expected answer"
+
+    def test_record_without_matching_trace_id_key_included(self):
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "no trace id record"}],
+                output_messages=[{"role": "assistant", "content": "response"}],
+            ),
+        ]
+        spans = [_make_span_with_log_records(log_records)]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="TRACE",
+            session_spans=spans,
+            target_trace_id="target-trace",
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields["input"] == "no trace id record"
+
+
 class TestBuildTestCase:
     def test_basic_span_extraction(self):
         event = _make_event()
@@ -184,29 +445,18 @@ class TestBuildTestCase:
         assert test_case.input == "What is the capital of France?"
         assert test_case.actual_output == "The capital of France is Paris."
 
-    def test_retrieval_context_from_tool_spans(self):
-        spans = [
-            {
-                "traceId": "t1",
-                "spanId": "s1",
-                "attributes": {"gen_ai.message.role": "user", "gen_ai.message.content": "query"},
-            },
-            {
-                "traceId": "t1",
-                "spanId": "s2",
-                "attributes": {"gen_ai.message.role": "tool", "gen_ai.message.content": "doc chunk 1"},
-            },
-            {
-                "traceId": "t1",
-                "spanId": "s3",
-                "attributes": {"gen_ai.message.role": "tool", "gen_ai.message.content": "doc chunk 2"},
-            },
-            {
-                "traceId": "t1",
-                "spanId": "s4",
-                "attributes": {"gen_ai.message.role": "assistant", "gen_ai.message.content": "answer"},
-            },
+    def test_retrieval_context_from_tool_messages(self):
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "query"}],
+                output_messages=[
+                    {"role": "tool", "content": "doc chunk 1"},
+                    {"role": "tool", "content": "doc chunk 2"},
+                    {"role": "assistant", "content": "answer"},
+                ],
+            )
         ]
+        spans = [_make_span_with_log_records(log_records)]
         event = _make_event(spans=spans)
         parsed = ParsedEvaluationEvent.from_lambda_event(event)
         metric = _mock_metric(name="FaithfulnessMetric")
@@ -228,18 +478,13 @@ class TestBuildTestCase:
         assert test_case.expected_output == "Paris"
 
     def test_missing_required_field_raises_value_error(self):
-        spans = [
-            {
-                "traceId": "t1",
-                "spanId": "s1",
-                "attributes": {"gen_ai.message.role": "user", "gen_ai.message.content": "query"},
-            },
-            {
-                "traceId": "t1",
-                "spanId": "s2",
-                "attributes": {"gen_ai.message.role": "assistant", "gen_ai.message.content": "answer"},
-            },
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "query"}],
+                output_messages=[{"role": "assistant", "content": "answer"}],
+            )
         ]
+        spans = [_make_span_with_log_records(log_records)]
         event = _make_event(spans=spans)
         parsed = ParsedEvaluationEvent.from_lambda_event(event)
         metric = _mock_metric(name="FaithfulnessMetric")
@@ -283,23 +528,16 @@ class TestBuildTestCase:
         assert raw["evaluationReferenceInputs"] == refs
 
     def test_multiple_user_messages_concatenated(self):
-        spans = [
-            {
-                "traceId": "t1",
-                "spanId": "s1",
-                "attributes": {"gen_ai.message.role": "user", "gen_ai.message.content": "hello"},
-            },
-            {
-                "traceId": "t1",
-                "spanId": "s2",
-                "attributes": {"gen_ai.message.role": "user", "gen_ai.message.content": "world"},
-            },
-            {
-                "traceId": "t1",
-                "spanId": "s3",
-                "attributes": {"gen_ai.message.role": "assistant", "gen_ai.message.content": "hi"},
-            },
+        log_records = [
+            _make_log_record(
+                input_messages=[
+                    {"role": "user", "content": "hello"},
+                    {"role": "user", "content": "world"},
+                ],
+                output_messages=[{"role": "assistant", "content": "hi"}],
+            )
         ]
+        spans = [_make_span_with_log_records(log_records)]
         event = _make_event(spans=spans)
         parsed = ParsedEvaluationEvent.from_lambda_event(event)
         metric = _mock_metric(name="AnswerRelevancyMetric")
@@ -307,25 +545,3 @@ class TestBuildTestCase:
         test_case = build_test_case(parsed, metric)
 
         assert test_case.input == "hello\nworld"
-
-    def test_gen_ai_completion_fallback(self):
-        spans = [
-            {
-                "traceId": "t1",
-                "spanId": "s1",
-                "attributes": {"gen_ai.message.role": "user", "gen_ai.completion": "fallback input"},
-            },
-            {
-                "traceId": "t1",
-                "spanId": "s2",
-                "attributes": {"gen_ai.message.role": "assistant", "gen_ai.completion": "fallback output"},
-            },
-        ]
-        event = _make_event(spans=spans)
-        parsed = ParsedEvaluationEvent.from_lambda_event(event)
-        metric = _mock_metric(name="AnswerRelevancyMetric")
-
-        test_case = build_test_case(parsed, metric)
-
-        assert test_case.input == "fallback input"
-        assert test_case.actual_output == "fallback output"

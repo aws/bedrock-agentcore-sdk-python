@@ -1,5 +1,6 @@
 """Map AgentCore Lambda evaluation events to DeepEval LLMTestCase objects."""
 
+import json
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
@@ -92,15 +93,36 @@ def _get_required_params(metric: BaseMetric) -> List[str]:
     return ["input", "actual_output"]
 
 
+def _get_message_content(message: Any) -> str:
+    """Extract text content from a message object.
+
+    Message content can be a dict with a "content" or "message" key, or a plain string.
+    Handles one level of nesting (e.g. {"content": {"content": "text"}}).
+    """
+    if isinstance(message, str):
+        return message
+    if isinstance(message, dict):
+        for key in ("content", "message"):
+            if key in message:
+                val = message[key]
+                if isinstance(val, str):
+                    return val
+                if isinstance(val, dict):
+                    return _get_message_content(val)
+                return str(val)
+    return ""
+
+
 def _extract_fields_from_spans(
     parsed: ParsedEvaluationEvent,
 ) -> Dict[str, Any]:
-    """Extract LLMTestCase fields from ADOT session spans.
+    """Extract LLMTestCase fields from AgentCore session spans.
 
-    Bridges Session → LLMTestCase fields:
-        - input ← user messages (role=="user")
-        - actual_output ← assistant messages (role=="assistant")
-        - retrieval_context ← tool messages (role=="tool")
+    Parses _eval_log_records from span attributes, filters by target_trace_id,
+    and extracts messages by role:
+        - input ← input messages where role=="user"
+        - actual_output ← output messages where role=="assistant"
+        - retrieval_context ← output messages where role=="tool"
         - expected_output ← evaluationReferenceInputs[0].expectedResponse
     """
     user_messages: List[str] = []
@@ -109,18 +131,56 @@ def _extract_fields_from_spans(
 
     for span in parsed.session_spans:
         attributes = span.get("attributes", {})
-        role = attributes.get("gen_ai.message.role", "")
-        content = attributes.get("gen_ai.message.content", "")
+        log_records_raw = attributes.get("_eval_log_records")
+        if not log_records_raw:
+            continue
 
-        if not content:
-            content = attributes.get("gen_ai.completion", "")
+        if isinstance(log_records_raw, str):
+            try:
+                log_records = json.loads(log_records_raw)
+            except (json.JSONDecodeError, TypeError):
+                logger.debug("Failed to parse _eval_log_records as JSON")
+                continue
+        else:
+            log_records = log_records_raw
 
-        if role == "user" and content:
-            user_messages.append(content)
-        elif role == "assistant" and content:
-            assistant_messages.append(content)
-        elif role == "tool" and content:
-            tool_messages.append(content)
+        if not isinstance(log_records, list):
+            continue
+
+        for record in log_records:
+            if not isinstance(record, dict):
+                continue
+
+            if parsed.target_trace_id:
+                record_trace_id = record.get("traceId") or record.get("trace_id")
+                if record_trace_id and record_trace_id != parsed.target_trace_id:
+                    continue
+
+            body = record.get("body", {})
+            if not isinstance(body, dict):
+                continue
+
+            input_data = body.get("input", {})
+            if isinstance(input_data, dict):
+                for msg in input_data.get("messages", []):
+                    if not isinstance(msg, dict):
+                        continue
+                    role = msg.get("role", "")
+                    content = _get_message_content(msg)
+                    if role == "user" and content:
+                        user_messages.append(content)
+
+            output_data = body.get("output", {})
+            if isinstance(output_data, dict):
+                for msg in output_data.get("messages", []):
+                    if not isinstance(msg, dict):
+                        continue
+                    role = msg.get("role", "")
+                    content = _get_message_content(msg)
+                    if role == "assistant" and content:
+                        assistant_messages.append(content)
+                    elif role == "tool" and content:
+                        tool_messages.append(content)
 
     fields: Dict[str, Any] = {}
 
