@@ -190,6 +190,7 @@ def _extract_fields_from_spans(
         fields["actual_output"] = "\n".join(assistant_messages)
     if tool_messages:
         fields["retrieval_context"] = tool_messages
+        fields["context"] = tool_messages
 
     if parsed.reference_inputs:
         expected = parsed.reference_inputs[0].get("expectedResponse")

@@ -229,6 +229,26 @@ class TestExtractFieldsFromSpans:
         assert fields["retrieval_context"] == ["doc chunk 1", "doc chunk 2"]
         assert fields["actual_output"] == "answer"
 
+    def test_tool_messages_also_set_context_for_hallucination_metric(self):
+        log_records = [
+            _make_log_record(
+                input_messages=[{"role": "user", "content": "query"}],
+                output_messages=[
+                    {"role": "tool", "content": "context chunk"},
+                    {"role": "assistant", "content": "answer"},
+                ],
+            )
+        ]
+        spans = [_make_span_with_log_records(log_records)]
+        parsed = ParsedEvaluationEvent(
+            evaluation_level="TRACE", session_spans=spans
+        )
+
+        fields = _extract_fields_from_spans(parsed)
+
+        assert fields["context"] == ["context chunk"]
+        assert fields["context"] == fields["retrieval_context"]
+
     def test_message_content_as_dict_with_content_key(self):
         log_records = [
             _make_log_record(
