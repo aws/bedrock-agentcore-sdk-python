@@ -183,6 +183,18 @@ class TestGetRequiredParams:
 
         assert result == ["input", "actual_output"]
 
+    def test_unmappable_required_params_skips_to_static_registry(self):
+        metric = _mock_metric(name="GEval", required_params=["SomeTypingObject", "AnotherType"])
+        result = _get_required_params(metric)
+
+        assert result == ["input", "actual_output"]
+
+    def test_unmappable_required_params_falls_to_default(self):
+        metric = _mock_metric(name="UnknownMetric", required_params=["SomeTypingObject"])
+        result = _get_required_params(metric)
+
+        assert result == ["input", "actual_output"]
+
     def test_empty_required_params_falls_through(self):
         metric = _mock_metric(name="UnknownMetric", required_params=[])
         result = _get_required_params(metric)
