@@ -6,16 +6,16 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 from deepeval.metrics import BaseMetric
-from deepeval.test_case import LLMTestCase, LLMTestCaseParams
+from deepeval.test_case import LLMTestCase, SingleTurnParams
 
 logger = logging.getLogger(__name__)
 
-_PARAM_TO_FIELD: Dict[LLMTestCaseParams, str] = {
-    LLMTestCaseParams.INPUT: "input",
-    LLMTestCaseParams.ACTUAL_OUTPUT: "actual_output",
-    LLMTestCaseParams.EXPECTED_OUTPUT: "expected_output",
-    LLMTestCaseParams.CONTEXT: "context",
-    LLMTestCaseParams.RETRIEVAL_CONTEXT: "retrieval_context",
+_PARAM_TO_FIELD: Dict[SingleTurnParams, str] = {
+    SingleTurnParams.INPUT: "input",
+    SingleTurnParams.ACTUAL_OUTPUT: "actual_output",
+    SingleTurnParams.EXPECTED_OUTPUT: "expected_output",
+    SingleTurnParams.CONTEXT: "context",
+    SingleTurnParams.RETRIEVAL_CONTEXT: "retrieval_context",
 }
 
 _METRIC_REQUIRED_PARAMS: Dict[str, List[str]] = {
