@@ -178,191 +178,12 @@ jobs:
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
           echo "Diff: $BYTES bytes across $FILES files"
 
-      - name: Build prompt
-        if: steps.diff.outputs.bytes != '0'
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/prompt"
-          cat > "$RUNNER_TEMP/prompt/prompt.md" <<'PROMPT_EOF'
-          You are performing a HIGH-CONFIDENCE security code review of a pull
-          request. The complete diff is at `/tmp/pr.diff` — read it first
-          using the Read tool. That file is the ground truth for what the
-          PR changes; do not run `git diff` or any other git commands. To
-          understand context — callers of a changed function, existing
-          sanitization patterns, the project's threat model — use Grep,
-          Glob, and Read against the repository working tree. Do not use
-          Bash.
-
-          # OBJECTIVE
-
-          Identify HIGH-CONFIDENCE security vulnerabilities newly introduced
-          by this PR that have real exploitation potential. This is NOT a
-          general code review. Focus ONLY on security implications added by
-          the PR. Do not comment on pre-existing issues.
-
-          # CRITICAL INSTRUCTIONS
-
-          1. MINIMIZE FALSE POSITIVES: Only flag issues where you are >80%
-             confident of actual exploitability.
-          2. AVOID NOISE: Skip theoretical issues, style concerns, or
-             low-impact findings.
-          3. FOCUS ON IMPACT: Prioritize vulnerabilities that lead to
-             unauthorized access, data breach, or system compromise.
-          4. DO NOT report any of:
-             - Denial of service / resource exhaustion / rate limiting
-             - Secrets at rest on disk (handled by other tooling)
-             - Memory consumption or CPU exhaustion
-
-          # CATEGORIES TO EXAMINE
-
-          **Input validation**: SQL injection, command injection, XXE,
-          template injection, NoSQL injection, path traversal.
-          **AuthN/AuthZ**: authentication bypass, privilege escalation,
-          session/JWT flaws, authorization-logic bypasses.
-          **Crypto & secrets**: hardcoded keys/passwords/tokens, weak
-          algorithms, improper key storage, weak randomness, certificate
-          validation bypass.
-          **Code execution**: deserialization RCE (pickle, YAML, etc.),
-          eval injection, XSS (reflected/stored/DOM) — only in unsafe paths
-          (see precedents).
-          **Data exposure**: sensitive logging, PII handling violations,
-          API leakage, debug-info exposure.
-
-          A finding can still be HIGH severity if only exploitable from the
-          local network.
-
-          # METHODOLOGY
-
-          Phase 1 — Repository context: identify existing security
-          libraries/frameworks, sanitization patterns, the project's threat
-          model. Use search tools.
-
-          Phase 2 — Comparative analysis: compare new changes against
-          established patterns; flag deviations and net-new attack surface.
-
-          Phase 3 — Vulnerability assessment: for each modified file,
-          trace user input → sensitive operations, look for unsafe privilege
-          boundary crossings, identify injection points.
-
-          # FALSE-POSITIVE FILTER (apply hard)
-
-          Read the code (Read/Grep/Glob); do not run commands to reproduce
-          or write files.
-
-          HARD EXCLUSIONS — drop any finding matching:
-          1. DoS / resource exhaustion.
-          2. Secrets/credentials on disk if otherwise secured.
-          3. Rate limiting or service overload.
-          4. Memory/CPU exhaustion.
-          5. Missing input validation on non-security-critical fields.
-          6. Input sanitization in GitHub Actions workflows unless clearly
-             triggerable via untrusted input.
-          7. Lack of hardening; only flag concrete vulns.
-          8. Theoretical race conditions or timing attacks.
-          9. Outdated third-party libraries (handled separately).
-          10. Memory-safety issues in memory-safe languages (Rust, Go,
-              JS/TS, Python).
-          11. Files that are unit tests or test-only.
-          12. Log spoofing — un-sanitized user input to logs is not a vuln.
-          13. SSRF that only controls the path (host/protocol control is
-              required).
-          14. User-controlled content in AI system prompts is not a vuln.
-          15. Regex injection.
-          16. Regex DoS.
-          17. Insecure documentation (.md and similar).
-          18. Lack of audit logs.
-
-          PRECEDENTS:
-          1. Plaintext-logging high-value secrets IS a vuln; logging URLs
-             is assumed safe.
-          2. UUIDs are unguessable and need no validation.
-          3. Env vars and CLI flags are trusted inputs.
-          4. Resource leaks (memory, fd) are not vulns.
-          5. Tabnabbing, XS-Leaks, prototype pollution, open redirects:
-             only with extremely high confidence.
-          6. React / Angular: do not report XSS in components or .tsx files
-             unless using `dangerouslySetInnerHTML`,
-             `bypassSecurityTrustHtml`, or equivalents.
-          7. GitHub Actions workflow vulns: only when a concrete attack
-             path through untrusted input exists.
-          8. Missing AuthN/AuthZ in client-side code is not a vuln —
-             validation is the server's job.
-          9. MEDIUM findings only when obvious and concrete.
-          10. .ipynb notebook vulns: only with a concrete attack path
-              through untrusted input.
-          11. Logging non-PII data is not a vuln. Only flag when the data
-              is secrets, passwords, or PII.
-          12. Command injection in shell scripts: only when there is a
-              concrete attack path through untrusted input.
-
-          For each surviving finding, score confidence 1–10:
-          - 1–3: low / likely noise — drop
-          - 4–6: medium — drop unless obvious and concrete
-          - 7–10: high — keep
-
-          # PROCESS
-
-          Run this in three steps, exactly:
-
-          1. Spawn a Task sub-agent to identify candidate vulnerabilities.
-             Pass the full instructions above (objective, categories,
-             methodology, hard exclusions, precedents). Have it return a
-             structured list of candidates with file/line/category/
-             description/exploit/fix.
-
-          2. For EACH candidate from step 1, spawn an independent Task
-             sub-agent IN PARALLEL to adversarially verify it. Each
-             verifier gets the full FALSE-POSITIVE FILTER above and is
-             told to default to "drop" if uncertain. Each returns a
-             confidence score 1–10.
-
-          3. Drop any finding with confidence < 8. For every finding that
-             survives, call:
-
-                 mcp__github_inline_comment__create_inline_comment
-
-             with `{ path, line, body }` pointing at the exact file and
-             line in the diff. The body should follow:
-
-                 **<Severity>: <Category>**
-                 <One-paragraph description of the issue and concrete
-                 exploit scenario.>
-                 **Recommendation:** <One-sentence fix.>
-
-             Do NOT post a single summary comment listing all findings —
-             the workflow handles a top-level summary after this run
-             completes. If zero findings survive Phase 3, exit without
-             calling any tool.
-
-          Begin.
-          PROMPT_EOF
-
       - name: Configure AWS credentials
         if: steps.diff.outputs.bytes != '0'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.BEDROCK_SECURITY_REVIEW_ROLE_ARN }}
           aws-region: us-west-2
-
-      - name: Load prompt into env
-        id: load-prompt
-        if: steps.diff.outputs.bytes != '0'
-        # The action only accepts `prompt:` (a string), not a file path —
-        # passing prompt_file silently no-ops, leaves the action with no
-        # trigger, and skips the run with "No trigger found". Read the
-        # built prompt into an environment variable so we can pass it
-        # inline below. Using GITHUB_ENV with a randomized heredoc
-        # sentinel is the standard Actions idiom for multi-line values.
-        env:
-          PROMPT_FILE: ${{ runner.temp }}/prompt/prompt.md
-        run: |
-          set -euo pipefail
-          DELIM="EOF_$(uuidgen)"
-          {
-            echo "PROMPT_BODY<<$DELIM"
-            cat "$PROMPT_FILE"
-            echo "$DELIM"
-          } >> "$GITHUB_ENV"
 
       - name: Run Claude Code
         id: review
@@ -371,7 +192,158 @@ jobs:
         with:
           github_token: ${{ steps.app-token.outputs.token }}
           use_bedrock: "true"
-          prompt: ${{ env.PROMPT_BODY }}
+          prompt: |
+            You are performing a HIGH-CONFIDENCE security code review of a pull
+            request. The complete diff is at `/tmp/pr.diff` — read it first
+            using the Read tool. That file is the ground truth for what the
+            PR changes; do not run `git diff` or any other git commands. To
+            understand context — callers of a changed function, existing
+            sanitization patterns, the project's threat model — use Grep,
+            Glob, and Read against the repository working tree. Do not use
+            Bash.
+
+            # OBJECTIVE
+
+            Identify HIGH-CONFIDENCE security vulnerabilities newly introduced
+            by this PR that have real exploitation potential. This is NOT a
+            general code review. Focus ONLY on security implications added by
+            the PR. Do not comment on pre-existing issues.
+
+            # CRITICAL INSTRUCTIONS
+
+            1. MINIMIZE FALSE POSITIVES: Only flag issues where you are >80%
+               confident of actual exploitability.
+            2. AVOID NOISE: Skip theoretical issues, style concerns, or
+               low-impact findings.
+            3. FOCUS ON IMPACT: Prioritize vulnerabilities that lead to
+               unauthorized access, data breach, or system compromise.
+            4. DO NOT report any of:
+               - Denial of service / resource exhaustion / rate limiting
+               - Secrets at rest on disk (handled by other tooling)
+               - Memory consumption or CPU exhaustion
+
+            # CATEGORIES TO EXAMINE
+
+            **Input validation**: SQL injection, command injection, XXE,
+            template injection, NoSQL injection, path traversal.
+            **AuthN/AuthZ**: authentication bypass, privilege escalation,
+            session/JWT flaws, authorization-logic bypasses.
+            **Crypto & secrets**: hardcoded keys/passwords/tokens, weak
+            algorithms, improper key storage, weak randomness, certificate
+            validation bypass.
+            **Code execution**: deserialization RCE (pickle, YAML, etc.),
+            eval injection, XSS (reflected/stored/DOM) — only in unsafe paths
+            (see precedents).
+            **Data exposure**: sensitive logging, PII handling violations,
+            API leakage, debug-info exposure.
+
+            A finding can still be HIGH severity if only exploitable from the
+            local network.
+
+            # METHODOLOGY
+
+            Phase 1 — Repository context: identify existing security
+            libraries/frameworks, sanitization patterns, the project's threat
+            model. Use search tools.
+
+            Phase 2 — Comparative analysis: compare new changes against
+            established patterns; flag deviations and net-new attack surface.
+
+            Phase 3 — Vulnerability assessment: for each modified file,
+            trace user input → sensitive operations, look for unsafe privilege
+            boundary crossings, identify injection points.
+
+            # FALSE-POSITIVE FILTER (apply hard)
+
+            Read the code (Read/Grep/Glob); do not run commands to reproduce
+            or write files.
+
+            HARD EXCLUSIONS — drop any finding matching:
+            1. DoS / resource exhaustion.
+            2. Secrets/credentials on disk if otherwise secured.
+            3. Rate limiting or service overload.
+            4. Memory/CPU exhaustion.
+            5. Missing input validation on non-security-critical fields.
+            6. Input sanitization in GitHub Actions workflows unless clearly
+               triggerable via untrusted input.
+            7. Lack of hardening; only flag concrete vulns.
+            8. Theoretical race conditions or timing attacks.
+            9. Outdated third-party libraries (handled separately).
+            10. Memory-safety issues in memory-safe languages (Rust, Go,
+                JS/TS, Python).
+            11. Files that are unit tests or test-only.
+            12. Log spoofing — un-sanitized user input to logs is not a vuln.
+            13. SSRF that only controls the path (host/protocol control is
+                required).
+            14. User-controlled content in AI system prompts is not a vuln.
+            15. Regex injection.
+            16. Regex DoS.
+            17. Insecure documentation (.md and similar).
+            18. Lack of audit logs.
+
+            PRECEDENTS:
+            1. Plaintext-logging high-value secrets IS a vuln; logging URLs
+               is assumed safe.
+            2. UUIDs are unguessable and need no validation.
+            3. Env vars and CLI flags are trusted inputs.
+            4. Resource leaks (memory, fd) are not vulns.
+            5. Tabnabbing, XS-Leaks, prototype pollution, open redirects:
+               only with extremely high confidence.
+            6. React / Angular: do not report XSS in components or .tsx files
+               unless using `dangerouslySetInnerHTML`,
+               `bypassSecurityTrustHtml`, or equivalents.
+            7. GitHub Actions workflow vulns: only when a concrete attack
+               path through untrusted input exists.
+            8. Missing AuthN/AuthZ in client-side code is not a vuln —
+               validation is the server's job.
+            9. MEDIUM findings only when obvious and concrete.
+            10. .ipynb notebook vulns: only with a concrete attack path
+                through untrusted input.
+            11. Logging non-PII data is not a vuln. Only flag when the data
+                is secrets, passwords, or PII.
+            12. Command injection in shell scripts: only when there is a
+                concrete attack path through untrusted input.
+
+            For each surviving finding, score confidence 1–10:
+            - 1–3: low / likely noise — drop
+            - 4–6: medium — drop unless obvious and concrete
+            - 7–10: high — keep
+
+            # PROCESS
+
+            Run this in three steps, exactly:
+
+            1. Spawn a Task sub-agent to identify candidate vulnerabilities.
+               Pass the full instructions above (objective, categories,
+               methodology, hard exclusions, precedents). Have it return a
+               structured list of candidates with file/line/category/
+               description/exploit/fix.
+
+            2. For EACH candidate from step 1, spawn an independent Task
+               sub-agent IN PARALLEL to adversarially verify it. Each
+               verifier gets the full FALSE-POSITIVE FILTER above and is
+               told to default to "drop" if uncertain. Each returns a
+               confidence score 1–10.
+
+            3. Drop any finding with confidence < 8. For every finding that
+               survives, call:
+
+                   mcp__github_inline_comment__create_inline_comment
+
+               with `{ path, line, body }` pointing at the exact file and
+               line in the diff. The body should follow:
+
+                   **<Severity>: <Category>**
+                   <One-paragraph description of the issue and concrete
+                   exploit scenario.>
+                   **Recommendation:** <One-sentence fix.>
+
+               Do NOT post a single summary comment listing all findings —
+               the workflow handles a top-level summary after this run
+               completes. If zero findings survive Phase 3, exit without
+               calling any tool.
+
+            Begin.
           show_full_output: "true"
           # Read/Grep/Glob let the model explore the repo for context
           # (existing sanitization patterns, threat model, callers of a
