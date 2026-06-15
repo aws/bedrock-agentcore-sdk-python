@@ -80,7 +80,8 @@ def _get_required_params(metric: BaseMetric) -> List[str]:
     """
     if hasattr(metric, "_required_params") and metric._required_params:
         params = metric._required_params
-        return [_PARAM_TO_FIELD.get(p, str(p).lower()) for p in params]
+        if all(p in _PARAM_TO_FIELD for p in params):
+            return [_PARAM_TO_FIELD[p] for p in params]
 
     class_name = type(metric).__name__
     if class_name in _METRIC_REQUIRED_PARAMS:
