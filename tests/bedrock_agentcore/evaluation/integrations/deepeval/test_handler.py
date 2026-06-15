@@ -1,6 +1,7 @@
 """Tests for DeepEvalHandler."""
 
 import json
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -258,3 +259,63 @@ class TestDeepEvalHandlerEdgeCases:
         result = handler(_make_event())
 
         assert result["label"] == "Pass"
+
+    def test_model_override_sets_metric_model(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric, model="bedrock/anthropic.claude-3")
+
+        handler(_make_event())
+
+        assert metric.model == "bedrock/anthropic.claude-3"
+
+    def test_no_model_override_leaves_metric_unchanged(self):
+        metric = _mock_metric()
+        metric.model = "original-model"
+        handler = DeepEvalHandler(metric=metric)
+
+        handler(_make_event())
+
+        assert metric.model == "original-model"
+
+
+class TestDeepEvalHandlerTimeout:
+    def test_timeout_returns_error(self):
+        metric = _mock_metric()
+        metric.measure = MagicMock(side_effect=lambda tc: time.sleep(5))
+        handler = DeepEvalHandler(metric=metric, timeout=1)
+
+        result = handler(_make_event())
+
+        assert result["errorCode"] == "METRIC_TIMEOUT"
+        assert "1s timeout" in result["errorMessage"]
+
+    def test_no_timeout_when_measure_completes_in_time(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric, timeout=10)
+
+        result = handler(_make_event())
+
+        assert result["value"] == 0.85
+        assert "errorCode" not in result
+
+    def test_default_timeout_is_290(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric)
+
+        assert handler.timeout == 290
+
+    def test_custom_timeout_value(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric, timeout=60)
+
+        assert handler.timeout == 60
+
+    def test_metric_exception_still_propagates_with_timeout(self):
+        metric = _mock_metric()
+        metric.measure = MagicMock(side_effect=RuntimeError("LLM error"))
+        handler = DeepEvalHandler(metric=metric, timeout=10)
+
+        result = handler(_make_event())
+
+        assert result["errorCode"] == "METRIC_ERROR"
+        assert "LLM error" in result["errorMessage"]

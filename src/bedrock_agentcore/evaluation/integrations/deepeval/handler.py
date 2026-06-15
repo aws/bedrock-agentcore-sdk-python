@@ -1,6 +1,7 @@
 """DeepEval handler that adapts AgentCore Lambda evaluation events to DeepEval metrics."""
 
 import logging
+import threading
 from typing import Any, Callable, Dict, Optional
 
 from deepeval.metrics import BaseMetric
@@ -30,10 +31,14 @@ class DeepEvalHandler:
             return handler(event, context)
     """
 
+    DEFAULT_TIMEOUT = 290
+
     def __init__(
         self,
         metric: BaseMetric,
         field_mapper: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
+        model: Optional[str] = None,
+        timeout: Optional[int] = None,
     ):
         """Initialize the handler.
 
@@ -42,9 +47,15 @@ class DeepEvalHandler:
             field_mapper: Optional callable that receives the raw Lambda event and
                 returns a dict of LLMTestCase field values. Bypasses default span
                 extraction when provided.
+            model: Optional model identifier to override the metric's LLM
+                (e.g. a Bedrock model string instead of the default OpenAI model).
+            timeout: Maximum seconds to allow for metric.measure(). Defaults to 290
+                (slightly under Lambda's 300s max). Set to None to disable.
         """
         self.metric = metric
         self.field_mapper = field_mapper
+        self.model = model
+        self.timeout = timeout if timeout is not None else self.DEFAULT_TIMEOUT
 
     def __call__(self, event: Dict[str, Any], context: Any = None) -> Dict[str, Any]:
         """Handle a Lambda invocation.
@@ -69,8 +80,16 @@ class DeepEvalHandler:
             logger.error("Missing required fields: %s", e)
             return _error_response("MISSING_REQUIRED_FIELD", str(e))
 
+        if self.model is not None:
+            self.metric.model = self.model
+
         try:
-            self.metric.measure(test_case)
+            self._measure_with_timeout(test_case)
+        except _MetricTimeout:
+            return _error_response(
+                "METRIC_TIMEOUT",
+                f"{type(self.metric).__name__} exceeded {self.timeout}s timeout.",
+            )
         except Exception as e:
             logger.error("Metric measurement failed: %s", e, exc_info=True)
             return _error_response("METRIC_ERROR", f"{type(self.metric).__name__} failed: {e}")
@@ -82,6 +101,34 @@ class DeepEvalHandler:
         label = "Pass" if success else "Fail"
 
         return {"value": score, "label": label, "explanation": reason}
+
+    def _measure_with_timeout(self, test_case: Any) -> None:
+        """Run metric.measure with a thread-based timeout."""
+        if self.timeout <= 0:
+            self.metric.measure(test_case)
+            return
+
+        exception_holder: list = []
+
+        def target():
+            try:
+                self.metric.measure(test_case)
+            except Exception as e:
+                exception_holder.append(e)
+
+        thread = threading.Thread(target=target, daemon=True)
+        thread.start()
+        thread.join(timeout=self.timeout)
+
+        if thread.is_alive():
+            raise _MetricTimeout()
+
+        if exception_holder:
+            raise exception_holder[0]
+
+
+class _MetricTimeout(Exception):
+    """Raised when metric.measure exceeds the configured timeout."""
 
 
 def _error_response(code: str, message: str) -> Dict[str, str]:
