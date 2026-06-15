@@ -1,5 +1,6 @@
 """Tests for DeepEvalHandler."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,30 +15,27 @@ def _make_event(
     reference_inputs=None,
 ):
     """Build a raw Lambda event dict for testing."""
+    if spans is None:
+        log_records = [
+            {
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": "What is AI?"}]},
+                    "output": {"messages": [{"role": "assistant", "content": "AI is artificial intelligence."}]},
+                }
+            }
+        ]
+        spans = [
+            {
+                "traceId": "abc123",
+                "spanId": "span1",
+                "attributes": {"_eval_log_records": json.dumps(log_records)},
+            }
+        ]
+
     event = {
         "schemaVersion": "1.0",
         "evaluationLevel": level,
-        "evaluationInput": {
-            "sessionSpans": spans
-            or [
-                {
-                    "traceId": "abc123",
-                    "spanId": "span1",
-                    "attributes": {
-                        "gen_ai.message.role": "user",
-                        "gen_ai.message.content": "What is AI?",
-                    },
-                },
-                {
-                    "traceId": "abc123",
-                    "spanId": "span2",
-                    "attributes": {
-                        "gen_ai.message.role": "assistant",
-                        "gen_ai.message.content": "AI is artificial intelligence.",
-                    },
-                },
-            ]
-        },
+        "evaluationInput": {"sessionSpans": spans},
         "evaluationTarget": {},
     }
     if trace_ids is not None:
@@ -153,17 +151,20 @@ class TestDeepEvalHandlerErrors:
         assert result["errorCode"] == "INVALID_EVENT"
 
     def test_missing_required_field_returns_error(self):
+        log_records = [
+            {
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": "q"}]},
+                    "output": {"messages": [{"role": "assistant", "content": "a"}]},
+                }
+            }
+        ]
         spans = [
             {
                 "traceId": "t1",
                 "spanId": "s1",
-                "attributes": {"gen_ai.message.role": "user", "gen_ai.message.content": "q"},
-            },
-            {
-                "traceId": "t1",
-                "spanId": "s2",
-                "attributes": {"gen_ai.message.role": "assistant", "gen_ai.message.content": "a"},
-            },
+                "attributes": {"_eval_log_records": json.dumps(log_records)},
+            }
         ]
         metric = _mock_metric(name="FaithfulnessMetric")
         handler = DeepEvalHandler(metric=metric)
