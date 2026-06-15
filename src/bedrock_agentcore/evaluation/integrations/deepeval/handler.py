@@ -37,7 +37,7 @@ class DeepEvalHandler:
         self,
         metric: BaseMetric,
         field_mapper: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
-        model: Optional[str] = None,
+        model: Optional[Any] = None,
         timeout: Optional[int] = None,
     ):
         """Initialize the handler.
@@ -47,8 +47,9 @@ class DeepEvalHandler:
             field_mapper: Optional callable that receives the raw Lambda event and
                 returns a dict of LLMTestCase field values. Bypasses default span
                 extraction when provided.
-            model: Optional model identifier to override the metric's LLM
-                (e.g. a Bedrock model string instead of the default OpenAI model).
+            model: Optional model override for the metric's LLM. Can be a string
+                model ID (e.g. "bedrock/anthropic.claude-3") or a DeepEvalBaseLLM
+                subclass instance.
             timeout: Maximum seconds to allow for metric.measure(). Defaults to 290
                 (slightly under Lambda's 300s max). Set to None to disable.
         """

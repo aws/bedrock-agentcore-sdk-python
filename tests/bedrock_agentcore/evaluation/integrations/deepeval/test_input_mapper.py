@@ -4,7 +4,7 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
-from deepeval.test_case import LLMTestCaseParams
+from deepeval.test_case import SingleTurnParams
 
 from bedrock_agentcore.evaluation.integrations.deepeval.input_mapper import (
     ParsedEvaluationEvent,
@@ -156,7 +156,7 @@ class TestParsedEvaluationEvent:
 class TestGetRequiredParams:
     def test_uses_required_params_attribute(self):
         metric = _mock_metric(
-            required_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT]
+            required_params=[SingleTurnParams.INPUT, SingleTurnParams.ACTUAL_OUTPUT]
         )
         result = _get_required_params(metric)
 
@@ -171,7 +171,7 @@ class TestGetRequiredParams:
     def test_falls_back_to_evaluation_params(self):
         metric = _mock_metric(
             name="UnknownMetric",
-            evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.RETRIEVAL_CONTEXT],
+            evaluation_params=[SingleTurnParams.INPUT, SingleTurnParams.RETRIEVAL_CONTEXT],
         )
         result = _get_required_params(metric)
 
