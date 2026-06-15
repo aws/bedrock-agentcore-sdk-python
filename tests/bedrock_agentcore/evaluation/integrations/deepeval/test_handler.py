@@ -55,6 +55,7 @@ def _mock_metric(score=0.85, reason="Looks good", threshold=0.7, name="MockMetri
     metric._required_params = None
     del metric._required_params
     del metric.evaluation_params
+    del metric.success
 
     def measure_side_effect(test_case):
         metric.score = score
@@ -224,6 +225,34 @@ class TestDeepEvalHandlerEdgeCases:
     def test_default_threshold_when_missing(self):
         metric = _mock_metric(score=0.6)
         del metric.threshold
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["label"] == "Pass"
+
+    def test_label_uses_metric_success_true(self):
+        metric = _mock_metric(score=0.3, threshold=0.7)
+        metric.success = True
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["value"] == 0.3
+        assert result["label"] == "Pass"
+
+    def test_label_uses_metric_success_false(self):
+        metric = _mock_metric(score=0.9, threshold=0.7)
+        metric.success = False
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["value"] == 0.9
+        assert result["label"] == "Fail"
+
+    def test_label_falls_back_to_threshold_when_no_success(self):
+        metric = _mock_metric(score=0.8, threshold=0.7)
         handler = DeepEvalHandler(metric=metric)
 
         result = handler(_make_event())

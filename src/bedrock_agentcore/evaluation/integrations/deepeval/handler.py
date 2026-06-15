@@ -78,7 +78,8 @@ class DeepEvalHandler:
         score = self.metric.score
         reason = getattr(self.metric, "reason", None) or ""
         threshold = getattr(self.metric, "threshold", 0.5)
-        label = "Pass" if score is not None and score >= threshold else "Fail"
+        success = getattr(self.metric, "success", score is not None and score >= threshold)
+        label = "Pass" if success else "Fail"
 
         return {"value": score, "label": label, "explanation": reason}
 
