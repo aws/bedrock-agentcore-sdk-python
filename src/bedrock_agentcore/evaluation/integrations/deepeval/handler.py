@@ -55,8 +55,9 @@ class DeepEvalHandler:
         """
         self.metric = metric
         self.field_mapper = field_mapper
-        self.model = model
         self.timeout = timeout if timeout is not None else self.DEFAULT_TIMEOUT
+        if model is not None:
+            self.metric.model = model
 
     def __call__(self, event: Dict[str, Any], context: Any = None) -> Dict[str, Any]:
         """Handle a Lambda invocation.
@@ -80,9 +81,6 @@ class DeepEvalHandler:
         except ValueError as e:
             logger.error("Missing required fields: %s", e)
             return _error_response("MISSING_REQUIRED_FIELD", str(e))
-
-        if self.model is not None:
-            self.metric.model = self.model
 
         try:
             self._measure_with_timeout(test_case)
