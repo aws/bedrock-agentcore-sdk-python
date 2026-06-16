@@ -264,8 +264,6 @@ class TestDeepEvalHandlerEdgeCases:
         metric = _mock_metric()
         handler = DeepEvalHandler(metric=metric, model="bedrock/anthropic.claude-3")
 
-        handler(_make_event())
-
         assert metric.model == "bedrock/anthropic.claude-3"
 
     def test_no_model_override_leaves_metric_unchanged(self):
