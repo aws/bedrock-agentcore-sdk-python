@@ -1,16 +1,22 @@
 """Integration tests for GatewayClient KB target helper methods.
 
 Requires environment variables:
-    BEDROCK_TEST_REGION: AWS region (default: us-east-1)
+    BEDROCK_TEST_REGION: AWS region (default: us-west-2)
     GATEWAY_ROLE_ARN: IAM role ARN with AgentCore gateway trust policy
-    KB_ROLE_ARN: IAM role ARN with bedrock:InvokeModel, s3:*, and s3vectors:* permissions
+    KB_ROLE_ARN: IAM role ARN with bedrock:InvokeModel permissions for the embedding model
+
+Note:
+    Gateway knowledge base targets only support MANAGED (fully-managed) knowledge
+    bases. The gateway control plane rejects the Retrieve connector for any other
+    knowledge base type with "Retrieve is not supported for this knowledge base
+    type." A MANAGED KB lets Bedrock own the vector store internally, so no
+    storageConfiguration (and no self-provisioned S3 Vectors index) is required.
 """
 
 import os
 import time
 import uuid
 
-import boto3
 import pytest
 
 from bedrock_agentcore.gateway.client import GatewayClient
@@ -37,34 +43,16 @@ class TestGatewayKnowledgeBaseTarget:
         cls.kb_id = None
         cls.target_ids = []
 
-        # Create S3 Vectors resources
-        cls.s3vectors_client = boto3.client("s3vectors", region_name=cls.region)
-        cls.vector_bucket_name = f"kb-gw-integ-vb-{cls.test_suffix}"
-        cls.vector_index_name = f"kb-gw-integ-idx-{cls.test_suffix}"
-        cls.s3vectors_client.create_vector_bucket(vectorBucketName=cls.vector_bucket_name)
-        index_resp = cls.s3vectors_client.create_index(
-            vectorBucketName=cls.vector_bucket_name,
-            indexName=cls.vector_index_name,
-            dataType="float32",
-            dimension=1024,
-            distanceMetric="cosine",
-        )
-        cls.index_arn = index_resp["indexArn"]
-
-        # Create Knowledge Base
+        # Create a MANAGED knowledge base. Gateway KB targets require the MANAGED
+        # type; Bedrock owns the vector store internally, so no storageConfiguration
+        # or self-provisioned S3 Vectors index is needed.
         cls.kb = cls.kb_client.create_knowledge_base_and_wait(
             name=f"{cls.test_prefix}-kb",
             roleArn=cls.kb_role_arn,
             knowledgeBaseConfiguration={
-                "type": "VECTOR",
-                "vectorKnowledgeBaseConfiguration": {
+                "type": "MANAGED",
+                "managedKnowledgeBaseConfiguration": {
                     "embeddingModelArn": f"arn:aws:bedrock:{cls.region}::foundation-model/amazon.titan-embed-text-v2:0",
-                },
-            },
-            storageConfiguration={
-                "type": "S3_VECTORS",
-                "s3VectorsConfiguration": {
-                    "indexArn": cls.index_arn,
                 },
             },
         )
@@ -104,16 +92,6 @@ class TestGatewayKnowledgeBaseTarget:
                 cls.kb_client.delete_knowledge_base_and_wait(knowledgeBaseId=cls.kb_id)
             except Exception as e:
                 print(f"Failed to delete KB {cls.kb_id}: {e}")
-
-        # Delete S3 Vectors
-        try:
-            cls.s3vectors_client.delete_index(
-                vectorBucketName=cls.vector_bucket_name,
-                indexName=cls.vector_index_name,
-            )
-            cls.s3vectors_client.delete_vector_bucket(vectorBucketName=cls.vector_bucket_name)
-        except Exception as e:
-            print(f"Failed to clean up vector bucket: {e}")
 
     @pytest.mark.order(1)
     def test_create_knowledge_base_target_minimal(self):
