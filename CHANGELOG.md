@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.15.0] - 2026-06-17
+
+### Other Changes
+- test(integ): fix flaky gateway KB-target & memory list tests + orphan cleanup scripts (#536) (6fc08ed)
+- release: nys summit (#532) (a76cce8)
+- ci(gateway): pass KB_ROLE_ARN secret to integration tests (#535) (0cc1e21)
+- fix(test): update tests to be consistent with new model (#534) (82a2305)
+- ci: add Claude Code /security-review workflow on PRs (#516) (2550d55)
+
 ## [1.14.1] - 2026-06-11
 
 ### Fixed
