@@ -37,9 +37,12 @@ def delete_gateway(client, gateway_id, timeout_s=120, poll_s=5):
 
     The parent gateway cannot be deleted until its targets are fully removed.
     """
+
     def target_ids():
-        return [t["targetId"] for t in paginate(client, "list_gateway_targets", "items",
-                                                 gatewayIdentifier=gateway_id, maxResults=100)]
+        return [
+            t["targetId"]
+            for t in paginate(client, "list_gateway_targets", "items", gatewayIdentifier=gateway_id, maxResults=100)
+        ]
 
     for tid in target_ids():
         client.delete_gateway_target(gatewayIdentifier=gateway_id, targetId=tid)
