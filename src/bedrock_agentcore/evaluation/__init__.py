@@ -17,6 +17,7 @@ from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     EvaluatorStatistics,
     EvaluatorSummary,
     FailedScenario,
+    OnlineEvaluationDataSourceConfig,
 )
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_runner import (
     BatchEvaluationRunner,
@@ -70,6 +71,7 @@ __all__ = [
     "BatchEvaluationRunConfig",
     "CloudWatchOutputDataConfig",
     "CloudWatchDataSourceConfig",
+    "OnlineEvaluationDataSourceConfig",
     "BatchEvaluatorConfig",
     "BatchEvaluationSummary",
     "EvaluatorStatistics",
