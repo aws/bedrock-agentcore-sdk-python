@@ -4,13 +4,6 @@ Requires environment variables:
     BEDROCK_TEST_REGION: AWS region (default: us-west-2)
     GATEWAY_ROLE_ARN: IAM role ARN with AgentCore gateway trust policy
     KB_ROLE_ARN: IAM role ARN with bedrock:InvokeModel permissions for the embedding model
-
-Note:
-    Gateway knowledge base targets only support MANAGED (fully-managed) knowledge
-    bases. The gateway control plane rejects the Retrieve connector for any other
-    knowledge base type with "Retrieve is not supported for this knowledge base
-    type." A MANAGED KB lets Bedrock own the vector store internally, so no
-    storageConfiguration (and no self-provisioned S3 Vectors index) is required.
 """
 
 import os
