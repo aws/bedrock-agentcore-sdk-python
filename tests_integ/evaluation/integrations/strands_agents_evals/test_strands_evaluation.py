@@ -60,8 +60,7 @@ class TestStrandsEvaluationIntegration:
 
         evaluator = create_strands_evaluator("Builtin.Helpfulness", region=REGION)
         experiment = Experiment(cases=cases, evaluators=[evaluator])
-        reports = experiment.run_evaluations(task_fn)
-        report = reports[0]
+        report = experiment.run_evaluations(task_fn)
 
         # Verify results
         assert report.overall_score >= 0.0
@@ -86,8 +85,7 @@ class TestStrandsEvaluationIntegration:
 
         evaluator = create_strands_evaluator("Builtin.Accuracy", region=REGION)
         experiment = Experiment(cases=cases, evaluators=[evaluator])
-        reports = experiment.run_evaluations(task_fn)
-        report = reports[0]
+        report = experiment.run_evaluations(task_fn)
 
         assert report.overall_score >= 0.0
         assert report.overall_score <= 1.0
@@ -115,8 +113,7 @@ class TestStrandsEvaluationIntegration:
 
         evaluator = create_strands_evaluator("Builtin.Helpfulness", region=REGION, test_pass_score=0.6)
         experiment = Experiment(cases=cases, evaluators=[evaluator])
-        reports = experiment.run_evaluations(task_fn)
-        report = reports[0]
+        report = experiment.run_evaluations(task_fn)
 
         assert report.overall_score >= 0.0
         assert report.overall_score <= 1.0
@@ -135,8 +132,7 @@ class TestStrandsEvaluationIntegration:
 
         evaluator = create_strands_evaluator("Builtin.Helpfulness", region=REGION)
         experiment = Experiment(cases=cases, evaluators=[evaluator])
-        reports = experiment.run_evaluations(task_fn)
-        report = reports[0]
+        report = experiment.run_evaluations(task_fn)
 
         # Should return 0 score for empty trajectory
         assert report.overall_score == 0.0
@@ -161,8 +157,7 @@ class TestStrandsEvaluationIntegration:
         # Test with high threshold
         evaluator = create_strands_evaluator("Builtin.Helpfulness", region=REGION, test_pass_score=0.9)
         experiment = Experiment(cases=cases, evaluators=[evaluator])
-        reports = experiment.run_evaluations(task_fn)
-        report = reports[0]
+        report = experiment.run_evaluations(task_fn)
 
         assert report.overall_score >= 0.0
         assert report.overall_score <= 1.0
