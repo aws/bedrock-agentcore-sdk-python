@@ -26,6 +26,11 @@ class TestEvaluatorInput:
         inp = EvaluatorInput(evaluation_level="SESSION", session_spans=[])
         assert inp.reference_inputs == []
 
+    def test_evaluator_id_and_name_default_none(self):
+        inp = EvaluatorInput(evaluation_level="SESSION", session_spans=[])
+        assert inp.evaluator_id is None
+        assert inp.evaluator_name is None
+
     def test_reference_inputs_coerced_from_dicts(self):
         # The service sends camelCase dicts; pydantic coerces them via aliases.
         inp = EvaluatorInput(

@@ -40,6 +40,8 @@ class EvaluatorInput(BaseModel):
         target_trace_id: The target trace ID (set for TRACE level, None otherwise).
         target_span_id: The target span ID (set for TOOL_CALL level, None otherwise).
         schema_version: Schema version of the Lambda contract.
+        evaluator_id: The ID of the code-based evaluator that was invoked.
+        evaluator_name: The name of the code-based evaluator that was invoked.
         reference_inputs: Ground-truth reference inputs (from evaluationReferenceInputs),
             filtered by the service according to evaluation level. Empty when no ground
             truth is configured.
@@ -50,6 +52,8 @@ class EvaluatorInput(BaseModel):
     target_trace_id: Optional[str] = None
     target_span_id: Optional[str] = None
     schema_version: str = "1.0"
+    evaluator_id: Optional[str] = None
+    evaluator_name: Optional[str] = None
     reference_inputs: List[ReferenceInput] = Field(default_factory=list)
 
 
