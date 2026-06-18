@@ -75,6 +75,39 @@ class TestDecoratorWithRawEvent:
         handler(event)
 
 
+class TestReferenceInputs:
+    def test_reference_inputs_passed_through(self):
+        captured = []
+
+        @custom_code_based_evaluator()
+        def handler(inp, context):
+            captured.append(inp.reference_inputs)
+            return EvaluatorOutput(value=1.0, label="Pass")
+
+        event = _make_event(level="TRACE", trace_ids=["abc123"])
+        event["evaluationReferenceInputs"] = [
+            {
+                "context": {"spanContext": {"sessionId": "sess", "traceId": "abc123"}},
+                "expectedResponse": {"text": "Paris"},
+            }
+        ]
+        handler(event)
+
+        assert len(captured[0]) == 1
+        assert captured[0][0].expected_response_text == "Paris"
+
+    def test_reference_inputs_default_empty(self):
+        captured = []
+
+        @custom_code_based_evaluator()
+        def handler(inp, context):
+            captured.append(inp.reference_inputs)
+            return EvaluatorOutput(value=1.0, label="Pass")
+
+        handler(_make_event())  # no evaluationReferenceInputs key
+        assert captured[0] == []
+
+
 class TestExceptionPropagation:
     def test_exception_propagates(self):
         @custom_code_based_evaluator()

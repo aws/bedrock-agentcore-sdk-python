@@ -41,6 +41,7 @@ def custom_code_based_evaluator():
                 target_trace_id=trace_ids[0] if trace_ids else None,
                 target_span_id=span_ids[0] if span_ids else None,
                 schema_version=event.get("schemaVersion", "1.0"),
+                reference_inputs=event.get("evaluationReferenceInputs") or [],
             )
 
             result = fn(evaluator_input, context)
