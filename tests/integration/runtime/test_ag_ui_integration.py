@@ -108,7 +108,7 @@ class TestAGUIServerIntegration:
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "Healthy"
-        assert isinstance(body["time_of_last_update"], int)
+        assert "time_of_last_update" not in body
 
     def test_bedrock_headers_propagated_via_sse(self):
         def _test():
