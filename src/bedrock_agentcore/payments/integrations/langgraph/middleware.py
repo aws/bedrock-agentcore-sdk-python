@@ -10,6 +10,7 @@ from langchain.messages import ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
+from bedrock_agentcore.payments.integrations.error_messages import get_payment_error_message
 from bedrock_agentcore.payments.integrations.handlers import (
     PaymentResponseHandler,
     get_payment_handler,
@@ -37,34 +38,6 @@ from .tools import (
 logger = logging.getLogger(__name__)
 
 # Deterministic error messages per exception type.
-# The LLM sees these messages and should follow the "Do not retry" instruction.
-_ERROR_MESSAGES: Dict[type, str] = {
-    PaymentInstrumentConfigurationRequired: (
-        "No payment instrument configured. Do not retry this call. "
-        "Inform the user they need to configure a payment instrument before making paid requests."
-    ),
-    PaymentSessionConfigurationRequired: (
-        "No payment session configured. Do not retry this call. "
-        "Inform the user they need to create a payment session before making paid requests."
-    ),
-    PaymentInstrumentNotFound: (
-        "Payment instrument not found. Do not retry this call. "
-        "Inform the user their payment instrument ID is invalid or has been deleted."
-    ),
-    PaymentSessionNotFound: (
-        "Payment session not found. Do not retry this call. "
-        "Inform the user their payment session ID is invalid or has expired."
-    ),
-    PaymentSessionExpired: (
-        "Payment session has expired. Do not retry this call. "
-        "Inform the user they need to create a new payment session."
-    ),
-    InsufficientBudget: (
-        "Insufficient budget. The payment amount exceeds the remaining session limit. "
-        "Do not retry this call. Inform the user they need to increase their session budget "
-        "or create a new session with higher limits."
-    ),
-}
 
 
 class _FallbackHandler:
@@ -569,18 +542,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         Returns:
             ToolMessage with status="error" and deterministic content.
         """
-        msg = _ERROR_MESSAGES.get(type(exception))
-        if msg is None:
-            if isinstance(exception, PaymentError):
-                msg = (
-                    f"Payment processing failed ({exception}). "
-                    "Do not retry this call. Inform the user that payment could not be completed."
-                )
-            else:
-                msg = (
-                    f"An unexpected error occurred during payment processing ({exception}). "
-                    "Do not retry this call. Inform the user that payment could not be completed."
-                )
+        msg = get_payment_error_message(exception)
 
         return ToolMessage(
             content=f"PAYMENT ERROR: {msg}",
