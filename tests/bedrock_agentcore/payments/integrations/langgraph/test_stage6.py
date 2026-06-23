@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
 
-from bedrock_agentcore.payments.integrations.langgraph.config import AgentCorePaymentsConfig
+from bedrock_agentcore.payments.integrations.langgraph import AgentCorePaymentsConfig
 from bedrock_agentcore.payments.integrations.langgraph.middleware import AgentCorePaymentsMiddleware
 
 

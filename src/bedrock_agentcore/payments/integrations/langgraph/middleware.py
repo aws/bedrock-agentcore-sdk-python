@@ -25,7 +25,7 @@ from bedrock_agentcore.payments.manager import (
     PaymentManager,
 )
 
-from .config import AgentCorePaymentsConfig
+from ..config import AgentCorePaymentsConfig
 from .tools import (
     make_get_payment_instrument_balance_tool,
     make_get_payment_instrument_tool,

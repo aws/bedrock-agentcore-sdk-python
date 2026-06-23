@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain.messages import ToolMessage
 
-from bedrock_agentcore.payments.integrations.langgraph.config import AgentCorePaymentsConfig
+from bedrock_agentcore.payments.integrations.langgraph import AgentCorePaymentsConfig
 from bedrock_agentcore.payments.integrations.langgraph.middleware import AgentCorePaymentsMiddleware
 from bedrock_agentcore.payments.manager import (
     InsufficientBudget,

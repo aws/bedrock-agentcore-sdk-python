@@ -13,7 +13,7 @@ from bedrock_agentcore.payments.integrations.handlers import (
     MCPRequestPaymentHandler,
     PaymentResponseHandler,
 )
-from bedrock_agentcore.payments.integrations.langgraph.config import AgentCorePaymentsConfig
+from bedrock_agentcore.payments.integrations.langgraph import AgentCorePaymentsConfig
 from bedrock_agentcore.payments.integrations.langgraph.middleware import AgentCorePaymentsMiddleware
 
 
