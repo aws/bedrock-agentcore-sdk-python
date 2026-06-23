@@ -11,7 +11,6 @@ to both endpoints automatically.
 
 import inspect
 import logging
-import time
 import uuid
 from typing import Any, Callable, Optional
 
@@ -79,7 +78,6 @@ class AGUIApp(Starlette):
 
         self._handler: Optional[Callable] = None
         self._ping_handler: Optional[Callable] = None
-        self._last_status_update_time: float = time.time()
 
         routes = [
             Route("/invocations", self._handle_invocation, methods=["POST"]),
@@ -324,11 +322,10 @@ class AGUIApp(Starlette):
                 status = self._ping_handler()
             else:
                 status = PingStatus.HEALTHY
-            self._last_status_update_time = time.time()
         except Exception:
             logger.exception("Custom ping handler failed, falling back to Healthy")
             status = PingStatus.HEALTHY
-        return JSONResponse({"status": status.value, "time_of_last_update": int(self._last_status_update_time)})
+        return JSONResponse({"status": status.value})
 
 
 def build_ag_ui_app(

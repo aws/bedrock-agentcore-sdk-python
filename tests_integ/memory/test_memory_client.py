@@ -437,7 +437,10 @@ class TestMemoryClient:
     def test_list_memories(self):
         if not getattr(self, "lifecycle_memory_id", None):
             pytest.skip("create test did not run")
-        memories = self.client.list_memories()
+        # Paginate through all memories. The shared integ-test account can hold
+        # more than the default 100-item cap, so a capped list may not include
+        # the just-created memory even though it exists.
+        memories = self.client.list_memories(max_results=10000)
         assert any(
             m.get("memoryId") == self.lifecycle_memory_id or m.get("id") == self.lifecycle_memory_id for m in memories
         )
