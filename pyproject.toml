@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bedrock-agentcore"
-version = "1.10.0"
+version = "1.15.0"
 description = "An SDK for using Bedrock AgentCore"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -26,18 +26,15 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "boto3>=1.43.0",
-    "botocore>=1.43.0",
+    "boto3>=1.43.31",
+    "botocore>=1.43.31",
     "pydantic>=2.0.0,<2.41.3",
     "urllib3>=1.26.0",
     "starlette>=0.46.2",
     "typing-extensions>=4.13.2,<5.0.0",
     "uvicorn>=0.34.2",
-    "websockets>=12.0",
+    "websockets>=13.0",
 ]
-
-[project.scripts]
-bedrock-agentcore = "bedrock_agentcore.cli:main"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -154,15 +151,17 @@ dev = [
     "wheel>=0.45.1",
     "strands-agents>=1.20.0",
     "strands-agents-evals>=0.1.0",
-    "a2a-sdk[http-server]>=0.3",
+    "a2a-sdk[http-server]>=0.3,<1.0",
     "ag-ui-protocol>=0.1.10",
+    "mcp-proxy-for-aws>=0.1.0",
 ]
 
 [project.optional-dependencies]
-a2a = ["a2a-sdk[http-server]>=0.3"]
+a2a = ["a2a-sdk[http-server]>=0.3,<1.0"]
 ag-ui = ["ag-ui-protocol>=0.1.10"]
 strands-agents = [
-    "strands-agents>=1.20.0"
+    "strands-agents>=1.20.0",
+    "mcp>=1.23.0,<2.0.0",
 ]
 strands-agents-evals = [
     "strands-agents-evals>=0.1.0"
@@ -170,4 +169,7 @@ strands-agents-evals = [
 simulation = [
     "jinja2>=3.1.0",
     "strands-agents-evals>=0.1.0",
+]
+datasets = [
+    "requests>=2.31.0",
 ]

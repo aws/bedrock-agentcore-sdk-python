@@ -18,6 +18,7 @@ import uuid
 import pytest
 
 from bedrock_agentcore.memory import MemoryClient
+from bedrock_agentcore.memory.models import IndexedKey, MetadataValueType
 
 from .helpers import poll_until
 
@@ -102,6 +103,34 @@ class TestMemoryClient:
             stream_delivery_resources=updated_config,
         )
         assert response["memory"]["streamDeliveryResources"] == updated_config
+
+    def test_indexed_keys_create_and_update(self):
+        """Create memory with indexed_keys, then add another via update_memory passthrough."""
+        initial_keys = [
+            IndexedKey.build("priority", MetadataValueType.NUMBER),
+            IndexedKey.build("agent_type", MetadataValueType.STRING),
+        ]
+
+        memory = self.client.create_memory_and_wait(
+            name=f"{self.test_prefix}_indexed",
+            strategies=[],
+            indexed_keys=initial_keys,
+        )
+
+        memory_id = memory["id"]
+        self.__class__.memory_ids.append(memory_id)
+
+        assert memory.get("indexedKeys") == initial_keys
+
+        added_key = IndexedKey.build("region", MetadataValueType.STRING)
+        response = self.client.update_memory(
+            memory_id=memory_id,
+            client_token=str(uuid.uuid4()),
+            add_indexed_keys=[added_key],
+        )
+
+        updated_keys = response["memory"]["indexedKeys"]
+        assert {k["key"] for k in updated_keys} == {"priority", "agent_type", "region"}
 
     # --- Data Plane Tests (order 1-10) ---
 
@@ -408,7 +437,10 @@ class TestMemoryClient:
     def test_list_memories(self):
         if not getattr(self, "lifecycle_memory_id", None):
             pytest.skip("create test did not run")
-        memories = self.client.list_memories()
+        # Paginate through all memories. The shared integ-test account can hold
+        # more than the default 100-item cap, so a capped list may not include
+        # the just-created memory even though it exists.
+        memories = self.client.list_memories(max_results=10000)
         assert any(
             m.get("memoryId") == self.lifecycle_memory_id or m.get("id") == self.lifecycle_memory_id for m in memories
         )

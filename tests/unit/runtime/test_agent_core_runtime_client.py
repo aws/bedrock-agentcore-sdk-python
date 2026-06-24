@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 import pytest
 
-from bedrock_agentcore.runtime.agent_core_runtime_client import AgentCoreRuntimeClient
+from bedrock_agentcore.runtime.agent_core_runtime_client import AgentCoreRuntimeClient, parse_runtime_arn
 
 
 class TestAgentCoreRuntimeClientInit:
@@ -23,77 +23,45 @@ class TestAgentCoreRuntimeClientInit:
 
 
 class TestParseRuntimeArn:
-    """Tests for _parse_runtime_arn helper."""
+    """Tests for parse_runtime_arn module-level helper."""
 
     def test_parse_valid_arn(self):
-        """Test parsing a valid runtime ARN."""
-        client = AgentCoreRuntimeClient(region="us-west-2")
         arn = "arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/my-runtime-abc123"
-
-        result = client._parse_runtime_arn(arn)
-
+        result = parse_runtime_arn(arn)
         assert result["region"] == "us-west-2"
         assert result["account_id"] == "123456789012"
         assert result["runtime_id"] == "my-runtime-abc123"
 
     def test_parse_valid_gov_arn(self):
-        """Test parsing a valid govcloud runtime ARN."""
-        client = AgentCoreRuntimeClient(region="us-gov-west-1")
         arn = "arn:aws-us-gov:bedrock-agentcore:us-gov-west-1:123456789012:runtime/my-runtime-abc123"
-
-        result = client._parse_runtime_arn(arn)
-
+        result = parse_runtime_arn(arn)
         assert result["region"] == "us-gov-west-1"
         assert result["account_id"] == "123456789012"
         assert result["runtime_id"] == "my-runtime-abc123"
 
     def test_parse_invalid_arn_partition(self):
-        """Test parsing an invalid runtime ARN."""
-        client = AgentCoreRuntimeClient(region="us-iso-east-1")
-        invalid_arn = "arn:aws-iso:bedrock-agentcore:us-iso-east-1:123456789012:runtime/my-runtime-abc123"
-
         with pytest.raises(ValueError, match="Invalid runtime ARN format"):
-            client._parse_runtime_arn(invalid_arn)
+            parse_runtime_arn("arn:aws-iso:bedrock-agentcore:us-iso-east-1:123456789012:runtime/my-runtime-abc123")
 
     def test_parse_invalid_arn_raises_error(self):
-        """Test that invalid ARN format raises ValueError."""
-        client = AgentCoreRuntimeClient(region="us-west-2")
-        invalid_arn = "not-a-valid-arn"
-
         with pytest.raises(ValueError, match="Invalid runtime ARN format"):
-            client._parse_runtime_arn(invalid_arn)
+            parse_runtime_arn("not-a-valid-arn")
 
     def test_parse_wrong_service_raises_error(self):
-        """Test that wrong service in ARN raises ValueError."""
-        client = AgentCoreRuntimeClient(region="us-west-2")
-        wrong_service = "arn:aws:s3:us-west-2:123456789012:bucket/my-bucket"
-
         with pytest.raises(ValueError, match="Invalid runtime ARN format"):
-            client._parse_runtime_arn(wrong_service)
+            parse_runtime_arn("arn:aws:s3:us-west-2:123456789012:bucket/my-bucket")
 
     def test_parse_empty_region_raises_error(self):
-        """Test that empty region in ARN raises ValueError."""
-        client = AgentCoreRuntimeClient(region="us-west-2")
-        empty_region = "arn:aws:bedrock-agentcore::123456789012:runtime/my-runtime"
-
         with pytest.raises(ValueError, match="ARN components cannot be empty"):
-            client._parse_runtime_arn(empty_region)
+            parse_runtime_arn("arn:aws:bedrock-agentcore::123456789012:runtime/my-runtime")
 
     def test_parse_empty_account_id_raises_error(self):
-        """Test that empty account_id in ARN raises ValueError."""
-        client = AgentCoreRuntimeClient(region="us-west-2")
-        empty_account = "arn:aws:bedrock-agentcore:us-west-2::runtime/my-runtime"
-
         with pytest.raises(ValueError, match="ARN components cannot be empty"):
-            client._parse_runtime_arn(empty_account)
+            parse_runtime_arn("arn:aws:bedrock-agentcore:us-west-2::runtime/my-runtime")
 
     def test_parse_empty_runtime_id_raises_error(self):
-        """Test that empty runtime_id in ARN raises ValueError."""
-        client = AgentCoreRuntimeClient(region="us-west-2")
-        empty_runtime = "arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/"
-
         with pytest.raises(ValueError, match="ARN components cannot be empty"):
-            client._parse_runtime_arn(empty_runtime)
+            parse_runtime_arn("arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/")
 
 
 class TestBuildWebsocketUrl:

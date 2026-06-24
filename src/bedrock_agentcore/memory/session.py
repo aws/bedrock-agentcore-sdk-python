@@ -21,6 +21,7 @@ from .models import (
     Event,
     EventMessage,
     EventMetadataFilter,
+    MemoryMetadataFilter,
     MemoryRecord,
     MetadataValue,
     SessionSummary,
@@ -903,6 +904,7 @@ class MemorySessionManager:
         max_results: int = 20,
         namespace: Optional[str] = None,
         namespace_path: Optional[str] = None,
+        metadata_filters: Optional[List[MemoryMetadataFilter]] = None,
     ) -> List[MemoryRecord]:
         """Performs a semantic search against the long-term memory for this actor.
 
@@ -921,7 +923,16 @@ class MemorySessionManager:
             namespace: Exact-match namespace (preserves pre-redesign behavior during the
                 service grace period)
             namespace_path: Hierarchical path-prefix namespace
+            metadata_filters: Optional list of metadata filter expressions to scope results
+                by indexed metadata keys before semantic search runs. The service accepts
+                1-5 filters. An empty list is treated as no filter.
+
+        Raises:
+            ValueError: If `metadata_filters` exceeds the service maximum of 5.
         """
+        if metadata_filters is not None and len(metadata_filters) > 5:
+            raise ValueError(f"metadata_filters supports a maximum of 5 expressions; received {len(metadata_filters)}.")
+
         resolved_namespace = resolve_namespace_prefix_deprecation(namespace_prefix, namespace)
         ns_params = build_namespace_params(resolved_namespace, namespace_path)
         ns_value = resolved_namespace or namespace_path
@@ -930,6 +941,9 @@ class MemorySessionManager:
         search_criteria = {"searchQuery": query, "topK": top_k}
         if strategy_id:
             search_criteria["memoryStrategyId"] = strategy_id
+        if metadata_filters:
+            search_criteria["metadataFilters"] = metadata_filters
+            logger.debug("Applying %d metadata filter(s)", len(metadata_filters))
 
         params = {
             "memoryId": self._memory_id,
@@ -1252,6 +1266,7 @@ class MemorySession(DictWrapper):
         max_results: int = 20,
         namespace: Optional[str] = None,
         namespace_path: Optional[str] = None,
+        metadata_filters: Optional[List[MemoryMetadataFilter]] = None,
     ) -> List[MemoryRecord]:
         """Delegates to manager.search_long_term_memories."""
         return self._manager.search_long_term_memories(
@@ -1262,6 +1277,7 @@ class MemorySession(DictWrapper):
             max_results,
             namespace=namespace,
             namespace_path=namespace_path,
+            metadata_filters=metadata_filters,
         )
 
     def list_long_term_memory_records(

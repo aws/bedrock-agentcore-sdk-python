@@ -1,9 +1,12 @@
 """AgentCorePaymentsPlugin for Strands Agents framework."""
 
+import json
 import logging
+import time
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
+import httpx
 from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent
 from strands.plugins import Plugin, hook
 from strands.tools import tool
@@ -25,7 +28,8 @@ logger = logging.getLogger(__name__)
 class AgentCorePaymentsPlugin(Plugin):
     """Plugin for handling X402 payment requirements and providing payment tools in Strands Agents.
 
-    This plugin provides three tools for querying payment information:
+    This plugin provides tools for querying payment information and making paid HTTP calls:
+    - http_request: Call a (paid) HTTP endpoint; 402 responses are settled automatically
     - getPaymentInstrument: Retrieve details about a specific payment instrument
     - listPaymentInstruments: List all payment instruments for a user
     - getPaymentSession: Retrieve details about a specific payment session
@@ -55,6 +59,18 @@ class AgentCorePaymentsPlugin(Plugin):
         super().__init__()
         self.config = config
         self.payment_manager: Optional[PaymentManager] = None
+
+        # Honor the provide_http_request opt-out: Strands' Plugin base auto-discovers
+        # every @tool method into self._tools at super().__init__(). If the caller
+        # wants to ship their own http_request, drop ours so Strands' tool registry
+        # doesn't raise ValueError on duplicate tool name.
+        if not self.config.provide_http_request:
+            self._tools = [t for t in self._tools if t.tool_name != "http_request"]
+            logger.info(
+                "provide_http_request=False — plugin's http_request tool will not be registered. "
+                "Auto-payment still triggers on any tool emitting a PAYMENT_REQUIRED: marker."
+            )
+
         logger.info("Initialized AgentCorePaymentsPlugin")
 
     def init_agent(self, agent) -> None:
@@ -163,11 +179,6 @@ class AgentCorePaymentsPlugin(Plugin):
                 )
                 return
 
-        # Check if payment retry limit has been reached
-        if self._check_payment_retry_limit(event):
-            logger.warning("Payment processing retry limit has been reached. Processing skipped.")
-            return
-
         # Check if response is a 402 Payment Required
         if not hasattr(event, "result") or event.result is None:
             return
@@ -192,9 +203,6 @@ class AgentCorePaymentsPlugin(Plugin):
 
             logger.info("Detected 402 Payment Required response from tool: %s", event.tool_use.get("name", "unknown"))
 
-            # Increment retry count in invocation state
-            self._increment_payment_retry_count(event)
-
             # Build payment_required_request dict using handler methods
             headers = handler.extract_headers(event.result)
             body = handler.extract_body(event.result)
@@ -204,20 +212,28 @@ class AgentCorePaymentsPlugin(Plugin):
                 "body": body or {},
             }
 
-            # If we already retried with payment credentials and still got a 402,
-            # this is a post-payment failure (e.g., insufficient balance, invalid signature).
-            # Propagate as an interrupt instead of retrying again to avoid infinite loops.
-            if self._is_post_payment_failure(event, body):
+            # If we previously signed successfully and still got a 402, the server
+            # rejected the payment for a non-retryable reason (e.g., insufficient balance).
+            # Do not retry — store failure state so the agent is notified via interrupt.
+            if self._has_successful_signing(event):
+                error_msg = body.get("error", "unknown error") if body and isinstance(body, dict) else "unknown error"
                 logger.warning(
-                    "Received 402 after payment retry for tool %s — treating as payment failure",
+                    "Received 402 after successful signing for tool %s — post-payment failure: %s",
                     event.tool_use.get("name", "unknown"),
+                    error_msg,
                 )
-                error_msg = self._extract_payment_error_message(body)
-                self._store_payment_failure_state(event, PaymentError(f"Payment failed after retry: {error_msg}"))
+                self._store_payment_failure_state(event, PaymentError(f"Payment rejected after signing: {error_msg}"))
                 return
 
+            # Check if signing retry limit has been reached
+            if self._check_payment_retry_limit(event):
+                logger.warning("Payment signing retry limit reached. Processing skipped.")
+                return
+
+            # Increment before attempt so limit is enforced even on exception
+            self._increment_payment_retry_count(event)
+
             # Validate tool input before processing payment
-            tool_input = event.tool_use.get("input", {})
             if not handler.validate_tool_input(tool_input):
                 logger.error("Tool input validation failed, cannot apply payment header")
                 self._store_payment_failure_state(event, Exception("Tool input validation failed"))
@@ -232,10 +248,25 @@ class AgentCorePaymentsPlugin(Plugin):
                 self._store_payment_failure_state(event, Exception("Failed to apply payment header"))
                 return
 
+            # Mark that signing succeeded for this tool use — if we get another 402
+            # after this retry, we know it's a server-side rejection, not a signing failure.
+            self._mark_successful_signing(event)
+
+            # Wait one chain-block before letting the tool retry, so the merchant's
+            # facilitator has time to see block.timestamp > validAfter when it submits
+            # transferWithAuthorization to USDC. Without this delay, fast facilitators
+            # can submit in the same second the signature was minted, hitting the
+            # contract's strict ``block.timestamp > validAfter`` check and producing
+            # a misleading "invalid_payload" 402 from the seller.
+            delay = self.config.post_payment_retry_delay_seconds
+            if delay > 0:
+                logger.info(
+                    "Waiting %.1fs before retry to allow chain to advance past validAfter",
+                    delay,
+                )
+                time.sleep(delay)
+
             # Set retry flag to re-execute the tool with payment credentials.
-            # Do NOT reset the payment retry counter here — it must persist across
-            # retries so that _is_post_payment_failure and _check_payment_retry_limit
-            # can detect repeated 402s and break the loop.
             event.retry = True
             self._reset_interrupt_retry_count(event)
             logger.info("Set retry flag to re-execute tool with payment credentials")
@@ -295,63 +326,37 @@ class AgentCorePaymentsPlugin(Plugin):
             "Payment retry attempt %d/%d for tool use %s", retry_count + 1, self.MAX_PAYMENT_RETRIES, tool_use_id
         )
 
-    def _is_post_payment_failure(self, event: AfterToolCallEvent, body: Optional[Dict[str, Any]]) -> bool:
-        """Check if this 402 response is a failure after we already retried with payment credentials.
-
-        A post-payment failure occurs when:
-        1. We already sent a payment header (retry count > 0 before this increment), AND
-        2. The 402 response body contains an error that is NOT the initial "payment required"
-           (e.g., "invalid_exact_evm_insufficient_balance", "payment_rejected", etc.)
-
-        This prevents infinite loops where the plugin keeps signing and retrying
-        against a server that keeps rejecting the payment for non-retryable reasons.
+    def _has_successful_signing(self, event: AfterToolCallEvent) -> bool:
+        """Check if we previously signed a payment successfully for this tool use.
 
         Args:
             event: The after tool call event
-            body: The extracted response body (may be None)
 
         Returns:
-            True if this is a post-payment failure that should be propagated as an interrupt
+            True if signing was previously successful (meaning this 402 is a server-side rejection)
         """
         tool_use_id = event.tool_use.get("toolUseId", "unknown")
-        payment_retry_key = f"payment_retry_count_{tool_use_id}"
-        # retry count was already incremented before this check, so > 1 means
-        # we already attempted at least one payment retry
-        retry_count = event.invocation_state.get(payment_retry_key, 0)
+        signed_key = f"payment_signed_{tool_use_id}"
+        return event.invocation_state.get(signed_key, False)
 
-        if retry_count <= 1:
-            return False
+    def _mark_successful_signing(self, event: AfterToolCallEvent) -> None:
+        """Mark that signing succeeded for this tool use.
 
-        # If the body contains an error field that is NOT the initial "payment required",
-        # this is a post-payment failure
-        if body and isinstance(body, dict):
-            error = body.get("error", "")
-            if isinstance(error, str) and error.lower() not in ("", "payment required"):
-                logger.info(
-                    "Post-payment failure detected for tool %s: error=%s (retry_count=%d)",
-                    tool_use_id,
-                    error,
-                    retry_count,
-                )
-                return True
+        Called after generate_payment_header and apply_payment_header both succeed,
+        right before setting event.retry. If a subsequent 402 is received,
+        _has_successful_signing will return True indicating the failure is server-side.
 
-        return False
-
-    @staticmethod
-    def _extract_payment_error_message(body: Optional[Dict[str, Any]]) -> str:
-        """Extract a human-readable error message from a 402 response body.
+        Note: payment_signed_*, payment_retry_count_*, and payment_failure_* keys are
+        intentionally not cleared. invocation_state is scoped to a single agent
+        invocation and is discarded by Strands when the invocation ends, so these
+        per-tool-use markers do not accumulate across invocations.
 
         Args:
-            body: The extracted response body (may be None)
-
-        Returns:
-            Error message string, or "unknown error" if not extractable
+            event: The after tool call event
         """
-        if body and isinstance(body, dict):
-            error = body.get("error")
-            if isinstance(error, str) and error:
-                return error
-        return "unknown error"
+        tool_use_id = event.tool_use.get("toolUseId", "unknown")
+        signed_key = f"payment_signed_{tool_use_id}"
+        event.invocation_state[signed_key] = True
 
     def _store_payment_failure_state(self, event: AfterToolCallEvent, exception: Exception) -> None:
         """Store payment failure information in invocation state for agent to handle.
@@ -751,3 +756,87 @@ class AgentCorePaymentsPlugin(Plugin):
                 str(e),
             )
             raise
+
+    @tool
+    def http_request(
+        self,
+        url: str,
+        method: str = "GET",
+        headers: Optional[Dict[str, str]] = None,
+        body: Optional[Union[Dict[str, Any], str]] = None,
+    ) -> Dict[str, Any]:
+        """Call an HTTP endpoint. 402 Payment Required responses are settled automatically.
+
+        When the endpoint responds with HTTP 402, this plugin's after_tool_call hook
+        intercepts the result, generates an x402 payment header via the configured
+        PaymentManager, mutates ``headers`` with the X-PAYMENT (v1) or
+        PAYMENT-SIGNATURE (v2) header, and Strands re-invokes this tool — yielding
+        the final 200 response and (when applicable) a settle hash in the
+        PAYMENT-RESPONSE header.
+
+        Returns a Strands ToolResult dict: ``status`` is always ``success`` (HTTP
+        errors are returned in the body, not raised), and ``content`` is a single
+        text block. On 402 the text is prefixed with ``PAYMENT_REQUIRED:`` so the
+        SDK's payment handlers can extract the x402 payload.
+
+        Args:
+            url: The full URL to request.
+            method: HTTP method. Defaults to ``GET``.
+            headers: Optional request headers. The plugin mutates this dict to add
+                the payment header on retry.
+            body: Optional request body. ``dict`` is sent as JSON; ``str`` is sent
+                as-is. Ignored for ``GET``/``HEAD``.
+
+        Returns:
+            Strands ToolResult dict with ``status`` and ``content``.
+        """
+        request_headers = dict(headers) if headers else {}
+        method_upper = method.upper()
+
+        try:
+            with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+                if body is None or method_upper in ("GET", "HEAD"):
+                    resp = client.request(method_upper, url, headers=request_headers)
+                elif isinstance(body, str):
+                    resp = client.request(method_upper, url, headers=request_headers, content=body)
+                else:
+                    resp = client.request(method_upper, url, headers=request_headers, json=body)
+        except httpx.RequestError as exc:
+            logger.error("http_request failed for %s: %s", url, exc)
+            return {
+                "status": "error",
+                "content": [
+                    {
+                        "text": json.dumps(
+                            {
+                                "statusCode": 0,
+                                "error": f"Request failed: {exc}",
+                                "url": url,
+                            }
+                        )
+                    }
+                ],
+            }
+
+        response_headers = dict(resp.headers)
+        try:
+            response_body: Any = resp.json()
+        except Exception:
+            response_body = {"text": resp.text}
+
+        payload = {
+            "statusCode": resp.status_code,
+            "headers": response_headers,
+            "body": response_body,
+        }
+
+        if resp.status_code == 402:
+            return {
+                "status": "success",
+                "content": [{"text": f"PAYMENT_REQUIRED: {json.dumps(payload)}"}],
+            }
+
+        return {
+            "status": "success",
+            "content": [{"text": json.dumps(payload)}],
+        }

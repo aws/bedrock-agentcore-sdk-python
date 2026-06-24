@@ -9,8 +9,13 @@ import datetime
 import logging
 import secrets
 import uuid
-from typing import Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, urlencode, urlparse
+
+from .shell._validation import parse_runtime_arn, validate_shell_id
+
+if TYPE_CHECKING:
+    from .shell import AuthMode, ReconnectConfig, ShellSession
 
 import boto3
 from botocore.auth import SigV4Auth, SigV4QueryAuth
@@ -23,7 +28,6 @@ from .._utils.endpoints import get_data_plane_endpoint, validate_region
 from .._utils.polling import wait_until, wait_until_deleted
 from .._utils.snake_case import accept_snake_case_kwargs, convert_kwargs
 from .._utils.user_agent import build_user_agent_suffix
-from .utils import is_valid_partition
 
 DEFAULT_PRESIGNED_URL_TIMEOUT = 300
 MAX_PRESIGNED_URL_TIMEOUT = 300
@@ -80,21 +84,20 @@ class AgentCoreRuntimeClient:
             integration_source: Optional integration source for user-agent
                 telemetry.
         """
-        session = session if session else boto3.Session()
-        self.region = validate_region(region or session.region_name or "us-west-2")
-        self.session = session
+        self.region = validate_region(region or (session.region_name if session else None) or "us-west-2")
+        self.session = session if session else boto3.Session(region_name=self.region)
         self.integration_source = integration_source
         self.logger = logging.getLogger(__name__)
 
         user_agent_extra = build_user_agent_suffix(integration_source)
         client_config = Config(user_agent_extra=user_agent_extra)
 
-        self.cp_client = session.client(
+        self.cp_client = self.session.client(
             "bedrock-agentcore-control",
             region_name=self.region,
             config=client_config,
         )
-        self.dp_client = session.client(
+        self.dp_client = self.session.client(
             "bedrock-agentcore",
             region_name=self.region,
             config=client_config,
@@ -124,47 +127,6 @@ class AgentCoreRuntimeClient:
             f"Available methods can be found in the boto3 documentation for "
             f"'bedrock-agentcore' and 'bedrock-agentcore-control' services."
         )
-
-    def _parse_runtime_arn(self, runtime_arn: str) -> Dict[str, str]:
-        """Parse runtime ARN and extract components.
-
-        Args:
-            runtime_arn (str): Full runtime ARN
-
-        Returns:
-            Dict[str, str]: Dictionary with region, account_id, runtime_id
-
-        Raises:
-            ValueError: If ARN format is invalid
-        """
-        # Expected format: arn:aws:bedrock-agentcore:{region}:{account}:runtime/{runtime_id}
-        parts = runtime_arn.split(":")
-
-        if len(parts) != 6:
-            raise ValueError(f"Invalid runtime ARN format: {runtime_arn}")
-
-        if parts[0] != "arn" or not is_valid_partition(parts[1]) or parts[2] != "bedrock-agentcore":
-            raise ValueError(f"Invalid runtime ARN format: {runtime_arn}")
-
-        # Parse the resource part (runtime/{runtime_id})
-        resource = parts[5]
-        if not resource.startswith("runtime/"):
-            raise ValueError(f"Invalid runtime ARN format: {runtime_arn}")
-
-        runtime_id = resource.split("/", 1)[1]
-
-        # Validate that components are not empty
-        region = parts[3]
-        account_id = parts[4]
-
-        if not region or not account_id or not runtime_id:
-            raise ValueError("ARN components cannot be empty")
-
-        return {
-            "region": region,
-            "account_id": account_id,
-            "runtime_id": runtime_id,
-        }
 
     def _build_websocket_url(
         self,
@@ -209,6 +171,72 @@ class AgentCoreRuntimeClient:
 
         return ws_url
 
+    def _sigv4_sign(
+        self,
+        https_url: str,
+        signed_headers: Optional[Dict[str, str]] = None,
+        unsigned_headers: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, str]:
+        """SigV4-sign a WebSocket upgrade URL and return the full header dict.
+
+        Args:
+            https_url: The https:// form of the wss:// URL to sign.
+            signed_headers: Headers to include inside the AWSRequest so they
+                are covered by the SigV4 signature.
+            unsigned_headers: Headers appended to the result after signing
+                (not covered by the signature).
+
+        Returns:
+            Dict with Host, X-Amz-Date, Authorization, optionally
+            X-Amz-Security-Token, plus any signed/unsigned headers passed in.
+        """
+        credentials = self.session.get_credentials()
+        if not credentials:
+            raise RuntimeError("No AWS credentials found")
+        frozen = credentials.get_frozen_credentials()
+        host = urlparse(https_url).netloc
+        req_headers: Dict[str, str] = {
+            "host": host,
+            "x-amz-date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
+        }
+        if signed_headers:
+            req_headers.update({k.lower(): v for k, v in signed_headers.items()})
+        request = AWSRequest(method="GET", url=https_url, headers=req_headers)
+        SigV4Auth(frozen, "bedrock-agentcore", self.region).add_auth(request)
+        headers: Dict[str, str] = {
+            "Host": host,
+            "X-Amz-Date": request.headers["x-amz-date"],
+            "Authorization": request.headers["Authorization"],
+        }
+        if frozen.token:
+            headers["X-Amz-Security-Token"] = frozen.token
+        if signed_headers:
+            headers.update(signed_headers)
+        if unsigned_headers:
+            headers.update(unsigned_headers)
+        return headers
+
+    def _presign(self, https_url: str, expires: int) -> str:
+        """Sign a WebSocket URL with SigV4 query-string auth and return it as wss://.
+
+        Args:
+            https_url: The https:// URL to sign (query params already embedded).
+            expires: Seconds until the presigned URL expires.
+
+        Returns:
+            Presigned wss:// URL.
+
+        Raises:
+            RuntimeError: If no AWS credentials are found.
+        """
+        credentials = self.session.get_credentials()
+        if not credentials:
+            raise RuntimeError("No AWS credentials found")
+        frozen = credentials.get_frozen_credentials()
+        request = AWSRequest(method="GET", url=https_url, headers={"host": urlparse(https_url).hostname})
+        SigV4QueryAuth(frozen, "bedrock-agentcore", self.region, expires=expires).add_auth(request)
+        return request.url.replace("https://", "wss://")
+
     def generate_ws_connection(
         self,
         runtime_arn: str,
@@ -243,7 +271,7 @@ class AgentCoreRuntimeClient:
         self.logger.info("Generating WebSocket connection credentials...")
 
         # Validate ARN
-        self._parse_runtime_arn(runtime_arn)
+        parse_runtime_arn(runtime_arn)
 
         # Auto-generate session ID if not provided
         if not session_id:
@@ -252,50 +280,17 @@ class AgentCoreRuntimeClient:
 
         # Build WebSocket URL
         ws_url = self._build_websocket_url(runtime_arn, endpoint_name)
-
-        # Get AWS credentials
-        credentials = self.session.get_credentials()
-        if not credentials:
-            raise RuntimeError("No AWS credentials found")
-
-        frozen_credentials = credentials.get_frozen_credentials()
-
-        # Convert wss:// to https:// for signing
-        https_url = ws_url.replace("wss://", "https://")
-        parsed = urlparse(https_url)
-        host = parsed.netloc
-
-        # Create the request to sign
-        request = AWSRequest(
-            method="GET",
-            url=https_url,
-            headers={
-                "host": host,
-                "x-amz-date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
+        headers = self._sigv4_sign(
+            ws_url.replace("wss://", "https://"),
+            unsigned_headers={
+                "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id,
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Version": "13",
+                "Sec-WebSocket-Key": base64.b64encode(secrets.token_bytes(16)).decode(),
+                "User-Agent": "AgentCoreRuntimeClient/1.0",
             },
         )
-
-        # Sign the request with SigV4
-        auth = SigV4Auth(frozen_credentials, "bedrock-agentcore", self.region)
-        auth.add_auth(request)
-
-        # Build headers for WebSocket connection
-        headers = {
-            "Host": host,
-            "X-Amz-Date": request.headers["x-amz-date"],
-            "Authorization": request.headers["Authorization"],
-            "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id,
-            "Upgrade": "websocket",
-            "Connection": "Upgrade",
-            "Sec-WebSocket-Version": "13",
-            "Sec-WebSocket-Key": base64.b64encode(secrets.token_bytes(16)).decode(),
-            "User-Agent": "AgentCoreRuntimeClient/1.0",
-        }
-
-        # Add session token if present
-        if frozen_credentials.token:
-            headers["X-Amz-Security-Token"] = frozen_credentials.token
-
         self.logger.info("✓ WebSocket connection credentials generated (Session: %s)", session_id)
         return ws_url, headers
 
@@ -347,7 +342,7 @@ class AgentCoreRuntimeClient:
             raise ValueError(f"Expiry timeout cannot exceed {MAX_PRESIGNED_URL_TIMEOUT} seconds, got {expires}")
 
         # Validate ARN
-        self._parse_runtime_arn(runtime_arn)
+        parse_runtime_arn(runtime_arn)
 
         # Auto-generate session ID if not provided
         if not session_id:
@@ -361,38 +356,7 @@ class AgentCoreRuntimeClient:
 
         # Build WebSocket URL with query parameters
         ws_url = self._build_websocket_url(runtime_arn, endpoint_name, custom_headers)
-
-        # Convert wss:// to https:// for signing
-        https_url = ws_url.replace("wss://", "https://")
-
-        # Parse URL
-        url = urlparse(https_url)
-
-        # Get AWS credentials
-        credentials = self.session.get_credentials()
-        if not credentials:
-            raise RuntimeError("No AWS credentials found")
-
-        frozen_credentials = credentials.get_frozen_credentials()
-
-        # Create the request to sign
-        request = AWSRequest(method="GET", url=https_url, headers={"host": url.hostname})
-
-        # Sign the request with SigV4QueryAuth
-        signer = SigV4QueryAuth(
-            credentials=frozen_credentials,
-            service_name="bedrock-agentcore",
-            region_name=self.region,
-            expires=expires,
-        )
-        signer.add_auth(request)
-
-        if not request.url:
-            raise RuntimeError("Failed to generate presigned URL")
-
-        # Convert back to wss:// for WebSocket connection
-        presigned_url = request.url.replace("https://", "wss://")
-
+        presigned_url = self._presign(ws_url.replace("wss://", "https://"), expires)
         self.logger.info("✓ Presigned URL generated (expires in %s seconds, Session: %s)", expires, session_id)
         return presigned_url
 
@@ -439,7 +403,7 @@ class AgentCoreRuntimeClient:
             raise ValueError("Bearer token cannot be empty")
 
         # Validate ARN
-        self._parse_runtime_arn(runtime_arn)
+        parse_runtime_arn(runtime_arn)
 
         # Auto-generate session ID if not provided
         if not session_id:
@@ -472,6 +436,335 @@ class AgentCoreRuntimeClient:
         self.logger.debug("Bearer token length: %d characters", len(bearer_token))
 
         return ws_url, headers
+
+    # InvokeAgentRuntimeCommandShell auth helpers
+    # -------------------------------------------------------------------------
+
+    def _build_shell_url(
+        self,
+        runtime_arn: str,
+        endpoint_name: Optional[str] = None,
+        shell_id: Optional[str] = None,
+    ) -> str:
+        """Build wss:// URL for /ws/shells (shell op).
+
+        Args:
+            runtime_arn: Full runtime ARN.
+            endpoint_name: Optional qualifier query param.
+            shell_id: Optional shellId query param.
+
+        Returns:
+            WebSocket URL (wss://…).
+        """
+        host = get_data_plane_endpoint(self.region).replace("https://", "")
+        encoded_arn = quote(runtime_arn, safe="")
+        path = f"/runtimes/{encoded_arn}/ws/shells"
+
+        params: Dict[str, str] = {}
+        if endpoint_name:
+            params["qualifier"] = endpoint_name
+        if shell_id:
+            params["shellId"] = shell_id
+
+        qs = urlencode(params)
+        return f"wss://{host}{path}?{qs}" if qs else f"wss://{host}{path}"
+
+    def connect_shell(
+        self,
+        runtime_arn: str,
+        session_id: Optional[str] = None,
+        endpoint_name: Optional[str] = None,
+        shell_id: Optional[str] = None,
+    ) -> Tuple[str, Dict[str, str]]:
+        """Return (wss_url, headers) for a SigV4-authenticated shell session.
+
+        SigV4 is the correct auth path for server-side Python.  Browsers cannot
+        set arbitrary headers on a WebSocket upgrade (RFC 6455); use
+        ``connect_shell_oauth`` for browser-facing use cases instead.
+
+        Args:
+            runtime_arn: Full agent runtime ARN.
+            session_id: Routes to an existing VM. Auto-generated UUID if omitted;
+                a new VM is provisioned.
+            endpoint_name: Endpoint qualifier (default: DEFAULT).
+            shell_id: Client-chosen shell name (1–128 chars, no ?, #, &).
+                Auto-generated UUID if omitted. **Store this value** — passing the same
+                ID reconnects to the same PTY, preserving shell state and up to 256 KB
+                of buffered output.
+
+        Returns:
+            ``(wss_url, headers)`` — pass both directly to any WebSocket library.
+
+        Raises:
+            ValueError: If the ARN format is invalid or ``shell_id`` is
+                outside the allowed character set.
+            RuntimeError: If no AWS credentials are found.
+
+        Example:
+            url, headers = client.connect_shell(
+                runtime_arn="arn:aws:bedrock-agentcore:us-west-2:123:runtime/r",
+                shell_id="my-debug-shell",
+            )
+            ws = await websockets.connect(url, additional_headers=headers)
+        """
+        parse_runtime_arn(runtime_arn)
+        if not session_id:
+            session_id = str(uuid.uuid4())
+        if not shell_id:
+            shell_id = str(uuid.uuid4())
+        validate_shell_id(shell_id)
+        ws_url = self._build_shell_url(runtime_arn, endpoint_name, shell_id)
+        headers = self._sigv4_sign(
+            ws_url.replace("wss://", "https://"),
+            signed_headers={"X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id},
+            unsigned_headers={"User-Agent": build_user_agent_suffix(self.integration_source)},
+        )
+        self.logger.info(
+            "Generated shell connection (session=%s, shell_id=%s)",
+            session_id,
+            shell_id,
+        )
+        return ws_url, headers
+
+    def connect_shell_presigned(
+        self,
+        runtime_arn: str,
+        session_id: Optional[str] = None,
+        endpoint_name: Optional[str] = None,
+        shell_id: Optional[str] = None,
+        expires: int = DEFAULT_PRESIGNED_URL_TIMEOUT,
+    ) -> str:
+        """Return a presigned wss:// URL for a shell session (auth in query string).
+
+        Useful when you need to hand a URL to another process or service without
+        sharing AWS credentials directly.
+
+        Args:
+            runtime_arn: Full agent runtime ARN.
+            session_id: Routes to an existing VM. Auto-generated if omitted.
+            endpoint_name: Endpoint qualifier (default: DEFAULT).
+            shell_id: Client-chosen shell name. Store this value for
+                reconnection. Auto-generated if omitted.
+            expires: Seconds until the URL expires (max 300).
+
+        Returns:
+            Presigned wss:// URL — open with any WebSocket client, no extra headers needed.
+
+        Raises:
+            ValueError: If ``expires`` exceeds the maximum, the ARN is invalid, or
+                ``shell_id`` contains forbidden characters.
+            RuntimeError: If no AWS credentials are found.
+
+        Example:
+            url = client.connect_shell_presigned(
+                runtime_arn="arn:aws:bedrock-agentcore:us-west-2:123:runtime/r",
+                shell_id="build-shell",
+                expires=120,
+            )
+            ws = await websockets.connect(url)
+        """
+        if expires > MAX_PRESIGNED_URL_TIMEOUT:
+            raise ValueError(f"Expiry timeout cannot exceed {MAX_PRESIGNED_URL_TIMEOUT} seconds, got {expires}")
+        parse_runtime_arn(runtime_arn)
+        if not session_id:
+            session_id = str(uuid.uuid4())
+        if not shell_id:
+            shell_id = str(uuid.uuid4())
+        validate_shell_id(shell_id)
+        ws_url = self._build_shell_url(runtime_arn, endpoint_name, shell_id)
+        https_url = ws_url.replace("wss://", "https://")
+        # session_id rides as a query param so it is covered by the signature
+        sep = "&" if "?" in https_url else "?"
+        https_url += sep + urlencode({"X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id})
+        presigned = self._presign(https_url, expires)
+        self.logger.info(
+            "Generated presigned shell URL (expires=%ds, shell_id=%s)",
+            expires,
+            shell_id,
+        )
+        return presigned
+
+    def connect_shell_oauth(
+        self,
+        runtime_arn: str,
+        bearer_token: str,
+        session_id: Optional[str] = None,
+        endpoint_name: Optional[str] = None,
+        shell_id: Optional[str] = None,
+    ) -> Tuple[str, List[str]]:
+        """Return (wss_url, subprotocols) for an OAuth-authenticated shell session.
+
+        This is the only valid auth path for browser clients: browsers cannot set
+        arbitrary headers on a WebSocket upgrade (RFC 6455), so the bearer
+        token is embedded in the ``Sec-WebSocket-Protocol`` handshake using the
+        ``base64UrlBearerAuthorization`` scheme instead.
+
+        Server-side Python callers should prefer ``connect_shell`` with
+        SigV4.  Use this method when building a browser relay or xterm.js
+        integration.
+
+        Args:
+            runtime_arn: Full agent runtime ARN.
+            bearer_token: OAuth bearer token obtained from your identity provider.
+            session_id: Routes to an existing VM. Auto-generated if omitted.
+            endpoint_name: Endpoint qualifier (default: DEFAULT).
+            shell_id: Client-chosen shell name. Store this value for
+                reconnection. Auto-generated if omitted.
+
+        Returns:
+            ``(wss_url, subprotocols)`` — pass both to the WebSocket constructor.
+            ``subprotocols`` contains the base64url-encoded token as
+            ``base64UrlBearerAuthorization.<token>`` plus the sentinel
+            ``base64UrlBearerAuthorization``.
+
+        Raises:
+            ValueError: If ``bearer_token`` is empty, the ARN is invalid, or
+                ``shell_id`` contains forbidden characters.
+
+        Example (server-side relay):
+            url, protos = client.connect_shell_oauth(
+                runtime_arn="arn:...",
+                bearer_token=await get_oauth_token(),
+                shell_id="inspector-shell",
+            )
+            ws = await websockets.connect(url, subprotocols=protos)
+
+        Example (browser):
+            # Backend returns (url, subprotocols); browser does:
+            # const ws = new WebSocket(url, subprotocols)
+        """
+        if not bearer_token:
+            raise ValueError("bearer_token cannot be empty")
+        parse_runtime_arn(runtime_arn)
+        if not session_id:
+            session_id = str(uuid.uuid4())
+        if not shell_id:
+            shell_id = str(uuid.uuid4())
+        validate_shell_id(shell_id)
+
+        ws_url = self._build_shell_url(runtime_arn, endpoint_name, shell_id)
+        sep = "&" if "?" in ws_url else "?"
+        ws_url += sep + urlencode({"X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id})
+
+        # Bearer token embedded as a WebSocket subprotocol using the
+        # base64UrlBearerAuthorization scheme — the only mechanism available to
+        # browser clients for passing auth on a WS upgrade (RFC 6455).
+        encoded = base64.urlsafe_b64encode(bearer_token.encode()).decode().rstrip("=")
+        if len(encoded) > 4096:
+            raise ValueError(
+                f"bearer_token too large to embed in Sec-WebSocket-Protocol ({len(encoded)} chars encoded, max 4096)"
+            )
+        subprotocols: List[str] = [
+            f"base64UrlBearerAuthorization.{encoded}",
+            "base64UrlBearerAuthorization",
+        ]
+
+        self.logger.info("Generated OAuth shell connection (shell_id=%s)", shell_id)
+        return ws_url, subprotocols
+
+    def open_shell(
+        self,
+        runtime_arn: str,
+        session_id: Optional[str] = None,
+        shell_id: Optional[str] = None,
+        endpoint_name: Optional[str] = None,
+        auth: "AuthMode" = "sigv4",
+        reconnect_config: Optional["ReconnectConfig"] = None,
+    ) -> "ShellSession":
+        r"""Create a ``ShellSession`` for interactive shell access to an agent VM.
+
+        Returns an async context manager that connects on ``__aenter__`` and
+        sends a graceful CLOSE frame on ``__aexit__``.
+
+        Args:
+            runtime_arn: Full agent runtime ARN.
+            session_id: Runtime session ID — routes to an existing VM. Auto-generated
+                UUID if omitted; a new VM is provisioned.
+            shell_id: Client-chosen shell name (1–128 UTF-8 chars, no
+                ``?``, ``#``, or ``&``). Auto-generated if omitted. **Store this
+                value alongside** ``session_id`` — both are required to reconnect to
+                the same PTY. ``shell_id`` names the PTY; ``session_id`` routes to
+                the VM that hosts it. Passing either without the other will not
+                reconnect successfully.
+            endpoint_name: Endpoint qualifier (default: DEFAULT).
+            auth: Authentication mode. One of:
+
+                - ``"sigv4"`` *(default)* — SigV4-signed headers from the boto3
+                  session. Correct for all server-side Python use cases.
+                - ``PresignedAuth(expires=N)`` — auth embedded in the URL query
+                  string; valid for up to ``expires`` seconds (max 300). Use when
+                  handing a URL to another process without sharing AWS credentials.
+                - ``OAuthAuth(bearer_token="…")`` — bearer token embedded as a
+                  WebSocket subprotocol. The only valid path for browser clients
+                  (browsers cannot set arbitrary headers on a WS upgrade).
+
+            reconnect_config: When provided, ``ShellSession`` automatically
+                reconnects on unexpected WebSocket disconnects using the same
+                ``shell_id``. The ``on_reconnect`` callback fires after each
+                successful reconnect with ``reconnected=True/False`` so callers can
+                react to the buffered-output burst. ``None`` (default) disables
+                auto-retry — callers handle reconnection explicitly.
+
+        Returns:
+            ``ShellSession`` async context manager.
+
+        Example — SigV4 (default):
+            async with client.open_shell(runtime_arn, session_id=sid) as shell:
+                await shell.send("cat /etc/os-release\\n")
+                async for frame in shell:
+                    if frame.channel == ShellChannel.STDOUT:
+                        print(frame.text, end="")
+                    elif frame.channel == ShellChannel.STATUS:
+                        # Termination frames have empty metadata (no shellId).
+                        if not frame.json().get("metadata", {}).get("shellId"):
+                            break
+
+        Example — presigned URL:
+            async with client.open_shell(
+                runtime_arn,
+                auth=PresignedAuth(expires=120),
+                shell_id="build-shell",
+            ) as shell:
+                ...
+
+        Example — OAuth (browser relay or OAuth-only environments):
+            async with client.open_shell(
+                runtime_arn,
+                auth=OAuthAuth(bearer_token=await get_oauth_token()),
+                shell_id="inspector-shell",
+            ) as shell:
+                ...
+
+        Example — auto-reconnect with callback:
+            async def on_reconnect(reconnected: bool) -> None:
+                print(f"reconnected={reconnected}")
+
+            config = ReconnectConfig(max_retries=5, on_reconnect=on_reconnect)
+            async with client.open_shell(
+                runtime_arn,
+                shell_id="debug",
+                reconnect_config=config,
+            ) as shell:
+                async for frame in shell:
+                    ...
+        """
+        from .shell import ShellSession
+
+        parsed = parse_runtime_arn(runtime_arn)
+        if parsed["region"] != self.region:
+            raise ValueError(
+                f"ARN region {parsed['region']!r} does not match client region {self.region!r}. "
+                "Create a client for the same region as the runtime ARN, or use the ARN's region."
+            )
+        return ShellSession(
+            client=self,
+            runtime_arn=runtime_arn,
+            session_id=session_id,
+            shell_id=shell_id,
+            endpoint_name=endpoint_name,
+            auth=auth,
+            reconnect_config=reconnect_config,
+        )
 
     # *_and_wait methods
     # -------------------------------------------------------------------------

@@ -56,8 +56,7 @@ class TestBuildAGUIApp:
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "Healthy"
-        assert isinstance(body["time_of_last_update"], int)
-        assert body["time_of_last_update"] > 0
+        assert "time_of_last_update" not in body
 
     def test_custom_ping_handler(self):
         app = AGUIApp()

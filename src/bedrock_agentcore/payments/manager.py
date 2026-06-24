@@ -844,7 +844,10 @@ class PaymentManager:
             payment_input: Payment input details specific to the payment type
             user_id: Unique identifier for the user (optional, omitted for bearer auth)
             client_token: Optional idempotency token for request uniqueness
-            payment_connector_id: Optional payment connector ID to route the payment
+            payment_connector_id: Accepted for backward compatibility but no longer
+                forwarded to the service. ProcessPayment derives the connector from
+                the payment instrument; sending paymentConnectorId on this call was
+                rejected by the API as an unknown parameter.
 
         Returns:
             Dictionary containing processPaymentId and transaction details
@@ -873,8 +876,9 @@ class PaymentManager:
                 "paymentInput": payment_input,
                 "clientToken": client_token,
             }
-            if payment_connector_id is not None:
-                params["paymentConnectorId"] = payment_connector_id
+            # paymentConnectorId is intentionally NOT included — the ProcessPayment
+            # API does not accept it and rejects requests that contain it. The
+            # connector is resolved server-side from the payment instrument.
 
             result = self._payment_client.process_payment(**params)
             logger.info("Successfully processed payment for user %s", user_id)
@@ -935,7 +939,10 @@ class PaymentManager:
             network_preferences: Optional list of network identifiers in order of preference.
                 If not provided, defaults to NETWORK_PREFERENCES from constants.
             client_token: Optional unique token for idempotency. If not provided, a new one is generated.
-            payment_connector_id: Optional payment connector ID to pass to process_payment.
+            payment_connector_id: Accepted for backward compatibility but no longer
+                forwarded to process_payment. ProcessPayment derives the connector
+                from the payment instrument; sending paymentConnectorId on that call
+                was rejected by the API as an unknown parameter.
 
         Returns:
             Dictionary with header name and value (e.g., {"X-PAYMENT": "base64..."} or
@@ -1045,18 +1052,18 @@ class PaymentManager:
                 }
             }
 
-            process_payment_params = {
-                "user_id": user_id,
-                "payment_session_id": payment_session_id,
-                "payment_instrument_id": payment_instrument_id,
-                "payment_type": "CRYPTO_X402",
-                "payment_input": payment_input,
-                "client_token": client_token,
-            }
-            if payment_connector_id is not None:
-                process_payment_params["payment_connector_id"] = payment_connector_id
-
-            payment_result = self.process_payment(**process_payment_params)
+            # ProcessPayment does not accept paymentConnectorId — the connector is
+            # resolved server-side from the payment instrument. The argument is
+            # intentionally not forwarded, even when callers (e.g. plugins) supply
+            # it via plugin config.
+            payment_result = self.process_payment(
+                user_id=user_id,
+                payment_session_id=payment_session_id,
+                payment_instrument_id=payment_instrument_id,
+                payment_type="CRYPTO_X402",
+                payment_input=payment_input,
+                client_token=client_token,
+            )
             logger.debug("Payment processed successfully")
 
             # Extract cryptoX402 proof from payment result
@@ -1445,7 +1452,7 @@ class PaymentManager:
                     "x402Version": 2,
                     "resource": x402_payload.get("resource"),
                     "accepted": selected_accept,
-                    "extension": x402_payload.get("extension", {}),
+                    "extensions": x402_payload.get("extensions", {}),
                     "payload": crypto_x402_proof.get("payload"),
                 }
                 header_json = json.dumps(payment_signature)

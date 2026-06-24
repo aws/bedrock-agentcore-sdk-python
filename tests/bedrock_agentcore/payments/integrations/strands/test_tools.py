@@ -1681,3 +1681,329 @@ class TestUserIdPrecedence:
             payment_instrument_id="instr-123",
             payment_connector_id=None,
         )
+
+
+class TestHttpRequestTool:
+    """Tests for the http_request tool method on AgentCorePaymentsPlugin.
+
+    The tool returns a Strands ToolResult dict so the AgentCorePaymentsPlugin's
+    after_tool_call hook can inspect the result and trigger payment retries on 402.
+    """
+
+    def _make_plugin(self):
+        from bedrock_agentcore.payments.integrations.config import AgentCorePaymentsPluginConfig
+        from bedrock_agentcore.payments.integrations.strands.plugin import AgentCorePaymentsPlugin
+
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn="arn:aws:payment:us-east-1:123456789012:payment-manager/test",
+            user_id="test-user",
+            payment_instrument_id="test-instrument",
+            payment_session_id="test-session",
+        )
+        return AgentCorePaymentsPlugin(config)
+
+    @staticmethod
+    def _mock_response(status_code: int, headers: dict | None = None, json_body=None, text: str | None = None):
+        from unittest.mock import MagicMock as _MagicMock
+
+        resp = _MagicMock()
+        resp.status_code = status_code
+        resp.headers = headers or {}
+        if json_body is not None:
+            resp.json.return_value = json_body
+            resp.text = json.dumps(json_body)
+        else:
+            resp.json.side_effect = ValueError("not json")
+            resp.text = text or ""
+        return resp
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.httpx.Client")
+    def test_returns_tool_result_envelope_on_200(self, mock_client_cls):
+        """200 OK responses are wrapped in a Strands ToolResult dict."""
+        plugin = self._make_plugin()
+        mock_client = MagicMock()
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+        mock_client.request.return_value = self._mock_response(
+            200, headers={"content-type": "application/json"}, json_body={"weather": "sunny", "temp": 70}
+        )
+
+        result = plugin.http_request(url="https://example.com/weather")
+
+        assert result["status"] == "success"
+        assert isinstance(result["content"], list) and len(result["content"]) == 1
+        text = result["content"][0]["text"]
+        assert not text.startswith("PAYMENT_REQUIRED:")
+        body = json.loads(text)
+        assert body["statusCode"] == 200
+        assert body["body"] == {"weather": "sunny", "temp": 70}
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.httpx.Client")
+    def test_402_uses_payment_required_marker(self, mock_client_cls):
+        """402 responses are tagged with PAYMENT_REQUIRED: so the SDK handler can parse them."""
+        plugin = self._make_plugin()
+        mock_client = MagicMock()
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+
+        x402_body = {
+            "x402Version": 2,
+            "error": "Payment required",
+            "accepts": [
+                {
+                    "scheme": "exact",
+                    "network": "eip155:84532",
+                    "amount": "1000",
+                    "asset": "0x036C",
+                    "payTo": "0xabc",
+                    "maxTimeoutSeconds": 300,
+                    "extra": {"name": "USDC", "version": "2"},
+                }
+            ],
+        }
+        mock_client.request.return_value = self._mock_response(
+            402, headers={"PAYMENT-REQUIRED": "base64..."}, json_body=x402_body
+        )
+
+        result = plugin.http_request(url="https://example.com/paid")
+
+        assert result["status"] == "success"
+        text = result["content"][0]["text"]
+        assert text.startswith("PAYMENT_REQUIRED: ")
+        payload = json.loads(text[len("PAYMENT_REQUIRED: ") :])
+        assert payload["statusCode"] == 402
+        assert payload["body"]["x402Version"] == 2
+        assert payload["body"]["accepts"][0]["network"] == "eip155:84532"
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.httpx.Client")
+    def test_402_marker_is_parsed_by_sdk_handler(self, mock_client_cls):
+        """The 402 envelope this tool emits is recognized by the SDK's handler dispatcher.
+
+        End-to-end contract test: tool output -> get_payment_handler -> 402 status code.
+        """
+        from bedrock_agentcore.payments.integrations.handlers import get_payment_handler
+
+        plugin = self._make_plugin()
+        mock_client = MagicMock()
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+        mock_client.request.return_value = self._mock_response(
+            402,
+            headers={"x-foo": "bar"},
+            json_body={"x402Version": 1, "accepts": [{"scheme": "exact", "network": "eip155:84532"}]},
+        )
+
+        tool_result = plugin.http_request(url="https://example.com/paid")
+        # event.result for AfterToolCallEvent is the content list
+        handler = get_payment_handler("http_request", {"url": "https://example.com/paid", "headers": {}})
+        assert handler.extract_status_code(tool_result["content"]) == 402
+        body = handler.extract_body(tool_result["content"])
+        assert body["x402Version"] == 1
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.httpx.Client")
+    def test_get_request_does_not_send_body(self, mock_client_cls):
+        """GET requests must never send a body, even if the agent supplies one."""
+        plugin = self._make_plugin()
+        mock_client = MagicMock()
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+        mock_client.request.return_value = self._mock_response(200, json_body={"ok": True})
+
+        plugin.http_request(url="https://example.com", method="GET", body={"ignored": "value"})
+
+        call_kwargs = mock_client.request.call_args.kwargs
+        assert "json" not in call_kwargs
+        assert "content" not in call_kwargs
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.httpx.Client")
+    def test_post_with_dict_body_serializes_as_json(self, mock_client_cls):
+        """dict body is sent via httpx's json= kwarg (sets Content-Type)."""
+        plugin = self._make_plugin()
+        mock_client = MagicMock()
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+        mock_client.request.return_value = self._mock_response(200, json_body={"ok": True})
+
+        plugin.http_request(url="https://example.com/api", method="POST", body={"name": "test"})
+
+        call_kwargs = mock_client.request.call_args.kwargs
+        assert call_kwargs["json"] == {"name": "test"}
+        assert "content" not in call_kwargs
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.httpx.Client")
+    def test_post_with_str_body_sent_as_raw_content(self, mock_client_cls):
+        """str body is sent verbatim via content=, not re-serialized."""
+        plugin = self._make_plugin()
+        mock_client = MagicMock()
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+        mock_client.request.return_value = self._mock_response(200, json_body={"ok": True})
+
+        plugin.http_request(url="https://example.com/api", method="POST", body="raw=payload&x=1")
+
+        call_kwargs = mock_client.request.call_args.kwargs
+        assert call_kwargs["content"] == "raw=payload&x=1"
+        assert "json" not in call_kwargs
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.httpx.Client")
+    def test_caller_headers_are_forwarded(self, mock_client_cls):
+        """User-supplied headers are passed through to the request (and copied, not aliased)."""
+        plugin = self._make_plugin()
+        mock_client = MagicMock()
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+        mock_client.request.return_value = self._mock_response(200, json_body={"ok": True})
+
+        caller_headers = {"X-Custom": "v1", "Authorization": "Bearer xyz"}
+        plugin.http_request(url="https://example.com", headers=caller_headers)
+
+        sent = mock_client.request.call_args.kwargs["headers"]
+        assert sent["X-Custom"] == "v1"
+        assert sent["Authorization"] == "Bearer xyz"
+        # Should be a new dict — mutating the request copy must not bleed back.
+        sent["X-Plugin-Mutation"] = "ok"
+        assert "X-Plugin-Mutation" not in caller_headers
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.httpx.Client")
+    def test_non_json_response_body_falls_back_to_text(self, mock_client_cls):
+        """Endpoints that return non-JSON bodies are wrapped in {"text": ...}."""
+        plugin = self._make_plugin()
+        mock_client = MagicMock()
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+        mock_client.request.return_value = self._mock_response(
+            200, headers={"content-type": "text/plain"}, text="hello world"
+        )
+
+        result = plugin.http_request(url="https://example.com")
+
+        body = json.loads(result["content"][0]["text"])
+        assert body["statusCode"] == 200
+        assert body["body"] == {"text": "hello world"}
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.httpx.Client")
+    def test_request_error_returned_as_error_status(self, mock_client_cls):
+        """Network errors are returned as ToolResult status='error' rather than raised."""
+        import httpx as _httpx
+
+        plugin = self._make_plugin()
+        mock_client = MagicMock()
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+        mock_client.request.side_effect = _httpx.ConnectError("dns failure")
+
+        result = plugin.http_request(url="https://example.com")
+
+        assert result["status"] == "error"
+        body = json.loads(result["content"][0]["text"])
+        assert body["statusCode"] == 0
+        assert "dns failure" in body["error"]
+        assert body["url"] == "https://example.com"
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.httpx.Client")
+    def test_method_is_uppercased(self, mock_client_cls):
+        """HTTP method is normalized to upper case so callers can pass 'get' or 'GET'."""
+        plugin = self._make_plugin()
+        mock_client = MagicMock()
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+        mock_client.request.return_value = self._mock_response(200, json_body={})
+
+        plugin.http_request(url="https://example.com", method="post", body={"a": 1})
+
+        # First positional arg to client.request is the method
+        assert mock_client.request.call_args.args[0] == "POST"
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.httpx.Client")
+    def test_default_headers_dict_when_caller_omits(self, mock_client_cls):
+        """When the caller does not pass headers, the request still gets a (mutable) dict."""
+        plugin = self._make_plugin()
+        mock_client = MagicMock()
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+        mock_client.request.return_value = self._mock_response(200, json_body={})
+
+        plugin.http_request(url="https://example.com")
+
+        sent = mock_client.request.call_args.kwargs["headers"]
+        assert isinstance(sent, dict)
+        assert sent == {}
+
+
+class TestProvideHttpRequestOptOut:
+    """Tests for the provide_http_request config flag.
+
+    When True (default), AgentCorePaymentsPlugin registers its built-in
+    http_request @tool. When False, the tool is dropped from the plugin's
+    discovered tools so callers can ship their own http_request without
+    Strands raising ValueError on duplicate tool names.
+    """
+
+    @staticmethod
+    def _make_config(**overrides):
+        from bedrock_agentcore.payments.integrations.config import AgentCorePaymentsPluginConfig
+
+        kwargs = dict(
+            payment_manager_arn="arn:aws:payment:us-east-1:123456789012:payment-manager/test",
+            user_id="test-user",
+            payment_instrument_id="test-instrument",
+            payment_session_id="test-session",
+        )
+        kwargs.update(overrides)
+        return AgentCorePaymentsPluginConfig(**kwargs)
+
+    def test_default_provides_http_request(self):
+        """By default the plugin registers http_request alongside its other tools."""
+        from bedrock_agentcore.payments.integrations.strands.plugin import AgentCorePaymentsPlugin
+
+        plugin = AgentCorePaymentsPlugin(self._make_config())
+        tool_names = {t.tool_name for t in plugin.tools}
+        assert "http_request" in tool_names
+        # Sanity: the rest of the plugin's tools are still there.
+        assert "get_payment_instrument" in tool_names
+        assert "get_payment_session" in tool_names
+
+    def test_opt_out_drops_only_http_request(self):
+        """provide_http_request=False removes ONLY http_request from the registered tools."""
+        from bedrock_agentcore.payments.integrations.strands.plugin import AgentCorePaymentsPlugin
+
+        plugin = AgentCorePaymentsPlugin(self._make_config(provide_http_request=False))
+        tool_names = {t.tool_name for t in plugin.tools}
+        assert "http_request" not in tool_names
+        # Other plugin tools must still be present so payment-info queries still work.
+        assert "get_payment_instrument" in tool_names
+        assert "list_payment_instruments" in tool_names
+        assert "get_payment_instrument_balance" in tool_names
+        assert "get_payment_session" in tool_names
+
+    def test_opt_out_does_not_disable_payment_hook(self):
+        """Disabling the tool must not disable the after_tool_call interceptor.
+
+        A caller's own http_request that emits PAYMENT_REQUIRED-marked content
+        should still trigger the plugin's auto-pay path.
+        """
+        from bedrock_agentcore.payments.integrations.strands.plugin import AgentCorePaymentsPlugin
+
+        plugin = AgentCorePaymentsPlugin(self._make_config(provide_http_request=False))
+        hook_names = [getattr(h, "__name__", repr(h)) for h in plugin.hooks]
+        assert "after_tool_call" in hook_names
+        assert "before_tool_call" in hook_names
+
+    def test_provide_http_request_validation_rejects_non_bool(self):
+        """Config validator rejects non-boolean values for the new flag."""
+        import pytest
+
+        from bedrock_agentcore.payments.integrations.config import AgentCorePaymentsPluginConfig
+
+        with pytest.raises(ValueError, match="provide_http_request must be a boolean"):
+            AgentCorePaymentsPluginConfig(
+                payment_manager_arn="arn:aws:payment:us-east-1:123456789012:payment-manager/test",
+                user_id="test-user",
+                provide_http_request="yes",  # type: ignore[arg-type]
+            )
+
+    def test_opt_out_preserves_payment_manager_init(self):
+        """The init flow (PaymentManager initialization) is unaffected by the flag."""
+        from unittest.mock import MagicMock
+
+        from bedrock_agentcore.payments.integrations.strands.plugin import AgentCorePaymentsPlugin
+
+        plugin = AgentCorePaymentsPlugin(self._make_config(provide_http_request=False))
+        # init_agent should be callable and should not blow up just because we opted out.
+        try:
+            plugin.init_agent(agent=MagicMock())
+        except RuntimeError:
+            # Real PaymentManager call against a fake ARN — tolerate the network/IAM
+            # failure; what we care about is that init_agent doesn't trip on the flag.
+            pass
+        # Plugin object itself must still be usable
+        assert plugin.config.provide_http_request is False

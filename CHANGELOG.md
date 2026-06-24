@@ -1,5 +1,59 @@
 # Changelog
 
+## [1.15.0] - 2026-06-17
+
+### Other Changes
+- test(integ): fix flaky gateway KB-target & memory list tests + orphan cleanup scripts (#536) (6fc08ed)
+- release: nys summit (#532) (a76cce8)
+- ci(gateway): pass KB_ROLE_ARN secret to integration tests (#535) (0cc1e21)
+- fix(test): update tests to be consistent with new model (#534) (82a2305)
+- ci: add Claude Code /security-review workflow on PRs (#516) (2550d55)
+
+## [1.14.1] - 2026-06-11
+
+### Fixed
+- fix: declare requests as optional 'datasets' extra (#508) (2359137)
+
+### Other Changes
+- fix(payments): correct "extension" typo to "extensions" in x402 v2 he… (#513) (5f9031d)
+- fix(a2a): cap a2a-sdk below 1.0 to restore A2A server startup (#510) (12f0f8b)
+
+## [1.14.0] - 2026-06-05
+
+### Other Changes
+- feat(runtime): add interactive runtime shell support (#505) (cf19e57)
+- Revert "ci: skip bearer token integ tests pending AgentCredentialProviderService fix (#499)" (#502) (69954eb)
+
+## [1.13.0] - 2026-06-02
+
+### Added
+- feat: AgentCore tool search plugin for Strands Agents (#494) (1cdc356)
+
+### Other Changes
+- feat(workflows): add closed-PR comment redirect  (#489) (cc10c12)
+- ci: skip bearer token integ tests pending AgentCredentialProviderService fix (#499) (8786b18)
+
+## [1.12.0] - 2026-05-28
+
+### Added
+- feat: add async support to MemorySessionManager (#478) (76edb16)
+
+### Fixed
+- fix: out-of-scope variable in catch block (#497) (4054115)
+
+### Other Changes
+- add metadata support for LTM (#481) (80c4b11)
+
+## [1.11.0] - 2026-05-22
+
+### Fixed
+- fix: stop retrying after successful payment signing is rejected by merchant (#492) (0b2b34f)
+
+### Other Changes
+- fix(payments): drop unsupported paymentConnectorId + add http_request plugin tool + EIP-3009 timing fix (#493) (d5428b2)
+- feat(evaluation): add DatasetClient and dataset management service provider (#491) (29287c2)
+- test: add OTEL span content leakage integration tests (#485) (c311682)
+
 ## [1.10.0] - 2026-05-19
 
 ### Added
