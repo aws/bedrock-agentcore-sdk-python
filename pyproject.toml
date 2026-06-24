@@ -36,9 +36,6 @@ dependencies = [
     "websockets>=13.0",
 ]
 
-[project.scripts]
-bedrock-agentcore = "bedrock_agentcore.cli:main"
-
 [tool.hatch.metadata]
 allow-direct-references = true
 
