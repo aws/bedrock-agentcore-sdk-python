@@ -111,6 +111,46 @@ class CloudWatchDataSourceConfig(BaseModel, DataSourceConfig):
         }
 
 
+class OnlineEvaluationDataSourceConfig(BaseModel, DataSourceConfig):
+    """Online-evaluation data source — pulls spans from an existing OnlineEvaluationConfig.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
+
+    Unlike :class:`CloudWatchDataSourceConfig`, this source does not filter by the
+    session IDs generated during agent invocation: the service reads sessions already
+    captured by the referenced OnlineEvaluationConfig, optionally narrowed to a time
+    window. As a result it is typically used to (re-)evaluate previously recorded
+    sessions rather than sessions produced by the current ``agent_invoker`` run.
+
+    Attributes:
+        online_evaluation_config_arn: ARN of the OnlineEvaluationConfig whose
+            captured sessions are evaluated.
+        use_invocation_time_range: When ``True`` (default), the runner supplies the
+            ``sessionFilterConfig`` time window from the earliest/latest session times
+            observed during agent invocation. Set to ``False`` to omit the window and
+            let the service use the OnlineEvaluationConfig's own session selection.
+    """
+
+    online_evaluation_config_arn: str = Field(min_length=1)
+    use_invocation_time_range: bool = True
+
+    def to_data_source_config(
+        self,
+        session_ids: List[str],
+        start_time: datetime,
+        end_time: datetime,
+    ) -> Dict[str, Any]:
+        """Return an onlineEvaluationConfigSource dataSourceConfig dict for the evaluation API."""
+        source: Dict[str, Any] = {"onlineEvaluationConfigArn": self.online_evaluation_config_arn}
+        if self.use_invocation_time_range:
+            source["sessionFilterConfig"] = {
+                "startTime": start_time,
+                "endTime": end_time,
+            }
+        return {"onlineEvaluationConfigSource": source}
+
+
 # ---------------------------------------------------------------------------
 # Batch eval result models
 # ---------------------------------------------------------------------------
@@ -219,6 +259,8 @@ class BatchEvaluationResult(BaseModel):
         description: Optional human-readable description of the batch evaluation job.
         status: Terminal status of the job (e.g. ``"COMPLETED"``).
         created_at: Timestamp when the batch evaluation job was created.
+        updated_at: Timestamp when the batch evaluation job was last updated by
+            the service. ``None`` if the API did not return it.
         evaluation_results: Aggregated per-evaluator statistics. Present when
             the job completed successfully; ``None`` otherwise.
         error_details: Service-reported error messages when the job failed.
@@ -230,6 +272,9 @@ class BatchEvaluationResult(BaseModel):
             per-session evaluation result events. Pass to
             :py:meth:`BatchEvaluationRunner.fetch_evaluation_events`
             to read the raw OTel evaluation records.
+        kms_key_arn: ARN of the KMS key the service used to encrypt this batch
+            evaluation's data, echoed back by the API. ``None`` when an
+            AWS-owned key was used.
     """
 
     batch_evaluation_id: str
@@ -238,10 +283,12 @@ class BatchEvaluationResult(BaseModel):
     description: Optional[str] = None
     status: str
     created_at: datetime
+    updated_at: Optional[datetime] = None
     evaluation_results: Optional[BatchEvaluationSummary] = None
     error_details: Optional[List[str]] = None
     agent_invocation_failures: List[FailedScenario] = Field(default_factory=list)
     output_data_config: Optional[CloudWatchOutputDataConfig] = None
+    kms_key_arn: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +328,13 @@ class BatchEvaluationRunConfig(BaseModel):
             Defaults to 30 seconds. Must be less than ``polling_timeout_seconds``.
         simulation_config: Actor simulation settings. Required when the dataset
             contains SimulatedScenario entries.
+        kms_key_arn: ARN of the customer-managed KMS key used to encrypt the
+            batch evaluation's data at rest. When omitted, the service uses an
+            AWS-owned key. The key must be in the same region as the evaluation,
+            and the calling principal must have ``kms:Encrypt``/``kms:Decrypt``
+            permissions on it.
+        tags: Optional resource tags applied to the batch evaluation job
+            (key/value pairs), useful for cost allocation and access control.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -293,6 +347,8 @@ class BatchEvaluationRunConfig(BaseModel):
     polling_timeout_seconds: int = 1800
     polling_interval_seconds: int = 30
     simulation_config: Optional[SimulationConfig] = None
+    kms_key_arn: Optional[str] = None
+    tags: Optional[Dict[str, str]] = None
 
     @model_validator(mode="after")
     def validate_polling(self):

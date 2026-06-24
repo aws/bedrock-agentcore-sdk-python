@@ -11,6 +11,7 @@ from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     BatchEvaluatorConfig,
     CloudWatchDataSourceConfig,
     CloudWatchOutputDataConfig,
+    OnlineEvaluationDataSourceConfig,
 )
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_runner import (
     BatchEvaluationRunner,
@@ -449,6 +450,180 @@ def test_run_cloudwatch_source_passes_session_ids():
     call_kwargs = runner.data_plane_client.start_batch_evaluation.call_args.kwargs
     filter_config = call_kwargs["dataSourceConfig"]["cloudWatchLogs"]["filterConfig"]
     assert filter_config["sessionIds"] == ["s1-session-abc"]
+
+
+# ---------------------------------------------------------------------------
+# kms_key_arn / tags wiring
+# ---------------------------------------------------------------------------
+
+_KMS_KEY_ARN = "arn:aws:kms:us-west-2:123456789012:key/abcd-1234"
+
+
+def _make_config_with_kms(kms_key_arn=_KMS_KEY_ARN, tags=None):
+    return BatchEvaluationRunConfig(
+        batch_evaluation_name="test-eval",
+        evaluator_config=BatchEvaluatorConfig(evaluator_ids=["Builtin.Helpfulness"]),
+        data_source=_make_cw_source(),
+        max_concurrent_scenarios=2,
+        polling_timeout_seconds=60,
+        polling_interval_seconds=5,
+        kms_key_arn=kms_key_arn,
+        tags=tags,
+    )
+
+
+def _run_with_single_session(runner, config):
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [],
+        ),
+    ):
+        return runner.run_dataset_evaluation(config=config, dataset=_DATASET, agent_invoker=_make_invoker())
+
+
+def test_run_passes_kms_key_arn_to_start_batch_evaluation():
+    runner = _make_runner()
+    runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
+    runner.data_plane_client.get_batch_evaluation.return_value = _make_completed_response()
+
+    _run_with_single_session(runner, _make_config_with_kms())
+
+    call_kwargs = runner.data_plane_client.start_batch_evaluation.call_args.kwargs
+    assert call_kwargs["kmsKeyArn"] == _KMS_KEY_ARN
+
+
+def test_run_omits_kms_key_arn_when_not_set():
+    runner = _make_runner()
+    runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
+    runner.data_plane_client.get_batch_evaluation.return_value = _make_completed_response()
+
+    _run_with_single_session(runner, _make_config())
+
+    call_kwargs = runner.data_plane_client.start_batch_evaluation.call_args.kwargs
+    assert "kmsKeyArn" not in call_kwargs
+
+
+def test_run_surfaces_kms_key_arn_on_result():
+    runner = _make_runner()
+    runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
+    runner.data_plane_client.get_batch_evaluation.return_value = {
+        **_make_completed_response(),
+        "kmsKeyArn": _KMS_KEY_ARN,
+    }
+
+    result = _run_with_single_session(runner, _make_config_with_kms())
+
+    assert result.kms_key_arn == _KMS_KEY_ARN
+
+
+def test_run_kms_key_arn_none_on_result_when_absent():
+    runner = _make_runner()
+    runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
+    runner.data_plane_client.get_batch_evaluation.return_value = _make_completed_response()
+
+    result = _run_with_single_session(runner, _make_config())
+
+    assert result.kms_key_arn is None
+
+
+def test_run_passes_tags_to_start_batch_evaluation():
+    runner = _make_runner()
+    runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
+    runner.data_plane_client.get_batch_evaluation.return_value = _make_completed_response()
+
+    _run_with_single_session(runner, _make_config_with_kms(tags={"team": "agentcore"}))
+
+    call_kwargs = runner.data_plane_client.start_batch_evaluation.call_args.kwargs
+    assert call_kwargs["tags"] == {"team": "agentcore"}
+
+
+def test_run_omits_tags_when_not_set():
+    runner = _make_runner()
+    runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
+    runner.data_plane_client.get_batch_evaluation.return_value = _make_completed_response()
+
+    _run_with_single_session(runner, _make_config())
+
+    call_kwargs = runner.data_plane_client.start_batch_evaluation.call_args.kwargs
+    assert "tags" not in call_kwargs
+
+
+# ---------------------------------------------------------------------------
+# OnlineEvaluationDataSourceConfig wiring + updated_at
+# ---------------------------------------------------------------------------
+
+_ONLINE_CONFIG_ARN = "arn:aws:bedrock-agentcore:us-west-2:123456789012:online-evaluation-config/oec-1"
+
+
+def test_run_online_source_passes_online_config_arn():
+    """Runner emits onlineEvaluationConfigSource (not cloudWatchLogs) for online sources."""
+    runner = _make_runner()
+    runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
+    runner.data_plane_client.get_batch_evaluation.return_value = _make_completed_response()
+
+    online_source = OnlineEvaluationDataSourceConfig(online_evaluation_config_arn=_ONLINE_CONFIG_ARN)
+
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [],
+        ),
+    ):
+        runner.run_dataset_evaluation(
+            config=_make_config(source=online_source), dataset=_DATASET, agent_invoker=_make_invoker()
+        )
+
+    call_kwargs = runner.data_plane_client.start_batch_evaluation.call_args.kwargs
+    ds = call_kwargs["dataSourceConfig"]
+    assert "cloudWatchLogs" not in ds
+    online = ds["onlineEvaluationConfigSource"]
+    assert online["onlineEvaluationConfigArn"] == _ONLINE_CONFIG_ARN
+    assert online["sessionFilterConfig"]["startTime"] == _T0
+    assert online["sessionFilterConfig"]["endTime"] == _T1
+
+
+def test_run_surfaces_updated_at_on_result():
+    runner = _make_runner()
+    runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
+    runner.data_plane_client.get_batch_evaluation.return_value = {
+        **_make_completed_response(),
+        "updatedAt": _T1,
+    }
+
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [],
+        ),
+    ):
+        result = runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
+
+    assert result.updated_at == _T1
+
+
+def test_run_updated_at_none_when_absent():
+    runner = _make_runner()
+    runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
+    runner.data_plane_client.get_batch_evaluation.return_value = _make_completed_response()
+
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [],
+        ),
+    ):
+        result = runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
+
+    assert result.updated_at is None
 
 
 # ---------------------------------------------------------------------------
