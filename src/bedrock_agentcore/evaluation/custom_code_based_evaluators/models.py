@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ReferenceInput(BaseModel):
@@ -60,14 +60,28 @@ class EvaluatorInput(BaseModel):
 class EvaluatorOutput(BaseModel):
     """Result returned by a code-based evaluator function.
 
+    For **success** responses, ``label`` is required and ``errorCode`` / ``errorMessage``
+    should be omitted.  For **error** responses, set ``errorCode`` (and optionally
+    ``errorMessage``); ``label`` may be omitted.
+
     Attributes:
-        value: Numerical score for the evaluation.
-        label: Categorical label (e.g. "Pass", "Fail"). Required.
+        value: Numerical score for the evaluation (success responses).
+        label: Categorical label (e.g. "Pass", "Fail"). Required unless errorCode is set.
         explanation: Optional explanation of the evaluation result.
+        errorCode: Error code for error responses (e.g. "VALIDATION_FAILED").
+        errorMessage: Human-readable error description for error responses.
     """
 
     value: Optional[float] = None
-    label: str
+    label: Optional[str] = None
     explanation: Optional[str] = None
     errorCode: Optional[str] = None
     errorMessage: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _require_label_or_error_code(self) -> "EvaluatorOutput":
+        if not self.errorCode and self.label is None:
+            raise ValueError(
+                "label is required for success responses; set errorCode to return an error response without a label"
+            )
+        return self

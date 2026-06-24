@@ -74,17 +74,31 @@ class TestEvaluatorOutput:
         assert out.label == "Pass"
         assert out.explanation == "Looks good"
 
-    def test_label_required(self):
+    def test_label_required_without_error_code(self):
         import pytest
         from pydantic import ValidationError
 
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError, match="label is required for success responses"):
             EvaluatorOutput(value=1.0)
 
     def test_label_only(self):
         out = EvaluatorOutput(label="Fail")
         assert out.label == "Fail"
         assert out.value is None
+
+    def test_error_response_without_label(self):
+        out = EvaluatorOutput(
+            errorCode="VALIDATION_FAILED",
+            errorMessage="Input spans missing required attributes.",
+        )
+        assert out.label is None
+        assert out.errorCode == "VALIDATION_FAILED"
+        assert out.errorMessage == "Input spans missing required attributes."
+
+    def test_error_response_with_label(self):
+        out = EvaluatorOutput(label="Fail", errorCode="PARTIAL_ERROR", errorMessage="Some fields missing")
+        assert out.label == "Fail"
+        assert out.errorCode == "PARTIAL_ERROR"
 
 
 class TestReferenceInput:
