@@ -1,4 +1,4 @@
-"""Tests for DeepEvalHandler."""
+"""Tests for DeepEvalHandler and DeepEvalAdapter."""
 
 import json
 import time
@@ -6,7 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bedrock_agentcore.evaluation.integrations.deepeval.handler import DeepEvalHandler
+from bedrock_agentcore.evaluation.integrations.deepeval.adapter import DeepEvalAdapter, DeepEvalHandler
+from bedrock_agentcore.evaluation.integrations.base import BaseAdapter
+from bedrock_agentcore.evaluation.custom_code_based_evaluators.models import EvaluatorInput
 
 
 def _make_event(
@@ -317,3 +319,109 @@ class TestDeepEvalHandlerTimeout:
 
         assert result["errorCode"] == "METRIC_ERROR"
         assert "LLM error" in result["errorMessage"]
+
+
+class TestBackwardCompatibility:
+    def test_handler_is_alias_for_adapter(self):
+        assert DeepEvalHandler is DeepEvalAdapter
+
+    def test_adapter_is_subclass_of_base(self):
+        assert issubclass(DeepEvalAdapter, BaseAdapter)
+
+    def test_import_from_init(self):
+        from bedrock_agentcore.evaluation.integrations.deepeval import DeepEvalHandler as H
+        from bedrock_agentcore.evaluation.integrations.deepeval import DeepEvalAdapter as A
+
+        assert H is A
+
+    def test_handler_works_same_as_before(self):
+        metric = _mock_metric(score=0.9, threshold=0.7)
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["value"] == 0.9
+        assert result["label"] == "Pass"
+
+
+class TestEvaluatorInputAcceptance:
+    def _make_evaluator_input(self):
+        log_records = [
+            {
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": "Hello"}]},
+                    "output": {"messages": [{"role": "assistant", "content": "Hi there"}]},
+                }
+            }
+        ]
+        spans = [
+            {
+                "traceId": "t1",
+                "spanId": "s1",
+                "attributes": {"_eval_log_records": json.dumps(log_records)},
+            }
+        ]
+        return EvaluatorInput(
+            evaluation_level="TRACE",
+            session_spans=spans,
+            target_trace_id="t1",
+            target_span_id=None,
+        )
+
+    def test_accepts_evaluator_input(self):
+        metric = _mock_metric(score=0.95)
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(self._make_evaluator_input())
+
+        assert result["value"] == 0.95
+        assert result["label"] == "Pass"
+
+    def test_evaluator_input_extracts_fields_correctly(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric)
+
+        handler(self._make_evaluator_input())
+
+        test_case = metric.measure.call_args[0][0]
+        assert test_case.input == "Hello"
+        assert test_case.actual_output == "Hi there"
+
+    def test_evaluator_input_with_trace_id_filtering(self):
+        log_records = [
+            {
+                "traceId": "target",
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": "relevant"}]},
+                    "output": {"messages": [{"role": "assistant", "content": "yes"}]},
+                },
+            },
+            {
+                "traceId": "other",
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": "irrelevant"}]},
+                    "output": {"messages": [{"role": "assistant", "content": "no"}]},
+                },
+            },
+        ]
+        spans = [
+            {
+                "traceId": "t1",
+                "spanId": "s1",
+                "attributes": {"_eval_log_records": json.dumps(log_records)},
+            }
+        ]
+        evaluator_input = EvaluatorInput(
+            evaluation_level="TRACE",
+            session_spans=spans,
+            target_trace_id="target",
+        )
+
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric)
+
+        handler(evaluator_input)
+
+        test_case = metric.measure.call_args[0][0]
+        assert test_case.input == "relevant"
+        assert test_case.actual_output == "yes"
