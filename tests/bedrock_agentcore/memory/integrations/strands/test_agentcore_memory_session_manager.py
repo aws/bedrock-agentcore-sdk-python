@@ -1169,6 +1169,31 @@ class TestAgentCoreMemorySessionManager:
                     result = manager.retrieve_customer_context(event)
                     assert result is None
 
+    def test_retrieve_customer_context_empty_content(self, agentcore_config_with_retrieval, mock_memory_client):
+        """Empty content list on the last message must not raise IndexError."""
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            return_value=mock_memory_client,
+        ):
+            with patch("boto3.Session") as mock_boto_session:
+                mock_session = Mock()
+                mock_session.region_name = "us-west-2"
+                mock_session.client.return_value = Mock()
+                mock_boto_session.return_value = mock_session
+
+                with patch(
+                    "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
+                ):
+                    manager = AgentCoreMemorySessionManager(agentcore_config_with_retrieval)
+
+                    mock_agent = Mock()
+                    mock_agent.messages = [{"role": "user", "content": []}]
+
+                    event = MessageAddedEvent(agent=mock_agent, message={"role": "user", "content": []})
+                    result = manager.retrieve_customer_context(event)
+                    assert result is None
+                    mock_memory_client.retrieve_memories.assert_not_called()
+
     def test_retrieve_customer_context_no_config(self, agentcore_config, mock_memory_client):
         """Test retrieve_customer_context with no retrieval config."""
         with patch(

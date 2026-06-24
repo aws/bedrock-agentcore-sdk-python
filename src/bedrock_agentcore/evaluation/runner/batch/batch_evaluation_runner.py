@@ -398,6 +398,10 @@ class BatchEvaluationRunner:
             )
             if config.description is not None:
                 start_kwargs["description"] = config.description
+            if config.kms_key_arn is not None:
+                start_kwargs["kmsKeyArn"] = config.kms_key_arn
+            if config.tags:
+                start_kwargs["tags"] = config.tags
             start_response = self.data_plane_client.start_batch_evaluation(**start_kwargs)
         except Exception as e:
             error_code = self._get_boto3_error_code(e)
@@ -438,11 +442,13 @@ class BatchEvaluationRunner:
             batch_evaluation_name=response["batchEvaluationName"],
             status=response["status"],
             created_at=response["createdAt"],
+            updated_at=response.get("updatedAt"),
             description=response.get("description"),
             agent_invocation_failures=failed_scenarios,
             evaluation_results=evaluation_results,
             error_details=response.get("errorDetails"),
             output_data_config=output_data_config,
+            kms_key_arn=response.get("kmsKeyArn"),
         )
 
         logger.info(

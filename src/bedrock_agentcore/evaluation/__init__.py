@@ -4,6 +4,7 @@ from bedrock_agentcore.evaluation.client import EvaluationClient, ReferenceInput
 from bedrock_agentcore.evaluation.custom_code_based_evaluators import (
     EvaluatorInput,
     EvaluatorOutput,
+    ReferenceInput,
     custom_code_based_evaluator,
 )
 from bedrock_agentcore.evaluation.dataset_client import DatasetClient
@@ -17,6 +18,7 @@ from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     EvaluatorStatistics,
     EvaluatorSummary,
     FailedScenario,
+    OnlineEvaluationDataSourceConfig,
 )
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_runner import (
     BatchEvaluationRunner,
@@ -70,6 +72,7 @@ __all__ = [
     "BatchEvaluationRunConfig",
     "CloudWatchOutputDataConfig",
     "CloudWatchDataSourceConfig",
+    "OnlineEvaluationDataSourceConfig",
     "BatchEvaluatorConfig",
     "BatchEvaluationSummary",
     "EvaluatorStatistics",
@@ -103,6 +106,7 @@ __all__ = [
     "Turn",
     "PredefinedScenario",
     "PredefinedScenarioExecutor",
+    "ReferenceInput",
     "SimulatedScenario",
     "SimulatedScenarioExecutor",
     "custom_code_based_evaluator",
