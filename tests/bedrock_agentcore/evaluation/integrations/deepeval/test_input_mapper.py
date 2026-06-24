@@ -1,4 +1,4 @@
-"""Tests for deepeval input_mapper module."""
+"""Tests for deepeval input mapping and test case building."""
 
 import json
 from unittest.mock import MagicMock
@@ -6,9 +6,11 @@ from unittest.mock import MagicMock
 import pytest
 from deepeval.test_case import SingleTurnParams
 
-from bedrock_agentcore.evaluation.integrations.deepeval.input_mapper import (
+from bedrock_agentcore.evaluation.integrations.base import (
     ParsedEvaluationEvent,
-    _extract_fields_from_spans,
+    extract_fields_from_spans as _extract_fields_from_spans,
+)
+from bedrock_agentcore.evaluation.integrations.deepeval.adapter import (
     _get_required_params,
     build_test_case,
 )
