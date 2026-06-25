@@ -1,0 +1,427 @@
+"""Tests for DeepEvalHandler and DeepEvalAdapter."""
+
+import json
+import time
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from bedrock_agentcore.evaluation.integrations.deepeval.adapter import DeepEvalAdapter, DeepEvalHandler
+from bedrock_agentcore.evaluation.integrations.base import BaseAdapter
+from bedrock_agentcore.evaluation.custom_code_based_evaluators.models import EvaluatorInput
+
+
+def _make_event(
+    level="TRACE",
+    trace_ids=None,
+    spans=None,
+    reference_inputs=None,
+):
+    """Build a raw Lambda event dict for testing."""
+    if spans is None:
+        log_records = [
+            {
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": "What is AI?"}]},
+                    "output": {"messages": [{"role": "assistant", "content": "AI is artificial intelligence."}]},
+                }
+            }
+        ]
+        spans = [
+            {
+                "traceId": "abc123",
+                "spanId": "span1",
+                "attributes": {"_eval_log_records": json.dumps(log_records)},
+            }
+        ]
+
+    event = {
+        "schemaVersion": "1.0",
+        "evaluationLevel": level,
+        "evaluationInput": {"sessionSpans": spans},
+        "evaluationTarget": {},
+    }
+    if trace_ids is not None:
+        event["evaluationTarget"]["traceIds"] = trace_ids
+    if reference_inputs is not None:
+        event["evaluationReferenceInputs"] = reference_inputs
+    return event
+
+
+def _mock_metric(score=0.85, reason="Looks good", threshold=0.7, name="MockMetric"):
+    """Create a mock metric that returns a fixed score on measure()."""
+    metric = MagicMock()
+    type(metric).__name__ = name
+    metric.threshold = threshold
+    metric.score = score
+    metric.reason = reason
+    metric._required_params = None
+    del metric._required_params
+    del metric.evaluation_params
+    del metric.success
+
+    def measure_side_effect(test_case):
+        metric.score = score
+        metric.reason = reason
+
+    metric.measure = MagicMock(side_effect=measure_side_effect)
+    return metric
+
+
+class TestDeepEvalHandlerSuccess:
+    def test_returns_pass_when_score_above_threshold(self):
+        metric = _mock_metric(score=0.9, threshold=0.7)
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["value"] == 0.9
+        assert result["label"] == "Pass"
+        assert result["explanation"] == "Looks good"
+
+    def test_returns_fail_when_score_below_threshold(self):
+        metric = _mock_metric(score=0.3, threshold=0.7)
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["value"] == 0.3
+        assert result["label"] == "Fail"
+
+    def test_returns_pass_at_exact_threshold(self):
+        metric = _mock_metric(score=0.7, threshold=0.7)
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["label"] == "Pass"
+
+    def test_metric_measure_called_with_test_case(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric)
+
+        handler(_make_event())
+
+        metric.measure.assert_called_once()
+        test_case = metric.measure.call_args[0][0]
+        assert test_case.input == "What is AI?"
+        assert test_case.actual_output == "AI is artificial intelligence."
+
+    def test_context_parameter_ignored(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric)
+        mock_context = {"function_name": "my-lambda"}
+
+        result = handler(_make_event(), mock_context)
+
+        assert result["value"] == 0.85
+
+    def test_custom_field_mapper(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(
+            metric=metric,
+            field_mapper=lambda event: {
+                "input": "mapped input",
+                "actual_output": "mapped output",
+            },
+        )
+
+        result = handler(_make_event())
+
+        assert result["value"] == 0.85
+        test_case = metric.measure.call_args[0][0]
+        assert test_case.input == "mapped input"
+        assert test_case.actual_output == "mapped output"
+
+
+class TestDeepEvalHandlerErrors:
+    def test_invalid_event_returns_error(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler({})
+
+        assert result["errorCode"] == "INVALID_EVENT"
+        assert "errorMessage" in result
+        assert "value" not in result
+
+    def test_missing_evaluation_input_returns_error(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric)
+
+        event = {"evaluationLevel": "TRACE", "evaluationTarget": {}}
+        result = handler(event)
+
+        assert result["errorCode"] == "INVALID_EVENT"
+
+    def test_missing_required_field_returns_error(self):
+        log_records = [
+            {
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": "q"}]},
+                    "output": {"messages": [{"role": "assistant", "content": "a"}]},
+                }
+            }
+        ]
+        spans = [
+            {
+                "traceId": "t1",
+                "spanId": "s1",
+                "attributes": {"_eval_log_records": json.dumps(log_records)},
+            }
+        ]
+        metric = _mock_metric(name="FaithfulnessMetric")
+        handler = DeepEvalHandler(metric=metric)
+
+        event = _make_event(spans=spans)
+        result = handler(event)
+
+        assert result["errorCode"] == "MISSING_REQUIRED_FIELD"
+        assert "retrieval_context" in result["errorMessage"]
+
+    def test_metric_measure_exception_returns_error(self):
+        metric = _mock_metric()
+        metric.measure = MagicMock(side_effect=RuntimeError("LLM timeout"))
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["errorCode"] == "METRIC_ERROR"
+        assert "LLM timeout" in result["errorMessage"]
+
+    def test_never_raises_on_any_input(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric)
+
+        for bad_input in [None, [], "string", 42, {"random": "keys"}]:
+            result = handler(bad_input)
+            assert "errorCode" in result or "value" in result
+
+
+class TestDeepEvalHandlerEdgeCases:
+    def test_metric_with_no_reason(self):
+        metric = _mock_metric(score=0.8, reason=None)
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["explanation"] == ""
+
+    def test_metric_score_zero(self):
+        metric = _mock_metric(score=0.0, threshold=0.5)
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["value"] == 0.0
+        assert result["label"] == "Fail"
+
+    def test_metric_score_one(self):
+        metric = _mock_metric(score=1.0, threshold=0.5)
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["value"] == 1.0
+        assert result["label"] == "Pass"
+
+    def test_default_threshold_when_missing(self):
+        metric = _mock_metric(score=0.6)
+        del metric.threshold
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["label"] == "Pass"
+
+    def test_label_uses_metric_success_true(self):
+        metric = _mock_metric(score=0.3, threshold=0.7)
+        metric.success = True
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["value"] == 0.3
+        assert result["label"] == "Pass"
+
+    def test_label_uses_metric_success_false(self):
+        metric = _mock_metric(score=0.9, threshold=0.7)
+        metric.success = False
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["value"] == 0.9
+        assert result["label"] == "Fail"
+
+    def test_label_falls_back_to_threshold_when_no_success(self):
+        metric = _mock_metric(score=0.8, threshold=0.7)
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["label"] == "Pass"
+
+    def test_model_override_sets_metric_model(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric, model="bedrock/anthropic.claude-3")
+
+        assert metric.model == "bedrock/anthropic.claude-3"
+
+    def test_no_model_override_leaves_metric_unchanged(self):
+        metric = _mock_metric()
+        metric.model = "original-model"
+        handler = DeepEvalHandler(metric=metric)
+
+        handler(_make_event())
+
+        assert metric.model == "original-model"
+
+
+class TestDeepEvalHandlerTimeout:
+    def test_timeout_returns_error(self):
+        metric = _mock_metric()
+        metric.measure = MagicMock(side_effect=lambda tc: time.sleep(5))
+        handler = DeepEvalHandler(metric=metric, timeout=1)
+
+        result = handler(_make_event())
+
+        assert result["errorCode"] == "METRIC_TIMEOUT"
+        assert "1s timeout" in result["errorMessage"]
+
+    def test_no_timeout_when_measure_completes_in_time(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric, timeout=10)
+
+        result = handler(_make_event())
+
+        assert result["value"] == 0.85
+        assert "errorCode" not in result
+
+    def test_default_timeout_is_290(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric)
+
+        assert handler.timeout == 290
+
+    def test_custom_timeout_value(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric, timeout=60)
+
+        assert handler.timeout == 60
+
+    def test_metric_exception_still_propagates_with_timeout(self):
+        metric = _mock_metric()
+        metric.measure = MagicMock(side_effect=RuntimeError("LLM error"))
+        handler = DeepEvalHandler(metric=metric, timeout=10)
+
+        result = handler(_make_event())
+
+        assert result["errorCode"] == "METRIC_ERROR"
+        assert "LLM error" in result["errorMessage"]
+
+
+class TestBackwardCompatibility:
+    def test_handler_is_alias_for_adapter(self):
+        assert DeepEvalHandler is DeepEvalAdapter
+
+    def test_adapter_is_subclass_of_base(self):
+        assert issubclass(DeepEvalAdapter, BaseAdapter)
+
+    def test_import_from_init(self):
+        from bedrock_agentcore.evaluation.integrations.deepeval import DeepEvalHandler as H
+        from bedrock_agentcore.evaluation.integrations.deepeval import DeepEvalAdapter as A
+
+        assert H is A
+
+    def test_handler_works_same_as_before(self):
+        metric = _mock_metric(score=0.9, threshold=0.7)
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(_make_event())
+
+        assert result["value"] == 0.9
+        assert result["label"] == "Pass"
+
+
+class TestEvaluatorInputAcceptance:
+    def _make_evaluator_input(self):
+        log_records = [
+            {
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": "Hello"}]},
+                    "output": {"messages": [{"role": "assistant", "content": "Hi there"}]},
+                }
+            }
+        ]
+        spans = [
+            {
+                "traceId": "t1",
+                "spanId": "s1",
+                "attributes": {"_eval_log_records": json.dumps(log_records)},
+            }
+        ]
+        return EvaluatorInput(
+            evaluation_level="TRACE",
+            session_spans=spans,
+            target_trace_id="t1",
+            target_span_id=None,
+        )
+
+    def test_accepts_evaluator_input(self):
+        metric = _mock_metric(score=0.95)
+        handler = DeepEvalHandler(metric=metric)
+
+        result = handler(self._make_evaluator_input())
+
+        assert result["value"] == 0.95
+        assert result["label"] == "Pass"
+
+    def test_evaluator_input_extracts_fields_correctly(self):
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric)
+
+        handler(self._make_evaluator_input())
+
+        test_case = metric.measure.call_args[0][0]
+        assert test_case.input == "Hello"
+        assert test_case.actual_output == "Hi there"
+
+    def test_evaluator_input_with_trace_id_filtering(self):
+        log_records = [
+            {
+                "traceId": "target",
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": "relevant"}]},
+                    "output": {"messages": [{"role": "assistant", "content": "yes"}]},
+                },
+            },
+            {
+                "traceId": "other",
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": "irrelevant"}]},
+                    "output": {"messages": [{"role": "assistant", "content": "no"}]},
+                },
+            },
+        ]
+        spans = [
+            {
+                "traceId": "t1",
+                "spanId": "s1",
+                "attributes": {"_eval_log_records": json.dumps(log_records)},
+            }
+        ]
+        evaluator_input = EvaluatorInput(
+            evaluation_level="TRACE",
+            session_spans=spans,
+            target_trace_id="target",
+        )
+
+        metric = _mock_metric()
+        handler = DeepEvalHandler(metric=metric)
+
+        handler(evaluator_input)
+
+        test_case = metric.measure.call_args[0][0]
+        assert test_case.input == "relevant"
+        assert test_case.actual_output == "yes"

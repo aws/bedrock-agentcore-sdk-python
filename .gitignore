@@ -229,3 +229,4 @@ local_settings.py
 Dockerfile
 CLAUDE.md
 .omc/
+.deepeval/
