@@ -132,7 +132,7 @@ class TestMemoryRecord:
             "memoryRecordId": "record-123",
             "content": {"text": "This is a memory record"},
             "namespace": "user/preferences/",
-            "relevanceScore": 0.95,
+            "score": 0.95,
             "createdAt": "2023-01-01T00:00:00Z",
         }
         memory_record = MemoryRecord(data)
@@ -140,7 +140,7 @@ class TestMemoryRecord:
         assert memory_record._data == data
         assert memory_record.memoryRecordId == "record-123"
         assert memory_record["content"]["text"] == "This is a memory record"
-        assert memory_record.get("relevanceScore") == 0.95
+        assert memory_record.get("score") == 0.95
 
     def test_memory_record_dict_access(self):
         """Test MemoryRecord dictionary-like access."""

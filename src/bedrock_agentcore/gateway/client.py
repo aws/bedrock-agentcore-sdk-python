@@ -1,7 +1,7 @@
 """AgentCore Gateway SDK - Client for MCP gateway and target operations."""
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import boto3
 from botocore.config import Config
@@ -240,6 +240,145 @@ class GatewayClient:
                 targetId=target_id,
             ),
             wait_config=wait_config,
+        )
+
+    # Knowledge Base target helpers
+    # -------------------------------------------------------------------------
+    def create_knowledge_base_target(
+        self,
+        gateway_identifier: str,
+        knowledge_base_id: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        retrieval_configuration: Optional[Dict[str, Any]] = None,
+        parameter_overrides: Optional[List[Dict[str, Any]]] = None,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Create a gateway target that exposes a Knowledge Base as an MCP Retrieve tool.
+
+        Args:
+            gateway_identifier: Gateway ID or ARN.
+            knowledge_base_id: The Knowledge Base to expose.
+            name: Target name. Defaults to "kb-{knowledge_base_id}".
+            description: Agent-facing description of the Retrieve tool.
+            retrieval_configuration: Optional retrieval config (vectorSearchConfiguration, etc.).
+            parameter_overrides: Optional per-parameter visibility/description overrides.
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Additional arguments forwarded to create_gateway_target
+                (e.g., credentialProviderConfigurations, roleArn). Overrides built values on conflict.
+
+        Returns:
+            Gateway target details when READY.
+        """
+        parameter_values: Dict[str, Any] = {"knowledgeBaseId": knowledge_base_id}
+        if retrieval_configuration:
+            parameter_values["retrievalConfiguration"] = retrieval_configuration
+
+        tool_config: Dict[str, Any] = {
+            "name": "Retrieve",
+            "parameterValues": parameter_values,
+        }
+        if description:
+            tool_config["description"] = description
+        if parameter_overrides:
+            tool_config["parameterOverrides"] = parameter_overrides
+
+        target_kwargs = {
+            "gatewayIdentifier": gateway_identifier,
+            "name": name or f"kb-{knowledge_base_id}",
+            "targetConfiguration": {
+                "mcp": {
+                    "connector": {
+                        "source": {"connectorId": "bedrock-knowledge-bases"},
+                        "enabled": ["Retrieve"],
+                        "configurations": [tool_config],
+                    },
+                },
+            },
+            "credentialProviderConfigurations": [
+                {"credentialProviderType": "GATEWAY_IAM_ROLE"},
+            ],
+        }
+        target_kwargs.update(kwargs)
+
+        return self.create_gateway_target_and_wait(
+            wait_config=wait_config,
+            **target_kwargs,
+        )
+
+    def create_agentic_retrieve_target(
+        self,
+        gateway_identifier: str,
+        retrievers: List[Dict[str, Any]],
+        model_arn: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        max_agent_iteration: Optional[int] = None,
+        parameter_overrides: Optional[List[Dict[str, Any]]] = None,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Create a gateway target that exposes Knowledge Bases as an MCP AgenticRetrieveStream tool.
+
+        Args:
+            gateway_identifier: Gateway ID or ARN.
+            retrievers: List of retriever configurations, each with knowledge_base_id and optional
+                retrieval_overrides. Example: [{"knowledgeBaseId": "KB1", "description": "..."}]
+            model_arn: Foundation model ARN for orchestration.
+            name: Target name. Defaults to "agentic-retrieve-{timestamp}".
+            description: Agent-facing description of the AgenticRetrieveStream tool.
+            max_agent_iteration: Max iterations for the agentic loop (default: service default).
+            parameter_overrides: Optional per-parameter visibility/description overrides.
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Additional arguments forwarded to create_gateway_target. Overrides built values on conflict.
+
+        Returns:
+            Gateway target details when READY.
+        """
+        import time as _time
+
+        agentic_config: Dict[str, Any] = {
+            "foundationModelConfiguration": {"bedrock": {"modelArn": model_arn}},
+        }
+        if max_agent_iteration:
+            agentic_config["maxAgentIteration"] = max_agent_iteration
+
+        parameter_values: Dict[str, Any] = {
+            "retrievers": retrievers,
+            "agenticRetrieveConfiguration": agentic_config,
+        }
+
+        tool_config: Dict[str, Any] = {
+            "name": "AgenticRetrieveStream",
+            "parameterValues": parameter_values,
+        }
+        if description:
+            tool_config["description"] = description
+        if parameter_overrides:
+            tool_config["parameterOverrides"] = parameter_overrides
+
+        target_kwargs = {
+            "gatewayIdentifier": gateway_identifier,
+            "name": name or f"agentic-retrieve-{int(_time.time())}",
+            "targetConfiguration": {
+                "mcp": {
+                    "connector": {
+                        "source": {"connectorId": "bedrock-agentic-retrieve"},
+                        "enabled": ["AgenticRetrieveStream"],
+                        "configurations": [tool_config],
+                    },
+                },
+            },
+            "credentialProviderConfigurations": [
+                {"credentialProviderType": "GATEWAY_IAM_ROLE"},
+            ],
+        }
+        target_kwargs.update(kwargs)
+
+        return self.create_gateway_target_and_wait(
+            wait_config=wait_config,
+            **target_kwargs,
         )
 
     # Name-based lookup

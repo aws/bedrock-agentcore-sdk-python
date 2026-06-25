@@ -206,7 +206,7 @@ class TestA2AServerIntegration:
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "Healthy"
-        assert isinstance(body["time_of_last_update"], int)
+        assert "time_of_last_update" not in body
 
     def test_bedrock_headers_propagated_to_executor(self, echo_executor):
         builder = BedrockCallContextBuilder()

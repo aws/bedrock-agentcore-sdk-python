@@ -5,7 +5,6 @@ extraction, health checks, and Docker host detection.
 """
 
 import logging
-import time
 import uuid
 from typing import Any, Callable, Optional
 
@@ -238,20 +237,16 @@ def build_a2a_app(
         context_builder=context_builder,
     )
 
-    last_status_update_time = time.time()
-
     def _handle_ping(request: Any) -> JSONResponse:
-        nonlocal last_status_update_time
         try:
             if ping_handler is not None:
                 status = ping_handler()
             else:
                 status = PingStatus.HEALTHY
-            last_status_update_time = time.time()
         except Exception:
             logger.exception("Custom ping handler failed, falling back to Healthy")
             status = PingStatus.HEALTHY
-        return JSONResponse({"status": status.value, "time_of_last_update": int(last_status_update_time)})
+        return JSONResponse({"status": status.value})
 
     # Build the Starlette app with /ping included upfront, then add A2A routes,
     # so we don't depend on mutating app.routes after build().
