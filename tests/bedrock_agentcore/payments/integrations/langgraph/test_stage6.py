@@ -1,9 +1,7 @@
 """Tests for Stage 6: Built-in Tools."""
 
 import json
-from unittest.mock import MagicMock, patch, PropertyMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from bedrock_agentcore.payments.integrations.langgraph import AgentCorePaymentsConfig
 from bedrock_agentcore.payments.integrations.langgraph.middleware import AgentCorePaymentsMiddleware
@@ -85,7 +83,7 @@ class TestHttpRequestTool:
             result = tool.invoke({"url": "http://example.com"})
 
         assert result.startswith("PAYMENT_REQUIRED: ")
-        parsed = json.loads(result[len("PAYMENT_REQUIRED: "):])
+        parsed = json.loads(result[len("PAYMENT_REQUIRED: ") :])
         assert parsed["statusCode"] == 402
 
     @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")

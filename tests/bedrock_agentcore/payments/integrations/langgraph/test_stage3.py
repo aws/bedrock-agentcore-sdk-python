@@ -1,11 +1,10 @@
 """Tests for Stage 3: Payment Signing + Retry."""
 
 import json
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 from langchain.messages import ToolMessage
-from langgraph.types import Command
 
 from bedrock_agentcore.payments.integrations.langgraph import AgentCorePaymentsConfig
 from bedrock_agentcore.payments.integrations.langgraph.middleware import AgentCorePaymentsMiddleware
@@ -170,10 +169,12 @@ class TestSuccessfulRetry:
         mw = AgentCorePaymentsMiddleware(config)
 
         request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
-        mock_handler = MagicMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=_200_content(), tool_call_id="tc-1"),
-        ])
+        mock_handler = MagicMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
 
         mw.wrap_tool_call(request, mock_handler)
         assert mock_handler.call_count == 2
@@ -199,10 +200,12 @@ class TestPostPaymentRejection:
         request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
 
         # Both calls return 402
-        mock_handler = MagicMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-        ])
+        mock_handler = MagicMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+            ]
+        )
 
         result = mw.wrap_tool_call(request, mock_handler)
 
@@ -222,17 +225,21 @@ class TestPostPaymentRejection:
 
         request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
 
-        payload_with_error = json.dumps({
-            "statusCode": 402,
-            "headers": {},
-            "body": {"error": "insufficient_balance"},
-        })
+        payload_with_error = json.dumps(
+            {
+                "statusCode": 402,
+                "headers": {},
+                "body": {"error": "insufficient_balance"},
+            }
+        )
         content_402_with_error = f"PAYMENT_REQUIRED: {payload_with_error}"
 
-        mock_handler = MagicMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=content_402_with_error, tool_call_id="tc-1"),
-        ])
+        mock_handler = MagicMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=content_402_with_error, tool_call_id="tc-1"),
+            ]
+        )
 
         result = mw.wrap_tool_call(request, mock_handler)
         assert "insufficient_balance" in result.content
@@ -256,10 +263,12 @@ class TestRetryDelay:
         mw = AgentCorePaymentsMiddleware(config)
 
         request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
-        mock_handler = MagicMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=_200_content(), tool_call_id="tc-1"),
-        ])
+        mock_handler = MagicMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
 
         mw.wrap_tool_call(request, mock_handler)
         mock_sleep.assert_called_once_with(3.0)
@@ -274,10 +283,12 @@ class TestRetryDelay:
         mw = AgentCorePaymentsMiddleware(config)
 
         request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
-        mock_handler = MagicMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=_200_content(), tool_call_id="tc-1"),
-        ])
+        mock_handler = MagicMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
 
         mw.wrap_tool_call(request, mock_handler)
         mock_sleep.assert_not_called()

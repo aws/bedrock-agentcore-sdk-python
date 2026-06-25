@@ -1,14 +1,13 @@
 """Tests for LangGraph AgentCorePaymentsConfig and AgentCorePaymentsMiddleware."""
 
 import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler
 from bedrock_agentcore.payments.integrations.langgraph import AgentCorePaymentsConfig
 from bedrock_agentcore.payments.integrations.langgraph.middleware import AgentCorePaymentsMiddleware
-from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler, PaymentResponseHandler
-
 
 # ---------------------------------------------------------------------------
 # Config validation tests

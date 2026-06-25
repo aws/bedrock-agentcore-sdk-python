@@ -4,7 +4,6 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from langchain.messages import ToolMessage
 from langgraph.types import Command
 
@@ -84,14 +83,19 @@ class TestAsyncRetryFlow:
         mw = AgentCorePaymentsMiddleware(_make_config())
 
         success_msg = ToolMessage(content=_200_content(), tool_call_id="tc-1")
-        handler = AsyncMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            success_msg,
-        ])
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                success_msg,
+            ]
+        )
 
-        result = asyncio.run(mw.awrap_tool_call(
-            _make_request(tool_args={"url": "http://x.com", "headers": {}}), handler,
-        ))
+        result = asyncio.run(
+            mw.awrap_tool_call(
+                _make_request(tool_args={"url": "http://x.com", "headers": {}}),
+                handler,
+            )
+        )
         assert result is success_msg
 
     @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
@@ -99,10 +103,12 @@ class TestAsyncRetryFlow:
         mock_pm_cls.return_value.generate_payment_header.return_value = {"X-PAYMENT": "sig"}
         mw = AgentCorePaymentsMiddleware(_make_config())
 
-        handler = AsyncMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=_200_content(), tool_call_id="tc-1"),
-        ])
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
 
         asyncio.run(mw.awrap_tool_call(_make_request(tool_args={"url": "http://x.com", "headers": {}}), handler))
         assert handler.await_count == 2
@@ -122,10 +128,12 @@ class TestAsyncSleepUsed:
         config = _make_config(post_payment_retry_delay_seconds=3.0)
         mw = AgentCorePaymentsMiddleware(config)
 
-        handler = AsyncMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=_200_content(), tool_call_id="tc-1"),
-        ])
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_async_sleep:
             asyncio.run(mw.awrap_tool_call(_make_request(tool_args={"url": "http://x.com", "headers": {}}), handler))
@@ -138,10 +146,12 @@ class TestAsyncSleepUsed:
         config = _make_config(post_payment_retry_delay_seconds=3.0)
         mw = AgentCorePaymentsMiddleware(config)
 
-        handler = AsyncMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=_200_content(), tool_call_id="tc-1"),
-        ])
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
             asyncio.run(mw.awrap_tool_call(_make_request(tool_args={"url": "http://x.com", "headers": {}}), handler))
@@ -162,10 +172,12 @@ class TestAsyncToThread:
         mock_pm_cls.return_value.generate_payment_header.return_value = {"X-PAYMENT": "sig"}
         mw = AgentCorePaymentsMiddleware(_make_config())
 
-        handler = AsyncMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=_200_content(), tool_call_id="tc-1"),
-        ])
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
 
         with patch("asyncio.to_thread", new_callable=AsyncMock, return_value={"X-PAYMENT": "sig"}) as mock_to_thread:
             asyncio.run(mw.awrap_tool_call(_make_request(tool_args={"url": "http://x.com", "headers": {}}), handler))
@@ -189,9 +201,12 @@ class TestAsyncErrorHandling:
 
         handler = AsyncMock(return_value=ToolMessage(content=_402_content(), tool_call_id="tc-1"))
 
-        result = asyncio.run(mw.awrap_tool_call(
-            _make_request(tool_args={"url": "http://x.com", "headers": {}}), handler,
-        ))
+        result = asyncio.run(
+            mw.awrap_tool_call(
+                _make_request(tool_args={"url": "http://x.com", "headers": {}}),
+                handler,
+            )
+        )
         assert "PAYMENT ERROR" in result.content
         assert "No payment instrument configured" in result.content
         assert result.status == "error"
@@ -201,14 +216,19 @@ class TestAsyncErrorHandling:
         mock_pm_cls.return_value.generate_payment_header.return_value = {"X-PAYMENT": "sig"}
         mw = AgentCorePaymentsMiddleware(_make_config())
 
-        handler = AsyncMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-        ])
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+            ]
+        )
 
-        result = asyncio.run(mw.awrap_tool_call(
-            _make_request(tool_args={"url": "http://x.com", "headers": {}}), handler,
-        ))
+        result = asyncio.run(
+            mw.awrap_tool_call(
+                _make_request(tool_args={"url": "http://x.com", "headers": {}}),
+                handler,
+            )
+        )
         assert "signed but rejected" in result.content
 
     @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
@@ -218,9 +238,12 @@ class TestAsyncErrorHandling:
 
         handler = AsyncMock(return_value=ToolMessage(content=_402_content(), tool_call_id="tc-1"))
 
-        result = asyncio.run(mw.awrap_tool_call(
-            _make_request(tool_args={"url": "http://x.com", "headers": {}}), handler,
-        ))
+        result = asyncio.run(
+            mw.awrap_tool_call(
+                _make_request(tool_args={"url": "http://x.com", "headers": {}}),
+                handler,
+            )
+        )
         assert isinstance(result, ToolMessage)
         assert "unexpected error" in result.content
         assert "async boom" in result.content

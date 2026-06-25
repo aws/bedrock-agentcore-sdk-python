@@ -113,8 +113,7 @@ class AgentCorePaymentsPluginConfig:
         if self.custom_handlers is not None:
             if not isinstance(self.custom_handlers, dict):
                 raise ValueError(
-                    "custom_handlers must be a dict mapping tool names"
-                    " to PaymentResponseHandler instances"
+                    "custom_handlers must be a dict mapping tool names to PaymentResponseHandler instances"
                 )
             if not all(isinstance(k, str) for k in self.custom_handlers):
                 raise ValueError("All keys in custom_handlers must be strings")

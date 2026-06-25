@@ -6,10 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain.messages import ToolMessage
-from langgraph.types import Command
 
 from bedrock_agentcore.payments.integrations.langgraph import AgentCorePaymentsConfig
-from bedrock_agentcore.payments.integrations.langgraph.errors import ErrorResolution, PaymentErrorContext
+from bedrock_agentcore.payments.integrations.langgraph.errors import ErrorResolution
 from bedrock_agentcore.payments.integrations.langgraph.middleware import AgentCorePaymentsMiddleware
 from bedrock_agentcore.payments.manager import (
     InsufficientBudget,
@@ -76,10 +75,12 @@ class TestErrorHandlerBasicFlow:
         mw = AgentCorePaymentsMiddleware(config)
 
         request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
-        mock_handler = MagicMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=_200_content(), tool_call_id="tc-1"),
-        ])
+        mock_handler = MagicMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
 
         result = mw.wrap_tool_call(request, mock_handler)
         assert "PAYMENT ERROR" not in result.content
@@ -269,10 +270,12 @@ class TestAsyncErrorHandler:
         mw = AgentCorePaymentsMiddleware(config)
 
         request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
-        handler = AsyncMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=_200_content(), tool_call_id="tc-1"),
-        ])
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
 
         result = asyncio.run(mw.awrap_tool_call(request, handler))
         assert "PAYMENT ERROR" not in result.content
@@ -293,10 +296,12 @@ class TestAsyncErrorHandler:
         mw = AgentCorePaymentsMiddleware(config)
 
         request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
-        handler = AsyncMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=_200_content(), tool_call_id="tc-1"),
-        ])
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
 
         result = asyncio.run(mw.awrap_tool_call(request, handler))
         assert "PAYMENT ERROR" not in result.content

@@ -18,10 +18,10 @@ Optional:
 
 import json
 import os
+from unittest.mock import MagicMock
 
 import pytest
 from langchain.messages import ToolMessage
-from unittest.mock import MagicMock
 
 from bedrock_agentcore.payments.integrations.langgraph import (
     AgentCorePaymentsConfig,
@@ -31,13 +31,16 @@ from bedrock_agentcore.payments.manager import PaymentManager
 
 # Skip entire module if required env vars not configured
 pytestmark = pytest.mark.skipif(
-    not all(os.environ.get(k) for k in [
-        "ACP_PAYMENT_MANAGER_ARN",
-        "ACP_USER_ID",
-        "ACP_PAYMENT_INSTRUMENT_ID",
-        "ACP_REGION",
-        "ACP_TESTNET_URL",
-    ]),
+    not all(
+        os.environ.get(k)
+        for k in [
+            "ACP_PAYMENT_MANAGER_ARN",
+            "ACP_USER_ID",
+            "ACP_PAYMENT_INSTRUMENT_ID",
+            "ACP_REGION",
+            "ACP_TESTNET_URL",
+        ]
+    ),
     reason=(
         "Testnet env vars not set (ACP_PAYMENT_MANAGER_ARN, ACP_USER_ID,"
         " ACP_PAYMENT_INSTRUMENT_ID, ACP_REGION, ACP_TESTNET_URL)"
@@ -102,7 +105,7 @@ class TestFullPaymentFlow:
         print(f"\n[http_request raw result]: {result[:200]}...")
         assert "PAYMENT_REQUIRED:" in result, f"Expected 402 from testnet, got: {result[:100]}"
 
-        parsed = json.loads(result[len("PAYMENT_REQUIRED: "):])
+        parsed = json.loads(result[len("PAYMENT_REQUIRED: ") :])
         assert parsed["statusCode"] == 402
         print(f"[402 body keys]: {list(parsed.get('body', {}).keys())}")
 
@@ -207,7 +210,7 @@ class TestFullPaymentFlow:
         injected = tool_args["parameters"]["headers"]
         print(f"[MCP parameters.headers]: {list(injected.keys())}")
         assert len(injected) > 0, "No payment header injected into parameters.headers"
-        print(f"[MCP Gateway flow succeeded with 200]")
+        print("[MCP Gateway flow succeeded with 200]")
 
     def test_payment_header_was_injected(self, middleware, testnet_url):
         """After wrap_tool_call, the tool_args dict has a payment header."""
@@ -233,10 +236,7 @@ class TestFullPaymentFlow:
         print(f"\n[Injected headers]: {list(injected_headers.keys())}")
         assert len(injected_headers) > 0, "No payment header was injected"
         # Common header names: X-PAYMENT (v1) or PAYMENT-SIGNATURE (v2)
-        has_payment_header = any(
-            k.upper() in ("X-PAYMENT", "PAYMENT-SIGNATURE", "PAYMENT")
-            for k in injected_headers
-        )
+        has_payment_header = any(k.upper() in ("X-PAYMENT", "PAYMENT-SIGNATURE", "PAYMENT") for k in injected_headers)
         assert has_payment_header, f"Expected payment header, got: {list(injected_headers.keys())}"
 
 
@@ -303,7 +303,7 @@ class TestFallbackDetectionFunctional:
 
         parsed = json.loads(result.content)
         assert parsed["statusCode"] == 200, f"Expected 200, got {parsed.get('statusCode')}"
-        print(f"[Fallback detection flow succeeded — no marker, no custom handler, got 200]")
+        print("[Fallback detection flow succeeded — no marker, no custom handler, got 200]")
 
 
 class TestCustomHandlerRegistry:
@@ -335,6 +335,7 @@ class TestCustomHandlerRegistry:
         custom_handler = TrackingHandler()
 
         from dataclasses import replace
+
         custom_config = replace(config, custom_handlers={"my_http_tool": custom_handler})
         mw = AgentCorePaymentsMiddleware(custom_config)
 
@@ -357,18 +358,19 @@ class TestCustomHandlerRegistry:
         assert custom_handler.detect_called, "Custom handler's extract_status_code was not invoked"
         assert custom_handler.extract_called, "Custom handler's extract_headers was not invoked"
         assert custom_handler.inject_called, "Custom handler's apply_payment_header was not invoked"
-        print(f"[Custom handler used for detection: ✓, extraction: ✓, injection: ✓]")
+        print("[Custom handler used for detection: ✓, extraction: ✓, injection: ✓]")
 
         assert call_count[0] == 2, f"Expected 2 calls, got {call_count[0]}"
         assert "PAYMENT ERROR" not in result.content, f"Payment failed: {result.content}"
 
         parsed = json.loads(result.content)
         assert parsed["statusCode"] == 200
-        print(f"[Custom handler flow succeeded with 200]")
+        print("[Custom handler flow succeeded with 200]")
 
     def test_custom_handler_non_marker_tool(self, config, testnet_url):
         """Custom handler detects 402 from a tool that does NOT use the PAYMENT_REQUIRED: marker."""
         import httpx
+
         from bedrock_agentcore.payments.integrations.handlers import PaymentResponseHandler
 
         # Custom handler that detects 402 from raw JSON (no marker prefix)
@@ -381,6 +383,7 @@ class TestCustomHandlerRegistry:
             def extract_status_code(self, result):
                 self.detect_called = True
                 import json as _json
+
                 # result is {"content": [{"text": "..."}]} from _prepare_for_handler
                 content = result.get("content", [])
                 for block in content:
@@ -395,6 +398,7 @@ class TestCustomHandlerRegistry:
 
             def extract_headers(self, result):
                 import json as _json
+
                 content = result.get("content", [])
                 for block in content:
                     text = block.get("text", "") if isinstance(block, dict) else ""
@@ -408,6 +412,7 @@ class TestCustomHandlerRegistry:
 
             def extract_body(self, result):
                 import json as _json
+
                 content = result.get("content", [])
                 for block in content:
                     text = block.get("text", "") if isinstance(block, dict) else ""
@@ -431,6 +436,7 @@ class TestCustomHandlerRegistry:
         custom_handler = RawJsonHandler()
 
         from dataclasses import replace
+
         custom_config = replace(config, custom_handlers={"raw_http_tool": custom_handler})
         mw = AgentCorePaymentsMiddleware(custom_config)
 
@@ -476,7 +482,7 @@ class TestCustomHandlerRegistry:
 
         parsed = json.loads(result.content)
         assert parsed["statusCode"] == 200, f"Expected 200, got {parsed.get('statusCode')}"
-        print(f"[Non-marker custom handler flow succeeded with 200]")
+        print("[Non-marker custom handler flow succeeded with 200]")
         from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler
 
         # Custom handler that tracks all three phases
@@ -502,6 +508,7 @@ class TestCustomHandlerRegistry:
 
         # Create middleware with custom handler for "my_http_tool"
         from dataclasses import replace
+
         custom_config = replace(config, custom_handlers={"my_http_tool": custom_handler})
         mw = AgentCorePaymentsMiddleware(custom_config)
 
@@ -526,7 +533,7 @@ class TestCustomHandlerRegistry:
         assert custom_handler.detect_called, "Custom handler's extract_status_code was not invoked"
         assert custom_handler.extract_called, "Custom handler's extract_headers was not invoked"
         assert custom_handler.inject_called, "Custom handler's apply_payment_header was not invoked"
-        print(f"[Custom handler used for detection: ✓, extraction: ✓, injection: ✓]")
+        print("[Custom handler used for detection: ✓, extraction: ✓, injection: ✓]")
 
         # Full flow still works (402 → sign → retry → 200)
         assert call_count[0] == 2, f"Expected 2 calls, got {call_count[0]}"
@@ -534,4 +541,4 @@ class TestCustomHandlerRegistry:
 
         parsed = json.loads(result.content)
         assert parsed["statusCode"] == 200
-        print(f"[Custom handler flow succeeded with 200]")
+        print("[Custom handler flow succeeded with 200]")

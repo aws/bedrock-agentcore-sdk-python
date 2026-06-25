@@ -16,14 +16,10 @@ from bedrock_agentcore.payments.integrations.handlers import (
     get_payment_handler,
 )
 from bedrock_agentcore.payments.manager import (
-    InsufficientBudget,
     PaymentError,
     PaymentInstrumentConfigurationRequired,
-    PaymentInstrumentNotFound,
-    PaymentSessionConfigurationRequired,
-    PaymentSessionExpired,
-    PaymentSessionNotFound,
     PaymentManager,
+    PaymentSessionConfigurationRequired,
 )
 
 from ..config import AgentCorePaymentsConfig
@@ -238,16 +234,12 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             PaymentError: If payment processing fails.
         """
         if self.config.payment_instrument_id is None:
-            raise PaymentInstrumentConfigurationRequired(
-                "payment_instrument_id is required for x402 payments."
-            )
+            raise PaymentInstrumentConfigurationRequired("payment_instrument_id is required for x402 payments.")
         if self.config.payment_session_id is None:
             if self.config.auto_session:
                 self._create_auto_session()
             else:
-                raise PaymentSessionConfigurationRequired(
-                    "payment_session_id is required for x402 payments."
-                )
+                raise PaymentSessionConfigurationRequired("payment_session_id is required for x402 payments.")
 
         return self.payment_manager.generate_payment_header(
             user_id=self.config.user_id,
@@ -311,15 +303,13 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         if prepared is None:
             return result
 
-        has_custom_handler = (
-            self.config.custom_handlers is not None
-            and tool_name in self.config.custom_handlers
-        )
+        has_custom_handler = self.config.custom_handlers is not None and tool_name in self.config.custom_handlers
 
         if has_custom_handler:
             detection_handler = self.config.custom_handlers[tool_name]
         else:
             from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler
+
             detection_handler = GenericPaymentHandler()
 
         status_code = detection_handler.extract_status_code(prepared)
@@ -390,6 +380,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             if retry_prepared is not None:
                 # Use fresh detection on the retry result (not the frozen fallback handler)
                 from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler as _GH
+
                 _retry_handler = _GH()
                 retry_status = _retry_handler.extract_status_code(retry_prepared)
                 # Also check via fallback if marker not found
@@ -401,15 +392,11 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                 if retry_status == 402:
                     retry_body = _retry_handler.extract_body(retry_prepared) or {}
                     error_detail = (
-                        retry_body.get("error", "unknown error")
-                        if isinstance(retry_body, dict)
-                        else "unknown error"
+                        retry_body.get("error", "unknown error") if isinstance(retry_body, dict) else "unknown error"
                     )
                     return self._error_tool_message(
                         request,
-                        PaymentError(
-                            f"Payment was signed but rejected by the server ({error_detail})."
-                        ),
+                        PaymentError(f"Payment was signed but rejected by the server ({error_detail})."),
                     )
 
             return retry_result
@@ -486,8 +473,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
                 has_custom = self.config.custom_handlers and tool_name in self.config.custom_handlers
                 injection_handler = (
-                    self.config.custom_handlers[tool_name] if has_custom
-                    else self._get_handler(tool_name, tool_args)
+                    self.config.custom_handlers[tool_name] if has_custom else self._get_handler(tool_name, tool_args)
                 )
 
                 if not injection_handler.validate_tool_input(tool_args):
@@ -513,6 +499,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                 retry_prepared = self._prepare_for_handler(retry_result.content)
                 if retry_prepared is not None:
                     from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler as _GH
+
                     _rh = _GH()
                     retry_status = _rh.extract_status_code(retry_prepared)
                     if retry_status != 402:
@@ -524,9 +511,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                         detail = retry_body.get("error", "unknown") if isinstance(retry_body, dict) else "unknown"
                         return self._error_tool_message(
                             request,
-                            PaymentError(
-                                f"Payment signed but rejected after recovery ({detail})."
-                            ),
+                            PaymentError(f"Payment signed but rejected after recovery ({detail})."),
                         )
 
                 return retry_result
@@ -597,15 +582,13 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         if prepared is None:
             return result
 
-        has_custom_handler = (
-            self.config.custom_handlers is not None
-            and tool_name in self.config.custom_handlers
-        )
+        has_custom_handler = self.config.custom_handlers is not None and tool_name in self.config.custom_handlers
 
         if has_custom_handler:
             detection_handler = self.config.custom_handlers[tool_name]
         else:
             from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler
+
             detection_handler = GenericPaymentHandler()
 
         status_code = detection_handler.extract_status_code(prepared)
@@ -632,9 +615,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                 "body": body_402,
             }
 
-            payment_header = await asyncio.to_thread(
-                self._generate_payment_header, payment_required_request
-            )
+            payment_header = await asyncio.to_thread(self._generate_payment_header, payment_required_request)
 
             if has_custom_handler:
                 injection_handler = detection_handler
@@ -665,6 +646,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             retry_prepared = self._prepare_for_handler(retry_result.content)
             if retry_prepared is not None:
                 from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler as _GH
+
                 _retry_handler = _GH()
                 retry_status = _retry_handler.extract_status_code(retry_prepared)
                 if retry_status != 402:
@@ -675,15 +657,11 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                 if retry_status == 402:
                     retry_body = _retry_handler.extract_body(retry_prepared) or {}
                     error_detail = (
-                        retry_body.get("error", "unknown error")
-                        if isinstance(retry_body, dict)
-                        else "unknown error"
+                        retry_body.get("error", "unknown error") if isinstance(retry_body, dict) else "unknown error"
                     )
                     return self._error_tool_message(
                         request,
-                        PaymentError(
-                            f"Payment was signed but rejected by the server ({error_detail})."
-                        ),
+                        PaymentError(f"Payment was signed but rejected by the server ({error_detail})."),
                     )
 
             return retry_result
@@ -715,6 +693,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         """Async version of _invoke_error_handler. Supports async callbacks."""
         import asyncio
         import inspect
+
         from .errors import ErrorResolution, PaymentErrorContext
 
         retry_count = 0
@@ -755,18 +734,16 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             retry_count += 1
             logger.info(
                 "on_payment_error returned RETRY (async, attempt %d/%d)",
-                retry_count, self.config.max_error_retries,
+                retry_count,
+                self.config.max_error_retries,
             )
 
             try:
-                payment_header = await asyncio.to_thread(
-                    self._generate_payment_header, payment_required_request or {}
-                )
+                payment_header = await asyncio.to_thread(self._generate_payment_header, payment_required_request or {})
 
                 has_custom = self.config.custom_handlers and tool_name in self.config.custom_handlers
                 injection_handler = (
-                    self.config.custom_handlers[tool_name] if has_custom
-                    else self._get_handler(tool_name, tool_args)
+                    self.config.custom_handlers[tool_name] if has_custom else self._get_handler(tool_name, tool_args)
                 )
 
                 if not injection_handler.validate_tool_input(tool_args):
@@ -791,6 +768,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                 retry_prepared = self._prepare_for_handler(retry_result.content)
                 if retry_prepared is not None:
                     from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler as _GH
+
                     _rh = _GH()
                     retry_status = _rh.extract_status_code(retry_prepared)
                     if retry_status != 402:
@@ -802,9 +780,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                         detail = retry_body.get("error", "unknown") if isinstance(retry_body, dict) else "unknown"
                         return self._error_tool_message(
                             request,
-                            PaymentError(
-                                f"Payment signed but rejected after recovery ({detail})."
-                            ),
+                            PaymentError(f"Payment signed but rejected after recovery ({detail})."),
                         )
 
                 return retry_result

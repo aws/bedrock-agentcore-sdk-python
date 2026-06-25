@@ -3,7 +3,6 @@
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
 from langchain.messages import ToolMessage
 
 from bedrock_agentcore.payments.integrations.langgraph import AgentCorePaymentsConfig
@@ -11,9 +10,7 @@ from bedrock_agentcore.payments.integrations.langgraph.middleware import AgentCo
 from bedrock_agentcore.payments.manager import (
     InsufficientBudget,
     PaymentError,
-    PaymentInstrumentConfigurationRequired,
     PaymentInstrumentNotFound,
-    PaymentSessionConfigurationRequired,
     PaymentSessionExpired,
     PaymentSessionNotFound,
 )
@@ -147,10 +144,12 @@ class TestDeterministicErrorMessages:
 
         payload_with_error = json.dumps({"statusCode": 402, "headers": {}, "body": {"error": "bad_sig"}})
         request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
-        handler = MagicMock(side_effect=[
-            ToolMessage(content=_402_content(), tool_call_id="tc-1"),
-            ToolMessage(content=f"PAYMENT_REQUIRED: {payload_with_error}", tool_call_id="tc-1"),
-        ])
+        handler = MagicMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=f"PAYMENT_REQUIRED: {payload_with_error}", tool_call_id="tc-1"),
+            ]
+        )
 
         result = mw.wrap_tool_call(request, handler)
         assert "signed but rejected" in result.content
