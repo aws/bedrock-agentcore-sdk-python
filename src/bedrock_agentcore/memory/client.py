@@ -442,6 +442,7 @@ class MemoryClient:
         event_timestamp: Optional[datetime] = None,
         branch: Optional[Dict[str, str]] = None,
         metadata: Optional[Dict[str, MetadataValue]] = None,
+        extraction_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Save an event of an agent interaction or conversation with a user.
 
@@ -461,6 +462,8 @@ class MemoryClient:
             metadata: Optional custom key-value metadata to attach to the event.
                      Maximum 15 key-value pairs. Keys must be 1-128 characters.
                      Example: {"location": {"stringValue": "NYC"}}
+            extraction_mode: Controls long-term memory extraction. Set to "SKIP" to store
+                     the event in short-term memory without triggering extraction.
 
         Returns:
             Created event
@@ -542,6 +545,9 @@ class MemoryClient:
 
             if metadata:
                 params["metadata"] = metadata
+
+            if extraction_mode:
+                params["extractionMode"] = extraction_mode
 
             response = self.gmdp_client.create_event(**params)
 

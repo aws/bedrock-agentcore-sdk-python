@@ -2148,6 +2148,69 @@ def test_create_event_with_multiple_metadata_keys():
         assert len(kwargs["metadata"]) == 3
 
 
+def test_create_event_with_extraction_mode():
+    """Test create_event with extraction_mode parameter."""
+    with patch("boto3.Session"):
+        client = MemoryClient()
+
+        # Mock the client
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        # Mock create_event response
+        mock_gmdp.create_event.return_value = {
+            "event": {
+                "eventId": "event-skip-123",
+                "memoryId": "mem-123",
+            }
+        }
+
+        # Test create_event with extraction_mode=SKIP
+        result = client.create_event(
+            memory_id="mem-123",
+            actor_id="user-123",
+            session_id="session-456",
+            messages=[("Sensitive data here", "USER")],
+            extraction_mode="SKIP",
+        )
+
+        assert result["eventId"] == "event-skip-123"
+
+        # Verify extractionMode was passed correctly
+        args, kwargs = mock_gmdp.create_event.call_args
+        assert kwargs["extractionMode"] == "SKIP"
+
+
+def test_create_event_without_extraction_mode():
+    """Test create_event without extraction_mode does not include the field."""
+    with patch("boto3.Session"):
+        client = MemoryClient()
+
+        # Mock the client
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        # Mock create_event response
+        mock_gmdp.create_event.return_value = {
+            "event": {
+                "eventId": "event-normal-123",
+                "memoryId": "mem-123",
+            }
+        }
+
+        # Test create_event without extraction_mode
+        client.create_event(
+            memory_id="mem-123",
+            actor_id="user-123",
+            session_id="session-456",
+            messages=[("Normal data here", "USER")],
+        )
+
+        # Verify extractionMode was NOT passed
+        args, kwargs = mock_gmdp.create_event.call_args
+        assert "extractionMode" not in kwargs
+
+
 def test_create_memory_and_wait_client_error():
     """Test create_memory_and_wait with ClientError during status check."""
     with patch("boto3.Session"):
