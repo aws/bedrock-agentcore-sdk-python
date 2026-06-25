@@ -2,15 +2,15 @@
 
 ## [1.15.1] - 2026-06-25
 
+### Added
+- feat(evaluation): add KMS, tags, online data source, and updated_at to batch eval (#533) (de79b6b)
+- feat(evaluation): expose evaluationReferenceInputs on EvaluatorInput (#540) (ff55a2a)
+
 ### Fixed
 - fix: use correct 'score' field for memory relevance filtering (#480) (eaaf451)
 - fix: remove invalid CLI entrypoint from pyproject.toml (#521) (e937f9a)
-
-### Other Changes
 - fix(evaluation): make EvaluatorOutput.label optional for error responses (#545) (1eabc67)
 - fix(memory): guard retrieve_customer_context against empty message content (#544) (56b215d)
-- feat(evaluation): add KMS, tags, online data source, and updated_at to batch eval (#533) (de79b6b)
-- feat(evaluation): expose evaluationReferenceInputs on EvaluatorInput (#540) (ff55a2a)
 - fix(runtime): drop time_of_last_update from A2A and AG-UI ping responses (#542) (44b1a92)
 - fix(ci): make security review robust to shallow-clone restoration (#524) (fefb240)
 
