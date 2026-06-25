@@ -491,9 +491,15 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                 )
 
                 if not injection_handler.validate_tool_input(tool_args):
-                    return self._error_tool_message(request, PaymentError("Could not apply payment credentials after error recovery."))
+                    return self._error_tool_message(
+                        request,
+                        PaymentError("Could not apply payment credentials after error recovery."),
+                    )
                 if not injection_handler.apply_payment_header(tool_args, payment_header):
-                    return self._error_tool_message(request, PaymentError("Could not apply payment credentials after error recovery."))
+                    return self._error_tool_message(
+                        request,
+                        PaymentError("Could not apply payment credentials after error recovery."),
+                    )
 
                 delay = self.config.post_payment_retry_delay_seconds
                 if delay > 0:
@@ -516,7 +522,12 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                     if retry_status == 402:
                         retry_body = _rh.extract_body(retry_prepared) or {}
                         detail = retry_body.get("error", "unknown") if isinstance(retry_body, dict) else "unknown"
-                        return self._error_tool_message(request, PaymentError(f"Payment signed but rejected after recovery ({detail})."))
+                        return self._error_tool_message(
+                            request,
+                            PaymentError(
+                                f"Payment signed but rejected after recovery ({detail})."
+                            ),
+                        )
 
                 return retry_result
 
@@ -742,7 +753,10 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                 return None
 
             retry_count += 1
-            logger.info("on_payment_error returned RETRY (async, attempt %d/%d)", retry_count, self.config.max_error_retries)
+            logger.info(
+                "on_payment_error returned RETRY (async, attempt %d/%d)",
+                retry_count, self.config.max_error_retries,
+            )
 
             try:
                 payment_header = await asyncio.to_thread(
@@ -756,9 +770,15 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                 )
 
                 if not injection_handler.validate_tool_input(tool_args):
-                    return self._error_tool_message(request, PaymentError("Could not apply payment credentials after error recovery."))
+                    return self._error_tool_message(
+                        request,
+                        PaymentError("Could not apply payment credentials after error recovery."),
+                    )
                 if not injection_handler.apply_payment_header(tool_args, payment_header):
-                    return self._error_tool_message(request, PaymentError("Could not apply payment credentials after error recovery."))
+                    return self._error_tool_message(
+                        request,
+                        PaymentError("Could not apply payment credentials after error recovery."),
+                    )
 
                 delay = self.config.post_payment_retry_delay_seconds
                 if delay > 0:
@@ -780,7 +800,12 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                     if retry_status == 402:
                         retry_body = _rh.extract_body(retry_prepared) or {}
                         detail = retry_body.get("error", "unknown") if isinstance(retry_body, dict) else "unknown"
-                        return self._error_tool_message(request, PaymentError(f"Payment signed but rejected after recovery ({detail})."))
+                        return self._error_tool_message(
+                            request,
+                            PaymentError(
+                                f"Payment signed but rejected after recovery ({detail})."
+                            ),
+                        )
 
                 return retry_result
 

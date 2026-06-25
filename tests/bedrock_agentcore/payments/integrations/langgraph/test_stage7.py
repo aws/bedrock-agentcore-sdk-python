@@ -42,7 +42,11 @@ def _make_config(**overrides):
 
 def _make_request(tool_name="http_request", tool_args=None, tool_id="tc-1"):
     req = MagicMock()
-    req.tool_call = {"name": tool_name, "args": tool_args if tool_args is not None else {"url": "http://x.com", "headers": {}}, "id": tool_id}
+    req.tool_call = {
+        "name": tool_name,
+        "args": tool_args if tool_args is not None else {"url": "http://x.com", "headers": {}},
+        "id": tool_id,
+    }
     return req
 
 

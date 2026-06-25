@@ -38,7 +38,10 @@ pytestmark = pytest.mark.skipif(
         "ACP_REGION",
         "ACP_TESTNET_URL",
     ]),
-    reason="Testnet env vars not set (ACP_PAYMENT_MANAGER_ARN, ACP_USER_ID, ACP_PAYMENT_INSTRUMENT_ID, ACP_REGION, ACP_TESTNET_URL)",
+    reason=(
+        "Testnet env vars not set (ACP_PAYMENT_MANAGER_ARN, ACP_USER_ID,"
+        " ACP_PAYMENT_INSTRUMENT_ID, ACP_REGION, ACP_TESTNET_URL)"
+    ),
 )
 
 

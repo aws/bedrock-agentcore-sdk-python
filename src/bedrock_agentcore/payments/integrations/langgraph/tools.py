@@ -88,7 +88,10 @@ def make_get_payment_instrument_tool(middleware: Any):
         Returns:
             Payment instrument details dictionary.
         """
-        resolved_id = (payment_instrument_id.strip() if payment_instrument_id else None) or middleware.config.payment_instrument_id
+        resolved_id = (
+            (payment_instrument_id.strip() if payment_instrument_id else None)
+            or middleware.config.payment_instrument_id
+        )
         resolved_user = (user_id.strip() if user_id else None) or middleware.config.user_id
         return middleware.payment_manager.get_payment_instrument(
             user_id=resolved_user,
@@ -184,7 +187,10 @@ def make_get_payment_session_tool(middleware: Any):
         Returns:
             Payment session details dictionary.
         """
-        resolved_id = (payment_session_id.strip() if payment_session_id else None) or middleware.config.payment_session_id
+        resolved_id = (
+            (payment_session_id.strip() if payment_session_id else None)
+            or middleware.config.payment_session_id
+        )
         resolved_user = (user_id.strip() if user_id else None) or middleware.config.user_id
         return middleware.payment_manager.get_payment_session(
             user_id=resolved_user,
