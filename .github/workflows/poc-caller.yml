@@ -3,4 +3,4 @@ on:
   workflow_dispatch:
 jobs:
   call:
-    uses: aws/bedrock-agentcore-sdk-python-private/.github/workflows/poc-reusable.yml@feat/reusable-workflow
+    uses: aws/bedrock-agentcore-sdk-python-private/.github/workflows/poc-reusable.yml@feat/reusable-workflows
