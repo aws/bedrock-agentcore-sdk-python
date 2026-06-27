@@ -173,3 +173,9 @@ simulation = [
 datasets = [
     "requests>=2.31.0",
 ]
+deepeval = [
+    "deepeval>=2.0.0",
+]
+autoevals = [
+    "autoevals>=0.0.50",
+]
