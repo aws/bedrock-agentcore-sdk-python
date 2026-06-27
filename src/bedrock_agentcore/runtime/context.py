@@ -7,7 +7,7 @@ import logging
 from contextvars import ContextVar
 from typing import Any, Callable, Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..config_bundle.bundle import ConfigBundleRef
 
@@ -21,10 +21,7 @@ class RequestContext(BaseModel):
     request_headers: Optional[Dict[str, str]] = Field(None)
     request: Optional[Any] = Field(None, description="The underlying Starlette request object")
 
-    class Config:
-        """Allow non-serializable types like Starlette Request."""
-
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class BedrockAgentCoreContext:
