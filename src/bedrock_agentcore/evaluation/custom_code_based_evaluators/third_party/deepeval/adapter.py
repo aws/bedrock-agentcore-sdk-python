@@ -45,7 +45,18 @@ class DeepEvalAdapter(BaseAdapter):
             self.metric.model = model
 
     def validate_fields(self, fields: Dict[str, Any]) -> None:
-        """No pre-validation; let DeepEval raise on missing params."""
+        """Validate that input and actual_output are present."""
+        missing = []
+        if not fields.get("input"):
+            missing.append("input")
+        if not fields.get("actual_output"):
+            missing.append("actual_output")
+        if missing:
+            metric_name = type(self.metric).__name__
+            raise ValueError(
+                f"Field(s) {missing} required by {metric_name} but not found in evaluation event. "
+                f"Provide a field_mapper or ensure spans contain the necessary data."
+            )
 
     def execute(self, fields: Dict[str, Any]) -> EvaluatorOutput:
         """Run the DeepEval metric and return formatted results."""
@@ -60,12 +71,12 @@ class DeepEvalAdapter(BaseAdapter):
         try:
             self.metric.measure(test_case)
         except Exception as e:
-            error_type = type(e).__name__
-            if "MissingTestCaseParams" in error_type or "missing" in str(e).lower():
+            if type(e).__name__ == "MissingTestCaseParamsError":
                 return EvaluatorOutput(
                     label="Error",
                     errorCode="MISSING_REQUIRED_FIELD",
-                    errorMessage=f"{type(self.metric).__name__} requires fields not available: {e}",
+                    errorMessage=f"{type(self.metric).__name__} requires fields not extracted from spans: {e}. "
+                    f"Provide a field_mapper to supply custom fields from your trace data.",
                 )
             raise
 

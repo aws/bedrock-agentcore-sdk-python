@@ -94,6 +94,7 @@ def extract_from_agent_span_events(
     for span in session_spans:
         attributes = span.get("attributes", {})
         operation_name = attributes.get("gen_ai.operation.name")
+        # Phase 1: only invoke_agent spans supported; others fall through to field_mapper
         if operation_name != "invoke_agent":
             continue
 

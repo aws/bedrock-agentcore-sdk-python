@@ -2,11 +2,10 @@
 
 import abc
 import logging
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, Optional
 
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.models import EvaluatorInput, EvaluatorOutput
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_parsers import (
-    SpanParseResult,
     parse_spans,
 )
 
@@ -31,8 +30,9 @@ class BaseAdapter(abc.ABC):
 
         Args:
             field_mapper: Optional callable that receives the EvaluatorInput and
-                returns a dict of field values. Bypasses default span parsing
-                when provided.
+                returns a dict with keys: 'input', 'actual_output', and optionally
+                'expected_output', 'context', 'retrieval_context'. Bypasses default
+                span parsing when provided.
         """
         self.field_mapper = field_mapper
 
@@ -81,8 +81,7 @@ class BaseAdapter(abc.ABC):
         if self.field_mapper is not None:
             return self.field_mapper(evaluator_input)
 
-        reference_inputs = getattr(evaluator_input, "reference_inputs", None)
-        result = parse_spans(evaluator_input.session_spans, reference_inputs)
+        result = parse_spans(evaluator_input.session_spans, evaluator_input.reference_inputs)
         return result.to_dict()
 
     @abc.abstractmethod

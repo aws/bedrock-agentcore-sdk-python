@@ -107,6 +107,36 @@ class TestDeepEvalAdapterSuccess:
         assert test_case.input == "mapped input"
         assert test_case.actual_output == "mapped output"
 
+    def test_reference_inputs_populates_expected_output(self):
+        metric = _mock_metric()
+        adapter = DeepEvalAdapter(metric=metric)
+
+        evaluator_input = EvaluatorInput(
+            evaluation_level="TRACE",
+            session_spans=[
+                {
+                    "traceId": "t1",
+                    "spanId": "s1",
+                    "attributes": {"gen_ai.operation.name": "invoke_agent"},
+                    "span_events": [
+                        {
+                            "body": {
+                                "input": {"messages": [{"role": "user", "content": "What is AI?"}]},
+                                "output": {"messages": [{"role": "assistant", "content": "AI is artificial intelligence."}]},
+                            }
+                        }
+                    ],
+                }
+            ],
+            target_trace_id="t1",
+            reference_inputs=[{"expectedResponse": "AI stands for artificial intelligence."}],
+        )
+
+        result = adapter(evaluator_input)
+
+        test_case = metric.measure.call_args[0][0]
+        assert test_case.expected_output == "AI stands for artificial intelligence."
+
     def test_model_override_sets_metric_model(self):
         metric = _mock_metric()
         DeepEvalAdapter(metric=metric, model="bedrock/anthropic.claude-3")
@@ -153,6 +183,31 @@ class TestDeepEvalAdapterErrors:
         assert result.errorCode == "FIELD_EXTRACTION_ERROR"
         assert result.label == "Error"
 
+    def test_missing_input_returns_error(self):
+        spans = [
+            {
+                "traceId": "t1",
+                "spanId": "s1",
+                "attributes": {"gen_ai.operation.name": "invoke_agent"},
+                "span_events": [
+                    {
+                        "body": {
+                            "output": {"messages": [{"role": "assistant", "content": "answer"}]},
+                        }
+                    }
+                ],
+            }
+        ]
+        metric = _mock_metric()
+        adapter = DeepEvalAdapter(metric=metric)
+
+        result = adapter(_make_evaluator_input(spans=spans))
+
+        assert result.errorCode == "MISSING_REQUIRED_FIELD"
+        assert "input" in result.errorMessage
+        assert "field_mapper" in result.errorMessage
+        metric.measure.assert_not_called()
+
     def test_metric_measure_exception_returns_error(self):
         metric = _mock_metric()
         metric.measure = MagicMock(side_effect=RuntimeError("LLM timeout"))
@@ -166,9 +221,7 @@ class TestDeepEvalAdapterErrors:
     def test_missing_params_error_caught(self):
         metric = _mock_metric()
 
-        class MissingTestCaseParamsError(Exception):
-            pass
-
+        MissingTestCaseParamsError = type("MissingTestCaseParamsError", (Exception,), {})
         metric.measure = MagicMock(
             side_effect=MissingTestCaseParamsError("retrieval_context is required")
         )
@@ -178,6 +231,7 @@ class TestDeepEvalAdapterErrors:
 
         assert result.errorCode == "MISSING_REQUIRED_FIELD"
         assert "retrieval_context" in result.errorMessage
+        assert "field_mapper" in result.errorMessage
 
     def test_never_raises(self):
         metric = _mock_metric()

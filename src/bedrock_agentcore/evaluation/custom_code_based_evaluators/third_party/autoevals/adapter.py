@@ -40,7 +40,7 @@ class AutoevalsAdapter(BaseAdapter):
         self.threshold = threshold
 
     def validate_fields(self, fields: Dict[str, Any]) -> None:
-        """Validate that input and actual_output are present."""
+        """Validate minimum required fields; scorer raises on additional missing params."""
         missing = []
         if not fields.get("input"):
             missing.append("input")
