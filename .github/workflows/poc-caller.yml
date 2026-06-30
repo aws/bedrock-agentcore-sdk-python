@@ -1,8 +1,0 @@
-name: PoC Caller
-on:
-  workflow_dispatch:
-permissions:
-  contents: read
-jobs:
-  call:
-    uses: aws/bedrock-agentcore-sdk-python-private/.github/workflows/reusable-poc.yml@feat/reusable-workflows
