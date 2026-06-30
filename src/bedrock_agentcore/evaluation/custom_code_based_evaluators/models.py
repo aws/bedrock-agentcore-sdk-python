@@ -51,7 +51,6 @@ class EvaluatorInput(BaseModel):
     session_spans: List[Dict]
     target_trace_id: Optional[str] = None
     target_span_id: Optional[str] = None
-    reference_inputs: Optional[List[Dict]] = None
     schema_version: str = "1.0"
     evaluator_id: Optional[str] = None
     evaluator_name: Optional[str] = None

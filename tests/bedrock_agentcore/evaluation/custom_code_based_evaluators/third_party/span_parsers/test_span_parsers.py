@@ -2,6 +2,7 @@
 
 import pytest
 
+from bedrock_agentcore.evaluation.custom_code_based_evaluators.models import ReferenceInput
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_parsers import (
     SpanParseResult,
     parse_spans,
@@ -96,7 +97,7 @@ class TestParseSpansSuccess:
                 output_messages=[{"role": "assistant", "content": "a"}],
             )
         ]
-        refs = [{"expectedResponse": "expected answer"}]
+        refs = [ReferenceInput(expectedResponse={"text": "expected answer"})]
 
         result = parse_spans(spans, reference_inputs=refs)
 

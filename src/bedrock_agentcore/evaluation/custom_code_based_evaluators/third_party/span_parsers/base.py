@@ -28,7 +28,7 @@ _PARSERS = [
 
 def parse_spans(
     session_spans: List[Dict[str, Any]],
-    reference_inputs: Optional[List[Dict[str, Any]]] = None,
+    reference_inputs: Optional[List[Any]] = None,
 ) -> SpanParseResult:
     """Parse session spans using the first matching agent-level parser.
 
@@ -38,7 +38,7 @@ def parse_spans(
 
     Args:
         session_spans: Raw ADOT span dicts from the evaluation service.
-        reference_inputs: Optional reference inputs for expected_output.
+        reference_inputs: Optional ReferenceInput list for expected_output.
 
     Returns:
         SpanParseResult with extracted fields.
@@ -50,7 +50,8 @@ def parse_spans(
         result = parser(session_spans)
         if result is not None:
             if reference_inputs:
-                expected = reference_inputs[0].get("expectedResponse")
+                ref = reference_inputs[0]
+                expected = getattr(ref, "expected_response_text", None)
                 if expected:
                     result.expected_output = expected
             return result

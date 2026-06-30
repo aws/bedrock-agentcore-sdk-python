@@ -129,7 +129,7 @@ class TestDeepEvalAdapterSuccess:
                 }
             ],
             target_trace_id="t1",
-            reference_inputs=[{"expectedResponse": "AI stands for artificial intelligence."}],
+            reference_inputs=[{"expectedResponse": {"text": "AI stands for artificial intelligence."}}],
         )
 
         result = adapter(evaluator_input)
