@@ -797,7 +797,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             return []
 
     def _filter_restored_tool_context(self, messages: list[SessionMessage]) -> list[SessionMessage]:
-        """Strip historical toolUse/toolResult context from restored messages."""
+        """Strip toolUse/toolResult context, merging same-role turns into a Converse-valid sequence.
+
+        The trailing turn is left as-is: the runtime appends the next user turn before the model
+        call, so forcing a user tail here would create two adjacent user turns.
+        """
         filtered_messages: list[SessionMessage] = []
         for session_message in messages:
             message = session_message.to_message()
@@ -810,6 +814,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             if not filtered_content:
                 continue
 
+            if filtered_messages and filtered_messages[-1].to_message()["role"] == message["role"]:
+                filtered_content = filtered_messages.pop().to_message()["content"] + filtered_content
+
             filtered_message: Message = {"role": message["role"], "content": filtered_content}
             filtered_messages.append(
                 SessionMessage(
@@ -820,6 +827,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                     updated_at=session_message.updated_at,
                 )
             )
+
+        while filtered_messages and filtered_messages[0].to_message()["role"] != "user":
+            filtered_messages.pop(0)
 
         return filtered_messages
 
