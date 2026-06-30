@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.16.0] - 2026-06-30
+
+### Other Changes
+- fix(ci): prevent script injection in GitHub Actions workflows (#559) (c771470)
+- Add extraction_mode parameter to MemoryClient.create_event (#550) (22fc032)
+
 ## [1.15.1] - 2026-06-25
 
 ### Added
