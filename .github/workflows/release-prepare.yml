@@ -31,8 +31,10 @@ jobs:
     steps:
       - name: Validate running from main
         if: github.ref != 'refs/heads/main'
+        env:
+          GITHUB_REF: ${{ github.ref }}
         run: |
-          echo "❌ ERROR: Must run from main branch, got ${{ github.ref }}"
+          echo "❌ ERROR: Must run from main branch, got $GITHUB_REF"
           exit 1
 
       - name: Checkout code
