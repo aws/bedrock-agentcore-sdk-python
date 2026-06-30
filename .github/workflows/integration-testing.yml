@@ -185,9 +185,11 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
+        env:
+          EXTRA_DEPS: ${{ matrix.extra-deps }}
         run: |
           pip install -e .
-          pip install --no-cache-dir pytest pytest-xdist pytest-order pytest-rerunfailures requests strands-agents uvicorn httpx starlette websockets ${{ matrix.extra-deps }}
+          pip install --no-cache-dir pytest pytest-xdist pytest-order pytest-rerunfailures requests strands-agents uvicorn httpx starlette websockets $EXTRA_DEPS
 
       - name: Run integration tests
         env:
@@ -208,10 +210,14 @@ jobs:
           COGNITO_POOL_ID: ${{ secrets.COGNITO_POOL_ID }}
           COGNITO_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID }}
           COGNITO_CLIENT_SECRET: ${{ secrets.COGNITO_CLIENT_SECRET }}
+          PYTEST_PATH: ${{ matrix.path }}
+          PYTEST_IGNORE: ${{ matrix.ignore }}
         id: tests
         timeout-minutes: ${{ matrix.timeout }}
+        # PYTEST_PATH/PYTEST_IGNORE come from the job matrix and hold space-separated
+        # pytest path/ignore args; left unquoted intentionally so they word-split.
         run: |
-          pytest ${{ matrix.path }} ${{ matrix.ignore }} -n auto --dist=loadscope -s --log-cli-level=INFO
+          pytest $PYTEST_PATH $PYTEST_IGNORE -n auto --dist=loadscope -s --log-cli-level=INFO
 
   safety-gate:
     runs-on: ubuntu-latest

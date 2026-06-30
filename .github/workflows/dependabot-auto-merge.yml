@@ -56,20 +56,28 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          DEP_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          PREV_VERSION: ${{ steps.metadata.outputs.previous-version }}
+          NEW_VERSION: ${{ steps.metadata.outputs.new-version }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
         run: |
           gh pr merge --auto --squash "$PR_URL"
-          echo "✓ Auto-merge enabled: ${{ steps.metadata.outputs.dependency-names }} \
-          (${{ steps.metadata.outputs.previous-version }} → \
-          ${{ steps.metadata.outputs.new-version }}, \
-          ${{ steps.metadata.outputs.update-type }})"
+          echo "✓ Auto-merge enabled: $DEP_NAMES \
+          ($PREV_VERSION → \
+          $NEW_VERSION, \
+          $UPDATE_TYPE)"
 
       # major bumps: log clearly and do nothing.
       # The PR stays open and is assigned to aws/bedrock-agentcore-maintainers
       # via dependabot.yml for human review.
       - name: Skip major bumps — human review required
         if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        env:
+          DEP_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          PREV_VERSION: ${{ steps.metadata.outputs.previous-version }}
+          NEW_VERSION: ${{ steps.metadata.outputs.new-version }}
         run: |
-          echo "⏭ Skipped: ${{ steps.metadata.outputs.dependency-names }} \
-          is a major bump (${{ steps.metadata.outputs.previous-version }} → \
-          ${{ steps.metadata.outputs.new-version }}). \
+          echo "⏭ Skipped: $DEP_NAMES \
+          is a major bump ($PREV_VERSION → \
+          $NEW_VERSION). \
           Requires review from aws/bedrock-agentcore-maintainers."
