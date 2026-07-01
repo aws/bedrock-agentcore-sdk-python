@@ -7,7 +7,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:
-    from .config import AgentCorePaymentsConfig
+    from ..config import AgentCorePaymentsConfig
 
 
 class ErrorResolution(Enum):
