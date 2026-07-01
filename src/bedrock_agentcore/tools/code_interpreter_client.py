@@ -74,23 +74,32 @@ class CodeInterpreter:
     """
 
     def __init__(
-        self, region: str, session: Optional[boto3.Session] = None, integration_source: Optional[str] = None
+        self,
+        region: Optional[str] = None,
+        session: Optional[boto3.Session] = None,
+        integration_source: Optional[str] = None,
     ) -> None:
         """Initialize a Code Interpreter client for the specified AWS region.
 
         Args:
-            region (str): The AWS region to use.
+            region (Optional[str]): The AWS region to use. Defaults to None, in
+                which case the region is resolved from the boto3 session (environment
+                variables, config file, instance metadata, etc.).
             session (Optional[boto3.Session]): Optional boto3 session.
             integration_source (Optional[str]): Framework integration identifier
                 for telemetry (e.g., 'langchain', 'crewai'). Used to track
                 customer acquisition from different integrations.
         """
-        self.region = region
         self.logger = logging.getLogger(__name__)
         self.integration_source = integration_source
 
         if session is None:
             session = boto3.Session()
+
+        if region is None:
+            region = session.region_name
+
+        self.region = region
 
         # Build config with user-agent for telemetry
         user_agent_extra = build_user_agent_suffix(integration_source)
@@ -800,12 +809,15 @@ class CodeInterpreter:
 
 @contextmanager
 def code_session(
-    region: str, session: Optional[boto3.Session] = None, identifier: Optional[str] = None
+    region: Optional[str] = None,
+    session: Optional[boto3.Session] = None,
+    identifier: Optional[str] = None,
 ) -> Generator[CodeInterpreter, None, None]:
     """Context manager for creating and managing a code interpreter session.
 
     Args:
-        region (str): AWS region.
+        region (Optional[str]): AWS region. Defaults to None, resolved from the
+            boto3 session when not provided.
         session (Optional[boto3.Session]): Optional boto3 session.
         identifier (Optional[str]): Interpreter identifier (system or custom).
 
