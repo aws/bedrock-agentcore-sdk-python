@@ -3,7 +3,8 @@
 import logging
 import time
 import uuid
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain.messages import ToolMessage
@@ -50,6 +51,17 @@ class _FallbackHandler:
 
     def extract_body(self, result: Any) -> Optional[Dict[str, Any]]:
         return self._parsed.get("body", {})
+
+
+@dataclass
+class _DetectionResult:
+    """Result of 402 detection phase."""
+
+    detection_handler: Any
+    has_custom_handler: bool
+    prepared: Dict[str, List[Dict[str, str]]]
+    tool_name: str
+    tool_args: Dict[str, Any]
 
 
 class AgentCorePaymentsMiddleware(AgentMiddleware):
@@ -108,6 +120,10 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         tools.append(make_get_payment_instrument_balance_tool(self))
         tools.append(make_get_payment_session_tool(self))
         return tools
+
+    # -------------------------------------------------------------------------
+    # Shared helpers (pure logic, no async/sync split)
+    # -------------------------------------------------------------------------
 
     @staticmethod
     def _prepare_for_handler(content: Any) -> Optional[Dict[str, List[Dict[str, str]]]]:
@@ -219,6 +235,151 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
         return None
 
+    def _check_guards(
+        self, request: ToolCallRequest, result: Union[ToolMessage, Command]
+    ) -> Optional[Union[ToolMessage, Command]]:
+        """Check early-exit guards. Returns the result to pass through, or None to continue processing."""
+        if isinstance(result, Command):
+            return result
+        if not self.config.auto_payment:
+            return result
+        tool_name = request.tool_call["name"]
+        if self.config.payment_tool_allowlist is not None:
+            if tool_name not in self.config.payment_tool_allowlist:
+                return result
+        return None
+
+    def _detect_402(self, request: ToolCallRequest, result: ToolMessage) -> Optional[_DetectionResult]:
+        """Run 402 detection. Returns detection context if 402 found, None otherwise."""
+        tool_name = request.tool_call["name"]
+        tool_args = request.tool_call.get("args", {})
+        prepared = self._prepare_for_handler(result.content)
+        if prepared is None:
+            return None
+
+        has_custom_handler = self.config.custom_handlers is not None and tool_name in self.config.custom_handlers
+
+        if has_custom_handler:
+            detection_handler = self.config.custom_handlers[tool_name]
+        else:
+            from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler
+
+            detection_handler = GenericPaymentHandler()
+
+        status_code = detection_handler.extract_status_code(prepared)
+
+        # Lenient fallback if marker detection didn't find 402
+        if status_code != 402 and not has_custom_handler:
+            fallback = self._fallback_detect_402(result.content)
+            if fallback is not None:
+                status_code = 402
+                detection_handler = _FallbackHandler(fallback)
+
+        if status_code != 402:
+            return None
+
+        logger.info("Detected 402 Payment Required from tool: %s", tool_name)
+        return _DetectionResult(
+            detection_handler=detection_handler,
+            has_custom_handler=has_custom_handler,
+            prepared=prepared,
+            tool_name=tool_name,
+            tool_args=tool_args,
+        )
+
+    def _extract_payment_request(self, detection: _DetectionResult) -> Dict[str, Any]:
+        """Extract the payment-required request dict from a detection result."""
+        headers_402 = detection.detection_handler.extract_headers(detection.prepared) or {}
+        body_402 = detection.detection_handler.extract_body(detection.prepared) or {}
+        return {
+            "statusCode": 402,
+            "headers": headers_402,
+            "body": body_402,
+        }
+
+    def _inject_payment_header(
+        self,
+        request: ToolCallRequest,
+        detection: _DetectionResult,
+        payment_header: Dict[str, str],
+    ) -> Optional[ToolMessage]:
+        """Inject payment header into tool args. Returns error ToolMessage on failure, None on success."""
+        if detection.has_custom_handler:
+            injection_handler = detection.detection_handler
+        else:
+            injection_handler = self._get_handler(detection.tool_name, detection.tool_args)
+
+        if not injection_handler.validate_tool_input(detection.tool_args):
+            return self._error_tool_message(
+                request,
+                PaymentError("Could not apply payment credentials to this tool's request format."),
+            )
+        if not injection_handler.apply_payment_header(detection.tool_args, payment_header):
+            return self._error_tool_message(
+                request,
+                PaymentError("Could not apply payment credentials to this tool's request format."),
+            )
+        return None
+
+    def _check_post_payment_rejection(
+        self, request: ToolCallRequest, retry_result: Union[ToolMessage, Command]
+    ) -> Optional[Union[ToolMessage, Command]]:
+        """Check if the retry result is still a 402 (payment rejected). Returns error or None."""
+        if isinstance(retry_result, Command):
+            return retry_result
+
+        retry_prepared = self._prepare_for_handler(retry_result.content)
+        if retry_prepared is None:
+            return None
+
+        from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler as _GH
+
+        _retry_handler = _GH()
+        retry_status = _retry_handler.extract_status_code(retry_prepared)
+        if retry_status != 402:
+            retry_fallback = self._fallback_detect_402(retry_result.content)
+            if retry_fallback is not None:
+                retry_status = 402
+                _retry_handler = _FallbackHandler(retry_fallback)
+        if retry_status == 402:
+            retry_body = _retry_handler.extract_body(retry_prepared) or {}
+            error_detail = (
+                retry_body.get("error", "unknown error") if isinstance(retry_body, dict) else "unknown error"
+            )
+            return self._error_tool_message(
+                request,
+                PaymentError(f"Payment was signed but rejected by the server ({error_detail})."),
+            )
+        return None
+
+    def _check_post_recovery_rejection(
+        self, request: ToolCallRequest, retry_result: Union[ToolMessage, Command]
+    ) -> Optional[Union[ToolMessage, Command]]:
+        """Check if the retry result after error recovery is still a 402. Returns error or None."""
+        if isinstance(retry_result, Command):
+            return retry_result
+
+        retry_prepared = self._prepare_for_handler(retry_result.content)
+        if retry_prepared is None:
+            return None
+
+        from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler as _GH
+
+        _rh = _GH()
+        retry_status = _rh.extract_status_code(retry_prepared)
+        if retry_status != 402:
+            fallback = self._fallback_detect_402(retry_result.content)
+            if fallback:
+                retry_status = 402
+        if retry_status == 402:
+            retry_body = _rh.extract_body(retry_prepared) or {}
+            detail = retry_body.get("error", "unknown") if isinstance(retry_body, dict) else "unknown"
+            return self._error_tool_message(
+                request,
+                PaymentError(f"Payment signed but rejected after recovery ({detail})."),
+            )
+        return None
+
     def _generate_payment_header(self, payment_required_request: Dict[str, Any]) -> Dict[str, str]:
         """Generate payment header via PaymentManager.
 
@@ -266,6 +427,32 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         self.config.payment_session_id = session["paymentSessionId"]
         logger.info("auto_session: created session %s", self.config.payment_session_id)
 
+    @staticmethod
+    def _error_tool_message(request: ToolCallRequest, exception: Exception) -> ToolMessage:
+        """Create a ToolMessage with a deterministic error message for the LLM.
+
+        Looks up the exception type in the error message map. Falls back to a
+        generic message that includes the exception string for unrecognized types.
+
+        Args:
+            request: The original tool call request (for tool_call_id).
+            exception: The exception to report.
+
+        Returns:
+            ToolMessage with status="error" and deterministic content.
+        """
+        msg = get_payment_error_message(exception)
+
+        return ToolMessage(
+            content=f"PAYMENT ERROR: {msg}",
+            tool_call_id=request.tool_call["id"],
+            status="error",
+        )
+
+    # -------------------------------------------------------------------------
+    # Sync path
+    # -------------------------------------------------------------------------
+
     def wrap_tool_call(
         self,
         request: ToolCallRequest,
@@ -282,86 +469,26 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         """
         result = handler(request)
 
-        # Guard: Command results have no tool output to inspect
-        if isinstance(result, Command):
-            return result
-
-        # Guard: auto_payment disabled
-        if not self.config.auto_payment:
-            return result
-
-        # Guard: allowlist filtering
-        tool_name = request.tool_call["name"]
-        if self.config.payment_tool_allowlist is not None:
-            if tool_name not in self.config.payment_tool_allowlist:
-                return result
+        # Guard checks
+        guard_result = self._check_guards(request, result)
+        if guard_result is not None:
+            return guard_result
 
         # 402 detection
-        # Priority: custom handler → GenericPaymentHandler (marker) → lenient fallback (raw JSON)
-        tool_args = request.tool_call.get("args", {})
-        prepared = self._prepare_for_handler(result.content)
-        if prepared is None:
+        detection = self._detect_402(request, result)
+        if detection is None:
             return result
 
-        has_custom_handler = self.config.custom_handlers is not None and tool_name in self.config.custom_handlers
-
-        if has_custom_handler:
-            detection_handler = self.config.custom_handlers[tool_name]
-        else:
-            from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler
-
-            detection_handler = GenericPaymentHandler()
-
-        status_code = detection_handler.extract_status_code(prepared)
-
-        # Lenient fallback: if no custom handler and marker detection didn't find 402,
-        # try parsing raw JSON for statusCode:402 or x402Version fields.
-        # This handles MCP tools and other tools that return raw JSON without the marker.
-        if status_code != 402 and not has_custom_handler:
-            fallback = self._fallback_detect_402(result.content)
-            if fallback is not None:
-                status_code = 402
-                # Switch detection_handler to a wrapper that returns the parsed data
-                detection_handler = _FallbackHandler(fallback)
-
-        if status_code != 402:
-            return result
-
-        logger.info("Detected 402 Payment Required from tool: %s", tool_name)
-
-        # Payment processing with comprehensive error handling
+        # Payment processing
         payment_required_request = None
         try:
-            # Extract payment requirement details
-            headers_402 = detection_handler.extract_headers(prepared) or {}
-            body_402 = detection_handler.extract_body(prepared) or {}
-            payment_required_request = {
-                "statusCode": 402,
-                "headers": headers_402,
-                "body": body_402,
-            }
-
-            # Generate payment header
+            payment_required_request = self._extract_payment_request(detection)
             payment_header = self._generate_payment_header(payment_required_request)
 
-            # Resolve handler for header injection
-            # Custom handler handles all phases; otherwise resolve by tool shape
-            if has_custom_handler:
-                injection_handler = detection_handler
-            else:
-                injection_handler = self._get_handler(tool_name, tool_args)
-
-            # Inject header into tool args
-            if not injection_handler.validate_tool_input(tool_args):
-                return self._error_tool_message(
-                    request,
-                    PaymentError("Could not apply payment credentials to this tool's request format."),
-                )
-            if not injection_handler.apply_payment_header(tool_args, payment_header):
-                return self._error_tool_message(
-                    request,
-                    PaymentError("Could not apply payment credentials to this tool's request format."),
-                )
+            # Inject header
+            inject_error = self._inject_payment_header(request, detection, payment_header)
+            if inject_error is not None:
+                return inject_error
 
             # Blockchain timing delay
             delay = self.config.post_payment_retry_delay_seconds
@@ -372,42 +499,20 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             # Re-execute the tool with payment credentials
             retry_result = handler(request)
 
-            if isinstance(retry_result, Command):
-                return retry_result
-
             # Post-payment rejection detection
-            retry_prepared = self._prepare_for_handler(retry_result.content)
-            if retry_prepared is not None:
-                # Use fresh detection on the retry result (not the frozen fallback handler)
-                from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler as _GH
-
-                _retry_handler = _GH()
-                retry_status = _retry_handler.extract_status_code(retry_prepared)
-                # Also check via fallback if marker not found
-                if retry_status != 402:
-                    retry_fallback = self._fallback_detect_402(retry_result.content)
-                    if retry_fallback is not None:
-                        retry_status = 402
-                        _retry_handler = _FallbackHandler(retry_fallback)
-                if retry_status == 402:
-                    retry_body = _retry_handler.extract_body(retry_prepared) or {}
-                    error_detail = (
-                        retry_body.get("error", "unknown error") if isinstance(retry_body, dict) else "unknown error"
-                    )
-                    return self._error_tool_message(
-                        request,
-                        PaymentError(f"Payment was signed but rejected by the server ({error_detail})."),
-                    )
+            rejection = self._check_post_payment_rejection(request, retry_result)
+            if rejection is not None:
+                return rejection
 
             return retry_result
 
         except Exception as e:
-            logger.error("Payment processing error for tool %s: %s: %s", tool_name, type(e).__name__, e)
+            logger.error("Payment processing error for tool %s: %s: %s", detection.tool_name, type(e).__name__, e)
             if self.config.on_payment_error is not None and self.config.max_error_retries > 0:
                 resolution = self._invoke_error_handler(
                     exception=e,
-                    tool_name=tool_name,
-                    tool_args=tool_args,
+                    tool_name=detection.tool_name,
+                    tool_args=detection.tool_args,
                     payment_required_request=payment_required_request,
                     request=request,
                     handler=handler,
@@ -492,27 +597,11 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                     time.sleep(delay)
 
                 retry_result = handler(request)
-                if isinstance(retry_result, Command):
-                    return retry_result
 
-                # Post-payment rejection check
-                retry_prepared = self._prepare_for_handler(retry_result.content)
-                if retry_prepared is not None:
-                    from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler as _GH
-
-                    _rh = _GH()
-                    retry_status = _rh.extract_status_code(retry_prepared)
-                    if retry_status != 402:
-                        fallback = self._fallback_detect_402(retry_result.content)
-                        if fallback:
-                            retry_status = 402
-                    if retry_status == 402:
-                        retry_body = _rh.extract_body(retry_prepared) or {}
-                        detail = retry_body.get("error", "unknown") if isinstance(retry_body, dict) else "unknown"
-                        return self._error_tool_message(
-                            request,
-                            PaymentError(f"Payment signed but rejected after recovery ({detail})."),
-                        )
+                # Post-recovery rejection check
+                rejection = self._check_post_recovery_rejection(request, retry_result)
+                if rejection is not None:
+                    return rejection
 
                 return retry_result
 
@@ -524,27 +613,9 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         logger.warning("max_error_retries (%d) exhausted", self.config.max_error_retries)
         return self._error_tool_message(request, current_exception)
 
-    @staticmethod
-    def _error_tool_message(request: ToolCallRequest, exception: Exception) -> ToolMessage:
-        """Create a ToolMessage with a deterministic error message for the LLM.
-
-        Looks up the exception type in the error message map. Falls back to a
-        generic message that includes the exception string for unrecognized types.
-
-        Args:
-            request: The original tool call request (for tool_call_id).
-            exception: The exception to report.
-
-        Returns:
-            ToolMessage with status="error" and deterministic content.
-        """
-        msg = get_payment_error_message(exception)
-
-        return ToolMessage(
-            content=f"PAYMENT ERROR: {msg}",
-            tool_call_id=request.tool_call["id"],
-            status="error",
-        )
+    # -------------------------------------------------------------------------
+    # Async path
+    # -------------------------------------------------------------------------
 
     async def awrap_tool_call(
         self,
@@ -567,112 +638,50 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
         result = await handler(request)
 
-        if isinstance(result, Command):
-            return result
-        if not self.config.auto_payment:
-            return result
+        # Guard checks (shared)
+        guard_result = self._check_guards(request, result)
+        if guard_result is not None:
+            return guard_result
 
-        tool_name = request.tool_call["name"]
-        if self.config.payment_tool_allowlist is not None:
-            if tool_name not in self.config.payment_tool_allowlist:
-                return result
-
-        tool_args = request.tool_call.get("args", {})
-        prepared = self._prepare_for_handler(result.content)
-        if prepared is None:
+        # 402 detection (shared)
+        detection = self._detect_402(request, result)
+        if detection is None:
             return result
 
-        has_custom_handler = self.config.custom_handlers is not None and tool_name in self.config.custom_handlers
-
-        if has_custom_handler:
-            detection_handler = self.config.custom_handlers[tool_name]
-        else:
-            from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler
-
-            detection_handler = GenericPaymentHandler()
-
-        status_code = detection_handler.extract_status_code(prepared)
-
-        # Lenient fallback for async path (same as sync)
-        if status_code != 402 and not has_custom_handler:
-            fallback = self._fallback_detect_402(result.content)
-            if fallback is not None:
-                status_code = 402
-                detection_handler = _FallbackHandler(fallback)
-
-        if status_code != 402:
-            return result
-
-        logger.info("Detected 402 Payment Required from tool (async): %s", tool_name)
-
+        # Payment processing
         payment_required_request = None
         try:
-            headers_402 = detection_handler.extract_headers(prepared) or {}
-            body_402 = detection_handler.extract_body(prepared) or {}
-            payment_required_request = {
-                "statusCode": 402,
-                "headers": headers_402,
-                "body": body_402,
-            }
-
+            payment_required_request = self._extract_payment_request(detection)
             payment_header = await asyncio.to_thread(self._generate_payment_header, payment_required_request)
 
-            if has_custom_handler:
-                injection_handler = detection_handler
-            else:
-                injection_handler = self._get_handler(tool_name, tool_args)
+            # Inject header (shared)
+            inject_error = self._inject_payment_header(request, detection, payment_header)
+            if inject_error is not None:
+                return inject_error
 
-            if not injection_handler.validate_tool_input(tool_args):
-                return self._error_tool_message(
-                    request,
-                    PaymentError("Could not apply payment credentials to this tool's request format."),
-                )
-            if not injection_handler.apply_payment_header(tool_args, payment_header):
-                return self._error_tool_message(
-                    request,
-                    PaymentError("Could not apply payment credentials to this tool's request format."),
-                )
-
+            # Blockchain timing delay (async)
             delay = self.config.post_payment_retry_delay_seconds
             if delay > 0:
                 logger.info("Waiting %.1fs before retry for blockchain timing (async)", delay)
                 await asyncio.sleep(delay)
 
+            # Re-execute the tool with payment credentials
             retry_result = await handler(request)
 
-            if isinstance(retry_result, Command):
-                return retry_result
-
-            retry_prepared = self._prepare_for_handler(retry_result.content)
-            if retry_prepared is not None:
-                from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler as _GH
-
-                _retry_handler = _GH()
-                retry_status = _retry_handler.extract_status_code(retry_prepared)
-                if retry_status != 402:
-                    retry_fallback = self._fallback_detect_402(retry_result.content)
-                    if retry_fallback is not None:
-                        retry_status = 402
-                        _retry_handler = _FallbackHandler(retry_fallback)
-                if retry_status == 402:
-                    retry_body = _retry_handler.extract_body(retry_prepared) or {}
-                    error_detail = (
-                        retry_body.get("error", "unknown error") if isinstance(retry_body, dict) else "unknown error"
-                    )
-                    return self._error_tool_message(
-                        request,
-                        PaymentError(f"Payment was signed but rejected by the server ({error_detail})."),
-                    )
+            # Post-payment rejection detection (shared)
+            rejection = self._check_post_payment_rejection(request, retry_result)
+            if rejection is not None:
+                return rejection
 
             return retry_result
 
         except Exception as e:
-            logger.error("Payment processing error (async) for tool %s: %s: %s", tool_name, type(e).__name__, e)
+            logger.error("Payment processing error (async) for tool %s: %s: %s", detection.tool_name, type(e).__name__, e)
             if self.config.on_payment_error is not None and self.config.max_error_retries > 0:
                 resolution = await self._ainvoke_error_handler(
                     exception=e,
-                    tool_name=tool_name,
-                    tool_args=tool_args,
+                    tool_name=detection.tool_name,
+                    tool_args=detection.tool_args,
                     payment_required_request=payment_required_request,
                     request=request,
                     handler=handler,
@@ -762,26 +771,11 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                     await asyncio.sleep(delay)
 
                 retry_result = await handler(request)
-                if isinstance(retry_result, Command):
-                    return retry_result
 
-                retry_prepared = self._prepare_for_handler(retry_result.content)
-                if retry_prepared is not None:
-                    from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler as _GH
-
-                    _rh = _GH()
-                    retry_status = _rh.extract_status_code(retry_prepared)
-                    if retry_status != 402:
-                        fallback = self._fallback_detect_402(retry_result.content)
-                        if fallback:
-                            retry_status = 402
-                    if retry_status == 402:
-                        retry_body = _rh.extract_body(retry_prepared) or {}
-                        detail = retry_body.get("error", "unknown") if isinstance(retry_body, dict) else "unknown"
-                        return self._error_tool_message(
-                            request,
-                            PaymentError(f"Payment signed but rejected after recovery ({detail})."),
-                        )
+                # Post-recovery rejection check (shared)
+                rejection = self._check_post_recovery_rejection(request, retry_result)
+                if rejection is not None:
+                    return rejection
 
                 return retry_result
 
