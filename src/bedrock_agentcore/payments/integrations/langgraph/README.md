@@ -408,6 +408,8 @@ config = AgentCorePaymentsConfig(
 
 The session is created once and reused for all subsequent payments in that middleware instance.
 
+> **Instance lifecycle:** Create one `AgentCorePaymentsMiddleware` per agent invocation (or per user request in a server). The middleware is not thread-safe — sharing a single instance across concurrent invocations can cause races on session creation and config mutations.
+
 ## Disabling Auto-Payment
 
 Use the middleware only for its built-in query tools without 402 interception:
