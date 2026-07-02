@@ -1,5 +1,11 @@
 """Functional test: full 402 → sign → retry → 200 flow against a real testnet.
 
+PRE-MERGE REQUIREMENT:
+    These tests are skipped in CI (env vars not set). Any PR that modifies the
+    langgraph middleware MUST be validated against live testnet before merge.
+    Run this suite locally with a funded wallet on Base Sepolia to confirm the
+    real 402 → sign → settle → retry flow works end-to-end.
+
 Run:
     python -m pytest tests/bedrock_agentcore/payments/integrations/langgraph/test_functional.py -v -s
 
