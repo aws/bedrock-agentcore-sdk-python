@@ -445,6 +445,49 @@ config = AgentCorePaymentsConfig(
 
 With bearer auth, `user_id` is optional (derived from JWT `sub` claim).
 
+## Sync vs Async
+
+The middleware provides both sync (`wrap_tool_call`) and async (`awrap_tool_call`) paths. You don't choose between them — LangGraph calls the right one automatically based on how you invoke the agent:
+
+| Invocation | Path used | When to use |
+|---|---|---|
+| `agent.invoke(...)` | Sync — uses `time.sleep`, direct calls | Scripts, CLI tools, simple applications |
+| `agent.ainvoke(...)` / `await agent.ainvoke(...)` | Async — uses `asyncio.sleep`, `asyncio.to_thread` | FastAPI, Jupyter notebooks, web servers, any `async def` context |
+
+### What the async path does differently
+
+- **Non-blocking delay:** Uses `await asyncio.sleep()` instead of `time.sleep()` for the post-payment blockchain timing delay. This avoids blocking the event loop while waiting for on-chain settlement.
+- **Threaded payment signing:** Runs `generate_payment_header()` via `asyncio.to_thread()` since the PaymentManager SDK is synchronous. This keeps the event loop free during the signing call.
+- **Async error callbacks:** If your `on_payment_error` handler is `async def`, it's automatically awaited in the async path (sync callbacks also work).
+
+### Example: async in FastAPI
+
+```python
+from fastapi import FastAPI
+from langchain.agents import create_agent
+
+app = FastAPI()
+
+@app.post("/chat")
+async def chat(message: str):
+    config = AgentCorePaymentsConfig(...)
+    payments = AgentCorePaymentsMiddleware(config)
+    agent = create_agent(model="claude-sonnet-4-20250514", tools=[], middleware=[payments])
+
+    # Uses awrap_tool_call automatically — won't block other requests
+    result = await agent.ainvoke({"messages": [{"role": "user", "content": message}]})
+    return result
+```
+
+### Example: sync in a script
+
+```python
+# Uses wrap_tool_call automatically — simple and straightforward
+result = agent.invoke({"messages": [{"role": "user", "content": "Fetch paid data"}]})
+```
+
+No configuration needed — just use `.invoke()` or `.ainvoke()` and the middleware adapts.
+
 ## Comparison: With vs Without Middleware
 
 **Without middleware** (manual wrapping):

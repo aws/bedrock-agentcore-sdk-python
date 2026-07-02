@@ -3,7 +3,6 @@
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
 from langchain.messages import ToolMessage
 
 from bedrock_agentcore.payments.integrations.langgraph import AgentCorePaymentsConfig
@@ -132,9 +131,7 @@ class TestAutoSession:
         mw = AgentCorePaymentsMiddleware(config)
 
         request = _make_request(tool_args={"url": "http://paid-api.com", "headers": {}})
-        mock_handler = MagicMock(
-            return_value=ToolMessage(content=_402_content(), tool_call_id="tc-1")
-        )
+        mock_handler = MagicMock(return_value=ToolMessage(content=_402_content(), tool_call_id="tc-1"))
 
         result = mw.wrap_tool_call(request, mock_handler)
 

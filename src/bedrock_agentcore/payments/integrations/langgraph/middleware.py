@@ -4,7 +4,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain.messages import ToolMessage
@@ -343,9 +343,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                 _retry_handler = _FallbackHandler(retry_fallback)
         if retry_status == 402:
             retry_body = _retry_handler.extract_body(retry_prepared) or {}
-            error_detail = (
-                retry_body.get("error", "unknown error") if isinstance(retry_body, dict) else "unknown error"
-            )
+            error_detail = retry_body.get("error", "unknown error") if isinstance(retry_body, dict) else "unknown error"
             return self._error_tool_message(
                 request,
                 PaymentError(f"Payment was signed but rejected by the server ({error_detail})."),
@@ -676,7 +674,12 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             return retry_result
 
         except Exception as e:
-            logger.error("Payment processing error (async) for tool %s: %s: %s", detection.tool_name, type(e).__name__, e)
+            logger.error(
+                "Payment processing error (async) for tool %s: %s: %s",
+                detection.tool_name,
+                type(e).__name__,
+                e,
+            )
             if self.config.on_payment_error is not None and self.config.max_error_retries > 0:
                 resolution = await self._ainvoke_error_handler(
                     exception=e,
