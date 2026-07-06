@@ -61,6 +61,7 @@ class _DetectionResult:
     detection_handler: Any
     has_custom_handler: bool
     prepared: Dict[str, List[Dict[str, str]]]
+    raw_content: Any  # Original ToolMessage.content for custom handlers
     tool_name: str
     tool_args: Dict[str, Any]
 
@@ -262,12 +263,13 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
         if has_custom_handler:
             detection_handler = self.config.custom_handlers[tool_name]
+            # Custom handlers receive raw content (not the internal prepared shape)
+            status_code = detection_handler.extract_status_code(result.content)
         else:
             from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler
 
             detection_handler = GenericPaymentHandler()
-
-        status_code = detection_handler.extract_status_code(prepared)
+            status_code = detection_handler.extract_status_code(prepared)
 
         # Lenient fallback if marker detection didn't find 402
         if status_code != 402 and not has_custom_handler:
@@ -292,14 +294,17 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             detection_handler=detection_handler,
             has_custom_handler=has_custom_handler,
             prepared=prepared,
+            raw_content=result.content,
             tool_name=tool_name,
             tool_args=tool_args,
         )
 
     def _extract_payment_request(self, detection: _DetectionResult) -> Dict[str, Any]:
         """Extract the payment-required request dict from a detection result."""
-        headers_402 = detection.detection_handler.extract_headers(detection.prepared) or {}
-        body_402 = detection.detection_handler.extract_body(detection.prepared) or {}
+        # Custom handlers receive raw content; built-in handlers receive prepared shape
+        handler_input = detection.raw_content if detection.has_custom_handler else detection.prepared
+        headers_402 = detection.detection_handler.extract_headers(handler_input) or {}
+        body_402 = detection.detection_handler.extract_body(handler_input) or {}
         return {
             "statusCode": 402,
             "headers": headers_402,
