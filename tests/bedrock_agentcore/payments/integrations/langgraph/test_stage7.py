@@ -383,3 +383,49 @@ class TestBackwardCompatibility:
 
         result = mw.wrap_tool_call(request, mock_handler)
         assert "Payment session has expired" in result.content
+
+
+# ---------------------------------------------------------------------------
+# Async callback in sync path
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncCallbackInSyncPath:
+    """Async callbacks on the sync path fail loudly instead of silently."""
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_async_callback_in_sync_path_falls_through_gracefully(self, mock_pm_cls):
+        """An async callback on sync .invoke() logs a TypeError and falls through to PROPAGATE."""
+        mock_pm_cls.return_value.generate_payment_header.side_effect = PaymentError("fail")
+
+        async def async_cb(ctx):
+            ctx.config.payment_instrument_id = "fixed"
+            return ErrorResolution.RETRY
+
+        config = _make_config(on_payment_error=async_cb)
+        mw = AgentCorePaymentsMiddleware(config)
+
+        request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
+        mock_handler = MagicMock(return_value=ToolMessage(content=_402_content(), tool_call_id="tc-1"))
+
+        result = mw.wrap_tool_call(request, mock_handler)
+        # Falls through to default error message (callback never ran)
+        assert "PAYMENT ERROR" in result.content
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_async_callback_in_sync_path_does_not_mutate_config(self, mock_pm_cls):
+        """The async callback body never executes, so config is not mutated."""
+        mock_pm_cls.return_value.generate_payment_header.side_effect = PaymentError("fail")
+
+        async def async_cb(ctx):
+            ctx.config.payment_instrument_id = "should-not-appear"
+            return ErrorResolution.RETRY
+
+        config = _make_config(on_payment_error=async_cb)
+        mw = AgentCorePaymentsMiddleware(config)
+
+        request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
+        mock_handler = MagicMock(return_value=ToolMessage(content=_402_content(), tool_call_id="tc-1"))
+
+        mw.wrap_tool_call(request, mock_handler)
+        assert config.payment_instrument_id == "instr-1"  # unchanged

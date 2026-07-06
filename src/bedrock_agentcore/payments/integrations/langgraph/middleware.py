@@ -1,5 +1,6 @@
 """AgentCorePaymentsMiddleware for LangGraph agents."""
 
+import inspect
 import logging
 import time
 import uuid
@@ -552,6 +553,11 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             )
 
             try:
+                if inspect.iscoroutinefunction(self.config.on_payment_error):
+                    raise TypeError(
+                        "async on_payment_error callback cannot be used with sync .invoke(). "
+                        "Use agent.ainvoke() or provide a synchronous callback."
+                    )
                 resolution = self.config.on_payment_error(ctx)
             except Exception as cb_err:
                 logger.error("on_payment_error callback raised: %s", cb_err)
@@ -704,7 +710,6 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
     ) -> Optional[Union[ToolMessage, Command]]:
         """Async version of _invoke_error_handler. Supports async callbacks."""
         import asyncio
-        import inspect
 
         from .errors import ErrorResolution, PaymentErrorContext
 
