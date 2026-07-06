@@ -365,3 +365,62 @@ class TestLegacyTextBlockDetection:
 
         # GenericPaymentHandler also can't parse it — passes through
         assert result is tool_msg
+
+
+# ---------------------------------------------------------------------------
+# Custom handler raw content contract
+# ---------------------------------------------------------------------------
+
+
+class TestCustomHandlerRawContentContract:
+    """Verify custom handlers receive raw content, not the prepared shape."""
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_custom_handler_receives_raw_string(self, mock_pm):
+        """Custom handler extract_status_code gets the raw string content."""
+        from bedrock_agentcore.payments.integrations.handlers import PaymentResponseHandler
+
+        received_inputs = []
+
+        class SpyHandler(PaymentResponseHandler):
+            def extract_status_code(self, result):
+                received_inputs.append(result)
+                # Parse raw JSON directly
+                if isinstance(result, str):
+                    parsed = json.loads(result)
+                    return parsed.get("code")
+                return None
+
+            def extract_headers(self, result):
+                return {}
+
+            def extract_body(self, result):
+                return {"x402Version": 1}
+
+            def validate_tool_input(self, tool_input):
+                return True
+
+            def apply_payment_header(self, tool_input, payment_header):
+                return True
+
+        config = _make_config(custom_handlers={"my_tool": SpyHandler()})
+        mock_pm.return_value.generate_payment_header.return_value = {"X-PAYMENT": "sig"}
+        mw = AgentCorePaymentsMiddleware(config)
+
+        raw_json = json.dumps({"code": 402, "data": "custom format"})
+        tool_msg = ToolMessage(content=raw_json, tool_call_id="tc-1")
+
+        request = _make_request(tool_name="my_tool", tool_args={"url": "http://x.com", "headers": {}})
+        mock_handler = MagicMock(
+            side_effect=[
+                tool_msg,
+                ToolMessage(content="success", tool_call_id="tc-1"),
+            ]
+        )
+
+        mw.wrap_tool_call(request, mock_handler)
+
+        # Verify the handler received the raw string, not {"content": [{"text": ...}]}
+        assert len(received_inputs) == 1
+        assert received_inputs[0] == raw_json
+        assert isinstance(received_inputs[0], str)

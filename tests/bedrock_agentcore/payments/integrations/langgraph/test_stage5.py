@@ -279,3 +279,263 @@ class TestAsyncGuards:
 
         result = asyncio.run(mw.awrap_tool_call(_make_request(tool_name="http_request"), handler))
         assert result is tool_msg
+
+
+# ---------------------------------------------------------------------------
+# Async auto_session
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncAutoSession:
+    """Test auto_session in the async path."""
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_auto_session_creates_session_on_first_402_async(self, mock_pm_cls):
+        mock_pm = mock_pm_cls.return_value
+        mock_pm.create_payment_session.return_value = {"paymentSessionId": "async-sess-1"}
+        mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "sig"}
+
+        config = _make_config(payment_session_id=None, auto_session=True, auto_session_budget="5.00")
+        mw = AgentCorePaymentsMiddleware(config)
+
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
+
+        result = asyncio.run(
+            mw.awrap_tool_call(_make_request(tool_args={"url": "http://x.com", "headers": {}}), handler)
+        )
+
+        mock_pm.create_payment_session.assert_called_once()
+        assert config.payment_session_id == "async-sess-1"
+        assert "paid" in result.content
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_auto_session_reuses_session_async(self, mock_pm_cls):
+        mock_pm = mock_pm_cls.return_value
+        mock_pm.create_payment_session.return_value = {"paymentSessionId": "async-sess-2"}
+        mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "sig"}
+
+        config = _make_config(payment_session_id=None, auto_session=True)
+        mw = AgentCorePaymentsMiddleware(config)
+
+        # First call
+        handler1 = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
+        asyncio.run(mw.awrap_tool_call(_make_request(tool_args={"url": "http://a.com", "headers": {}}), handler1))
+
+        # Second call — session already exists
+        handler2 = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-2"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-2"),
+            ]
+        )
+        asyncio.run(
+            mw.awrap_tool_call(
+                _make_request(tool_args={"url": "http://b.com", "headers": {}}, tool_id="tc-2"),
+                handler2,
+            )
+        )
+
+        assert mock_pm.create_payment_session.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Async post-payment rejection with raw JSON fallback
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncPostPaymentRejection:
+    """Post-payment rejection detection works in async path."""
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_raw_json_rejection_async(self, mock_pm_cls):
+        mock_pm_cls.return_value.generate_payment_header.return_value = {"X-PAYMENT": "sig"}
+        mw = AgentCorePaymentsMiddleware(_make_config())
+
+        # Retry returns raw JSON 402 (no marker)
+        raw_402 = json.dumps({"statusCode": 402, "body": {"error": "insufficient funds"}})
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=raw_402, tool_call_id="tc-1"),
+            ]
+        )
+
+        result = asyncio.run(
+            mw.awrap_tool_call(_make_request(tool_args={"url": "http://x.com", "headers": {}}), handler)
+        )
+
+        assert "PAYMENT ERROR" in result.content
+        assert "rejected" in result.content
+
+
+# ---------------------------------------------------------------------------
+# Async name-based handler fallback detection
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncNameBasedFallback:
+    """Legacy text-block format detected via name-based handler in async path."""
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_legacy_format_detected_async(self, mock_pm_cls):
+        mock_pm_cls.return_value.generate_payment_header.return_value = {"X-PAYMENT": "sig"}
+        mw = AgentCorePaymentsMiddleware(_make_config())
+
+        legacy_content = 'Status Code: 402\nHeaders: {}\nBody: {"x402Version": 1, "accepts": []}'
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=legacy_content, tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
+
+        asyncio.run(
+            mw.awrap_tool_call(
+                _make_request(tool_name="http_request", tool_args={"url": "http://x.com", "headers": {}}),
+                handler,
+            )
+        )
+
+        # Should detect via HttpRequestPaymentHandler and retry successfully
+        assert handler.await_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Async custom handler
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncCustomHandler:
+    """Custom handlers work in async path with raw content."""
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_custom_handler_receives_raw_content_async(self, mock_pm_cls):
+        from bedrock_agentcore.payments.integrations.handlers import PaymentResponseHandler
+
+        mock_pm_cls.return_value.generate_payment_header.return_value = {"X-PAYMENT": "sig"}
+
+        class RawJsonHandler(PaymentResponseHandler):
+            """Handler that expects raw JSON string content."""
+
+            def extract_status_code(self, result):
+                # result should be the raw string content
+                if isinstance(result, str):
+                    parsed = json.loads(result)
+                    return parsed.get("code")
+                return None
+
+            def extract_headers(self, result):
+                if isinstance(result, str):
+                    parsed = json.loads(result)
+                    return parsed.get("hdrs", {})
+                return {}
+
+            def extract_body(self, result):
+                if isinstance(result, str):
+                    parsed = json.loads(result)
+                    return parsed.get("payment", {})
+                return {}
+
+            def validate_tool_input(self, tool_input):
+                return isinstance(tool_input, dict) and "headers" in tool_input
+
+            def apply_payment_header(self, tool_input, payment_header):
+                tool_input["headers"].update(payment_header)
+                return True
+
+        custom = RawJsonHandler()
+        config = _make_config(custom_handlers={"my_tool": custom})
+        mw = AgentCorePaymentsMiddleware(config)
+
+        # Non-standard 402 format that only our custom handler understands
+        raw_content = json.dumps({"code": 402, "hdrs": {"x-pay": "v"}, "payment": {"x402Version": 1}})
+
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=raw_content, tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
+
+        result = asyncio.run(
+            mw.awrap_tool_call(
+                _make_request(tool_name="my_tool", tool_args={"url": "http://x.com", "headers": {}}),
+                handler,
+            )
+        )
+
+        # Custom handler detected 402, payment signed, retry succeeded
+        assert handler.await_count == 2
+        assert "paid" in result.content
+
+
+# ---------------------------------------------------------------------------
+# Async error handler callback
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncErrorHandlerCallback:
+    """Error handler callback works in async path."""
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_async_error_handler_retries_successfully(self, mock_pm_cls):
+        from bedrock_agentcore.payments.integrations.langgraph.errors import ErrorResolution
+        from bedrock_agentcore.payments.manager import PaymentError
+
+        mock_pm = mock_pm_cls.return_value
+        mock_pm.generate_payment_header.side_effect = [
+            PaymentError("session expired"),
+            {"X-PAYMENT": "sig"},
+        ]
+
+        async def fix_session(ctx):
+            ctx.config.payment_session_id = "fresh-sess"
+            return ErrorResolution.RETRY
+
+        config = _make_config(on_payment_error=fix_session)
+        mw = AgentCorePaymentsMiddleware(config)
+
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
+
+        result = asyncio.run(
+            mw.awrap_tool_call(_make_request(tool_args={"url": "http://x.com", "headers": {}}), handler)
+        )
+
+        assert "PAYMENT ERROR" not in result.content
+        assert config.payment_session_id == "fresh-sess"
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_async_error_handler_propagates(self, mock_pm_cls):
+        from bedrock_agentcore.payments.integrations.langgraph.errors import ErrorResolution
+        from bedrock_agentcore.payments.manager import PaymentError
+
+        mock_pm_cls.return_value.generate_payment_header.side_effect = PaymentError("fatal")
+
+        async def propagate(ctx):
+            return ErrorResolution.PROPAGATE
+
+        config = _make_config(on_payment_error=propagate)
+        mw = AgentCorePaymentsMiddleware(config)
+
+        handler = AsyncMock(return_value=ToolMessage(content=_402_content(), tool_call_id="tc-1"))
+
+        result = asyncio.run(
+            mw.awrap_tool_call(_make_request(tool_args={"url": "http://x.com", "headers": {}}), handler)
+        )
+
+        assert "PAYMENT ERROR" in result.content
