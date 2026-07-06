@@ -35,8 +35,6 @@ from .tools import (
 
 logger = logging.getLogger(__name__)
 
-# Deterministic error messages per exception type.
-
 
 class _FallbackHandler:
     """Minimal handler wrapping pre-parsed 402 data from fallback detection."""
@@ -85,14 +83,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
     """
 
     def __init__(self, config: AgentCorePaymentsConfig) -> None:
-        """Initialize middleware with config and create PaymentManager.
-
-        Args:
-            config: Payment configuration.
-
-        Raises:
-            RuntimeError: If PaymentManager initialization fails.
-        """
+        """Initialize middleware with config and create PaymentManager."""
         super().__init__()
         self.config = config
         try:
@@ -109,11 +100,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         logger.info("AgentCorePaymentsMiddleware initialized")
 
     def _build_tools(self) -> list:
-        """Build the list of tools to register with the agent.
-
-        Returns:
-            List of tool callables. Includes http_request if provide_http_request=True.
-        """
+        """Build the list of tools to register with the agent."""
         tools = []
         if self.config.provide_http_request:
             tools.append(make_http_request_tool(self))
@@ -129,14 +116,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
     @staticmethod
     def _prepare_for_handler(content: Any) -> Optional[Dict[str, List[Dict[str, str]]]]:
-        """Normalize ToolMessage.content into handler-compatible shape.
-
-        Args:
-            content: ToolMessage.content — either a str, list, or None.
-
-        Returns:
-            Dict with "content" key containing list of {"text": ...} blocks, or None.
-        """
+        """Normalize ToolMessage.content into handler-compatible shape."""
         if content is None:
             return None
         if isinstance(content, str):
@@ -154,19 +134,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         return None
 
     def _get_handler(self, tool_name: str, tool_args: Dict[str, Any]) -> PaymentResponseHandler:
-        """Resolve the payment response handler for a tool.
-
-        Resolution priority:
-        1. Custom handlers from config (highest priority)
-        2. Built-in registry (name-based → MCP shape → generic fallback)
-
-        Args:
-            tool_name: Name of the tool.
-            tool_args: Tool call arguments dict.
-
-        Returns:
-            The resolved PaymentResponseHandler instance.
-        """
+        """Resolve the payment response handler for a tool."""
         if self.config.custom_handlers and tool_name in self.config.custom_handlers:
             logger.debug("Using custom handler for tool: %s", tool_name)
             return self.config.custom_handlers[tool_name]
@@ -174,18 +142,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
     @staticmethod
     def _fallback_detect_402(content: Any) -> Optional[Dict[str, Any]]:
-        """Lenient fallback: detect 402 from raw JSON without the PAYMENT_REQUIRED: marker.
-
-        Handles MCP tools and other tools that return raw JSON responses like:
-        - {"statusCode": 402, "headers": {...}, "body": {...}}
-        - {"x402Version": 1, "accepts": [...]}
-
-        Args:
-            content: ToolMessage.content (str or list).
-
-        Returns:
-            Parsed payment-required dict if 402 detected, None otherwise.
-        """
+        """Lenient fallback: detect 402 from raw JSON without the PAYMENT_REQUIRED: marker."""
         import json as _json
 
         texts = []
@@ -206,12 +163,10 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             if not isinstance(parsed, dict):
                 continue
 
-            # Check for statusCode: 402
             if parsed.get("statusCode") == 402:
                 logger.debug("Fallback detection: found statusCode 402 in raw JSON")
                 return parsed
 
-            # Check for httpStatus: 402 (MCP structuredContent format)
             if parsed.get("httpStatus") == 402:
                 logger.debug("Fallback detection: found httpStatus 402 (MCP format)")
                 return {
@@ -220,12 +175,10 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                     "body": parsed.get("structuredContent", {}),
                 }
 
-            # Check for x402 payload (x402Version + accepts) at top level
             if "x402Version" in parsed and "accepts" in parsed:
                 logger.debug("Fallback detection: found x402 payload in raw JSON")
                 return {"statusCode": 402, "headers": {}, "body": parsed}
 
-            # Check for x402 payload nested in structuredContent
             sc = parsed.get("structuredContent")
             if isinstance(sc, dict) and "x402Version" in sc and "accepts" in sc:
                 logger.debug("Fallback detection: found x402 payload in structuredContent")
@@ -240,7 +193,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
     def _check_guards(
         self, request: ToolCallRequest, result: Union[ToolMessage, Command]
     ) -> Optional[Union[ToolMessage, Command]]:
-        """Check early-exit guards. Returns the result to pass through, or None to continue processing."""
+        """Check early-exit guards. Returns the result to pass through, or None to continue."""
         if isinstance(result, Command):
             return result
         if not self.config.auto_payment:
@@ -335,39 +288,22 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             )
         return None
 
-    def _check_post_payment_rejection(
-        self, request: ToolCallRequest, retry_result: Union[ToolMessage, Command]
+    def _check_retry_rejection(
+        self,
+        request: ToolCallRequest,
+        retry_result: Union[ToolMessage, Command],
+        error_context: str = "by the server",
     ) -> Optional[Union[ToolMessage, Command]]:
-        """Check if the retry result is still a 402 (payment rejected). Returns error or None."""
-        if isinstance(retry_result, Command):
-            return retry_result
+        """Check if a retry result is still a 402 (payment rejected).
 
-        retry_prepared = self._prepare_for_handler(retry_result.content)
-        if retry_prepared is None:
-            return None
+        Args:
+            request: The original tool call request.
+            retry_result: The result from the retry attempt.
+            error_context: Context string for the error message (e.g. "by the server", "after recovery").
 
-        from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler as _GH
-
-        _retry_handler = _GH()
-        retry_status = _retry_handler.extract_status_code(retry_prepared)
-        if retry_status != 402:
-            retry_fallback = self._fallback_detect_402(retry_result.content)
-            if retry_fallback is not None:
-                retry_status = 402
-                _retry_handler = _FallbackHandler(retry_fallback)
-        if retry_status == 402:
-            retry_body = _retry_handler.extract_body(retry_prepared) or {}
-            error_detail = retry_body.get("error", "unknown error") if isinstance(retry_body, dict) else "unknown error"
-            return self._error_tool_message(
-                request,
-                PaymentError(f"Payment was signed but rejected by the server ({error_detail})."),
-            )
-        return None
-
-    def _check_post_recovery_rejection(
-        self, request: ToolCallRequest, retry_result: Union[ToolMessage, Command]
-    ) -> Optional[Union[ToolMessage, Command]]:
-        """Check if the retry result after error recovery is still a 402. Returns error or None."""
+        Returns:
+            Error ToolMessage if 402 detected, the Command if result is a Command, or None.
+        """
         if isinstance(retry_result, Command):
             return retry_result
 
@@ -381,32 +317,45 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         retry_status = _rh.extract_status_code(retry_prepared)
         if retry_status != 402:
             fallback = self._fallback_detect_402(retry_result.content)
-            if fallback:
+            if fallback is not None:
                 retry_status = 402
                 _rh = _FallbackHandler(fallback)
         if retry_status == 402:
             retry_body = _rh.extract_body(retry_prepared) or {}
-            detail = retry_body.get("error", "unknown") if isinstance(retry_body, dict) else "unknown"
+            detail = retry_body.get("error", "unknown error") if isinstance(retry_body, dict) else "unknown error"
             return self._error_tool_message(
                 request,
-                PaymentError(f"Payment signed but rejected after recovery ({detail})."),
+                PaymentError(f"Payment was signed but rejected {error_context} ({detail})."),
+            )
+        return None
+
+    def _inject_for_error_retry(
+        self,
+        request: ToolCallRequest,
+        tool_name: str,
+        tool_args: Dict[str, Any],
+        payment_header: Dict[str, str],
+    ) -> Optional[ToolMessage]:
+        """Inject payment header during error handler retry. Returns error ToolMessage on failure."""
+        has_custom = self.config.custom_handlers and tool_name in self.config.custom_handlers
+        injection_handler = (
+            self.config.custom_handlers[tool_name] if has_custom else self._get_handler(tool_name, tool_args)
+        )
+
+        if not injection_handler.validate_tool_input(tool_args):
+            return self._error_tool_message(
+                request,
+                PaymentError("Could not apply payment credentials after error recovery."),
+            )
+        if not injection_handler.apply_payment_header(tool_args, payment_header):
+            return self._error_tool_message(
+                request,
+                PaymentError("Could not apply payment credentials after error recovery."),
             )
         return None
 
     def _generate_payment_header(self, payment_required_request: Dict[str, Any]) -> Dict[str, str]:
-        """Generate payment header via PaymentManager.
-
-        Args:
-            payment_required_request: Dict with statusCode, headers, body from the 402 response.
-
-        Returns:
-            Dict with payment header name → value.
-
-        Raises:
-            PaymentInstrumentConfigurationRequired: If payment_instrument_id not set.
-            PaymentSessionConfigurationRequired: If payment_session_id not set.
-            PaymentError: If payment processing fails.
-        """
+        """Generate payment header via PaymentManager."""
         if self.config.payment_instrument_id is None:
             raise PaymentInstrumentConfigurationRequired("payment_instrument_id is required for x402 payments.")
         if self.config.payment_session_id is None:
@@ -442,25 +391,53 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
     @staticmethod
     def _error_tool_message(request: ToolCallRequest, exception: Exception) -> ToolMessage:
-        """Create a ToolMessage with a deterministic error message for the LLM.
-
-        Looks up the exception type in the error message map. Falls back to a
-        generic message that includes the exception string for unrecognized types.
-
-        Args:
-            request: The original tool call request (for tool_call_id).
-            exception: The exception to report.
-
-        Returns:
-            ToolMessage with status="error" and deterministic content.
-        """
+        """Create a ToolMessage with a deterministic error message for the LLM."""
         msg = get_payment_error_message(exception)
-
         return ToolMessage(
             content=f"PAYMENT ERROR: {msg}",
             tool_call_id=request.tool_call["id"],
             status="error",
         )
+
+    def _build_error_context(
+        self,
+        current_exception: Exception,
+        tool_name: str,
+        tool_args: Dict[str, Any],
+        payment_required_request: Optional[Dict[str, Any]],
+        retry_count: int,
+    ) -> Any:
+        """Build a PaymentErrorContext for the error handler callback."""
+        from .errors import PaymentErrorContext
+
+        return PaymentErrorContext(
+            exception=current_exception,
+            exception_type=type(current_exception).__name__,
+            exception_message=str(current_exception),
+            tool_name=tool_name,
+            tool_args=tool_args,
+            payment_required_request=payment_required_request,
+            config=self.config,
+            retry_count=retry_count,
+        )
+
+    def _handle_callback_resolution(
+        self, resolution: Any, request: ToolCallRequest
+    ) -> Optional[Union[ToolMessage, None]]:
+        """Handle the callback return value. Returns ToolMessage for str, None for PROPAGATE, raises for RETRY."""
+        from .errors import ErrorResolution
+
+        if isinstance(resolution, str):
+            return ToolMessage(
+                content=f"PAYMENT ERROR: {resolution}",
+                tool_call_id=request.tool_call["id"],
+                status="error",
+            )
+        if resolution != ErrorResolution.RETRY:
+            # Signal: caller should return None (PROPAGATE)
+            return "PROPAGATE"  # type: ignore[return-value]
+        # Signal: caller should continue with retry
+        return None
 
     # -------------------------------------------------------------------------
     # Sync path
@@ -471,56 +448,46 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Union[ToolMessage, Command]],
     ) -> Union[ToolMessage, Command]:
-        """Wrap tool execution with 402 payment detection, signing, and retry.
-
-        Args:
-            request: The tool call request.
-            handler: Callable that executes the tool.
-
-        Returns:
-            The tool execution result or an error ToolMessage.
-        """
+        """Wrap tool execution with 402 payment detection, signing, and retry."""
         result = handler(request)
 
-        # Guard checks
         guard_result = self._check_guards(request, result)
         if guard_result is not None:
             return guard_result
 
-        # 402 detection
         detection = self._detect_402(request, result)
         if detection is None:
             return result
 
-        # Payment processing
         payment_required_request = None
         try:
             payment_required_request = self._extract_payment_request(detection)
             payment_header = self._generate_payment_header(payment_required_request)
 
-            # Inject header
             inject_error = self._inject_payment_header(request, detection, payment_header)
             if inject_error is not None:
                 return inject_error
 
-            # Blockchain timing delay
             delay = self.config.post_payment_retry_delay_seconds
             if delay > 0:
                 logger.info("Waiting %.1fs before retry for blockchain timing", delay)
                 time.sleep(delay)
 
-            # Re-execute the tool with payment credentials
             retry_result = handler(request)
 
-            # Post-payment rejection detection
-            rejection = self._check_post_payment_rejection(request, retry_result)
+            rejection = self._check_retry_rejection(request, retry_result, "by the server")
             if rejection is not None:
                 return rejection
 
             return retry_result
 
         except Exception as e:
-            logger.error("Payment processing error for tool %s: %s: %s", detection.tool_name, type(e).__name__, e)
+            logger.error(
+                "Payment processing error for tool %s: %s: %s",
+                detection.tool_name,
+                type(e).__name__,
+                e,
+            )
             if self.config.on_payment_error is not None and self.config.max_error_retries > 0:
                 resolution = self._invoke_error_handler(
                     exception=e,
@@ -543,27 +510,13 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         request: "ToolCallRequest",
         handler: Callable,
     ) -> Optional[Union[ToolMessage, Command]]:
-        """Invoke on_payment_error callback and retry if requested.
-
-        Returns:
-            ToolMessage/Command if retry succeeded or max retries exhausted.
-            None if callback returned PROPAGATE (caller uses default error path).
-        """
-        from .errors import ErrorResolution, PaymentErrorContext
-
+        """Invoke on_payment_error callback and retry if requested."""
         retry_count = 0
         current_exception = exception
 
         while retry_count < self.config.max_error_retries:
-            ctx = PaymentErrorContext(
-                exception=current_exception,
-                exception_type=type(current_exception).__name__,
-                exception_message=str(current_exception),
-                tool_name=tool_name,
-                tool_args=tool_args,
-                payment_required_request=payment_required_request,
-                config=self.config,
-                retry_count=retry_count,
+            ctx = self._build_error_context(
+                current_exception, tool_name, tool_args, payment_required_request, retry_count
             )
 
             try:
@@ -577,16 +530,11 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                 logger.error("on_payment_error callback raised: %s", cb_err)
                 return None
 
-            # str return = custom message to the LLM
-            if isinstance(resolution, str):
-                return ToolMessage(
-                    content=f"PAYMENT ERROR: {resolution}",
-                    tool_call_id=request.tool_call["id"],
-                    status="error",
-                )
-
-            if resolution != ErrorResolution.RETRY:
+            handled = self._handle_callback_resolution(resolution, request)
+            if handled == "PROPAGATE":
                 return None
+            if handled is not None:
+                return handled
 
             retry_count += 1
             logger.info("on_payment_error returned RETRY (attempt %d/%d)", retry_count, self.config.max_error_retries)
@@ -594,21 +542,9 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             try:
                 payment_header = self._generate_payment_header(payment_required_request or {})
 
-                has_custom = self.config.custom_handlers and tool_name in self.config.custom_handlers
-                injection_handler = (
-                    self.config.custom_handlers[tool_name] if has_custom else self._get_handler(tool_name, tool_args)
-                )
-
-                if not injection_handler.validate_tool_input(tool_args):
-                    return self._error_tool_message(
-                        request,
-                        PaymentError("Could not apply payment credentials after error recovery."),
-                    )
-                if not injection_handler.apply_payment_header(tool_args, payment_header):
-                    return self._error_tool_message(
-                        request,
-                        PaymentError("Could not apply payment credentials after error recovery."),
-                    )
+                inject_error = self._inject_for_error_retry(request, tool_name, tool_args, payment_header)
+                if inject_error is not None:
+                    return inject_error
 
                 delay = self.config.post_payment_retry_delay_seconds
                 if delay > 0:
@@ -616,8 +552,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
                 retry_result = handler(request)
 
-                # Post-recovery rejection check
-                rejection = self._check_post_recovery_rejection(request, retry_result)
+                rejection = self._check_retry_rejection(request, retry_result, "after recovery")
                 if rejection is not None:
                     return rejection
 
@@ -644,50 +579,36 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
         Uses asyncio.sleep for non-blocking delay and asyncio.to_thread for
         the synchronous PaymentManager.generate_payment_header call.
-
-        Args:
-            request: The tool call request.
-            handler: Async callable that executes the tool.
-
-        Returns:
-            The tool execution result or an error ToolMessage.
         """
         import asyncio
 
         result = await handler(request)
 
-        # Guard checks (shared)
         guard_result = self._check_guards(request, result)
         if guard_result is not None:
             return guard_result
 
-        # 402 detection (shared)
         detection = self._detect_402(request, result)
         if detection is None:
             return result
 
-        # Payment processing
         payment_required_request = None
         try:
             payment_required_request = self._extract_payment_request(detection)
             payment_header = await asyncio.to_thread(self._generate_payment_header, payment_required_request)
 
-            # Inject header (shared)
             inject_error = self._inject_payment_header(request, detection, payment_header)
             if inject_error is not None:
                 return inject_error
 
-            # Blockchain timing delay (async)
             delay = self.config.post_payment_retry_delay_seconds
             if delay > 0:
                 logger.info("Waiting %.1fs before retry for blockchain timing (async)", delay)
                 await asyncio.sleep(delay)
 
-            # Re-execute the tool with payment credentials
             retry_result = await handler(request)
 
-            # Post-payment rejection detection (shared)
-            rejection = self._check_post_payment_rejection(request, retry_result)
+            rejection = self._check_retry_rejection(request, retry_result, "by the server")
             if rejection is not None:
                 return rejection
 
@@ -725,21 +646,12 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         """Async version of _invoke_error_handler. Supports async callbacks."""
         import asyncio
 
-        from .errors import ErrorResolution, PaymentErrorContext
-
         retry_count = 0
         current_exception = exception
 
         while retry_count < self.config.max_error_retries:
-            ctx = PaymentErrorContext(
-                exception=current_exception,
-                exception_type=type(current_exception).__name__,
-                exception_message=str(current_exception),
-                tool_name=tool_name,
-                tool_args=tool_args,
-                payment_required_request=payment_required_request,
-                config=self.config,
-                retry_count=retry_count,
+            ctx = self._build_error_context(
+                current_exception, tool_name, tool_args, payment_required_request, retry_count
             )
 
             try:
@@ -751,16 +663,11 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                 logger.error("on_payment_error callback raised (async): %s", cb_err)
                 return None
 
-            # str return = custom message to the LLM
-            if isinstance(resolution, str):
-                return ToolMessage(
-                    content=f"PAYMENT ERROR: {resolution}",
-                    tool_call_id=request.tool_call["id"],
-                    status="error",
-                )
-
-            if resolution != ErrorResolution.RETRY:
+            handled = self._handle_callback_resolution(resolution, request)
+            if handled == "PROPAGATE":
                 return None
+            if handled is not None:
+                return handled
 
             retry_count += 1
             logger.info(
@@ -772,21 +679,9 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             try:
                 payment_header = await asyncio.to_thread(self._generate_payment_header, payment_required_request or {})
 
-                has_custom = self.config.custom_handlers and tool_name in self.config.custom_handlers
-                injection_handler = (
-                    self.config.custom_handlers[tool_name] if has_custom else self._get_handler(tool_name, tool_args)
-                )
-
-                if not injection_handler.validate_tool_input(tool_args):
-                    return self._error_tool_message(
-                        request,
-                        PaymentError("Could not apply payment credentials after error recovery."),
-                    )
-                if not injection_handler.apply_payment_header(tool_args, payment_header):
-                    return self._error_tool_message(
-                        request,
-                        PaymentError("Could not apply payment credentials after error recovery."),
-                    )
+                inject_error = self._inject_for_error_retry(request, tool_name, tool_args, payment_header)
+                if inject_error is not None:
+                    return inject_error
 
                 delay = self.config.post_payment_retry_delay_seconds
                 if delay > 0:
@@ -794,8 +689,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
                 retry_result = await handler(request)
 
-                # Post-recovery rejection check (shared)
-                rejection = self._check_post_recovery_rejection(request, retry_result)
+                rejection = self._check_retry_rejection(request, retry_result, "after recovery")
                 if rejection is not None:
                     return rejection
 
