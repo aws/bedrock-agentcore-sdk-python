@@ -1,6 +1,8 @@
 """AgentCorePaymentsMiddleware for LangGraph agents."""
 
+import asyncio
 import inspect
+import json
 import logging
 import time
 import uuid
@@ -14,6 +16,7 @@ from langgraph.types import Command
 
 from bedrock_agentcore.payments.integrations.error_messages import get_payment_error_message
 from bedrock_agentcore.payments.integrations.handlers import (
+    GenericPaymentHandler,
     PaymentResponseHandler,
     get_payment_handler,
 )
@@ -25,6 +28,7 @@ from bedrock_agentcore.payments.manager import (
 )
 
 from ..config import AgentCorePaymentsConfig
+from .errors import ErrorResolution, PaymentErrorContext
 from .tools import (
     make_get_payment_instrument_balance_tool,
     make_get_payment_instrument_tool,
@@ -143,8 +147,6 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
     @staticmethod
     def _fallback_detect_402(content: Any) -> Optional[Dict[str, Any]]:
         """Lenient fallback: detect 402 from raw JSON without the PAYMENT_REQUIRED: marker."""
-        import json as _json
-
         texts = []
         if isinstance(content, str):
             texts.append(content)
@@ -157,7 +159,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
         for text in texts:
             try:
-                parsed = _json.loads(text)
+                parsed = json.loads(text)
             except (ValueError, TypeError):
                 continue
             if not isinstance(parsed, dict):
@@ -219,8 +221,6 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             # Custom handlers receive raw content (not the internal prepared shape)
             status_code = detection_handler.extract_status_code(result.content)
         else:
-            from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler
-
             detection_handler = GenericPaymentHandler()
             status_code = detection_handler.extract_status_code(prepared)
 
@@ -311,9 +311,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         if retry_prepared is None:
             return None
 
-        from bedrock_agentcore.payments.integrations.handlers import GenericPaymentHandler as _GH
-
-        _rh = _GH()
+        _rh = GenericPaymentHandler()
         retry_status = _rh.extract_status_code(retry_prepared)
         if retry_status != 402:
             fallback = self._fallback_detect_402(retry_result.content)
@@ -408,8 +406,6 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         retry_count: int,
     ) -> Any:
         """Build a PaymentErrorContext for the error handler callback."""
-        from .errors import PaymentErrorContext
-
         return PaymentErrorContext(
             exception=current_exception,
             exception_type=type(current_exception).__name__,
@@ -425,8 +421,6 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         self, resolution: Any, request: ToolCallRequest
     ) -> Optional[Union[ToolMessage, None]]:
         """Handle the callback return value. Returns ToolMessage for str, None for PROPAGATE, raises for RETRY."""
-        from .errors import ErrorResolution
-
         if isinstance(resolution, str):
             return ToolMessage(
                 content=f"PAYMENT ERROR: {resolution}",
@@ -580,8 +574,6 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         Uses asyncio.sleep for non-blocking delay and asyncio.to_thread for
         the synchronous PaymentManager.generate_payment_header call.
         """
-        import asyncio
-
         result = await handler(request)
 
         guard_result = self._check_guards(request, result)
@@ -644,8 +636,6 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         handler: Callable,
     ) -> Optional[Union[ToolMessage, Command]]:
         """Async version of _invoke_error_handler. Supports async callbacks."""
-        import asyncio
-
         retry_count = 0
         current_exception = exception
 
