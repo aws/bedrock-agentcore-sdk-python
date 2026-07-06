@@ -326,13 +326,22 @@ class TestCustomHandlerRegistry:
                 self.extract_called = False
                 self.inject_called = False
 
+            @staticmethod
+            def _to_prepared(result):
+                """Wrap raw content into prepared shape for GenericPaymentHandler."""
+                if isinstance(result, str):
+                    return {"content": [{"text": result}]}
+                elif isinstance(result, list):
+                    return {"content": result}
+                return result
+
             def extract_status_code(self, result):
                 self.detect_called = True
-                return super().extract_status_code(result)
+                return super().extract_status_code(self._to_prepared(result))
 
             def extract_headers(self, result):
                 self.extract_called = True
-                return super().extract_headers(result)
+                return super().extract_headers(self._to_prepared(result))
 
             def apply_payment_header(self, tool_input, payment_header):
                 self.inject_called = True
@@ -390,10 +399,18 @@ class TestCustomHandlerRegistry:
                 self.detect_called = True
                 import json as _json
 
-                # result is {"content": [{"text": "..."}]} from _prepare_for_handler
-                content = result.get("content", [])
-                for block in content:
-                    text = block.get("text", "") if isinstance(block, dict) else ""
+                # Custom handlers now receive raw content (str or list)
+                texts = []
+                if isinstance(result, str):
+                    texts.append(result)
+                elif isinstance(result, list):
+                    for item in result:
+                        if isinstance(item, dict) and "text" in item:
+                            texts.append(item["text"])
+                        elif isinstance(item, str):
+                            texts.append(item)
+
+                for text in texts:
                     try:
                         parsed = _json.loads(text)
                         if isinstance(parsed, dict):
@@ -405,9 +422,17 @@ class TestCustomHandlerRegistry:
             def extract_headers(self, result):
                 import json as _json
 
-                content = result.get("content", [])
-                for block in content:
-                    text = block.get("text", "") if isinstance(block, dict) else ""
+                texts = []
+                if isinstance(result, str):
+                    texts.append(result)
+                elif isinstance(result, list):
+                    for item in result:
+                        if isinstance(item, dict) and "text" in item:
+                            texts.append(item["text"])
+                        elif isinstance(item, str):
+                            texts.append(item)
+
+                for text in texts:
                     try:
                         parsed = _json.loads(text)
                         if isinstance(parsed, dict):
@@ -419,9 +444,17 @@ class TestCustomHandlerRegistry:
             def extract_body(self, result):
                 import json as _json
 
-                content = result.get("content", [])
-                for block in content:
-                    text = block.get("text", "") if isinstance(block, dict) else ""
+                texts = []
+                if isinstance(result, str):
+                    texts.append(result)
+                elif isinstance(result, list):
+                    for item in result:
+                        if isinstance(item, dict) and "text" in item:
+                            texts.append(item["text"])
+                        elif isinstance(item, str):
+                            texts.append(item)
+
+                for text in texts:
                     try:
                         parsed = _json.loads(text)
                         if isinstance(parsed, dict):
@@ -498,13 +531,22 @@ class TestCustomHandlerRegistry:
                 self.extract_called = False
                 self.inject_called = False
 
+            @staticmethod
+            def _to_prepared(result):
+                """Wrap raw content into prepared shape for GenericPaymentHandler."""
+                if isinstance(result, str):
+                    return {"content": [{"text": result}]}
+                elif isinstance(result, list):
+                    return {"content": result}
+                return result
+
             def extract_status_code(self, result):
                 self.detect_called = True
-                return super().extract_status_code(result)
+                return super().extract_status_code(self._to_prepared(result))
 
             def extract_headers(self, result):
                 self.extract_called = True
-                return super().extract_headers(result)
+                return super().extract_headers(self._to_prepared(result))
 
             def apply_payment_header(self, tool_input, payment_header):
                 self.inject_called = True
