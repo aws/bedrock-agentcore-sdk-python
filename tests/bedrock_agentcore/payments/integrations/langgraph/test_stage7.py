@@ -429,3 +429,50 @@ class TestAsyncCallbackInSyncPath:
 
         mw.wrap_tool_call(request, mock_handler)
         assert config.payment_instrument_id == "instr-1"  # unchanged
+
+
+# ---------------------------------------------------------------------------
+# Post-recovery rejection with raw JSON (fallback handler path)
+# ---------------------------------------------------------------------------
+
+
+class TestPostRecoveryRejectionFallback:
+    """Verify that post-recovery 402 rejection extracts the real error from raw JSON."""
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_raw_json_rejection_after_recovery_includes_real_error(self, mock_pm_cls):
+        """When a raw-JSON tool returns 402 after error recovery, the real error detail is extracted."""
+        mock_pm = mock_pm_cls.return_value
+        # First call: generate_payment_header raises (triggers error handler)
+        # Second call (after recovery): succeeds with a header
+        mock_pm.generate_payment_header.side_effect = [
+            PaymentError("session expired"),
+            {"X-PAYMENT": "sig"},
+        ]
+
+        def fix_session(ctx):
+            ctx.config.payment_session_id = "new-sess"
+            return ErrorResolution.RETRY
+
+        config = _make_config(on_payment_error=fix_session)
+        mw = AgentCorePaymentsMiddleware(config)
+
+        # The retry after recovery returns raw JSON 402 (no PAYMENT_REQUIRED: marker)
+        raw_json_402 = json.dumps({"statusCode": 402, "body": {"error": "budget exceeded"}})
+
+        request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
+        call_count = [0]
+
+        def mock_handler(req):
+            call_count[0] += 1
+            if call_count[0] <= 1:
+                # First call: triggers initial 402 detection
+                return ToolMessage(content=_402_content(), tool_call_id="tc-1")
+            # Recovery retry: server rejects with raw JSON 402
+            return ToolMessage(content=raw_json_402, tool_call_id="tc-1")
+
+        result = mw.wrap_tool_call(request, mock_handler)
+
+        assert "PAYMENT ERROR" in result.content
+        # The real error detail should be extracted, not "unknown"
+        assert "budget exceeded" in result.content
