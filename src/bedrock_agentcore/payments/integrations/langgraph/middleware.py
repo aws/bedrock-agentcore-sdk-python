@@ -370,6 +370,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             fallback = self._fallback_detect_402(retry_result.content)
             if fallback:
                 retry_status = 402
+                _rh = _FallbackHandler(fallback)
         if retry_status == 402:
             retry_body = _rh.extract_body(retry_prepared) or {}
             detail = retry_body.get("error", "unknown") if isinstance(retry_body, dict) else "unknown"
