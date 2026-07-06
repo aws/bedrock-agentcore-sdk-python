@@ -15,6 +15,7 @@ def _make_evaluator_input(spans=None):
             {
                 "traceId": "t1",
                 "spanId": "s1",
+                "scope": {"name": "strands.telemetry.tracer", "version": ""},
                 "attributes": {"gen_ai.operation.name": "invoke_agent"},
                 "span_events": [
                     {
@@ -100,13 +101,13 @@ class TestAutoevalsAdapterSuccess:
         assert call_kwargs["input"] == "What is AI?"
         assert call_kwargs["output"] == "AI is artificial intelligence."
 
-    def test_custom_field_mapper(self):
+    def test_custom_customer_mapper(self):
         scorer = _mock_scorer()
         adapter = AutoevalsAdapter(
             scorer=scorer,
-            field_mapper=lambda ev: {
+            customer_mapper=lambda ev: {
                 "input": "custom input",
-                "actual_output": "custom output",
+                "output": "custom output",
             },
         )
 
@@ -139,6 +140,7 @@ class TestAutoevalsAdapterErrors:
             {
                 "traceId": "t1",
                 "spanId": "s1",
+                "scope": {"name": "strands.telemetry.tracer", "version": ""},
                 "attributes": {"gen_ai.operation.name": "invoke_agent"},
                 "span_events": [
                     {

@@ -2,11 +2,12 @@
 
 import abc
 import logging
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.models import EvaluatorInput, EvaluatorOutput
-from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_parsers import (
-    parse_spans,
+from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers import (
+    SpanMapResult,
+    map_spans,
 )
 
 logger = logging.getLogger(__name__)
@@ -16,25 +17,11 @@ class BaseAdapter(abc.ABC):
     """Base adapter for third-party evaluation framework integrations.
 
     Accepts an EvaluatorInput (from the code_based_evaluators flow),
-    extracts fields from spans using the built-in parser layer, runs the
+    extracts fields from spans using the built-in mapper layer, runs the
     evaluation via execute(), and returns an EvaluatorOutput.
 
     Never raises unhandled exceptions — always returns a valid EvaluatorOutput.
     """
-
-    def __init__(
-        self,
-        field_mapper: Optional[Callable[[EvaluatorInput], Dict[str, Any]]] = None,
-    ):
-        """Initialize the adapter.
-
-        Args:
-            field_mapper: Optional callable that receives the EvaluatorInput and
-                returns a dict with keys: 'input', 'actual_output', and optionally
-                'expected_output', 'context', 'retrieval_context'. Bypasses default
-                span parsing when provided.
-        """
-        self.field_mapper = field_mapper
 
     def __call__(self, evaluator_input: EvaluatorInput, context: Any = None) -> EvaluatorOutput:
         """Handle an evaluation invocation.
@@ -47,7 +34,7 @@ class BaseAdapter(abc.ABC):
             EvaluatorOutput with score, label, and explanation or error fields.
         """
         try:
-            fields = self._extract_fields(evaluator_input)
+            return self._run(evaluator_input)
         except ValueError as e:
             logger.error("Field extraction failed: %s", e)
             return EvaluatorOutput(
@@ -55,19 +42,6 @@ class BaseAdapter(abc.ABC):
                 errorCode="FIELD_EXTRACTION_ERROR",
                 errorMessage=str(e),
             )
-
-        try:
-            self.validate_fields(fields)
-        except ValueError as e:
-            logger.error("Validation failed: %s", e)
-            return EvaluatorOutput(
-                label="Error",
-                errorCode="MISSING_REQUIRED_FIELD",
-                errorMessage=str(e),
-            )
-
-        try:
-            return self.execute(fields)
         except Exception as e:
             logger.error("Execution failed: %s", e, exc_info=True)
             return EvaluatorOutput(
@@ -76,34 +50,28 @@ class BaseAdapter(abc.ABC):
                 errorMessage=f"{type(self).__name__} failed: {e}",
             )
 
-    def _extract_fields(self, evaluator_input: EvaluatorInput) -> Dict[str, Any]:
-        """Extract fields from the EvaluatorInput."""
-        if self.field_mapper is not None:
-            return self.field_mapper(evaluator_input)
-
-        result = parse_spans(evaluator_input.session_spans, evaluator_input.reference_inputs)
-        return result.to_dict()
-
     @abc.abstractmethod
-    def validate_fields(self, fields: Dict[str, Any]) -> None:
-        """Validate that required fields are present.
+    def _run(self, evaluator_input: EvaluatorInput) -> EvaluatorOutput:
+        """Run the full evaluation pipeline. Subclasses implement this."""
 
-        Each adapter must explicitly declare its validation behavior.
+    def _default_extract(self, evaluator_input: EvaluatorInput) -> SpanMapResult:
+        """Extract fields using the built-in span mapper layer."""
+        spans = self._filter_spans_by_target(evaluator_input)
+        return map_spans(spans, evaluator_input.reference_inputs)
 
-        Args:
-            fields: Extracted field dict.
+    def _filter_spans_by_target(self, evaluator_input: EvaluatorInput) -> List[Dict]:
+        """Filter session spans based on evaluationLevel and evaluationTarget.
 
-        Raises:
-            ValueError: If required fields are missing.
+        Per the AgentCore code-based evaluator contract:
+        - TRACE: only spans matching target_trace_id
+        - TOOL_CALL: only the span matching target_span_id
+        - SESSION: all spans (no filtering)
         """
+        spans = evaluator_input.session_spans
 
-    @abc.abstractmethod
-    def execute(self, fields: Dict[str, Any]) -> EvaluatorOutput:
-        """Run the evaluation and return an EvaluatorOutput.
+        if evaluator_input.evaluation_level == "TRACE" and evaluator_input.target_trace_id:
+            spans = [s for s in spans if s.get("traceId") == evaluator_input.target_trace_id]
+        elif evaluator_input.evaluation_level == "TOOL_CALL" and evaluator_input.target_span_id:
+            spans = [s for s in spans if s.get("spanId") == evaluator_input.target_span_id]
 
-        Args:
-            fields: Extracted field dict with keys like "input", "actual_output", etc.
-
-        Returns:
-            EvaluatorOutput with evaluation results.
-        """
+        return spans
