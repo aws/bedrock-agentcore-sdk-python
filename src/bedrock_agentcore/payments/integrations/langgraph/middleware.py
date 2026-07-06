@@ -276,6 +276,14 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                 status_code = 402
                 detection_handler = _FallbackHandler(fallback)
 
+        # Name-based handler fallback (e.g. HttpRequestPaymentHandler for legacy text-block format)
+        if status_code != 402 and not has_custom_handler:
+            name_handler = self._get_handler(tool_name, tool_args)
+            name_status = name_handler.extract_status_code(prepared)
+            if name_status == 402:
+                status_code = 402
+                detection_handler = name_handler
+
         if status_code != 402:
             return None
 

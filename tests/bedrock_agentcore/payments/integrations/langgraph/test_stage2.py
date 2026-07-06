@@ -323,3 +323,45 @@ class TestFallbackDetection:
         result = mw.wrap_tool_call(request, mock_handler)
 
         assert result is tool_msg
+
+
+# ---------------------------------------------------------------------------
+# Legacy text-block format detection (name-based handler fallback)
+# ---------------------------------------------------------------------------
+
+
+class TestLegacyTextBlockDetection:
+    """Test that legacy Status Code: format is detected via name-based handler."""
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_legacy_format_detected_for_http_request_tool(self, mock_pm):
+        """Legacy 'Status Code: 402' format detected via HttpRequestPaymentHandler."""
+        mw = AgentCorePaymentsMiddleware(_make_config())
+        # Legacy text-block format (no PAYMENT_REQUIRED: marker, not valid JSON)
+        content = 'Status Code: 402\nHeaders: {}\nBody: {"x402Version": 1, "accepts": []}'
+        tool_msg = ToolMessage(content=content, tool_call_id="tc-1")
+
+        request = _make_request(tool_name="http_request")
+        mock_handler = MagicMock(return_value=tool_msg)
+
+        result = mw.wrap_tool_call(request, mock_handler)
+
+        # 402 detected → payment processing attempted → error (no instrument configured)
+        assert isinstance(result, ToolMessage)
+        assert "PAYMENT ERROR" in result.content
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_legacy_format_not_detected_for_unknown_tool(self, mock_pm):
+        """Legacy format is NOT detected for a tool that doesn't resolve to HttpRequestPaymentHandler."""
+        mw = AgentCorePaymentsMiddleware(_make_config())
+        content = 'Status Code: 402\nHeaders: {}\nBody: {"x402Version": 1}'
+        tool_msg = ToolMessage(content=content, tool_call_id="tc-1")
+
+        # Tool named "my_custom_tool" resolves to GenericPaymentHandler, which can't parse this
+        request = _make_request(tool_name="my_custom_tool")
+        mock_handler = MagicMock(return_value=tool_msg)
+
+        result = mw.wrap_tool_call(request, mock_handler)
+
+        # GenericPaymentHandler also can't parse it — passes through
+        assert result is tool_msg
