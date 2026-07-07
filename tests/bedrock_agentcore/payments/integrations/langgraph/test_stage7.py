@@ -1,6 +1,7 @@
 """Tests for Stage 7: Error Handler Callback."""
 
 import asyncio
+import functools
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -481,6 +482,72 @@ class TestAsyncCallbackInSyncPath:
         result = asyncio.run(mw.awrap_tool_call(request, handler))
         assert cb.called  # the async __call__ actually ran (was awaited)
         assert "PAYMENT ERROR" not in result.content
+        assert json.loads(result.content)["statusCode"] == 200
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_partial_wrapped_async_callback_in_sync_path_raises(self, mock_pm_cls):
+        """functools.partial around an async callback is still detected on the sync path."""
+        mock_pm_cls.return_value.generate_payment_header.side_effect = PaymentError("fail")
+
+        async def async_cb(ctx, tenant=None):
+            return ErrorResolution.RETRY
+
+        config = _make_config(on_payment_error=functools.partial(async_cb, tenant="acme"))
+        mw = AgentCorePaymentsMiddleware(config)
+
+        request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
+        mock_handler = MagicMock(return_value=ToolMessage(content=_402_content(), tool_call_id="tc-1"))
+
+        with pytest.raises(TypeError, match="async on_payment_error callback cannot be used with sync"):
+            mw.wrap_tool_call(request, mock_handler)
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_partial_wrapped_async_object_in_sync_path_raises(self, mock_pm_cls):
+        """functools.partial around a callable object with async __call__ is also detected.
+
+        This is the case a plain inspect.iscoroutinefunction misses even on Python 3.10.
+        """
+        mock_pm_cls.return_value.generate_payment_header.side_effect = PaymentError("fail")
+
+        class AsyncCallback:
+            async def __call__(self, ctx, tenant=None):
+                return ErrorResolution.RETRY
+
+        config = _make_config(on_payment_error=functools.partial(AsyncCallback(), tenant="acme"))
+        mw = AgentCorePaymentsMiddleware(config)
+
+        request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
+        mock_handler = MagicMock(return_value=ToolMessage(content=_402_content(), tool_call_id="tc-1"))
+
+        with pytest.raises(TypeError, match="async on_payment_error callback cannot be used with sync"):
+            mw.wrap_tool_call(request, mock_handler)
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_partial_wrapped_async_callback_awaited_in_async_path(self, mock_pm_cls):
+        """A functools.partial async callback is awaited (with its bound args) on the async path."""
+        mock_pm = mock_pm_cls.return_value
+        mock_pm.generate_payment_header.side_effect = [PaymentError("first fail"), {"X-PAYMENT": "sig"}]
+
+        seen = []
+
+        async def async_cb(ctx, tenant=None):
+            seen.append(tenant)
+            ctx.config.payment_session_id = "new-sess"
+            return ErrorResolution.RETRY
+
+        config = _make_config(on_payment_error=functools.partial(async_cb, tenant="acme"))
+        mw = AgentCorePaymentsMiddleware(config)
+
+        request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
+
+        result = asyncio.run(mw.awrap_tool_call(request, handler))
+        assert seen == ["acme"]  # partial's bound arg applied and awaited
         assert json.loads(result.content)["statusCode"] == 200
 
 

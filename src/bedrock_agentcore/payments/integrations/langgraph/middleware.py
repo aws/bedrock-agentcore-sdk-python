@@ -1,6 +1,7 @@
 """AgentCorePaymentsMiddleware for LangGraph agents."""
 
 import asyncio
+import functools
 import inspect
 import json
 import logging
@@ -209,9 +210,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
     def _detect_402(self, request: ToolCallRequest, result: ToolMessage) -> Optional[_DetectionResult]:
         """Run 402 detection. Returns detection context if 402 found, None otherwise."""
         tool_name = request.tool_call["name"]
-        # setdefault (not get): when a tool call arrives without an "args" key, write the
-        # empty dict back into request.tool_call so a later payment-header injection is
-        # visible to the retried handler instead of mutating a throwaway dict.
+        # Store args back on the tool call so an injected payment header reaches the retried handler.
         tool_args = request.tool_call.setdefault("args", {})
         prepared = self._prepare_for_handler(result.content)
         if prepared is None:
@@ -402,15 +401,19 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
     @staticmethod
     def _is_async_callback(callback: Any) -> bool:
-        """True if the callback is a coroutine function or a callable object with async __call__.
+        """True if the callback ultimately resolves to an async coroutine function.
 
-        ``inspect.iscoroutinefunction`` alone misses stateful callbacks implemented as an
-        object with an ``async def __call__``, so we inspect the bound ``__call__`` too.
-        (``callable()`` — ruff B004's suggestion — cannot distinguish sync from async.)
+        Covers the wrappings a plain ``inspect.iscoroutinefunction`` can miss: callable
+        objects with an ``async def __call__``, ``functools.partial`` (whose async-ness is
+        not reliably visible through the partial across Python versions), and partials of
+        either. (``callable()`` — ruff B004's suggestion — cannot distinguish sync from async.)
         """
-        if inspect.iscoroutinefunction(callback):
+        target = callback
+        while isinstance(target, functools.partial):
+            target = target.func
+        if inspect.iscoroutinefunction(target):
             return True
-        call = getattr(callback, "__call__", None)  # noqa: B004
+        call = getattr(target, "__call__", None)  # noqa: B004
         return inspect.iscoroutinefunction(call)
 
     @staticmethod
