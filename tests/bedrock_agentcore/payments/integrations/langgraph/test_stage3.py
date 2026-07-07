@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain.messages import ToolMessage
 
+from bedrock_agentcore.payments.integrations.handlers import PaymentResponseHandler
 from bedrock_agentcore.payments.integrations.langgraph import AgentCorePaymentsConfig
 from bedrock_agentcore.payments.integrations.langgraph.middleware import AgentCorePaymentsMiddleware
 from bedrock_agentcore.payments.manager import (
@@ -13,6 +14,39 @@ from bedrock_agentcore.payments.manager import (
     PaymentInstrumentConfigurationRequired,
     PaymentSessionConfigurationRequired,
 )
+
+
+class _BespokeHandler(PaymentResponseHandler):
+    """Custom handler for a tool with a non-standard 402 shape: {"custom_status": 402, ...}.
+
+    Receives the raw ToolMessage.content (a str) per the custom-handler contract.
+    """
+
+    def extract_status_code(self, result):
+        if isinstance(result, str):
+            try:
+                return json.loads(result).get("custom_status")
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    def extract_headers(self, result):
+        return {}
+
+    def extract_body(self, result):
+        if isinstance(result, str):
+            try:
+                return json.loads(result)
+            except (ValueError, TypeError):
+                return {}
+        return {}
+
+    def validate_tool_input(self, tool_input):
+        return isinstance(tool_input, dict)
+
+    def apply_payment_header(self, tool_input, payment_header):
+        tool_input.setdefault("headers", {}).update(payment_header)
+        return True
 
 
 def _make_config(**overrides):
@@ -360,3 +394,91 @@ class TestErrorToolMessage:
         result = mw.wrap_tool_call(request, mock_handler)
         assert "PAYMENT ERROR" in result.content
         assert "request format" in result.content
+
+
+# ---------------------------------------------------------------------------
+# Custom-handler retry rejection (custom handler owns post-payment 402 detection)
+# ---------------------------------------------------------------------------
+
+
+class TestCustomHandlerRetryRejection:
+    """A registered custom handler decides whether the post-payment retry is still a 402."""
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_custom_format_rejection_detected_after_payment(self, mock_pm_cls):
+        """Retry still-402 in the custom format is detected and its error detail surfaced."""
+        mock_pm = mock_pm_cls.return_value
+        mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "sig"}
+
+        config = _make_config(custom_handlers={"bespoke_tool": _BespokeHandler()})
+        mw = AgentCorePaymentsMiddleware(config)
+
+        bespoke_402 = json.dumps({"custom_status": 402, "error": "bespoke_reject", "accepts": []})
+        request = _make_request(tool_name="bespoke_tool", tool_args={"url": "http://x.com", "headers": {}})
+        mock_handler = MagicMock(
+            side_effect=[
+                ToolMessage(content=bespoke_402, tool_call_id="tc-1"),  # initial 402
+                ToolMessage(content=bespoke_402, tool_call_id="tc-1"),  # retry still 402
+            ]
+        )
+
+        result = mw.wrap_tool_call(request, mock_handler)
+        assert isinstance(result, ToolMessage)
+        assert "signed but rejected" in result.content
+        assert "bespoke_reject" in result.content  # real detail, not "unknown"
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_custom_format_success_after_payment_passes_through(self, mock_pm_cls):
+        """When the retry succeeds in the custom format, the success result is returned (no false rejection)."""
+        mock_pm = mock_pm_cls.return_value
+        mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "sig"}
+
+        config = _make_config(custom_handlers={"bespoke_tool": _BespokeHandler()})
+        mw = AgentCorePaymentsMiddleware(config)
+
+        bespoke_402 = json.dumps({"custom_status": 402, "error": "pay", "accepts": []})
+        success = ToolMessage(content=json.dumps({"custom_status": 200, "data": "ok"}), tool_call_id="tc-1")
+        request = _make_request(tool_name="bespoke_tool", tool_args={"url": "http://x.com", "headers": {}})
+        mock_handler = MagicMock(side_effect=[ToolMessage(content=bespoke_402, tool_call_id="tc-1"), success])
+
+        result = mw.wrap_tool_call(request, mock_handler)
+        assert result is success
+        assert "PAYMENT ERROR" not in result.content
+
+
+# ---------------------------------------------------------------------------
+# Header injection when the tool call arrives without an "args" key
+# ---------------------------------------------------------------------------
+
+
+class TestHeaderInjectionMissingArgs:
+    """A tool call with no 'args' key still gets the payment header written where the retry sees it."""
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_header_injected_when_args_key_absent(self, mock_pm_cls):
+        mock_pm = mock_pm_cls.return_value
+        mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "sig123"}
+
+        config = _make_config()
+        mw = AgentCorePaymentsMiddleware(config)
+
+        # tool_call dict deliberately has NO "args" key
+        request = MagicMock()
+        request.tool_call = {"name": "http_request", "id": "tc-1"}
+
+        call_count = [0]
+
+        def mock_handler(req):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return ToolMessage(content=_402_content(), tool_call_id="tc-1")
+            return ToolMessage(content=_200_content(), tool_call_id="tc-1")
+
+        result = mw.wrap_tool_call(request, mock_handler)
+
+        # args was created on request.tool_call and the header injected into it,
+        # so the retried handler would have sent it.
+        assert "args" in request.tool_call
+        assert request.tool_call["args"]["headers"]["X-PAYMENT"] == "sig123"
+        assert call_count[0] == 2
+        assert json.loads(result.content)["statusCode"] == 200

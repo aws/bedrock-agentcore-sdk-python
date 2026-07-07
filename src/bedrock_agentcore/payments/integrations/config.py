@@ -35,6 +35,12 @@ class AgentCorePaymentsPluginConfig:
             Defaults to 5. Set to 0 to disable interrupt retries entirely.
         custom_handlers: Custom PaymentResponseHandler instances keyed by tool name.
             Takes precedence over the built-in handler registry during resolution.
+            A custom handler's extract_* methods receive the raw ToolMessage.content
+            (a str or a list of content blocks), not the middleware's internal wrapped
+            shape. The built-in handlers (GenericPaymentHandler, HttpRequestPaymentHandler,
+            MCPRequestPaymentHandler) expect a different, normalized shape, so passing one
+            of them directly as a custom handler will not detect 402s; subclass
+            PaymentResponseHandler (or wrap a built-in) and parse the raw content instead.
         auto_session: Whether to auto-create a payment session on first 402 if
             payment_session_id is not set. Default False.
         auto_session_budget: Budget for auto-created sessions (USD). Default "1.00".

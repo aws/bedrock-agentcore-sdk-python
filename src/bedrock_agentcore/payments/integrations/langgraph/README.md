@@ -293,12 +293,15 @@ When no callback is configured, or the callback returns `PROPAGATE`, the LLM rec
 
 Register custom `PaymentResponseHandler` implementations for tools with non-standard output formats. The custom handler is used for **all three phases**: detection, extraction, and injection.
 
+> **Input contract:** a custom handler's `extract_*` methods receive the **raw `ToolMessage.content`** — a `str` or a list of content blocks — exactly as the tool returned it, not the middleware's internal wrapped shape. Parse it yourself. The built-in handlers (`GenericPaymentHandler`, `HttpRequestPaymentHandler`, `MCPRequestPaymentHandler`) expect a different, normalized shape, so passing one of them directly as a custom handler will silently fail to detect 402s — subclass `PaymentResponseHandler` (or wrap a built-in) and parse the raw content.
+
 ```python
 from bedrock_agentcore.payments.integrations.handlers import PaymentResponseHandler
 
 class MyMCPHandler(PaymentResponseHandler):
     def extract_status_code(self, result):
-        # Parse your tool's output format to detect 402
+        # `result` is the raw ToolMessage.content (str or list of blocks).
+        # Parse your tool's output format to detect 402.
         ...
 
     def extract_headers(self, result):
