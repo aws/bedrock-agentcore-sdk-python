@@ -1,5 +1,50 @@
 # Changelog
 
+## [1.17.0] - 2026-07-02
+
+### Other Changes
+- fix(runtime): prevent streaming-bridge deadlock on client disconnect (#482) (#563) (2bfabb3)
+- Revert "Create poc-caller.yml (#561)" (#562) (8bbfe18)
+- Create poc-caller.yml (#561) (df244a2)
+
+## [1.16.0] - 2026-06-30
+
+### Other Changes
+- fix(ci): prevent script injection in GitHub Actions workflows (#559) (c771470)
+- Add extraction_mode parameter to MemoryClient.create_event (#550) (22fc032)
+
+## [1.15.1] - 2026-06-25
+
+### Added
+- feat(evaluation): add KMS, tags, online data source, and updated_at to batch eval (#533) (de79b6b)
+- feat(evaluation): expose evaluationReferenceInputs on EvaluatorInput (#540) (ff55a2a)
+
+### Fixed
+- fix: use correct 'score' field for memory relevance filtering (#480) (eaaf451)
+- fix: remove invalid CLI entrypoint from pyproject.toml (#521) (e937f9a)
+- fix(evaluation): make EvaluatorOutput.label optional for error responses (#545) (1eabc67)
+- fix(memory): guard retrieve_customer_context against empty message content (#544) (56b215d)
+- fix(runtime): drop time_of_last_update from A2A and AG-UI ping responses (#542) (44b1a92)
+- fix(ci): make security review robust to shallow-clone restoration (#524) (fefb240)
+
+## [1.15.0] - 2026-06-17
+
+### Other Changes
+- test(integ): fix flaky gateway KB-target & memory list tests + orphan cleanup scripts (#536) (6fc08ed)
+- release: nys summit (#532) (a76cce8)
+- ci(gateway): pass KB_ROLE_ARN secret to integration tests (#535) (0cc1e21)
+- fix(test): update tests to be consistent with new model (#534) (82a2305)
+- ci: add Claude Code /security-review workflow on PRs (#516) (2550d55)
+
+## [1.14.1] - 2026-06-11
+
+### Fixed
+- fix: declare requests as optional 'datasets' extra (#508) (2359137)
+
+### Other Changes
+- fix(payments): correct "extension" typo to "extensions" in x402 v2 he… (#513) (5f9031d)
+- fix(a2a): cap a2a-sdk below 1.0 to restore A2A server startup (#510) (12f0f8b)
+
 ## [1.14.0] - 2026-06-05
 
 ### Other Changes

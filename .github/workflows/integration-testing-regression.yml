@@ -216,11 +216,13 @@ jobs:
 
       # Install test dependencies only — NOT the library (already installed above).
       - name: Install test dependencies
+        env:
+          EXTRA_DEPS: ${{ matrix.extra-deps }}
         run: |
           pip install --no-cache-dir \
             pytest pytest-xdist pytest-order pytest-rerunfailures \
             requests strands-agents uvicorn httpx starlette websockets \
-            ${{ matrix.extra-deps }}
+            $EXTRA_DEPS
 
       # Run the old test suite against the new library.
       # A failure here means a test that passed in the previous release
@@ -235,14 +237,18 @@ jobs:
           RESOURCE_POLICY_TEST_ARN: ${{ secrets.RESOURCE_POLICY_TEST_ARN }}
           RESOURCE_POLICY_TEST_PRINCIPAL: ${{ secrets.RESOURCE_POLICY_TEST_PRINCIPAL }}
           BASELINE_TAG: ${{ needs.resolve-tag.outputs.tag }}
+          TEST_GROUP: ${{ matrix.group }}
+          PYTEST_PATH: ${{ matrix.path }}
         timeout-minutes: ${{ matrix.timeout }}
         working-directory: /tmp/baseline-tests
+        # PYTEST_PATH comes from the job matrix and holds space-separated pytest
+        # path args; left unquoted intentionally so it word-splits.
         run: |
           echo "================================================"
           echo "Library:    bedrock-agentcore (PR branch source)"
-          echo "Test suite: $BASELINE_TAG tests_integ/${{ matrix.group }}"
+          echo "Test suite: $BASELINE_TAG tests_integ/$TEST_GROUP"
           echo "================================================"
-          pytest ${{ matrix.path }} \
+          pytest $PYTEST_PATH \
             -n auto --dist=loadscope \
             -s --log-cli-level=INFO
 

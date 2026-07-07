@@ -539,7 +539,7 @@ class TestGeneratePaymentHeaderWorkflow:
         assert header_json["accepted"] is not None
         assert "payload" in header_json
         assert header_json["payload"] is not None
-        assert "extension" in header_json
+        assert "extensions" in header_json
 
         # Step 8: Verify scheme and network match the x402_response
         import json as json_module

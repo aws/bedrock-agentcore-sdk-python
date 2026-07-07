@@ -70,15 +70,14 @@ def _send_message_params(text: str = "hello") -> dict:
 
 
 class TestBuildA2AApp:
-    def test_ping_returns_healthy_with_timestamp(self):
+    def test_ping_returns_healthy_without_timestamp(self):
         app = build_a2a_app(_EchoExecutor(), _make_agent_card())
         client = TestClient(app)
         resp = client.get("/ping")
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "Healthy"
-        assert isinstance(body["time_of_last_update"], int)
-        assert body["time_of_last_update"] > 0
+        assert "time_of_last_update" not in body
 
     def test_custom_ping_handler(self):
         app = build_a2a_app(

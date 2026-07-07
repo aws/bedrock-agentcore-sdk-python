@@ -1452,7 +1452,7 @@ class PaymentManager:
                     "x402Version": 2,
                     "resource": x402_payload.get("resource"),
                     "accepted": selected_accept,
-                    "extension": x402_payload.get("extension", {}),
+                    "extensions": x402_payload.get("extensions", {}),
                     "payload": crypto_x402_proof.get("payload"),
                 }
                 header_json = json.dumps(payment_signature)

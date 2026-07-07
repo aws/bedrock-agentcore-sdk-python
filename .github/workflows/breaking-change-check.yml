@@ -47,7 +47,9 @@ jobs:
 
       # Fetch the base branch so the ref is available for griffe's worktree.
       - name: Fetch base branch
-        run: git fetch origin "${{ github.base_ref }}" --depth=1
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch origin "$BASE_REF" --depth=1
 
       # Run griffe using its Python API for stable, structured output.
       # The Python API is used instead of the CLI to:
@@ -150,6 +152,8 @@ jobs:
       # rather than creating a new one per commit.
       - name: Post or update PR comment
         uses: actions/github-script@v8
+        env:
+          GRIFFE_EXIT_CODE: ${{ steps.griffe.outputs.exit_code }}
         with:
           script: |
             const fs = require('fs');
@@ -186,7 +190,7 @@ jobs:
             }
 
             // Log summary to the Actions step output for visibility.
-            const exitCode = '${{ steps.griffe.outputs.exit_code }}';
+            const exitCode = process.env.GRIFFE_EXIT_CODE;
             if (exitCode === '1') {
               core.warning('Breaking changes detected — see PR comment for details.');
             }
