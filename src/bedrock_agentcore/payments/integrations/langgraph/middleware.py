@@ -1,6 +1,7 @@
 """AgentCorePaymentsMiddleware for LangGraph agents."""
 
 import asyncio
+import functools
 import inspect
 import json
 import logging
@@ -209,7 +210,8 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
     def _detect_402(self, request: ToolCallRequest, result: ToolMessage) -> Optional[_DetectionResult]:
         """Run 402 detection. Returns detection context if 402 found, None otherwise."""
         tool_name = request.tool_call["name"]
-        tool_args = request.tool_call.get("args", {})
+        # Store args back on the tool call so an injected payment header reaches the retried handler.
+        tool_args = request.tool_call.setdefault("args", {})
         prepared = self._prepare_for_handler(result.content)
         if prepared is None:
             return None
@@ -307,20 +309,30 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         if isinstance(retry_result, Command):
             return retry_result
 
-        retry_prepared = self._prepare_for_handler(retry_result.content)
-        if retry_prepared is None:
-            return None
+        tool_name = request.tool_call["name"]
+        if self.config.custom_handlers and tool_name in self.config.custom_handlers:
+            # Mirror _detect_402: a custom handler owns detection for its tool, so it must
+            # also decide whether the post-payment retry is still a 402. It receives raw content.
+            handler = self.config.custom_handlers[tool_name]
+            retry_status = handler.extract_status_code(retry_result.content)
+            retry_body = handler.extract_body(retry_result.content) if retry_status == 402 else None
+        else:
+            retry_prepared = self._prepare_for_handler(retry_result.content)
+            if retry_prepared is None:
+                return None
 
-        _rh = GenericPaymentHandler()
-        retry_status = _rh.extract_status_code(retry_prepared)
-        if retry_status != 402:
-            fallback = self._fallback_detect_402(retry_result.content)
-            if fallback is not None:
-                retry_status = 402
-                _rh = _FallbackHandler(fallback)
+            _rh = GenericPaymentHandler()
+            retry_status = _rh.extract_status_code(retry_prepared)
+            if retry_status != 402:
+                fallback = self._fallback_detect_402(retry_result.content)
+                if fallback is not None:
+                    retry_status = 402
+                    _rh = _FallbackHandler(fallback)
+            retry_body = _rh.extract_body(retry_prepared) if retry_status == 402 else None
+
         if retry_status == 402:
-            retry_body = _rh.extract_body(retry_prepared) or {}
-            detail = retry_body.get("error", "unknown error") if isinstance(retry_body, dict) else "unknown error"
+            body = retry_body or {}
+            detail = body.get("error", "unknown error") if isinstance(body, dict) else "unknown error"
             return self._error_tool_message(
                 request,
                 PaymentError(f"Payment was signed but rejected {error_context} ({detail})."),
@@ -386,6 +398,23 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         )
         self.config.payment_session_id = session["paymentSessionId"]
         logger.info("auto_session: created session %s", self.config.payment_session_id)
+
+    @staticmethod
+    def _is_async_callback(callback: Any) -> bool:
+        """True if the callback ultimately resolves to an async coroutine function.
+
+        Covers the wrappings a plain ``inspect.iscoroutinefunction`` can miss: callable
+        objects with an ``async def __call__``, ``functools.partial`` (whose async-ness is
+        not reliably visible through the partial across Python versions), and partials of
+        either. (``callable()`` — ruff B004's suggestion — cannot distinguish sync from async.)
+        """
+        target = callback
+        while isinstance(target, functools.partial):
+            target = target.func
+        if inspect.iscoroutinefunction(target):
+            return True
+        call = getattr(target, "__call__", None)  # noqa: B004
+        return inspect.iscoroutinefunction(call)
 
     @staticmethod
     def _error_tool_message(request: ToolCallRequest, exception: Exception) -> ToolMessage:
@@ -505,6 +534,15 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         handler: Callable,
     ) -> Optional[Union[ToolMessage, Command]]:
         """Invoke on_payment_error callback and retry if requested."""
+        # Fail loudly: an async callback on the sync path can never be awaited here, so a
+        # silent PROPAGATE would hide a programming error. Raise before the loop (outside the
+        # callback try/except) so the TypeError propagates instead of being swallowed.
+        if self._is_async_callback(self.config.on_payment_error):
+            raise TypeError(
+                "async on_payment_error callback cannot be used with sync .invoke(). "
+                "Use agent.ainvoke() or provide a synchronous callback."
+            )
+
         retry_count = 0
         current_exception = exception
 
@@ -514,11 +552,6 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             )
 
             try:
-                if inspect.iscoroutinefunction(self.config.on_payment_error):
-                    raise TypeError(
-                        "async on_payment_error callback cannot be used with sync .invoke(). "
-                        "Use agent.ainvoke() or provide a synchronous callback."
-                    )
                 resolution = self.config.on_payment_error(ctx)
             except Exception as cb_err:
                 logger.error("on_payment_error callback raised: %s", cb_err)
@@ -645,7 +678,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             )
 
             try:
-                if inspect.iscoroutinefunction(self.config.on_payment_error):
+                if self._is_async_callback(self.config.on_payment_error):
                     resolution = await self.config.on_payment_error(ctx)
                 else:
                     resolution = self.config.on_payment_error(ctx)
