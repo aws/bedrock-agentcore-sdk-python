@@ -113,6 +113,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if desired_timestamp is None:
             desired_timestamp = datetime.now(timezone.utc)
 
+        # Floor to milliseconds — the resolution AgentCore Memory actually stores
+        # and orders eventTimestamp at. Comparing at microsecond precision would
+        # miss two events that fall in the same millisecond but different
+        # microseconds: they pass the tie check here yet collide once stored.
+        desired_timestamp = desired_timestamp.replace(microsecond=(desired_timestamp.microsecond // 1000) * 1000)
+
         with self._timestamp_lock:
             if self._last_timestamp is not None and desired_timestamp <= self._last_timestamp:
                 # Break the tie at millisecond granularity (the service's resolution).

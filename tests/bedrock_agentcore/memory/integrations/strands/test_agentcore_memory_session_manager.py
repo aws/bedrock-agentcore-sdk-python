@@ -3870,11 +3870,19 @@ class TestMonotonicTimestamp:
         assert session_manager._get_monotonic_timestamp(later) == later
 
     def test_none_desired_uses_current_time(self, session_manager):
-        """Passing None falls back to current UTC time (preserved behavior)."""
+        """Passing None falls back to current UTC time (preserved behavior).
+
+        The result is floored to ms, so it can sit up to 999us below ``before``;
+        compare against the ms-floored bounds.
+        """
+
+        def floor_ms(dt):
+            return dt.replace(microsecond=(dt.microsecond // 1000) * 1000)
+
         before = datetime.now(timezone.utc)
         result = session_manager._get_monotonic_timestamp(None)
         after = datetime.now(timezone.utc)
-        assert before <= result <= after
+        assert floor_ms(before) <= result <= floor_ms(after)
 
     def test_within_process_burst_stays_ordered_at_ms_resolution(self, session_manager):
         """A burst of same-instant events gets strictly increasing 1ms-spaced
@@ -3887,3 +3895,27 @@ class TestMonotonicTimestamp:
         assert len(set(stamps)) == len(stamps)  # no ties (ambiguous ordering)
         # Whole burst stays within a few ms of the requested time, not seconds.
         assert stamps[-1] - base == timedelta(milliseconds=4)
+
+    def test_returned_timestamps_are_floored_to_milliseconds(self, session_manager):
+        """Timestamps are floored to ms — the sub-millisecond microseconds the
+        service would discard are dropped before comparison/storage."""
+        ts = datetime(2024, 1, 1, 12, 0, 0, 567890, tzinfo=timezone.utc)  # 567.890 ms
+        result = session_manager._get_monotonic_timestamp(ts)
+        assert result == ts.replace(microsecond=567000)
+        assert result.microsecond % 1000 == 0
+
+    def test_same_millisecond_different_microseconds_is_a_tie(self, session_manager):
+        """Two events in the same ms but different microseconds must be treated
+        as a collision and separated by 1ms — otherwise they collide once the
+        service floors both to the same millisecond."""
+        first = datetime(2024, 1, 1, 12, 0, 0, 500, tzinfo=timezone.utc)  # 0.500 ms
+        second = datetime(2024, 1, 1, 12, 0, 0, 900, tzinfo=timezone.utc)  # 0.900 ms
+
+        r1 = session_manager._get_monotonic_timestamp(first)
+        r2 = session_manager._get_monotonic_timestamp(second)
+
+        # Both floored to .000; the second is bumped to .001 rather than passing
+        # through as a false non-tie.
+        assert r1 == datetime(2024, 1, 1, 12, 0, 0, 0, tzinfo=timezone.utc)
+        assert r2 == datetime(2024, 1, 1, 12, 0, 0, 1000, tzinfo=timezone.utc)
+        assert r2 > r1
