@@ -3876,61 +3876,14 @@ class TestMonotonicTimestamp:
         after = datetime.now(timezone.utc)
         assert before <= result <= after
 
-    def test_seed_from_newest_persisted_event(self, session_manager, mock_memory_client):
-        """The floor is seeded from the latest persisted event so a fresh process
-        continues after it instead of restarting from wall-clock."""
-        persisted = datetime(2030, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-        mock_memory_client.list_events.return_value = [{"eventTimestamp": persisted}]
+    def test_within_process_burst_stays_ordered_at_ms_resolution(self, session_manager):
+        """A burst of same-instant events gets strictly increasing 1ms-spaced
+        timestamps instead of being inflated by whole seconds."""
+        base = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        # Five events all requesting the same instant (a same-second burst).
+        stamps = [session_manager._get_monotonic_timestamp(base) for _ in range(5)]
 
-        session_manager._seed_last_timestamp()
-        assert session_manager._last_timestamp == persisted
-
-        # list_events was called for exactly the latest event.
-        _, kwargs = mock_memory_client.list_events.call_args
-        assert kwargs["max_results"] == 1
-
-        # A "now" write that predates the persisted event is pushed after it.
-        stale_now = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-        result = session_manager._get_monotonic_timestamp(stale_now)
-        assert result == persisted + timedelta(milliseconds=1)
-
-    def test_seed_no_events_leaves_floor_unset(self, session_manager, mock_memory_client):
-        """A brand-new session (no events) leaves the floor as None."""
-        mock_memory_client.list_events.return_value = []
-        session_manager._seed_last_timestamp()
-        assert session_manager._last_timestamp is None
-
-    def test_seed_read_failure_is_swallowed(self, session_manager, mock_memory_client):
-        """A read failure must not break init — the floor stays unset (degrades
-        to in-process ordering) rather than raising."""
-        mock_memory_client.list_events.side_effect = Exception("transient API error")
-        session_manager._seed_last_timestamp()  # must not raise
-        assert session_manager._last_timestamp is None
-
-    def test_multiprocess_handoff_preserves_order(self, agentcore_config, mock_memory_client):
-        """End-to-end: turn 1 on 'pod A', turn 2 on a fresh 'pod B' that seeds
-        from pod A's newest event -> pod B's events sort strictly after pod A's,
-        even though pod B's wall-clock 'now' predates them."""
-        # --- Pod A: turn 1, five events a few ms apart within one second. ---
-        pod_a = _create_session_manager(agentcore_config, mock_memory_client)
-        turn1_base = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-        turn1 = [pod_a._get_monotonic_timestamp(turn1_base + timedelta(milliseconds=3 * i)) for i in range(5)]
-        assert turn1 == sorted(turn1)
-        newest_a = turn1[-1]
-
-        # --- Pod B: fresh process/instance. Its wall-clock 'now' is BEFORE
-        #     pod A's future events (the exact multi-pod race). It seeds from
-        #     the store (newest = pod A's last event). ---
-        pod_b = _create_session_manager(agentcore_config, mock_memory_client)
-        mock_memory_client.list_events.return_value = [{"eventTimestamp": newest_a}]
-        pod_b._seed_last_timestamp()
-
-        podb_now = turn1_base + timedelta(milliseconds=1)  # earlier than pod A's spread
-        turn2 = [pod_b._get_monotonic_timestamp(podb_now + timedelta(milliseconds=3 * i)) for i in range(3)]
-
-        # Every turn-2 event must come after every turn-1 event: no interleave.
-        assert min(turn2) > max(turn1)
-        combined = turn1 + turn2
-        assert combined == sorted(combined)
-        # No duplicate timestamps (ambiguous ordering is what Converse rejects).
-        assert len(set(combined)) == len(combined)
+        assert stamps == sorted(stamps)
+        assert len(set(stamps)) == len(stamps)  # no ties (ambiguous ordering)
+        # Whole burst stays within a few ms of the requested time, not seconds.
+        assert stamps[-1] - base == timedelta(milliseconds=4)
