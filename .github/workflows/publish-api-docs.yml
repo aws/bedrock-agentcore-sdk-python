@@ -1,0 +1,68 @@
+# =============================================================================
+# publish-api-docs.yml  —  bedrock-agentcore-sdk-python
+# =============================================================================
+# Auto-generates the Python SDK API reference as AsciiDoc (.adoc) on every
+# release and uploads it as a build artifact for the docs team to publish.
+#
+# Pipeline: install released SDK -> extract doc-model JSON (inspect + docstrings)
+#           -> render .adoc -> upload artifact.
+#
+# NOTE: this generates and publishes the docs as an artifact only; landing them
+# in the docs site is a separate step for now and may be automated later.
+# =============================================================================
+
+name: Publish API docs
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  ADOC_PREFIX: python-sdk
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the published SDK
+        # Install the EXACT released version, not the newest on PyPI.
+        # `release: [published]` can fire for pre-releases too, so pin to the
+        # release tag when present; fall back to newest for manual runs.
+        run: |
+          pip install --upgrade pip
+          if [ -n "$RELEASE_TAG" ]; then
+            pip install "bedrock-agentcore==${RELEASE_TAG#v}"
+          else
+            pip install bedrock-agentcore
+          fi
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+
+      - name: Extract doc-model JSON
+        run: python scripts/extract_api_model.py --out doc-model.json
+
+      - name: Render .adoc
+        run: |
+          python scripts/render_adoc.py \
+            --model doc-model.json \
+            --out-dir out/adoc \
+            --prefix "${ADOC_PREFIX}"
+
+      - name: Upload API-docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-docs-adoc
+          path: out/adoc
+          if-no-files-found: error
