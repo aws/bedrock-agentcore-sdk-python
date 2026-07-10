@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.0] - 2026-07-02
+
+### Other Changes
+- fix(runtime): prevent streaming-bridge deadlock on client disconnect (#482) (#563) (2bfabb3)
+- Revert "Create poc-caller.yml (#561)" (#562) (8bbfe18)
+- Create poc-caller.yml (#561) (df244a2)
+
 ## [1.16.0] - 2026-06-30
 
 ### Other Changes
