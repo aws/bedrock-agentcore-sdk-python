@@ -1,5 +1,7 @@
 import asyncio
+import concurrent.futures
 import contextlib
+import contextvars
 import json
 import os
 import threading
@@ -3061,3 +3063,134 @@ class TestIsForwardableHeader:
     def test_authorization_is_allowed(self):
         # Authorization is normalized to canonical casing by the loop, but is_forwardable_header must not block it
         assert is_forwardable_header("Authorization") is True
+
+
+class TestStreamingBridgeDeadlock:
+    """Regression tests for the async->sync streaming bridge deadlock.
+
+    When a streaming (async generator) handler produces faster than the SSE
+    consumer drains, the bounded queue used by ``_async_gen_to_sync_gen`` fills
+    up. The producer coroutine runs on the single shared worker loop, so a
+    blocking put on a full queue freezes that loop process-wide and starves
+    every other session's handler. If the consumer goes away entirely (client
+    disconnect), the producer must be torn down rather than left spinning.
+    """
+
+    @staticmethod
+    def _abandon_after(sync_gen, n):
+        """Consume ``n`` chunks from a bridged sync generator, then close it.
+
+        Mimics an SSE client that reads a bit and disconnects. Runs in a daemon
+        thread so a deadlocked ``q.get()`` can never hang the test thread.
+        """
+        for _ in range(n):
+            next(sync_gen)
+        sync_gen.close()  # StreamingResponse triggers GeneratorExit on client disconnect
+
+    def _run_bounded(self, target, timeout):
+        """Run ``target`` in a daemon thread; return True iff it finished within ``timeout``."""
+        done = threading.Event()
+        error = {}
+
+        def _wrap():
+            try:
+                target()
+            except BaseException as e:  # noqa: BLE001 - surface in assertion
+                error["e"] = e
+            finally:
+                done.set()
+
+        t = threading.Thread(target=_wrap, daemon=True)
+        t.start()
+        finished = done.wait(timeout)
+        if finished and "e" in error:
+            raise error["e"]
+        return finished
+
+    def test_worker_loop_survives_abandoned_stream(self):
+        """A consumer that stops early and disconnects must not freeze the worker loop.
+
+        The producer emits far more than the bridge's queue
+        maxsize; the consumer reads a few chunks then closes (SSE disconnect).
+        Afterwards a fresh coroutine must still run on the shared worker loop.
+        """
+        app = BedrockAgentCoreApp()
+
+        async def big_stream():
+            # Far beyond the bridge's bounded queue so a blocking producer wedges the loop.
+            for i in range(10_000):
+                yield f"chunk-{i}"
+
+        sync_gen = app._async_gen_to_sync_gen(big_stream(), contextvars.copy_context())
+        # Abandon the stream in a bounded thread (guards against a hang here too).
+        assert self._run_bounded(lambda: self._abandon_after(sync_gen, 3), timeout=10.0), (
+            "abandoning the stream hung — consumer blocked on the bridge"
+        )
+        time.sleep(0.5)  # let the orphaned producer either exit or wedge
+
+        # The shared worker loop must still be able to run new work.
+        loop = app._ensure_worker_loop()
+
+        async def _noop():
+            return "alive"
+
+        fut = asyncio.run_coroutine_threadsafe(_noop(), loop)
+        try:
+            alive = fut.result(timeout=5.0) == "alive"
+        except (concurrent.futures.TimeoutError, TimeoutError):
+            fut.cancel()
+            alive = False
+        assert alive, "worker loop is wedged after an abandoned stream — bridge deadlocked"
+
+    def test_second_session_survives_first_sessions_abandoned_stream(self):
+        """After session A abandons its stream, session B's streaming handler must still run."""
+        app = BedrockAgentCoreApp()
+
+        async def big_stream():
+            for i in range(10_000):
+                yield f"a-{i}"
+
+        gen_a = app._async_gen_to_sync_gen(big_stream(), contextvars.copy_context())
+        assert self._run_bounded(lambda: self._abandon_after(gen_a, 1), timeout=10.0), "abandoning session A hung"
+        time.sleep(0.5)
+
+        async def small_stream():
+            for i in range(3):
+                yield f"b-{i}"
+
+        gen_b = app._async_gen_to_sync_gen(small_stream(), contextvars.copy_context())
+        collected = []
+        # Consume B in a bounded thread: if the loop is starved, q.get() blocks forever
+        # and this returns False rather than hanging the suite.
+        completed = self._run_bounded(lambda: collected.extend(list(gen_b)), timeout=5.0)
+        assert completed and collected == ["b-0", "b-1", "b-2"], (
+            f"session B did not complete — worker loop starved by session A; completed={completed} got={collected}"
+        )
+
+    def test_disconnect_tears_down_producer_blocked_on_slow_downstream(self):
+        """Disconnecting while the handler is parked mid-await must cancel the producer.
+
+        The source generator yields one chunk then blocks on a long await (a slow
+        downstream). On client disconnect the producer must be cancelled so the
+        generator's ``finally`` runs and its resources are released — otherwise
+        the task and the upstream connection leak until the await returns.
+        """
+        app = BedrockAgentCoreApp()
+        cleaned_up = threading.Event()
+
+        async def stalled_stream():
+            try:
+                yield "first"
+                await asyncio.sleep(3600)  # park on a slow/hung downstream
+                yield "never"
+            finally:
+                cleaned_up.set()  # runs only if the coroutine is closed/cancelled
+
+        sync_gen = app._async_gen_to_sync_gen(stalled_stream(), contextvars.copy_context())
+        # Read the first chunk, then disconnect while the producer is parked in the await.
+        assert self._run_bounded(lambda: self._abandon_after(sync_gen, 1), timeout=10.0), "abandoning hung"
+
+        assert cleaned_up.wait(timeout=5.0), (
+            "producer parked in a mid-await was not torn down on disconnect — "
+            "source generator's finally never ran (task leaked)"
+        )

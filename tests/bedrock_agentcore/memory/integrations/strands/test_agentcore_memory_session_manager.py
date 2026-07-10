@@ -4,7 +4,7 @@ import asyncio
 import inspect
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 import pytest
@@ -3810,3 +3810,112 @@ class TestFlushAgentStatesRaceCondition:
 
         # State must be back in the buffer for retry.
         assert batching_session_manager.pending_agent_state_count() == 1
+
+
+class TestMonotonicTimestamp:
+    """Tests for monotonic event-timestamp ordering across processes/pods.
+
+    Regression coverage for the multi-process interleave bug: the ordering
+    counter must be instance-scoped, break ties at millisecond (not second)
+    granularity, and be seeded from the newest persisted event so a freshly
+    started process continues after another process's writes.
+    """
+
+    def test_state_is_instance_scoped_not_class_level(self, agentcore_config, mock_memory_client):
+        """Two managers must not share timestamp state (class-level state leaked
+        across unrelated sessions in the same process)."""
+        m1 = _create_session_manager(agentcore_config, mock_memory_client)
+        m2 = _create_session_manager(agentcore_config, mock_memory_client)
+
+        assert m1._last_timestamp is None
+        assert m2._last_timestamp is None
+
+        base = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        m1._get_monotonic_timestamp(base)
+
+        # m1 advanced; m2 must be untouched.
+        assert m1._last_timestamp == base
+        assert m2._last_timestamp is None
+        # Distinct lock objects, not a shared class attribute.
+        assert m1._timestamp_lock is not m2._timestamp_lock
+
+    def test_first_timestamp_passes_through_unchanged(self, session_manager):
+        """With no prior events, the desired timestamp is returned as-is."""
+        base = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        assert session_manager._get_monotonic_timestamp(base) == base
+
+    def test_tie_broken_by_one_millisecond_not_one_second(self, session_manager):
+        """A colliding timestamp is bumped by 1ms — not inflated by 1s like the
+        old behavior that pushed events seconds into the future."""
+        base = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        session_manager._get_monotonic_timestamp(base)
+
+        # Same timestamp again -> must advance by exactly 1ms.
+        second = session_manager._get_monotonic_timestamp(base)
+        assert second == base + timedelta(milliseconds=1)
+
+        # Third identical -> another 1ms.
+        third = session_manager._get_monotonic_timestamp(base)
+        assert third == base + timedelta(milliseconds=2)
+
+        # A full multi-event turn stays within a few ms of real time, not seconds.
+        assert third - base < timedelta(seconds=1)
+
+    def test_later_timestamp_is_not_bumped(self, session_manager):
+        """A desired timestamp clearly after the floor passes through unchanged."""
+        base = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        session_manager._get_monotonic_timestamp(base)
+
+        later = base + timedelta(seconds=5)
+        assert session_manager._get_monotonic_timestamp(later) == later
+
+    def test_none_desired_uses_current_time(self, session_manager):
+        """Passing None falls back to current UTC time (preserved behavior).
+
+        The result is floored to ms, so it can sit up to 999us below ``before``;
+        compare against the ms-floored bounds.
+        """
+
+        def floor_ms(dt):
+            return dt.replace(microsecond=(dt.microsecond // 1000) * 1000)
+
+        before = datetime.now(timezone.utc)
+        result = session_manager._get_monotonic_timestamp(None)
+        after = datetime.now(timezone.utc)
+        assert floor_ms(before) <= result <= floor_ms(after)
+
+    def test_within_process_burst_stays_ordered_at_ms_resolution(self, session_manager):
+        """A burst of same-instant events gets strictly increasing 1ms-spaced
+        timestamps instead of being inflated by whole seconds."""
+        base = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        # Five events all requesting the same instant (a same-second burst).
+        stamps = [session_manager._get_monotonic_timestamp(base) for _ in range(5)]
+
+        assert stamps == sorted(stamps)
+        assert len(set(stamps)) == len(stamps)  # no ties (ambiguous ordering)
+        # Whole burst stays within a few ms of the requested time, not seconds.
+        assert stamps[-1] - base == timedelta(milliseconds=4)
+
+    def test_returned_timestamps_are_floored_to_milliseconds(self, session_manager):
+        """Timestamps are floored to ms — the sub-millisecond microseconds the
+        service would discard are dropped before comparison/storage."""
+        ts = datetime(2024, 1, 1, 12, 0, 0, 567890, tzinfo=timezone.utc)  # 567.890 ms
+        result = session_manager._get_monotonic_timestamp(ts)
+        assert result == ts.replace(microsecond=567000)
+        assert result.microsecond % 1000 == 0
+
+    def test_same_millisecond_different_microseconds_is_a_tie(self, session_manager):
+        """Two events in the same ms but different microseconds must be treated
+        as a collision and separated by 1ms — otherwise they collide once the
+        service floors both to the same millisecond."""
+        first = datetime(2024, 1, 1, 12, 0, 0, 500, tzinfo=timezone.utc)  # 0.500 ms
+        second = datetime(2024, 1, 1, 12, 0, 0, 900, tzinfo=timezone.utc)  # 0.900 ms
+
+        r1 = session_manager._get_monotonic_timestamp(first)
+        r2 = session_manager._get_monotonic_timestamp(second)
+
+        # Both floored to .000; the second is bumped to .001 rather than passing
+        # through as a false non-tie.
+        assert r1 == datetime(2024, 1, 1, 12, 0, 0, 0, tzinfo=timezone.utc)
+        assert r2 == datetime(2024, 1, 1, 12, 0, 0, 1000, tzinfo=timezone.utc)
+        assert r2 > r1
