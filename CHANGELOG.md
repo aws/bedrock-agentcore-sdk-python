@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.18.0] - 2026-07-10
+
+### Fixed
+- fix: floor monotonic timestamps to milliseconds before comparison (#573) (f855616)
+- fix: order AgentCore Memory events at millisecond resolution (#572) (a271ab4)
+
+### Other Changes
+- ci: add API reference docs generation workflow (#569) (168f4be)
+- fix(payments): address langgraph middleware review follow-ups (#570) (46a0bea)
+- feat(payments): Add LangGraph integration for payment handling (#546) (0a8a486)
+
 ## [1.17.0] - 2026-07-02
 
 ### Other Changes
