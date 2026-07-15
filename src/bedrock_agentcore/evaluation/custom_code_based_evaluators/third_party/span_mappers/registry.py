@@ -1,54 +1,74 @@
-"""Span mapping orchestration — dispatches by OTel scope name via registry."""
+"""Span mapping orchestration — uses strands-evals mappers with auto-detection."""
 
 import logging
-from typing import Any, Dict, List, Optional, Set
+import warnings
+from typing import Any, Dict, List, Optional
 
-from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers.base import (
-    BaseSpanMapper,
+from strands_evals.mappers import (
+    LangChainOtelSessionMapper,
+    OpenInferenceSessionMapper,
+    detect_otel_mapper,
 )
+from strands_evals.mappers.utils import get_scope_name
+from strands_evals.types.trace import AgentInvocationSpan, Session, ToolExecutionSpan
+
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers.common import (
     SpanMapResult,
-)
-from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers.langgraph.openinference_instrumentation_langchain_mapper import (
-    OpenInferenceInstrumentationLangchainMapper,
-)
-from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers.langgraph.opentelemetry_instrumentation_langchain_mapper import (
-    OpenTelemetryInstrumentationLangchainMapper,
-)
-from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers.strands import (
-    StrandsTelemetryTracerMapper,
 )
 
 logger = logging.getLogger(__name__)
 
-_REGISTRY: List[BaseSpanMapper] = [
-    StrandsTelemetryTracerMapper(),
-    OpenInferenceInstrumentationLangchainMapper(),
-    OpenTelemetryInstrumentationLangchainMapper(),
-]
+# Amazon ADOT distro scope not recognized by strands-evals detect_otel_mapper
+SCOPE_AMAZON_OTEL_LANGCHAIN = "amazon.opentelemetry.distro.instrumentation.langchain"
 
 
-def _detect_scope_names(session_spans: List[Dict[str, Any]]) -> Set[str]:
-    """Collect unique scope names from all spans."""
-    names: Set[str] = set()
+def _detect_mapper(session_spans: List[Dict[str, Any]]):
+    """Detect the appropriate mapper, extending strands-evals for edge cases.
+
+    Handles:
+    - Amazon ADOT distro scope (not recognized by strands-evals)
+    - CloudWatch split format where body is on a separate entry from the scope span
+    """
+    from strands_evals.mappers import CloudWatchSessionMapper
+    from strands_evals.mappers.utils import get_body
+
+    has_strands_scope = False
+    has_body_entry = False
+
     for span in session_spans:
-        scope = span.get("scope", {})
-        if isinstance(scope, dict) and scope.get("name"):
-            names.add(scope["name"])
-    return names
+        scope_name = get_scope_name(span)
+        if scope_name == SCOPE_AMAZON_OTEL_LANGCHAIN:
+            return LangChainOtelSessionMapper()
+        if scope_name == "opentelemetry.instrumentation.langchain":
+            return LangChainOtelSessionMapper()
+        if scope_name == "openinference.instrumentation.langchain":
+            return OpenInferenceSessionMapper()
+        if scope_name == "strands.telemetry.tracer":
+            has_strands_scope = True
+        if get_body(span) is not None:
+            has_body_entry = True
+
+    # CloudWatch split format: Strands scope on metadata entries, body on log entries
+    if has_strands_scope and has_body_entry:
+        return CloudWatchSessionMapper()
+
+    # Fallback to strands-evals auto-detection
+    return detect_otel_mapper(session_spans)
 
 
 def map_spans(
     session_spans: List[Dict[str, Any]],
     reference_inputs: Optional[List[Any]] = None,
 ) -> SpanMapResult:
-    """Map session spans to evaluation fields.
+    """Map session spans to evaluation fields using strands-evals mappers.
 
-    Dispatches to the first registered mapper whose scope_name is found in the spans.
+    Auto-detects the span format (Strands, OpenInference, OpenTelemetry LangChain)
+    and delegates to the appropriate strands-evals mapper, then bridges the result
+    to SpanMapResult for adapter consumption.
 
     Args:
         session_spans: Raw ADOT span dicts from the evaluation service.
-        reference_inputs: Optional ReferenceInput list for expected_output.
+        reference_inputs: Optional ReferenceInput list for expected_output/tools/assertions.
 
     Returns:
         SpanMapResult with extracted fields.
@@ -56,39 +76,85 @@ def map_spans(
     Raises:
         ValueError: If no mapper can extract data from the spans.
     """
-    scope_names = _detect_scope_names(session_spans)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=DeprecationWarning, module="strands_evals")
+        mapper = _detect_mapper(session_spans)
 
-    for mapper in _REGISTRY:
-        if scope_names & set(mapper.scope_names):
-            result = mapper.map(session_spans)
-            if result is not None:
-                if reference_inputs:
-                    ref = reference_inputs[0]
-                    expected = getattr(ref, "expected_response_text", None)
-                    if expected:
-                        result.expected_output = expected
-                    trajectory = getattr(ref, "expected_trajectory", None)
-                    if isinstance(trajectory, dict):
-                        tool_names = trajectory.get("toolNames")
-                        if isinstance(tool_names, list) and tool_names:
-                            result.expected_tools = [
-                                {"name": name} for name in tool_names if isinstance(name, str)
-                            ]
-                    assertions = getattr(ref, "assertions", None)
-                    if isinstance(assertions, list) and assertions:
-                        assertion_texts = [
-                            a.get("text") for a in assertions
-                            if isinstance(a, dict) and a.get("text")
-                        ]
-                        if assertion_texts:
-                            result.assertions = assertion_texts
-                return result
+    try:
+        session = mapper.map_to_session(session_spans, session_id="eval")
+    except Exception as e:
+        raise ValueError(
+            f"Could not extract evaluation fields from spans using {type(mapper).__name__}: {e}. "
+            f"Provide a custom_mapper for custom or unsupported span formats."
+        ) from e
 
-    detected = ", ".join(sorted(scope_names)) if scope_names else "none"
-    supported = ", ".join(f"'{n}'" for m in _REGISTRY for n in m.scope_names)
-    raise ValueError(
-        f"Could not extract evaluation fields from spans. "
-        f"Detected scope names: [{detected}]. "
-        f"Supported: {supported}. "
-        f"Provide a custom_mapper for custom or unsupported span formats."
+    result = _session_to_span_map_result(session)
+
+    if reference_inputs:
+        ref = reference_inputs[0]
+        expected = getattr(ref, "expected_response_text", None)
+        if expected:
+            result.expected_output = expected
+        trajectory = getattr(ref, "expected_trajectory", None)
+        if isinstance(trajectory, dict):
+            tool_names = trajectory.get("toolNames")
+            if isinstance(tool_names, list) and tool_names:
+                result.expected_tools = [
+                    {"name": name} for name in tool_names if isinstance(name, str)
+                ]
+        assertions = getattr(ref, "assertions", None)
+        if isinstance(assertions, list) and assertions:
+            assertion_texts = [
+                a.get("text") for a in assertions
+                if isinstance(a, dict) and a.get("text")
+            ]
+            if assertion_texts:
+                result.assertions = assertion_texts
+
+    return result
+
+
+def _session_to_span_map_result(session: Session) -> SpanMapResult:
+    """Bridge strands-evals Session to SpanMapResult.
+
+    Extracts the last AgentInvocationSpan for input/output and all
+    ToolExecutionSpans for retrieval_context and tools_called.
+    """
+    agent_span = None
+    tool_spans: List[ToolExecutionSpan] = []
+
+    for trace in session.traces:
+        for span in trace.spans:
+            if isinstance(span, AgentInvocationSpan):
+                agent_span = span
+            elif isinstance(span, ToolExecutionSpan):
+                tool_spans.append(span)
+
+    if agent_span is None:
+        raise ValueError(
+            "No AgentInvocationSpan found in session. "
+            "Provide a custom_mapper for custom or unsupported span formats."
+        )
+
+    retrieval_context = [
+        ts.tool_result.content for ts in tool_spans
+        if ts.tool_result and ts.tool_result.content
+    ]
+    tools_called = [
+        {
+            "name": ts.tool_call.name,
+            "input_parameters": ts.tool_call.arguments if ts.tool_call.arguments else None,
+            "output": ts.tool_result.content if ts.tool_result else None,
+        }
+        for ts in tool_spans
+        if ts.tool_call and ts.tool_call.name
+    ]
+
+    return SpanMapResult(
+        input=agent_span.user_prompt,
+        actual_output=agent_span.agent_response,
+        retrieval_context=retrieval_context if retrieval_context else None,
+        context=retrieval_context if retrieval_context else None,
+        system_prompt=agent_span.system_prompt,
+        tools_called=tools_called if tools_called else None,
     )

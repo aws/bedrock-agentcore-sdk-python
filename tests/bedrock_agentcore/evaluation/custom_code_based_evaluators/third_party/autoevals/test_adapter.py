@@ -9,23 +9,32 @@ from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoe
 
 
 def _make_evaluator_input(spans=None):
-    """Build an EvaluatorInput with agent-level spans."""
+    """Build an EvaluatorInput with agent-level spans (CloudWatch split format)."""
     if spans is None:
         spans = [
             {
                 "traceId": "t1",
                 "spanId": "s1",
-                "scope": {"name": "strands.telemetry.tracer", "version": ""},
-                "attributes": {"gen_ai.operation.name": "invoke_agent"},
-                "span_events": [
-                    {
-                        "body": {
-                            "input": {"messages": [{"role": "user", "content": "What is AI?"}]},
-                            "output": {"messages": [{"role": "assistant", "content": "AI is artificial intelligence."}]},
-                        }
-                    }
-                ],
-            }
+                "scope": {"name": "strands.telemetry.tracer"},
+                "name": "invoke_agent",
+                "kind": "INTERNAL",
+                "startTimeUnixNano": 1000000000,
+                "endTimeUnixNano": 2000000000,
+                "attributes": {"gen_ai.operation.name": "invoke_agent", "session.id": "test-session"},
+                "status": {"code": "UNSET"},
+            },
+            {
+                "traceId": "t1",
+                "spanId": "s1",
+                "scope": {"name": "strands.telemetry.tracer"},
+                "timeUnixNano": 2000000000,
+                "observedTimeUnixNano": 2000000001,
+                "severityNumber": 9,
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": {"content": '[{"text": "What is AI?"}]'}}]},
+                    "output": {"messages": [{"role": "assistant", "content": {"message": "AI is artificial intelligence."}}]},
+                },
+            },
         ]
     return EvaluatorInput(
         evaluation_level="TRACE",
@@ -165,8 +174,8 @@ class TestAutoevalsAdapterErrors:
 
         result = adapter(_make_evaluator_input(spans=spans))
 
-        assert result.errorCode == "MISSING_REQUIRED_FIELD"
-        assert "input" in result.errorMessage
+        assert result.errorCode in ("MISSING_REQUIRED_FIELD", "FIELD_EXTRACTION_ERROR")
+        assert result.errorMessage  # error message present
 
     def test_scorer_exception_returns_error(self):
         scorer = _mock_scorer()

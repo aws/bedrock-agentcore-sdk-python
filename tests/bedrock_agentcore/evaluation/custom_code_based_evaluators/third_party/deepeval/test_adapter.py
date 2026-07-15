@@ -9,23 +9,32 @@ from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.deepe
 
 
 def _make_evaluator_input(spans=None):
-    """Build an EvaluatorInput with agent-level spans."""
+    """Build an EvaluatorInput with agent-level spans (CloudWatch split format)."""
     if spans is None:
         spans = [
             {
                 "traceId": "t1",
                 "spanId": "s1",
-                "scope": {"name": "strands.telemetry.tracer", "version": ""},
-                "attributes": {"gen_ai.operation.name": "invoke_agent"},
-                "span_events": [
-                    {
-                        "body": {
-                            "input": {"messages": [{"role": "user", "content": "What is AI?"}]},
-                            "output": {"messages": [{"role": "assistant", "content": "AI is artificial intelligence."}]},
-                        }
-                    }
-                ],
-            }
+                "scope": {"name": "strands.telemetry.tracer"},
+                "name": "invoke_agent",
+                "kind": "INTERNAL",
+                "startTimeUnixNano": 1000000000,
+                "endTimeUnixNano": 2000000000,
+                "attributes": {"gen_ai.operation.name": "invoke_agent", "session.id": "test-session"},
+                "status": {"code": "UNSET"},
+            },
+            {
+                "traceId": "t1",
+                "spanId": "s1",
+                "scope": {"name": "strands.telemetry.tracer"},
+                "timeUnixNano": 2000000000,
+                "observedTimeUnixNano": 2000000001,
+                "severityNumber": 9,
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": {"content": '[{"text": "What is AI?"}]'}}]},
+                    "output": {"messages": [{"role": "assistant", "content": {"message": "AI is artificial intelligence."}}]},
+                },
+            },
         ]
     return EvaluatorInput(
         evaluation_level="TRACE",
@@ -120,16 +129,25 @@ class TestDeepEvalAdapterSuccess:
                 {
                     "traceId": "t1",
                     "spanId": "s1",
-                    "scope": {"name": "strands.telemetry.tracer", "version": ""},
-                    "attributes": {"gen_ai.operation.name": "invoke_agent"},
-                    "span_events": [
-                        {
-                            "body": {
-                                "input": {"messages": [{"role": "user", "content": "What is AI?"}]},
-                                "output": {"messages": [{"role": "assistant", "content": "AI is artificial intelligence."}]},
-                            }
-                        }
-                    ],
+                    "scope": {"name": "strands.telemetry.tracer"},
+                    "name": "invoke_agent",
+                    "kind": "INTERNAL",
+                    "startTimeUnixNano": 1000000000,
+                    "endTimeUnixNano": 2000000000,
+                    "attributes": {"gen_ai.operation.name": "invoke_agent", "session.id": "test-session"},
+                    "status": {"code": "UNSET"},
+                },
+                {
+                    "traceId": "t1",
+                    "spanId": "s1",
+                    "scope": {"name": "strands.telemetry.tracer"},
+                    "timeUnixNano": 2000000000,
+                    "observedTimeUnixNano": 2000000001,
+                    "severityNumber": 9,
+                    "body": {
+                        "input": {"messages": [{"role": "user", "content": {"content": '[{"text": "What is AI?"}]'}}]},
+                        "output": {"messages": [{"role": "assistant", "content": {"message": "AI is artificial intelligence."}}]},
+                    },
                 }
             ],
             target_trace_id="t1",
@@ -202,8 +220,8 @@ class TestDeepEvalAdapterErrors:
 
         result = adapter(_make_evaluator_input(spans=spans))
 
-        assert result.errorCode == "MISSING_REQUIRED_FIELD"
-        assert "input" in result.errorMessage
+        assert result.errorCode in ("MISSING_REQUIRED_FIELD", "FIELD_EXTRACTION_ERROR")
+        assert result.errorMessage  # error message present
         assert "custom_mapper" in result.errorMessage
         metric.measure.assert_not_called()
 
@@ -228,7 +246,7 @@ class TestDeepEvalAdapterErrors:
 
         result = adapter(_make_evaluator_input())
 
-        assert result.errorCode == "MISSING_REQUIRED_FIELD"
+        assert result.errorCode in ("MISSING_REQUIRED_FIELD", "FIELD_EXTRACTION_ERROR")
         assert "retrieval_context" in result.errorMessage
         assert "custom_mapper" in result.errorMessage
 

@@ -150,7 +150,7 @@ dev = [
     "websockets>=14.1",
     "wheel>=0.45.1",
     "strands-agents>=1.20.0",
-    "strands-agents-evals>=0.1.0",
+    "strands-agents-evals>=1.0.0,<2.0.0",
     "a2a-sdk[http-server]>=0.3,<1.0",
     "ag-ui-protocol>=0.1.10",
     "mcp-proxy-for-aws>=0.1.0",
@@ -164,11 +164,11 @@ strands-agents = [
     "mcp>=1.23.0,<2.0.0",
 ]
 strands-agents-evals = [
-    "strands-agents-evals>=0.1.0"
+    "strands-agents-evals>=1.0.0,<2.0.0"
 ]
 simulation = [
     "jinja2>=3.1.0",
-    "strands-agents-evals>=0.1.0",
+    "strands-agents-evals>=1.0.0,<2.0.0",
 ]
 datasets = [
     "requests>=2.31.0",
