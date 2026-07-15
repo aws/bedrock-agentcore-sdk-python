@@ -373,6 +373,143 @@ class TestMapSpansInlineEvents:
         assert result.actual_output == "The answer is 4."
         assert result.system_prompt == "You are a helpful assistant."
 
+    def test_inline_events_extracts_tool_outputs_from_child_spans(self):
+        """Inline events format: tool outputs come from child execute_tool spans."""
+        agent_span = {
+            "traceId": "t1",
+            "spanId": "agent1",
+            "scope": {"name": "strands.telemetry.tracer", "version": ""},
+            "attributes": {"gen_ai.operation.name": "invoke_agent"},
+            "events": [
+                {"name": "gen_ai.user.message", "attributes": {"content": '[{"text": "What is the weather?"}]'}},
+                {"name": "gen_ai.choice", "attributes": {"message": "The weather in Tokyo is sunny and 25°C."}},
+            ],
+            "span_events": [],
+        }
+        tool_span_1 = {
+            "traceId": "t1",
+            "spanId": "tool1",
+            "parentSpanId": "agent1",
+            "scope": {"name": "strands.telemetry.tracer", "version": ""},
+            "attributes": {
+                "gen_ai.operation.name": "execute_tool",
+                "gen_ai.tool.name": "get_weather",
+            },
+            "events": [
+                {"name": "gen_ai.choice", "attributes": {"message": "Tokyo: sunny, 25°C"}},
+            ],
+            "span_events": [],
+        }
+        tool_span_2 = {
+            "traceId": "t1",
+            "spanId": "tool2",
+            "parentSpanId": "agent1",
+            "scope": {"name": "strands.telemetry.tracer", "version": ""},
+            "attributes": {
+                "gen_ai.operation.name": "execute_tool",
+                "gen_ai.tool.name": "get_forecast",
+            },
+            "events": [
+                {"name": "gen_ai.choice", "attributes": {"message": "Tomorrow: rain, 20°C"}},
+            ],
+            "span_events": [],
+        }
+
+        result = map_spans([agent_span, tool_span_1, tool_span_2])
+
+        assert result.input == "What is the weather?"
+        assert result.actual_output == "The weather in Tokyo is sunny and 25°C."
+        assert result.retrieval_context == ["Tokyo: sunny, 25°C", "Tomorrow: rain, 20°C"]
+        assert result.context == ["Tokyo: sunny, 25°C", "Tomorrow: rain, 20°C"]
+
+    def test_inline_events_tool_output_with_text_blocks(self):
+        """Tool span output as JSON text blocks is parsed correctly."""
+        agent_span = {
+            "traceId": "t1",
+            "spanId": "agent1",
+            "scope": {"name": "strands.telemetry.tracer", "version": ""},
+            "attributes": {"gen_ai.operation.name": "invoke_agent"},
+            "events": [
+                {"name": "gen_ai.user.message", "attributes": {"content": '[{"text": "Calculate BMI"}]'}},
+                {"name": "gen_ai.choice", "attributes": {"message": "Your BMI is 22.9."}},
+            ],
+            "span_events": [],
+        }
+        tool_span = {
+            "traceId": "t1",
+            "spanId": "tool1",
+            "parentSpanId": "agent1",
+            "scope": {"name": "strands.telemetry.tracer", "version": ""},
+            "attributes": {
+                "gen_ai.operation.name": "execute_tool",
+                "gen_ai.tool.name": "calculate_bmi",
+            },
+            "events": [
+                {"name": "gen_ai.choice", "attributes": {"message": '[{"text": "BMI: 22.9 (Normal weight)"}]'}},
+            ],
+            "span_events": [],
+        }
+
+        result = map_spans([agent_span, tool_span])
+
+        assert result.retrieval_context == ["BMI: 22.9 (Normal weight)"]
+
+    def test_inline_events_no_tool_spans_gives_no_retrieval_context(self):
+        """Inline events with no child tool spans returns None retrieval_context."""
+        span = {
+            "traceId": "t1",
+            "spanId": "agent1",
+            "scope": {"name": "strands.telemetry.tracer", "version": ""},
+            "attributes": {"gen_ai.operation.name": "invoke_agent"},
+            "events": [
+                {"name": "gen_ai.user.message", "attributes": {"content": '[{"text": "Hello"}]'}},
+                {"name": "gen_ai.choice", "attributes": {"message": "Hi!"}},
+            ],
+            "span_events": [],
+        }
+
+        result = map_spans([span])
+
+        assert result.retrieval_context is None
+        assert result.context is None
+
+    def test_inline_events_tool_span_body_fallback(self):
+        """Tool span without inline events falls back to span_events body."""
+        agent_span = {
+            "traceId": "t1",
+            "spanId": "agent1",
+            "scope": {"name": "strands.telemetry.tracer", "version": ""},
+            "attributes": {"gen_ai.operation.name": "invoke_agent"},
+            "events": [
+                {"name": "gen_ai.user.message", "attributes": {"content": '[{"text": "query"}]'}},
+                {"name": "gen_ai.choice", "attributes": {"message": "answer"}},
+            ],
+            "span_events": [],
+        }
+        tool_span = {
+            "traceId": "t1",
+            "spanId": "tool1",
+            "parentSpanId": "agent1",
+            "scope": {"name": "strands.telemetry.tracer", "version": ""},
+            "attributes": {
+                "gen_ai.operation.name": "execute_tool",
+                "gen_ai.tool.name": "search",
+            },
+            "events": [],
+            "span_events": [
+                {
+                    "body": {
+                        "input": {"messages": [{"role": "tool", "content": "params"}]},
+                        "output": {"messages": [{"role": "assistant", "content": "search result"}]},
+                    }
+                }
+            ],
+        }
+
+        result = map_spans([agent_span, tool_span])
+
+        assert result.retrieval_context == ["search result"]
+
     def test_span_body_multi_turn(self):
         """Multi-turn span body: first user input, last assistant output, tool outputs as retrieval_context."""
         spans = [

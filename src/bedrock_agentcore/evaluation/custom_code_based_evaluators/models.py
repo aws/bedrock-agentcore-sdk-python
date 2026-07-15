@@ -80,8 +80,9 @@ class EvaluatorOutput(BaseModel):
 
     @model_validator(mode="after")
     def _require_label_or_error_code(self) -> "EvaluatorOutput":
-        if not self.errorCode and self.label is None:
+        if not self.errorCode and self.label is None and self.value is None:
             raise ValueError(
-                "label is required for success responses; set errorCode to return an error response without a label"
+                "Either label, value, or errorCode must be set; "
+                "set errorCode to return an error response without a label"
             )
         return self

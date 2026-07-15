@@ -1,0 +1,526 @@
+{
+  "sessionSpans": [
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "langgraph_adot_travel.DEFAULT",
+          "service.name": "langgraph_adot_travel.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:376129850444:runtime/langgraph_adot_travel-0xP6Cw8X3b/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/langgraph_adot_travel-0xP6Cw8X3b-DEFAULT",
+          "telemetry.sdk.version": "1.42.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.18.0-aws"
+        }
+      },
+      "scope": {
+        "name": "opentelemetry.instrumentation.botocore.bedrock-runtime",
+        "version": "0.63b1"
+      },
+      "traceId": "6a3eea2d410764fe1a8a9b961481de87",
+      "spanId": "03ceec3b65ac2ba2",
+      "parentSpanId": "7aaf63abdfa41cb3",
+      "flags": 256,
+      "name": "chat us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "kind": "CLIENT",
+      "startTimeUnixNano": 1782508077849971279,
+      "endTimeUnixNano": 1782508079660746742,
+      "durationNano": 1810775463,
+      "attributes": {
+        "aws.local.service": "langgraph_adot_travel.DEFAULT",
+        "rpc.service": "Bedrock Runtime",
+        "aws.remote.resource.identifier": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "aws.remote.operation": "InvokeModel",
+        "gen_ai.provider.name": "aws.bedrock",
+        "server.address": "bedrock-runtime.us-east-1.amazonaws.com",
+        "gen_ai.request.max_tokens": 1024,
+        "aws.request_id": "a8028452-7e78-4d97-a034-4e714591c151",
+        "aws.local.operation": "UnmappedOperation",
+        "aws.span.kind": "CLIENT",
+        "aws.auth.region": "us-east-1",
+        "rpc.method": "InvokeModel",
+        "gen_ai.response.finish_reasons": [
+          "tool_use"
+        ],
+        "server.port": 443,
+        "gen_ai.request.model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "http.response.status_code": 200,
+        "gen_ai.system": "aws.bedrock",
+        "telemetry.extended": "true",
+        "gen_ai.usage.output_tokens": 93,
+        "aws.genai.span_kind": "LLM",
+        "rpc.system": "aws-api",
+        "aws.remote.service": "AWS::BedrockRuntime",
+        "http.status_code": 200,
+        "aws.region": "us-east-1",
+        "aws.remote.resource.type": "AWS::Bedrock::Model",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.usage.input_tokens": 1252,
+        "aws.genai.token_count_total": 1345,
+        "retry_attempts": 0,
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "manual-testing-langgraph-adot-travel-0626-004"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "langgraph_adot_travel.DEFAULT",
+          "service.name": "langgraph_adot_travel.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:376129850444:runtime/langgraph_adot_travel-0xP6Cw8X3b/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/langgraph_adot_travel-0xP6Cw8X3b-DEFAULT",
+          "telemetry.sdk.version": "1.42.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.18.0-aws"
+        }
+      },
+      "scope": {
+        "name": "amazon.opentelemetry.distro.instrumentation.langchain",
+        "version": "0.18.0"
+      },
+      "traceId": "6a3eea2d410764fe1a8a9b961481de87",
+      "spanId": "7aaf63abdfa41cb3",
+      "parentSpanId": "c531947c72c66b9d",
+      "flags": 256,
+      "name": "chat us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1782508077836729803,
+      "endTimeUnixNano": 1782508079661158173,
+      "durationNano": 1824428370,
+      "attributes": {
+        "aws.local.service": "langgraph_adot_travel.DEFAULT",
+        "langgraph.node": "agent",
+        "gen_ai.usage.output_tokens": 93,
+        "gen_ai.response.model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "aws.genai.span_kind": "LLM",
+        "langgraph.step": 1,
+        "gen_ai.provider.name": "aws.bedrock",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.usage.input_tokens": 1252,
+        "aws.genai.token_count_total": 1345,
+        "gen_ai.response.finish_reasons": [
+          "tool_use"
+        ],
+        "gen_ai.request.model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "manual-testing-langgraph-adot-travel-0626-004"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "langgraph_adot_travel.DEFAULT",
+          "service.name": "langgraph_adot_travel.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:376129850444:runtime/langgraph_adot_travel-0xP6Cw8X3b/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/langgraph_adot_travel-0xP6Cw8X3b-DEFAULT",
+          "telemetry.sdk.version": "1.42.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.18.0-aws"
+        }
+      },
+      "scope": {
+        "name": "amazon.opentelemetry.distro.instrumentation.langchain",
+        "version": "0.18.0"
+      },
+      "traceId": "6a3eea2d410764fe1a8a9b961481de87",
+      "spanId": "deab772630b99935",
+      "parentSpanId": "c531947c72c66b9d",
+      "flags": 256,
+      "name": "execute_tool search_flights",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1782508079663213096,
+      "endTimeUnixNano": 1782508079663750672,
+      "durationNano": 537576,
+      "attributes": {
+        "aws.local.service": "langgraph_adot_travel.DEFAULT",
+        "langgraph.node": "tools",
+        "gen_ai.tool.description": "Search for available flights between cities.",
+        "gen_ai.tool.type": "function",
+        "aws.genai.span_kind": "TOOL",
+        "langgraph.step": 2,
+        "aws.local.environment": "bedrock-agentcore:default",
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": "search_flights",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "gen_ai.tool.call.arguments": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}",
+        "session.id": "manual-testing-langgraph-adot-travel-0626-004",
+        "gen_ai.tool.call.result": "content='{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\", \"flights\": [{\"flight_id\": \"AA101\", \"departure\": \"06:00\", \"arrival\": \"14:30\", \"price\": 420, \"airline\": \"American\"}, {\"flight_id\": \"DL205\", \"departure\": \"09:15\", \"arrival\": \"17:45\", \"price\": 385, \"airline\": \"Delta\"}, {\"flight_id\": \"UA330\", \"departure\": \"14:00\", \"arrival\": \"22:30\", \"price\": 350, \"airline\": \"United\"}, {\"flight_id\": \"AA115\", \"departure\": \"16:30\", \"arrival\": \"01:00\", \"price\": 310, \"airline\": \"American\"}, {\"flight_id\": \"DL420\", \"departure\": \"20:00\", \"arrival\": \"04:30\", \"price\": 290, \"airline\": \"Delta\"}]}' name='search_flights' tool_call_id='toolu_bdrk_01ATqwUvrKV3bBWKFuTByfkR'"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "langgraph_adot_travel.DEFAULT",
+          "service.name": "langgraph_adot_travel.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:376129850444:runtime/langgraph_adot_travel-0xP6Cw8X3b/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/langgraph_adot_travel-0xP6Cw8X3b-DEFAULT",
+          "telemetry.sdk.version": "1.42.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.18.0-aws"
+        }
+      },
+      "scope": {
+        "name": "opentelemetry.instrumentation.botocore.bedrock-runtime",
+        "version": "0.63b1"
+      },
+      "traceId": "6a3eea2d410764fe1a8a9b961481de87",
+      "spanId": "fe7dc845e28398db",
+      "parentSpanId": "50ed9b1ba10eba03",
+      "flags": 256,
+      "name": "chat us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "kind": "CLIENT",
+      "startTimeUnixNano": 1782508079666699946,
+      "endTimeUnixNano": 1782508083582635421,
+      "durationNano": 3915935475,
+      "attributes": {
+        "aws.local.service": "langgraph_adot_travel.DEFAULT",
+        "rpc.service": "Bedrock Runtime",
+        "aws.remote.resource.identifier": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "aws.remote.operation": "InvokeModel",
+        "gen_ai.provider.name": "aws.bedrock",
+        "server.address": "bedrock-runtime.us-east-1.amazonaws.com",
+        "gen_ai.request.max_tokens": 1024,
+        "aws.request_id": "9c06a612-4e6c-4533-bd8c-4b9735cef3fc",
+        "aws.local.operation": "UnmappedOperation",
+        "aws.span.kind": "CLIENT",
+        "aws.auth.region": "us-east-1",
+        "rpc.method": "InvokeModel",
+        "gen_ai.response.finish_reasons": [
+          "end_turn"
+        ],
+        "server.port": 443,
+        "gen_ai.request.model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "http.response.status_code": 200,
+        "gen_ai.system": "aws.bedrock",
+        "telemetry.extended": "true",
+        "gen_ai.usage.output_tokens": 246,
+        "aws.genai.span_kind": "LLM",
+        "rpc.system": "aws-api",
+        "aws.remote.service": "AWS::BedrockRuntime",
+        "http.status_code": 200,
+        "aws.region": "us-east-1",
+        "aws.remote.resource.type": "AWS::Bedrock::Model",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.usage.input_tokens": 1578,
+        "aws.genai.token_count_total": 1824,
+        "retry_attempts": 0,
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "manual-testing-langgraph-adot-travel-0626-004"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "langgraph_adot_travel.DEFAULT",
+          "service.name": "langgraph_adot_travel.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:376129850444:runtime/langgraph_adot_travel-0xP6Cw8X3b/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/langgraph_adot_travel-0xP6Cw8X3b-DEFAULT",
+          "telemetry.sdk.version": "1.42.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.18.0-aws"
+        }
+      },
+      "scope": {
+        "name": "amazon.opentelemetry.distro.instrumentation.langchain",
+        "version": "0.18.0"
+      },
+      "traceId": "6a3eea2d410764fe1a8a9b961481de87",
+      "spanId": "50ed9b1ba10eba03",
+      "parentSpanId": "c531947c72c66b9d",
+      "flags": 256,
+      "name": "chat us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1782508079665438193,
+      "endTimeUnixNano": 1782508083582980918,
+      "durationNano": 3917542725,
+      "attributes": {
+        "aws.local.service": "langgraph_adot_travel.DEFAULT",
+        "langgraph.node": "agent",
+        "gen_ai.usage.output_tokens": 246,
+        "gen_ai.response.model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "aws.genai.span_kind": "LLM",
+        "langgraph.step": 3,
+        "gen_ai.provider.name": "aws.bedrock",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.usage.input_tokens": 1578,
+        "aws.genai.token_count_total": 1824,
+        "gen_ai.response.finish_reasons": [
+          "end_turn"
+        ],
+        "gen_ai.request.model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "manual-testing-langgraph-adot-travel-0626-004"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "langgraph_adot_travel.DEFAULT",
+          "service.name": "langgraph_adot_travel.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:376129850444:runtime/langgraph_adot_travel-0xP6Cw8X3b/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/langgraph_adot_travel-0xP6Cw8X3b-DEFAULT",
+          "telemetry.sdk.version": "1.42.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.18.0-aws"
+        }
+      },
+      "scope": {
+        "name": "amazon.opentelemetry.distro.instrumentation.langchain",
+        "version": "0.18.0"
+      },
+      "traceId": "6a3eea2d410764fe1a8a9b961481de87",
+      "spanId": "c531947c72c66b9d",
+      "parentSpanId": "caa1a71ec9195ba4",
+      "flags": 256,
+      "name": "invoke_agent LangGraph",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1782508077832427964,
+      "endTimeUnixNano": 1782508083584245492,
+      "durationNano": 5751817528,
+      "attributes": {
+        "aws.local.service": "langgraph_adot_travel.DEFAULT",
+        "gen_ai.operation.name": "invoke_agent",
+        "gen_ai.agent.name": "LangGraph",
+        "gen_ai.request.model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "aws.genai.span_kind": "AGENT",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "manual-testing-langgraph-adot-travel-0626-004",
+        "gen_ai.provider.name": "aws.bedrock",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "langgraph_adot_travel.DEFAULT",
+          "service.name": "langgraph_adot_travel.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:376129850444:runtime/langgraph_adot_travel-0xP6Cw8X3b/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/langgraph_adot_travel-0xP6Cw8X3b-DEFAULT",
+          "telemetry.sdk.version": "1.42.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.18.0-aws"
+        }
+      },
+      "scope": {
+        "name": "opentelemetry.instrumentation.starlette",
+        "version": "0.63b1"
+      },
+      "traceId": "6a3eea2d410764fe1a8a9b961481de87",
+      "spanId": "caa1a71ec9195ba4",
+      "parentSpanId": "6e5fdefc117e6020",
+      "flags": 768,
+      "name": "POST /invocations",
+      "kind": "SERVER",
+      "startTimeUnixNano": 1782508077827187491,
+      "endTimeUnixNano": 1782508083585249324,
+      "durationNano": 5758061833,
+      "attributes": {
+        "aws.local.service": "langgraph_adot_travel.DEFAULT",
+        "net.peer.port": 59780,
+        "telemetry.extended": "true",
+        "http.target": "/invocations",
+        "http.flavor": "1.1",
+        "http.url": "http://cell01.us-west-2.prod.arp.kepler-analytics.aws.dev/invocations",
+        "net.peer.ip": "127.0.0.1",
+        "http.host": "127.0.0.1:8080",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "http.status_code": 200,
+        "aws.local.operation": "POST /invocations",
+        "aws.span.kind": "SERVER",
+        "http.server_name": "cell01.us-west-2.prod.arp.kepler-analytics.aws.dev",
+        "net.host.port": 8080,
+        "http.route": "/invocations",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "http.method": "POST",
+        "http.response.status_code": 200,
+        "session.id": "manual-testing-langgraph-adot-travel-0626-004",
+        "http.scheme": "http"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "langgraph_adot_travel.DEFAULT",
+          "service.name": "langgraph_adot_travel.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:376129850444:runtime/langgraph_adot_travel-0xP6Cw8X3b/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/langgraph_adot_travel-0xP6Cw8X3b-DEFAULT",
+          "telemetry.sdk.version": "1.42.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.18.0-aws"
+        }
+      },
+      "scope": {
+        "name": "amazon.opentelemetry.distro.instrumentation.langchain"
+      },
+      "timeUnixNano": 1782508079661158173,
+      "observedTimeUnixNano": 1782508080691626966,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"tool_call\", \"id\": \"toolu_bdrk_01ATqwUvrKV3bBWKFuTByfkR\", \"name\": \"search_flights\", \"arguments\": {\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}}], \"finish_reason\": \"tool_call\"}]",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"Find flights from Seattle to NYC on March 15\"}]}]",
+              "role": "user"
+            },
+            {
+              "content": "[{\"type\": \"text\", \"content\": \"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\"}]",
+              "role": "system"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "amazon.opentelemetry.distro.instrumentation.langchain",
+        "session.id": "manual-testing-langgraph-adot-travel-0626-004"
+      },
+      "flags": 1,
+      "traceId": "6a3eea2d410764fe1a8a9b961481de87",
+      "spanId": "7aaf63abdfa41cb3"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "langgraph_adot_travel.DEFAULT",
+          "service.name": "langgraph_adot_travel.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:376129850444:runtime/langgraph_adot_travel-0xP6Cw8X3b/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/langgraph_adot_travel-0xP6Cw8X3b-DEFAULT",
+          "telemetry.sdk.version": "1.42.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.18.0-aws"
+        }
+      },
+      "scope": {
+        "name": "amazon.opentelemetry.distro.instrumentation.langchain"
+      },
+      "timeUnixNano": 1782508083582980918,
+      "observedTimeUnixNano": 1782508085800019514,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"text\", \"content\": \"I found several flights from Seattle (SEA) to New York City (NYC) on March 15, 2025:\\n\\n1. **AA101** - American Airlines\\n   - Departure: 6:00 AM \u2192 Arrival: 2:30 PM\\n   - Price: $420\\n\\n2. **DL205** - Delta\\n   - Departure: 9:15 AM \u2192 Arrival: 5:45 PM\\n   - Price: $385\\n\\n3. **UA330** - United Airlines\\n   - Departure: 2:00 PM \u2192 Arrival: 10:30 PM\\n   - Price: $350\\n\\n4. **AA115** - American Airlines\\n   - Departure: 4:30 PM \u2192 Arrival: 1:00 AM (next day)\\n   - Price: $310\\n\\n5. **DL420** - Delta\\n   - Departure: 8:00 PM \u2192 Arrival: 4:30 AM (next day)\\n   - Price: $290\\n\\nWould you like me to book any of these flights for you?\"}], \"finish_reason\": \"stop\"}]",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "[{\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"Find flights from Seattle to NYC on March 15\"}]}, {\"role\": \"assistant\", \"parts\": [{\"type\": \"tool_call\", \"id\": \"toolu_bdrk_01ATqwUvrKV3bBWKFuTByfkR\", \"name\": \"search_flights\", \"arguments\": {\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}}]}, {\"role\": \"tool\", \"parts\": [{\"type\": \"tool_call_response\", \"id\": \"toolu_bdrk_01ATqwUvrKV3bBWKFuTByfkR\", \"response\": \"{\\\"origin\\\": \\\"SEA\\\", \\\"destination\\\": \\\"NYC\\\", \\\"date\\\": \\\"2025-03-15\\\", \\\"flights\\\": [{\\\"flight_id\\\": \\\"AA101\\\", \\\"departure\\\": \\\"06:00\\\", \\\"arrival\\\": \\\"14:30\\\", \\\"price\\\": 420, \\\"airline\\\": \\\"American\\\"}, {\\\"flight_id\\\": \\\"DL205\\\", \\\"departure\\\": \\\"09:15\\\", \\\"arrival\\\": \\\"17:45\\\", \\\"price\\\": 385, \\\"airline\\\": \\\"Delta\\\"}, {\\\"flight_id\\\": \\\"UA330\\\", \\\"departure\\\": \\\"14:00\\\", \\\"arrival\\\": \\\"22:30\\\", \\\"price\\\": 350, \\\"airline\\\": \\\"United\\\"}, {\\\"flight_id\\\": \\\"AA115\\\", \\\"departure\\\": \\\"16:30\\\", \\\"arrival\\\": \\\"01:00\\\", \\\"price\\\": 310, \\\"airline\\\": \\\"American\\\"}, {\\\"flight_id\\\": \\\"DL420\\\", \\\"departure\\\": \\\"20:00\\\", \\\"arrival\\\": \\\"04:30\\\", \\\"price\\\": 290, \\\"airline\\\": \\\"Delta\\\"}]}\"}]}]",
+              "role": "user"
+            },
+            {
+              "content": "[{\"type\": \"text\", \"content\": \"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\"}]",
+              "role": "system"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "amazon.opentelemetry.distro.instrumentation.langchain",
+        "session.id": "manual-testing-langgraph-adot-travel-0626-004"
+      },
+      "flags": 1,
+      "traceId": "6a3eea2d410764fe1a8a9b961481de87",
+      "spanId": "50ed9b1ba10eba03"
+    }
+  ]
+}

@@ -1,0 +1,1934 @@
+{
+  "sessionSpans": [
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "opentelemetry.instrumentation.botocore.bedrock-runtime",
+        "version": "0.54b1"
+      },
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "706b9a86aaeea177",
+      "parentSpanId": "a46d76dc24a2b042",
+      "flags": 256,
+      "name": "chat anthropic.claude-3-5-haiku-20241022-v1:0",
+      "kind": "CLIENT",
+      "startTimeUnixNano": 1762574008730893402,
+      "endTimeUnixNano": 1762574010115698997,
+      "durationNano": 1384805595,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "rpc.service": "Bedrock Runtime",
+        "aws.remote.resource.identifier": "anthropic.claude-3-5-haiku-20241022-v1:0",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "aws.remote.operation": "InvokeModel",
+        "server.address": "bedrock-runtime.us-west-2.amazonaws.com",
+        "gen_ai.request.max_tokens": 1000,
+        "aws.request_id": "b6fac96e-2211-4946-b82b-bd439f000395",
+        "aws.local.operation": "UnmappedOperation",
+        "gen_ai.request.temperature": 0.1,
+        "aws.span.kind": "CLIENT",
+        "aws.auth.region": "us-west-2",
+        "rpc.method": "InvokeModel",
+        "gen_ai.response.finish_reasons": [
+          "tool_use"
+        ],
+        "server.port": 443,
+        "gen_ai.request.model": "anthropic.claude-3-5-haiku-20241022-v1:0",
+        "http.response.status_code": 200,
+        "gen_ai.system": "aws.bedrock",
+        "telemetry.extended": "true",
+        "gen_ai.usage.output_tokens": 70,
+        "rpc.system": "aws-api",
+        "aws.remote.service": "AWS::BedrockRuntime",
+        "http.status_code": 200,
+        "aws.region": "us-west-2",
+        "aws.remote.resource.type": "AWS::Bedrock::Model",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.usage.input_tokens": 340,
+        "retry_attempts": 0,
+        "PlatformType": "AWS::BedrockAgentCore",
+        "aws.auth.account.access_key": "ASIAXSVA2HQF3ZG3FTNL",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "3c076bc341658050",
+      "parentSpanId": "27cbfad8641ec4cc",
+      "flags": 256,
+      "name": "ChatBedrock",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574008728781056,
+      "endTimeUnixNano": 1762574010116188928,
+      "durationNano": 1387407872,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "metadata": "{\"langgraph_step\": 1, \"langgraph_node\": \"model\", \"langgraph_triggers\": [\"branch:to:model\"], \"langgraph_path\": [\"__pregel_pull\", \"model\"], \"langgraph_checkpoint_ns\": \"model:cc4d0ea5-2fcc-5185-f6f8-6545269fd34e\", \"checkpoint_ns\": \"model:cc4d0ea5-2fcc-5185-f6f8-6545269fd34e\", \"ls_provider\": \"amazon_bedrock\", \"ls_model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"ls_model_type\": \"chat\", \"ls_temperature\": 0.1, \"ls_max_tokens\": 1000}",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments": "{\"city\": \"Sunnyvale\"}",
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.1.message.role": "user",
+        "llm.token_count.prompt": 340,
+        "llm.model_name": "anthropic.claude-3-5-haiku-20241022-v1:0",
+        "llm.invocation_parameters": "{\"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"base_model_id\": null, \"provider\": \"anthropic\", \"stream\": false, \"trace\": null, \"guardrailIdentifier\": null, \"guardrailVersion\": null, \"_type\": \"amazon_bedrock_chat\", \"stop\": null, \"tools\": [{\"name\": \"get_weather\", \"description\": \"Get weather for a given city.\", \"input_schema\": {\"properties\": {\"city\": {\"type\": \"string\"}}, \"required\": [\"city\"], \"type\": \"object\"}}]}",
+        "llm.token_count.completion": 70,
+        "llm.output_messages.0.message.role": "assistant",
+        "llm.token_count.total": 410,
+        "aws.local.environment": "bedrock-agentcore:default",
+        "llm.provider": "amazon_bedrock",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.id": "toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz",
+        "input.mime_type": "application/json",
+        "output.mime_type": "application/json",
+        "llm.token_count.prompt_details.cache_read": 0,
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.name": "get_weather",
+        "openinference.span.kind": "LLM",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "llm.tools.0.tool.json_schema": "{\"name\": \"get_weather\", \"description\": \"Get weather for a given city.\", \"input_schema\": {\"properties\": {\"city\": {\"type\": \"string\"}}, \"required\": [\"city\"], \"type\": \"object\"}}"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "27cbfad8641ec4cc",
+      "parentSpanId": "c1707413c25a8bda",
+      "flags": 256,
+      "name": "model",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574008724525056,
+      "endTimeUnixNano": 1762574010117261056,
+      "durationNano": 1392736000,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "metadata": "{\"langgraph_step\": 1, \"langgraph_node\": \"model\", \"langgraph_triggers\": [\"branch:to:model\"], \"langgraph_path\": [\"__pregel_pull\", \"model\"], \"langgraph_checkpoint_ns\": \"model:cc4d0ea5-2fcc-5185-f6f8-6545269fd34e\"}",
+        "input.mime_type": "application/json",
+        "output.mime_type": "application/json",
+        "llm.input_messages.0.message.role": "user",
+        "openinference.span.kind": "CHAIN",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "6f4337486fe8b9a0",
+      "parentSpanId": "5487a51ca77f6db7",
+      "flags": 256,
+      "name": "get_weather",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574010118725120,
+      "endTimeUnixNano": 1762574010119345920,
+      "durationNano": 620800,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "metadata": "{\"langgraph_step\": 2, \"langgraph_node\": \"tools\", \"langgraph_triggers\": [\"__pregel_push\"], \"langgraph_path\": [\"__pregel_push\", 0, false], \"langgraph_checkpoint_ns\": \"tools:0fdc5086-1635-2096-60a1-838e893a9928\", \"checkpoint_ns\": \"tools:0fdc5086-1635-2096-60a1-838e893a9928\"}",
+        "output.mime_type": "application/json",
+        "tool.description": "Get weather for a given city.",
+        "openinference.span.kind": "TOOL",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "tool.name": "get_weather",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "5487a51ca77f6db7",
+      "parentSpanId": "c1707413c25a8bda",
+      "flags": 256,
+      "name": "tools",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574010117965824,
+      "endTimeUnixNano": 1762574010119854848,
+      "durationNano": 1889024,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "metadata": "{\"langgraph_step\": 2, \"langgraph_node\": \"tools\", \"langgraph_triggers\": [\"__pregel_push\"], \"langgraph_path\": [\"__pregel_push\", 0, false], \"langgraph_checkpoint_ns\": \"tools:0fdc5086-1635-2096-60a1-838e893a9928\"}",
+        "input.mime_type": "application/json",
+        "output.mime_type": "application/json",
+        "openinference.span.kind": "CHAIN",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "opentelemetry.instrumentation.botocore.bedrock-runtime",
+        "version": "0.54b1"
+      },
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "7a8c301409543395",
+      "parentSpanId": "a46d76dc24a2b042",
+      "flags": 256,
+      "name": "chat anthropic.claude-3-5-haiku-20241022-v1:0",
+      "kind": "CLIENT",
+      "startTimeUnixNano": 1762574010123558085,
+      "endTimeUnixNano": 1762574011570356982,
+      "durationNano": 1446798897,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "rpc.service": "Bedrock Runtime",
+        "aws.remote.resource.identifier": "anthropic.claude-3-5-haiku-20241022-v1:0",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "aws.remote.operation": "InvokeModel",
+        "server.address": "bedrock-runtime.us-west-2.amazonaws.com",
+        "gen_ai.request.max_tokens": 1000,
+        "aws.request_id": "6847a745-1017-4dc6-9f25-36369c71d8ea",
+        "aws.local.operation": "UnmappedOperation",
+        "gen_ai.request.temperature": 0.1,
+        "aws.span.kind": "CLIENT",
+        "aws.auth.region": "us-west-2",
+        "rpc.method": "InvokeModel",
+        "gen_ai.response.finish_reasons": [
+          "end_turn"
+        ],
+        "server.port": 443,
+        "gen_ai.request.model": "anthropic.claude-3-5-haiku-20241022-v1:0",
+        "http.response.status_code": 200,
+        "gen_ai.system": "aws.bedrock",
+        "telemetry.extended": "true",
+        "gen_ai.usage.output_tokens": 41,
+        "rpc.system": "aws-api",
+        "aws.remote.service": "AWS::BedrockRuntime",
+        "http.status_code": 200,
+        "aws.region": "us-west-2",
+        "aws.remote.resource.type": "AWS::Bedrock::Model",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.usage.input_tokens": 430,
+        "retry_attempts": 0,
+        "PlatformType": "AWS::BedrockAgentCore",
+        "aws.auth.account.access_key": "ASIAXSVA2HQF3ZG3FTNL",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "e71ff474f59bfc24",
+      "parentSpanId": "e302060fb09d311c",
+      "flags": 256,
+      "name": "ChatBedrock",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574010122304000,
+      "endTimeUnixNano": 1762574011570771968,
+      "durationNano": 1448467968,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "metadata": "{\"langgraph_step\": 3, \"langgraph_node\": \"model\", \"langgraph_triggers\": [\"branch:to:model\"], \"langgraph_path\": [\"__pregel_pull\", \"model\"], \"langgraph_checkpoint_ns\": \"model:0b702c44-4625-c984-4bc0-202c841d1129\", \"checkpoint_ns\": \"model:0b702c44-4625-c984-4bc0-202c841d1129\", \"ls_provider\": \"amazon_bedrock\", \"ls_model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"ls_model_type\": \"chat\", \"ls_temperature\": 0.1, \"ls_max_tokens\": 1000}",
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.1.message.role": "user",
+        "llm.token_count.prompt": 430,
+        "llm.model_name": "anthropic.claude-3-5-haiku-20241022-v1:0",
+        "llm.invocation_parameters": "{\"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"base_model_id\": null, \"provider\": \"anthropic\", \"stream\": false, \"trace\": null, \"guardrailIdentifier\": null, \"guardrailVersion\": null, \"_type\": \"amazon_bedrock_chat\", \"stop\": null, \"tools\": [{\"name\": \"get_weather\", \"description\": \"Get weather for a given city.\", \"input_schema\": {\"properties\": {\"city\": {\"type\": \"string\"}}, \"required\": [\"city\"], \"type\": \"object\"}}]}",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "llm.input_messages.2.message.tool_calls.0.tool_call.function.arguments": "{\"city\": \"Sunnyvale\"}",
+        "output.mime_type": "application/json",
+        "openinference.span.kind": "LLM",
+        "llm.tools.0.tool.json_schema": "{\"name\": \"get_weather\", \"description\": \"Get weather for a given city.\", \"input_schema\": {\"properties\": {\"city\": {\"type\": \"string\"}}, \"required\": [\"city\"], \"type\": \"object\"}}",
+        "llm.input_messages.3.message.tool_call_id": "toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz",
+        "llm.input_messages.3.message.name": "get_weather",
+        "llm.input_messages.2.message.tool_calls.0.tool_call.id": "toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz",
+        "llm.token_count.completion": 41,
+        "llm.output_messages.0.message.role": "assistant",
+        "llm.token_count.total": 471,
+        "llm.provider": "amazon_bedrock",
+        "input.mime_type": "application/json",
+        "llm.input_messages.2.message.tool_calls.0.tool_call.function.name": "get_weather",
+        "llm.token_count.prompt_details.cache_read": 0,
+        "llm.input_messages.3.message.role": "tool",
+        "llm.input_messages.2.message.role": "assistant",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "e302060fb09d311c",
+      "parentSpanId": "c1707413c25a8bda",
+      "flags": 256,
+      "name": "model",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574010120312064,
+      "endTimeUnixNano": 1762574011571458048,
+      "durationNano": 1451145984,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "metadata": "{\"langgraph_step\": 3, \"langgraph_node\": \"model\", \"langgraph_triggers\": [\"branch:to:model\"], \"langgraph_path\": [\"__pregel_pull\", \"model\"], \"langgraph_checkpoint_ns\": \"model:0b702c44-4625-c984-4bc0-202c841d1129\"}",
+        "input.mime_type": "application/json",
+        "output.mime_type": "application/json",
+        "llm.input_messages.0.message.role": "user",
+        "openinference.span.kind": "CHAIN",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "c1707413c25a8bda",
+      "parentSpanId": "a46d76dc24a2b042",
+      "flags": 256,
+      "name": "LangGraph",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574008723227136,
+      "endTimeUnixNano": 1762574011571988992,
+      "durationNano": 2848761856,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "input.mime_type": "application/json",
+        "output.mime_type": "application/json",
+        "llm.input_messages.0.message.role": "user",
+        "openinference.span.kind": "CHAIN",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "opentelemetry.instrumentation.starlette",
+        "version": "0.54b1"
+      },
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "a46d76dc24a2b042",
+      "parentSpanId": "55380f1aa03c91f8",
+      "flags": 768,
+      "name": "POST /invocations",
+      "kind": "SERVER",
+      "startTimeUnixNano": 1762574008722388640,
+      "endTimeUnixNano": 1762574011573256550,
+      "durationNano": 2850867910,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "net.peer.port": 36596,
+        "telemetry.extended": "true",
+        "http.target": "/invocations",
+        "http.flavor": "1.1",
+        "http.url": "http://127.0.0.1:8080/invocations",
+        "net.peer.ip": "127.0.0.1",
+        "http.host": "127.0.0.1:8080",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "http.status_code": 200,
+        "aws.local.operation": "POST /invocations",
+        "aws.span.kind": "SERVER",
+        "http.server_name": "cell01.us-west-2.prod.arp.kepler-analytics.aws.dev",
+        "net.host.port": 8080,
+        "http.route": "/invocations",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "http.method": "POST",
+        "http.response.status_code": 200,
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "http.scheme": "http"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "opentelemetry.instrumentation.botocore.bedrock-runtime",
+        "version": "0.54b1"
+      },
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "61984a71027cb2fd",
+      "parentSpanId": "b5b36c7579671ff6",
+      "flags": 256,
+      "name": "chat anthropic.claude-3-5-haiku-20241022-v1:0",
+      "kind": "CLIENT",
+      "startTimeUnixNano": 1762574011730420238,
+      "endTimeUnixNano": 1762574013695509504,
+      "durationNano": 1965089266,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "rpc.service": "Bedrock Runtime",
+        "aws.remote.resource.identifier": "anthropic.claude-3-5-haiku-20241022-v1:0",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "aws.remote.operation": "InvokeModel",
+        "server.address": "bedrock-runtime.us-west-2.amazonaws.com",
+        "gen_ai.request.max_tokens": 1000,
+        "aws.request_id": "66799ac0-3a10-4304-a074-46b24996542c",
+        "aws.local.operation": "UnmappedOperation",
+        "gen_ai.request.temperature": 0.1,
+        "aws.span.kind": "CLIENT",
+        "aws.auth.region": "us-west-2",
+        "rpc.method": "InvokeModel",
+        "gen_ai.response.finish_reasons": [
+          "tool_use"
+        ],
+        "server.port": 443,
+        "gen_ai.request.model": "anthropic.claude-3-5-haiku-20241022-v1:0",
+        "http.response.status_code": 200,
+        "gen_ai.system": "aws.bedrock",
+        "telemetry.extended": "true",
+        "gen_ai.usage.output_tokens": 102,
+        "rpc.system": "aws-api",
+        "aws.remote.service": "AWS::BedrockRuntime",
+        "http.status_code": 200,
+        "aws.region": "us-west-2",
+        "aws.remote.resource.type": "AWS::Bedrock::Model",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.usage.input_tokens": 343,
+        "retry_attempts": 0,
+        "PlatformType": "AWS::BedrockAgentCore",
+        "aws.auth.account.access_key": "ASIAXSVA2HQF3ZG3FTNL",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "9a47f8912c115bfa",
+      "parentSpanId": "b0aa8f3347f4bc76",
+      "flags": 256,
+      "name": "ChatBedrock",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574011729510912,
+      "endTimeUnixNano": 1762574013695902208,
+      "durationNano": 1966391296,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "metadata": "{\"langgraph_step\": 1, \"langgraph_node\": \"model\", \"langgraph_triggers\": [\"branch:to:model\"], \"langgraph_path\": [\"__pregel_pull\", \"model\"], \"langgraph_checkpoint_ns\": \"model:63703720-d347-0d33-a540-fc83fd87640c\", \"checkpoint_ns\": \"model:63703720-d347-0d33-a540-fc83fd87640c\", \"ls_provider\": \"amazon_bedrock\", \"ls_model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"ls_model_type\": \"chat\", \"ls_temperature\": 0.1, \"ls_max_tokens\": 1000}",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments": "{\"city\": \"Delhi\"}",
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.1.message.role": "user",
+        "llm.token_count.prompt": 343,
+        "llm.model_name": "anthropic.claude-3-5-haiku-20241022-v1:0",
+        "llm.invocation_parameters": "{\"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"base_model_id\": null, \"provider\": \"anthropic\", \"stream\": false, \"trace\": null, \"guardrailIdentifier\": null, \"guardrailVersion\": null, \"_type\": \"amazon_bedrock_chat\", \"stop\": null, \"tools\": [{\"name\": \"get_weather\", \"description\": \"Get weather for a given city.\", \"input_schema\": {\"properties\": {\"city\": {\"type\": \"string\"}}, \"required\": [\"city\"], \"type\": \"object\"}}]}",
+        "llm.token_count.completion": 102,
+        "llm.output_messages.0.message.role": "assistant",
+        "llm.token_count.total": 445,
+        "aws.local.environment": "bedrock-agentcore:default",
+        "llm.provider": "amazon_bedrock",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.id": "toolu_bdrk_01WmARQytce9hdi8kfpEwi95",
+        "input.mime_type": "application/json",
+        "output.mime_type": "application/json",
+        "llm.token_count.prompt_details.cache_read": 0,
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.name": "get_weather",
+        "openinference.span.kind": "LLM",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "llm.tools.0.tool.json_schema": "{\"name\": \"get_weather\", \"description\": \"Get weather for a given city.\", \"input_schema\": {\"properties\": {\"city\": {\"type\": \"string\"}}, \"required\": [\"city\"], \"type\": \"object\"}}"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "b0aa8f3347f4bc76",
+      "parentSpanId": "6116dd8865964a3f",
+      "flags": 256,
+      "name": "model",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574011727405056,
+      "endTimeUnixNano": 1762574013696518912,
+      "durationNano": 1969113856,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "metadata": "{\"langgraph_step\": 1, \"langgraph_node\": \"model\", \"langgraph_triggers\": [\"branch:to:model\"], \"langgraph_path\": [\"__pregel_pull\", \"model\"], \"langgraph_checkpoint_ns\": \"model:63703720-d347-0d33-a540-fc83fd87640c\"}",
+        "input.mime_type": "application/json",
+        "output.mime_type": "application/json",
+        "llm.input_messages.0.message.role": "user",
+        "openinference.span.kind": "CHAIN",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "a135499789a4b521",
+      "parentSpanId": "100fe0d68da8045a",
+      "flags": 256,
+      "name": "get_weather",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574013697829120,
+      "endTimeUnixNano": 1762574013698391808,
+      "durationNano": 562688,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "metadata": "{\"langgraph_step\": 2, \"langgraph_node\": \"tools\", \"langgraph_triggers\": [\"__pregel_push\"], \"langgraph_path\": [\"__pregel_push\", 0, false], \"langgraph_checkpoint_ns\": \"tools:60e7c1f6-4bba-872e-3cb0-64ee6b14b0d7\", \"checkpoint_ns\": \"tools:60e7c1f6-4bba-872e-3cb0-64ee6b14b0d7\"}",
+        "output.mime_type": "application/json",
+        "tool.description": "Get weather for a given city.",
+        "openinference.span.kind": "TOOL",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "tool.name": "get_weather",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "100fe0d68da8045a",
+      "parentSpanId": "6116dd8865964a3f",
+      "flags": 256,
+      "name": "tools",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574013697102080,
+      "endTimeUnixNano": 1762574013698870784,
+      "durationNano": 1768704,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "metadata": "{\"langgraph_step\": 2, \"langgraph_node\": \"tools\", \"langgraph_triggers\": [\"__pregel_push\"], \"langgraph_path\": [\"__pregel_push\", 0, false], \"langgraph_checkpoint_ns\": \"tools:60e7c1f6-4bba-872e-3cb0-64ee6b14b0d7\"}",
+        "input.mime_type": "application/json",
+        "output.mime_type": "application/json",
+        "openinference.span.kind": "CHAIN",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "opentelemetry.instrumentation.botocore.bedrock-runtime",
+        "version": "0.54b1"
+      },
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "d7a1998874b04f06",
+      "parentSpanId": "b5b36c7579671ff6",
+      "flags": 256,
+      "name": "chat anthropic.claude-3-5-haiku-20241022-v1:0",
+      "kind": "CLIENT",
+      "startTimeUnixNano": 1762574013702379094,
+      "endTimeUnixNano": 1762574016867665902,
+      "durationNano": 3165286808,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "rpc.service": "Bedrock Runtime",
+        "aws.remote.resource.identifier": "anthropic.claude-3-5-haiku-20241022-v1:0",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "aws.remote.operation": "InvokeModel",
+        "server.address": "bedrock-runtime.us-west-2.amazonaws.com",
+        "gen_ai.request.max_tokens": 1000,
+        "aws.request_id": "15da1193-74ab-47ef-9917-23547fc461c9",
+        "aws.local.operation": "UnmappedOperation",
+        "gen_ai.request.temperature": 0.1,
+        "aws.span.kind": "CLIENT",
+        "aws.auth.region": "us-west-2",
+        "rpc.method": "InvokeModel",
+        "gen_ai.response.finish_reasons": [
+          "end_turn"
+        ],
+        "server.port": 443,
+        "gen_ai.request.model": "anthropic.claude-3-5-haiku-20241022-v1:0",
+        "http.response.status_code": 200,
+        "gen_ai.system": "aws.bedrock",
+        "telemetry.extended": "true",
+        "gen_ai.usage.output_tokens": 135,
+        "rpc.system": "aws-api",
+        "aws.remote.service": "AWS::BedrockRuntime",
+        "http.status_code": 200,
+        "aws.region": "us-west-2",
+        "aws.remote.resource.type": "AWS::Bedrock::Model",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.usage.input_tokens": 462,
+        "retry_attempts": 0,
+        "PlatformType": "AWS::BedrockAgentCore",
+        "aws.auth.account.access_key": "ASIAXSVA2HQF3ZG3FTNL",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "0530c062cbd35fc4",
+      "parentSpanId": "7929ee33f804db79",
+      "flags": 256,
+      "name": "ChatBedrock",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574013701320960,
+      "endTimeUnixNano": 1762574016868043008,
+      "durationNano": 3166722048,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "metadata": "{\"langgraph_step\": 3, \"langgraph_node\": \"model\", \"langgraph_triggers\": [\"branch:to:model\"], \"langgraph_path\": [\"__pregel_pull\", \"model\"], \"langgraph_checkpoint_ns\": \"model:d2e071c3-da38-34c3-01e1-737ca87b8ba6\", \"checkpoint_ns\": \"model:d2e071c3-da38-34c3-01e1-737ca87b8ba6\", \"ls_provider\": \"amazon_bedrock\", \"ls_model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"ls_model_type\": \"chat\", \"ls_temperature\": 0.1, \"ls_max_tokens\": 1000}",
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.1.message.role": "user",
+        "llm.token_count.prompt": 462,
+        "llm.model_name": "anthropic.claude-3-5-haiku-20241022-v1:0",
+        "llm.invocation_parameters": "{\"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"base_model_id\": null, \"provider\": \"anthropic\", \"stream\": false, \"trace\": null, \"guardrailIdentifier\": null, \"guardrailVersion\": null, \"_type\": \"amazon_bedrock_chat\", \"stop\": null, \"tools\": [{\"name\": \"get_weather\", \"description\": \"Get weather for a given city.\", \"input_schema\": {\"properties\": {\"city\": {\"type\": \"string\"}}, \"required\": [\"city\"], \"type\": \"object\"}}]}",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "llm.input_messages.2.message.tool_calls.0.tool_call.function.arguments": "{\"city\": \"Delhi\"}",
+        "output.mime_type": "application/json",
+        "openinference.span.kind": "LLM",
+        "llm.tools.0.tool.json_schema": "{\"name\": \"get_weather\", \"description\": \"Get weather for a given city.\", \"input_schema\": {\"properties\": {\"city\": {\"type\": \"string\"}}, \"required\": [\"city\"], \"type\": \"object\"}}",
+        "llm.input_messages.3.message.tool_call_id": "toolu_bdrk_01WmARQytce9hdi8kfpEwi95",
+        "llm.input_messages.3.message.name": "get_weather",
+        "llm.input_messages.2.message.tool_calls.0.tool_call.id": "toolu_bdrk_01WmARQytce9hdi8kfpEwi95",
+        "llm.token_count.completion": 135,
+        "llm.output_messages.0.message.role": "assistant",
+        "llm.token_count.total": 597,
+        "llm.provider": "amazon_bedrock",
+        "input.mime_type": "application/json",
+        "llm.input_messages.2.message.tool_calls.0.tool_call.function.name": "get_weather",
+        "llm.token_count.prompt_details.cache_read": 0,
+        "llm.input_messages.3.message.role": "tool",
+        "llm.input_messages.2.message.role": "assistant",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "7929ee33f804db79",
+      "parentSpanId": "6116dd8865964a3f",
+      "flags": 256,
+      "name": "model",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574013699353088,
+      "endTimeUnixNano": 1762574016868731904,
+      "durationNano": 3169378816,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "metadata": "{\"langgraph_step\": 3, \"langgraph_node\": \"model\", \"langgraph_triggers\": [\"branch:to:model\"], \"langgraph_path\": [\"__pregel_pull\", \"model\"], \"langgraph_checkpoint_ns\": \"model:d2e071c3-da38-34c3-01e1-737ca87b8ba6\"}",
+        "input.mime_type": "application/json",
+        "output.mime_type": "application/json",
+        "llm.input_messages.0.message.role": "user",
+        "openinference.span.kind": "CHAIN",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain",
+        "version": "0.1.54"
+      },
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "6116dd8865964a3f",
+      "parentSpanId": "b5b36c7579671ff6",
+      "flags": 256,
+      "name": "LangGraph",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1762574011726499072,
+      "endTimeUnixNano": 1762574016869272064,
+      "durationNano": 5142772992,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "input.mime_type": "application/json",
+        "output.mime_type": "application/json",
+        "llm.input_messages.0.message.role": "user",
+        "openinference.span.kind": "CHAIN",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "opentelemetry.instrumentation.starlette",
+        "version": "0.54b1"
+      },
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "b5b36c7579671ff6",
+      "parentSpanId": "a8ba75f5bdfa8cb3",
+      "flags": 768,
+      "name": "POST /invocations",
+      "kind": "SERVER",
+      "startTimeUnixNano": 1762574011725960358,
+      "endTimeUnixNano": 1762574016870430854,
+      "durationNano": 5144470496,
+      "attributes": {
+        "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+        "net.peer.port": 36596,
+        "telemetry.extended": "true",
+        "http.target": "/invocations",
+        "http.flavor": "1.1",
+        "http.url": "http://127.0.0.1:8080/invocations",
+        "net.peer.ip": "127.0.0.1",
+        "http.host": "127.0.0.1:8080",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "http.status_code": 200,
+        "aws.local.operation": "POST /invocations",
+        "aws.span.kind": "SERVER",
+        "http.server_name": "cell01.us-west-2.prod.arp.kepler-analytics.aws.dev",
+        "net.host.port": 8080,
+        "http.route": "/invocations",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "http.method": "POST",
+        "http.response.status_code": 200,
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname",
+        "http.scheme": "http"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574010116188928,
+      "observedTimeUnixNano": 1762574014581523881,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"generations\": [[{\"text\": \"Let me check the weather for Sunnyvale right now.\", \"generation_info\": null, \"type\": \"ChatGeneration\", \"message\": {\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"AIMessage\"], \"kwargs\": {\"content\": \"Let me check the weather for Sunnyvale right now.\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 70, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 410}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 70, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 410}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"id\": \"lc_run--9351078d-2b75-4179-88b6-1284a67a3690-0\", \"tool_calls\": [{\"name\": \"get_weather\", \"args\": {\"city\": \"Sunnyvale\"}, \"id\": \"toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz\", \"type\": \"tool_call\"}], \"usage_metadata\": {\"input_tokens\": 340, \"output_tokens\": 70, \"total_tokens\": 410, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}, \"invalid_tool_calls\": []}}}]], \"llm_output\": {\"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 70, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 410}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"run\": null, \"type\": \"LLMResult\"}",
+              "role": "assistant"
+            },
+            {
+              "content": "Let me check the weather for Sunnyvale right now.",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{\"messages\": [[{\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"SystemMessage\"], \"kwargs\": {\"content\": \"You are a helpful assistant\", \"type\": \"system\"}}, {\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"HumanMessage\"], \"kwargs\": {\"content\": \"What is the weather in Sunnyvale\", \"type\": \"human\", \"id\": \"dbe68ae4-c482-473f-87dc-0a9ae0ba117f\"}}]]}",
+              "role": "user"
+            },
+            {
+              "content": "You are a helpful assistant",
+              "role": "user"
+            },
+            {
+              "content": "What is the weather in Sunnyvale",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "3c076bc341658050"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574010117261056,
+      "observedTimeUnixNano": 1762574014581631374,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"Let me check the weather for Sunnyvale right now.\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 70, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 410}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 70, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 410}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"name\": null, \"id\": \"lc_run--9351078d-2b75-4179-88b6-1284a67a3690-0\", \"tool_calls\": [{\"name\": \"get_weather\", \"args\": {\"city\": \"Sunnyvale\"}, \"id\": \"toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz\", \"type\": \"tool_call\"}], \"invalid_tool_calls\": [], \"usage_metadata\": {\"input_tokens\": 340, \"output_tokens\": 70, \"total_tokens\": 410, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}}]}",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"What is the weather in Sunnyvale\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"human\", \"name\": null, \"id\": \"dbe68ae4-c482-473f-87dc-0a9ae0ba117f\"}]}",
+              "role": "user"
+            },
+            {
+              "content": "What is the weather in Sunnyvale",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "27cbfad8641ec4cc"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574010119345920,
+      "observedTimeUnixNano": 1762574014581687354,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"content\": \"It's always sunny in Sunnyvale!\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"tool\", \"name\": \"get_weather\", \"id\": null, \"tool_call_id\": \"toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz\", \"artifact\": null, \"status\": \"success\"}",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{'city': 'Sunnyvale'}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "6f4337486fe8b9a0"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574010119854848,
+      "observedTimeUnixNano": 1762574014581734487,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"It's always sunny in Sunnyvale!\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"tool\", \"name\": \"get_weather\", \"id\": \"df4c43a7-c119-4300-b424-142c748971fd\", \"tool_call_id\": \"toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz\", \"artifact\": null, \"status\": \"success\"}]}",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{\"__type\": \"tool_call_with_context\", \"tool_call\": {\"name\": \"get_weather\", \"args\": {\"city\": \"Sunnyvale\"}, \"id\": \"toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz\", \"type\": \"tool_call\"}, \"state\": {\"messages\": [{\"content\": \"What is the weather in Sunnyvale\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"human\", \"name\": null, \"id\": \"dbe68ae4-c482-473f-87dc-0a9ae0ba117f\"}, {\"content\": \"Let me check the weather for Sunnyvale right now.\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 70, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 410}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 70, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 410}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"name\": null, \"id\": \"lc_run--9351078d-2b75-4179-88b6-1284a67a3690-0\", \"tool_calls\": [{\"name\": \"get_weather\", \"args\": {\"city\": \"Sunnyvale\"}, \"id\": \"toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz\", \"type\": \"tool_call\"}], \"invalid_tool_calls\": [], \"usage_metadata\": {\"input_tokens\": 340, \"output_tokens\": 70, \"total_tokens\": 410, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}}]}}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "5487a51ca77f6db7"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574011570771968,
+      "observedTimeUnixNano": 1762574014581857463,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"generations\": [[{\"text\": \"The weather in Sunnyvale is sunny! It seems like a beautiful day in this California city. Would you like to know anything else about the weather or have any other questions?\", \"generation_info\": null, \"type\": \"ChatGeneration\", \"message\": {\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"AIMessage\"], \"kwargs\": {\"content\": \"The weather in Sunnyvale is sunny! It seems like a beautiful day in this California city. Would you like to know anything else about the weather or have any other questions?\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 430, \"completion_tokens\": 41, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 471}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 430, \"completion_tokens\": 41, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 471}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"id\": \"lc_run--ac947616-6f33-4dec-8284-5411a463ef91-0\", \"usage_metadata\": {\"input_tokens\": 430, \"output_tokens\": 41, \"total_tokens\": 471, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}, \"tool_calls\": [], \"invalid_tool_calls\": []}}}]], \"llm_output\": {\"usage\": {\"prompt_tokens\": 430, \"completion_tokens\": 41, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 471}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"run\": null, \"type\": \"LLMResult\"}",
+              "role": "assistant"
+            },
+            {
+              "content": "The weather in Sunnyvale is sunny! It seems like a beautiful day in this California city. Would you like to know anything else about the weather or have any other questions?",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{\"messages\": [[{\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"SystemMessage\"], \"kwargs\": {\"content\": \"You are a helpful assistant\", \"type\": \"system\"}}, {\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"HumanMessage\"], \"kwargs\": {\"content\": \"What is the weather in Sunnyvale\", \"type\": \"human\", \"id\": \"dbe68ae4-c482-473f-87dc-0a9ae0ba117f\"}}, {\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"AIMessage\"], \"kwargs\": {\"content\": \"Let me check the weather for Sunnyvale right now.\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 70, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 410}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 70, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 410}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"id\": \"lc_run--9351078d-2b75-4179-88b6-1284a67a3690-0\", \"tool_calls\": [{\"name\": \"get_weather\", \"args\": {\"city\": \"Sunnyvale\"}, \"id\": \"toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz\", \"type\": \"tool_call\"}], \"usage_metadata\": {\"input_tokens\": 340, \"output_tokens\": 70, \"total_tokens\": 410, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}, \"invalid_tool_calls\": []}}, {\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"ToolMessage\"], \"kwargs\": {\"content\": \"It's always sunny in Sunnyvale!\", \"type\": \"tool\", \"name\": \"get_weather\", \"id\": \"df4c43a7-c119-4300-b424-142c748971fd\", \"tool_call_id\": \"toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz\", \"status\": \"success\"}}]]}",
+              "role": "user"
+            },
+            {
+              "content": "You are a helpful assistant",
+              "role": "user"
+            },
+            {
+              "content": "What is the weather in Sunnyvale",
+              "role": "user"
+            },
+            {
+              "content": "Let me check the weather for Sunnyvale right now.",
+              "role": "user"
+            },
+            {
+              "content": "It's always sunny in Sunnyvale!",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "e71ff474f59bfc24"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574011571458048,
+      "observedTimeUnixNano": 1762574014581928243,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"The weather in Sunnyvale is sunny! It seems like a beautiful day in this California city. Would you like to know anything else about the weather or have any other questions?\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 430, \"completion_tokens\": 41, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 471}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 430, \"completion_tokens\": 41, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 471}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"name\": null, \"id\": \"lc_run--ac947616-6f33-4dec-8284-5411a463ef91-0\", \"tool_calls\": [], \"invalid_tool_calls\": [], \"usage_metadata\": {\"input_tokens\": 430, \"output_tokens\": 41, \"total_tokens\": 471, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}}]}",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"What is the weather in Sunnyvale\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"human\", \"name\": null, \"id\": \"dbe68ae4-c482-473f-87dc-0a9ae0ba117f\"}, {\"content\": \"Let me check the weather for Sunnyvale right now.\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 70, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 410}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 70, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 410}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"name\": null, \"id\": \"lc_run--9351078d-2b75-4179-88b6-1284a67a3690-0\", \"tool_calls\": [{\"name\": \"get_weather\", \"args\": {\"city\": \"Sunnyvale\"}, \"id\": \"toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz\", \"type\": \"tool_call\"}], \"invalid_tool_calls\": [], \"usage_metadata\": {\"input_tokens\": 340, \"output_tokens\": 70, \"total_tokens\": 410, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}}, {\"content\": \"It's always sunny in Sunnyvale!\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"tool\", \"name\": \"get_weather\", \"id\": \"df4c43a7-c119-4300-b424-142c748971fd\", \"tool_call_id\": \"toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz\", \"artifact\": null, \"status\": \"success\"}]}",
+              "role": "user"
+            },
+            {
+              "content": "What is the weather in Sunnyvale",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "e302060fb09d311c"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574011571988992,
+      "observedTimeUnixNano": 1762574014581975535,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"What is the weather in Sunnyvale\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"human\", \"name\": null, \"id\": \"dbe68ae4-c482-473f-87dc-0a9ae0ba117f\"}, {\"content\": \"Let me check the weather for Sunnyvale right now.\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 70, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 410}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 70, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 410}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"name\": null, \"id\": \"lc_run--9351078d-2b75-4179-88b6-1284a67a3690-0\", \"tool_calls\": [{\"name\": \"get_weather\", \"args\": {\"city\": \"Sunnyvale\"}, \"id\": \"toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz\", \"type\": \"tool_call\"}], \"invalid_tool_calls\": [], \"usage_metadata\": {\"input_tokens\": 340, \"output_tokens\": 70, \"total_tokens\": 410, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}}, {\"content\": \"It's always sunny in Sunnyvale!\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"tool\", \"name\": \"get_weather\", \"id\": \"df4c43a7-c119-4300-b424-142c748971fd\", \"tool_call_id\": \"toolu_bdrk_015ZSH1fCSdSMCMVxQ9P9YZz\", \"artifact\": null, \"status\": \"success\"}, {\"content\": \"The weather in Sunnyvale is sunny! It seems like a beautiful day in this California city. Would you like to know anything else about the weather or have any other questions?\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 430, \"completion_tokens\": 41, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 471}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 430, \"completion_tokens\": 41, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 471}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"name\": null, \"id\": \"lc_run--ac947616-6f33-4dec-8284-5411a463ef91-0\", \"tool_calls\": [], \"invalid_tool_calls\": [], \"usage_metadata\": {\"input_tokens\": 430, \"output_tokens\": 41, \"total_tokens\": 471, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}}]}",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"What is the weather in Sunnyvale\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"human\", \"name\": null, \"id\": \"dbe68ae4-c482-473f-87dc-0a9ae0ba117f\"}]}",
+              "role": "user"
+            },
+            {
+              "content": "What is the weather in Sunnyvale",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebeb84f7baa083fe44f6149a0ba59",
+      "spanId": "c1707413c25a8bda"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574013695902208,
+      "observedTimeUnixNano": 1762574014582112861,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"generations\": [[{\"text\": \"I'll help you check the weather for Delhi. However, I want to clarify that the available weather tool provides current weather information for a specific city, not a forecast for the entire week. Let me retrieve the current weather for Delhi.\", \"generation_info\": null, \"type\": \"ChatGeneration\", \"message\": {\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"AIMessage\"], \"kwargs\": {\"content\": \"I'll help you check the weather for Delhi. However, I want to clarify that the available weather tool provides current weather information for a specific city, not a forecast for the entire week. Let me retrieve the current weather for Delhi.\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 343, \"completion_tokens\": 102, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 445}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 343, \"completion_tokens\": 102, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 445}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"id\": \"lc_run--1011bbbd-b112-410e-bafc-12ae37a0c70c-0\", \"tool_calls\": [{\"name\": \"get_weather\", \"args\": {\"city\": \"Delhi\"}, \"id\": \"toolu_bdrk_01WmARQytce9hdi8kfpEwi95\", \"type\": \"tool_call\"}], \"usage_metadata\": {\"input_tokens\": 343, \"output_tokens\": 102, \"total_tokens\": 445, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}, \"invalid_tool_calls\": []}}}]], \"llm_output\": {\"usage\": {\"prompt_tokens\": 343, \"completion_tokens\": 102, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 445}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"run\": null, \"type\": \"LLMResult\"}",
+              "role": "assistant"
+            },
+            {
+              "content": "I'll help you check the weather for Delhi. However, I want to clarify that the available weather tool provides current weather information for a specific city, not a forecast for the entire week. Let me retrieve the current weather for Delhi.",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{\"messages\": [[{\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"SystemMessage\"], \"kwargs\": {\"content\": \"You are a helpful assistant\", \"type\": \"system\"}}, {\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"HumanMessage\"], \"kwargs\": {\"content\": \"What will be the weather in the next week in Delhi?\", \"type\": \"human\", \"id\": \"9a4fff51-21a5-433a-9c30-9b20a4ad72b5\"}}]]}",
+              "role": "user"
+            },
+            {
+              "content": "You are a helpful assistant",
+              "role": "user"
+            },
+            {
+              "content": "What will be the weather in the next week in Delhi?",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "9a47f8912c115bfa"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574013696518912,
+      "observedTimeUnixNano": 1762574014582175702,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"I'll help you check the weather for Delhi. However, I want to clarify that the available weather tool provides current weather information for a specific city, not a forecast for the entire week. Let me retrieve the current weather for Delhi.\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 343, \"completion_tokens\": 102, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 445}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 343, \"completion_tokens\": 102, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 445}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"name\": null, \"id\": \"lc_run--1011bbbd-b112-410e-bafc-12ae37a0c70c-0\", \"tool_calls\": [{\"name\": \"get_weather\", \"args\": {\"city\": \"Delhi\"}, \"id\": \"toolu_bdrk_01WmARQytce9hdi8kfpEwi95\", \"type\": \"tool_call\"}], \"invalid_tool_calls\": [], \"usage_metadata\": {\"input_tokens\": 343, \"output_tokens\": 102, \"total_tokens\": 445, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}}]}",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"What will be the weather in the next week in Delhi?\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"human\", \"name\": null, \"id\": \"9a4fff51-21a5-433a-9c30-9b20a4ad72b5\"}]}",
+              "role": "user"
+            },
+            {
+              "content": "What will be the weather in the next week in Delhi?",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "b0aa8f3347f4bc76"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574013698391808,
+      "observedTimeUnixNano": 1762574014582218385,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"content\": \"It's always sunny in Delhi!\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"tool\", \"name\": \"get_weather\", \"id\": null, \"tool_call_id\": \"toolu_bdrk_01WmARQytce9hdi8kfpEwi95\", \"artifact\": null, \"status\": \"success\"}",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{'city': 'Delhi'}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "a135499789a4b521"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574013698870784,
+      "observedTimeUnixNano": 1762574014582257943,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"It's always sunny in Delhi!\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"tool\", \"name\": \"get_weather\", \"id\": \"abb61a05-149d-4207-a42c-c55322210bc9\", \"tool_call_id\": \"toolu_bdrk_01WmARQytce9hdi8kfpEwi95\", \"artifact\": null, \"status\": \"success\"}]}",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{\"__type\": \"tool_call_with_context\", \"tool_call\": {\"name\": \"get_weather\", \"args\": {\"city\": \"Delhi\"}, \"id\": \"toolu_bdrk_01WmARQytce9hdi8kfpEwi95\", \"type\": \"tool_call\"}, \"state\": {\"messages\": [{\"content\": \"What will be the weather in the next week in Delhi?\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"human\", \"name\": null, \"id\": \"9a4fff51-21a5-433a-9c30-9b20a4ad72b5\"}, {\"content\": \"I'll help you check the weather for Delhi. However, I want to clarify that the available weather tool provides current weather information for a specific city, not a forecast for the entire week. Let me retrieve the current weather for Delhi.\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 343, \"completion_tokens\": 102, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 445}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 343, \"completion_tokens\": 102, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 445}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"name\": null, \"id\": \"lc_run--1011bbbd-b112-410e-bafc-12ae37a0c70c-0\", \"tool_calls\": [{\"name\": \"get_weather\", \"args\": {\"city\": \"Delhi\"}, \"id\": \"toolu_bdrk_01WmARQytce9hdi8kfpEwi95\", \"type\": \"tool_call\"}], \"invalid_tool_calls\": [], \"usage_metadata\": {\"input_tokens\": 343, \"output_tokens\": 102, \"total_tokens\": 445, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}}]}}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "100fe0d68da8045a"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574016868043008,
+      "observedTimeUnixNano": 1762574019581237264,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"generations\": [[{\"text\": \"Based on the current weather information, it seems that Delhi is experiencing sunny conditions. Unfortunately, I can only provide the current weather status and not a detailed week-long forecast. For a comprehensive weekly forecast, I recommend checking a local weather service or meteorological website that specializes in extended forecasts for Delhi.\\n\\nThe current sunny weather suggests it might be warm, but temperatures and conditions can change throughout the week. If you need a detailed week-long forecast, I suggest consulting a local weather service or app that can provide more precise and up-to-date information about Delhi's upcoming weather.\\n\\nIs there anything else I can help you with?\", \"generation_info\": null, \"type\": \"ChatGeneration\", \"message\": {\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"AIMessage\"], \"kwargs\": {\"content\": \"Based on the current weather information, it seems that Delhi is experiencing sunny conditions. Unfortunately, I can only provide the current weather status and not a detailed week-long forecast. For a comprehensive weekly forecast, I recommend checking a local weather service or meteorological website that specializes in extended forecasts for Delhi.\\n\\nThe current sunny weather suggests it might be warm, but temperatures and conditions can change throughout the week. If you need a detailed week-long forecast, I suggest consulting a local weather service or app that can provide more precise and up-to-date information about Delhi's upcoming weather.\\n\\nIs there anything else I can help you with?\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 462, \"completion_tokens\": 135, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 597}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 462, \"completion_tokens\": 135, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 597}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"id\": \"lc_run--30f1a0cd-a822-48d7-bdcd-2e5bb7329a27-0\", \"usage_metadata\": {\"input_tokens\": 462, \"output_tokens\": 135, \"total_tokens\": 597, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}, \"tool_calls\": [], \"invalid_tool_calls\": []}}}]], \"llm_output\": {\"usage\": {\"prompt_tokens\": 462, \"completion_tokens\": 135, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 597}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"run\": null, \"type\": \"LLMResult\"}",
+              "role": "assistant"
+            },
+            {
+              "content": "Based on the current weather information, it seems that Delhi is experiencing sunny conditions. Unfortunately, I can only provide the current weather status and not a detailed week-long forecast. For a comprehensive weekly forecast, I recommend checking a local weather service or meteorological website that specializes in extended forecasts for Delhi.\n\nThe current sunny weather suggests it might be warm, but temperatures and conditions can change throughout the week. If you need a detailed week-long forecast, I suggest consulting a local weather service or app that can provide more precise and up-to-date information about Delhi's upcoming weather.\n\nIs there anything else I can help you with?",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{\"messages\": [[{\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"SystemMessage\"], \"kwargs\": {\"content\": \"You are a helpful assistant\", \"type\": \"system\"}}, {\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"HumanMessage\"], \"kwargs\": {\"content\": \"What will be the weather in the next week in Delhi?\", \"type\": \"human\", \"id\": \"9a4fff51-21a5-433a-9c30-9b20a4ad72b5\"}}, {\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"AIMessage\"], \"kwargs\": {\"content\": \"I'll help you check the weather for Delhi. However, I want to clarify that the available weather tool provides current weather information for a specific city, not a forecast for the entire week. Let me retrieve the current weather for Delhi.\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 343, \"completion_tokens\": 102, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 445}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 343, \"completion_tokens\": 102, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 445}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"id\": \"lc_run--1011bbbd-b112-410e-bafc-12ae37a0c70c-0\", \"tool_calls\": [{\"name\": \"get_weather\", \"args\": {\"city\": \"Delhi\"}, \"id\": \"toolu_bdrk_01WmARQytce9hdi8kfpEwi95\", \"type\": \"tool_call\"}], \"usage_metadata\": {\"input_tokens\": 343, \"output_tokens\": 102, \"total_tokens\": 445, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}, \"invalid_tool_calls\": []}}, {\"lc\": 1, \"type\": \"constructor\", \"id\": [\"langchain\", \"schema\", \"messages\", \"ToolMessage\"], \"kwargs\": {\"content\": \"It's always sunny in Delhi!\", \"type\": \"tool\", \"name\": \"get_weather\", \"id\": \"abb61a05-149d-4207-a42c-c55322210bc9\", \"tool_call_id\": \"toolu_bdrk_01WmARQytce9hdi8kfpEwi95\", \"status\": \"success\"}}]]}",
+              "role": "user"
+            },
+            {
+              "content": "You are a helpful assistant",
+              "role": "user"
+            },
+            {
+              "content": "What will be the weather in the next week in Delhi?",
+              "role": "user"
+            },
+            {
+              "content": "I'll help you check the weather for Delhi. However, I want to clarify that the available weather tool provides current weather information for a specific city, not a forecast for the entire week. Let me retrieve the current weather for Delhi.",
+              "role": "user"
+            },
+            {
+              "content": "It's always sunny in Delhi!",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "0530c062cbd35fc4"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574016868731904,
+      "observedTimeUnixNano": 1762574019581336089,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"Based on the current weather information, it seems that Delhi is experiencing sunny conditions. Unfortunately, I can only provide the current weather status and not a detailed week-long forecast. For a comprehensive weekly forecast, I recommend checking a local weather service or meteorological website that specializes in extended forecasts for Delhi.\\n\\nThe current sunny weather suggests it might be warm, but temperatures and conditions can change throughout the week. If you need a detailed week-long forecast, I suggest consulting a local weather service or app that can provide more precise and up-to-date information about Delhi's upcoming weather.\\n\\nIs there anything else I can help you with?\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 462, \"completion_tokens\": 135, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 597}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 462, \"completion_tokens\": 135, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 597}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"name\": null, \"id\": \"lc_run--30f1a0cd-a822-48d7-bdcd-2e5bb7329a27-0\", \"tool_calls\": [], \"invalid_tool_calls\": [], \"usage_metadata\": {\"input_tokens\": 462, \"output_tokens\": 135, \"total_tokens\": 597, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}}]}",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"What will be the weather in the next week in Delhi?\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"human\", \"name\": null, \"id\": \"9a4fff51-21a5-433a-9c30-9b20a4ad72b5\"}, {\"content\": \"I'll help you check the weather for Delhi. However, I want to clarify that the available weather tool provides current weather information for a specific city, not a forecast for the entire week. Let me retrieve the current weather for Delhi.\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 343, \"completion_tokens\": 102, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 445}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 343, \"completion_tokens\": 102, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 445}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"name\": null, \"id\": \"lc_run--1011bbbd-b112-410e-bafc-12ae37a0c70c-0\", \"tool_calls\": [{\"name\": \"get_weather\", \"args\": {\"city\": \"Delhi\"}, \"id\": \"toolu_bdrk_01WmARQytce9hdi8kfpEwi95\", \"type\": \"tool_call\"}], \"invalid_tool_calls\": [], \"usage_metadata\": {\"input_tokens\": 343, \"output_tokens\": 102, \"total_tokens\": 445, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}}, {\"content\": \"It's always sunny in Delhi!\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"tool\", \"name\": \"get_weather\", \"id\": \"abb61a05-149d-4207-a42c-c55322210bc9\", \"tool_call_id\": \"toolu_bdrk_01WmARQytce9hdi8kfpEwi95\", \"artifact\": null, \"status\": \"success\"}]}",
+              "role": "user"
+            },
+            {
+              "content": "What will be the weather in the next week in Delhi?",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "7929ee33f804db79"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "service.name": "lg_openinf_weather_creatAgent_api_noname.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:521102048267:runtime/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/lg_openinf_weather_creatAgent_api_noname-b3FcR57NVv-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.2-aws"
+        }
+      },
+      "scope": {
+        "name": "openinference.instrumentation.langchain"
+      },
+      "timeUnixNano": 1762574016869272064,
+      "observedTimeUnixNano": 1762574019581389852,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"What will be the weather in the next week in Delhi?\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"human\", \"name\": null, \"id\": \"9a4fff51-21a5-433a-9c30-9b20a4ad72b5\"}, {\"content\": \"I'll help you check the weather for Delhi. However, I want to clarify that the available weather tool provides current weather information for a specific city, not a forecast for the entire week. Let me retrieve the current weather for Delhi.\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 343, \"completion_tokens\": 102, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 445}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 343, \"completion_tokens\": 102, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 445}, \"stop_reason\": \"tool_use\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"name\": null, \"id\": \"lc_run--1011bbbd-b112-410e-bafc-12ae37a0c70c-0\", \"tool_calls\": [{\"name\": \"get_weather\", \"args\": {\"city\": \"Delhi\"}, \"id\": \"toolu_bdrk_01WmARQytce9hdi8kfpEwi95\", \"type\": \"tool_call\"}], \"invalid_tool_calls\": [], \"usage_metadata\": {\"input_tokens\": 343, \"output_tokens\": 102, \"total_tokens\": 445, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}}, {\"content\": \"It's always sunny in Delhi!\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"tool\", \"name\": \"get_weather\", \"id\": \"abb61a05-149d-4207-a42c-c55322210bc9\", \"tool_call_id\": \"toolu_bdrk_01WmARQytce9hdi8kfpEwi95\", \"artifact\": null, \"status\": \"success\"}, {\"content\": \"Based on the current weather information, it seems that Delhi is experiencing sunny conditions. Unfortunately, I can only provide the current weather status and not a detailed week-long forecast. For a comprehensive weekly forecast, I recommend checking a local weather service or meteorological website that specializes in extended forecasts for Delhi.\\n\\nThe current sunny weather suggests it might be warm, but temperatures and conditions can change throughout the week. If you need a detailed week-long forecast, I suggest consulting a local weather service or app that can provide more precise and up-to-date information about Delhi's upcoming weather.\\n\\nIs there anything else I can help you with?\", \"additional_kwargs\": {\"usage\": {\"prompt_tokens\": 462, \"completion_tokens\": 135, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 597}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"response_metadata\": {\"usage\": {\"prompt_tokens\": 462, \"completion_tokens\": 135, \"cache_read_input_tokens\": 0, \"cache_write_input_tokens\": 0, \"total_tokens\": 597}, \"stop_reason\": \"end_turn\", \"model_id\": \"anthropic.claude-3-5-haiku-20241022-v1:0\", \"model_provider\": \"bedrock\", \"model_name\": \"anthropic.claude-3-5-haiku-20241022-v1:0\"}, \"type\": \"ai\", \"name\": null, \"id\": \"lc_run--30f1a0cd-a822-48d7-bdcd-2e5bb7329a27-0\", \"tool_calls\": [], \"invalid_tool_calls\": [], \"usage_metadata\": {\"input_tokens\": 462, \"output_tokens\": 135, \"total_tokens\": 597, \"input_token_details\": {\"cache_creation\": 0, \"cache_read\": 0}}}]}",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "{\"messages\": [{\"content\": \"What will be the weather in the next week in Delhi?\", \"additional_kwargs\": {}, \"response_metadata\": {}, \"type\": \"human\", \"name\": null, \"id\": \"9a4fff51-21a5-433a-9c30-9b20a4ad72b5\"}]}",
+              "role": "user"
+            },
+            {
+              "content": "What will be the weather in the next week in Delhi?",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "openinference.instrumentation.langchain",
+        "session.id": "langgraph_openinf_2_turns_create_agent_noname"
+      },
+      "flags": 1,
+      "traceId": "690ebebb158ac1683bc1f74767f4b8f7",
+      "spanId": "6116dd8865964a3f"
+    }
+  ]
+}

@@ -1,51 +1,35 @@
-"""Span mapping orchestration."""
+"""Abstract base class for framework-specific span mappers."""
 
-import logging
+import abc
 from typing import Any, Dict, List, Optional
 
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers.common import (
     SpanMapResult,
 )
-from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers.strands import (
-    StrandsSpanMapper,
-)
-
-logger = logging.getLogger(__name__)
-
-_strands_mapper = StrandsSpanMapper()
 
 
-def map_spans(
-    session_spans: List[Dict[str, Any]],
-    reference_inputs: Optional[List[Any]] = None,
-) -> SpanMapResult:
-    """Map session spans to evaluation fields.
+class BaseSpanMapper(abc.ABC):
+    """Base class for framework-specific span mappers.
 
-    Currently supports Strands Agent SDK spans (scope.name == "strands.telemetry.tracer").
-    Additional framework support can be added when real span data is available.
-
-    Args:
-        session_spans: Raw ADOT span dicts from the evaluation service.
-        reference_inputs: Optional ReferenceInput list for expected_output.
-
-    Returns:
-        SpanMapResult with extracted fields.
-
-    Raises:
-        ValueError: If no mapper can extract data from the spans.
+    Subclasses implement scope_name and map() to extract evaluation fields
+    from spans produced by a specific OTel instrumentation scope.
     """
-    result = _strands_mapper.map(session_spans)
-    if result is not None:
-        if reference_inputs:
-            ref = reference_inputs[0]
-            expected = getattr(ref, "expected_response_text", None)
-            if expected:
-                result.expected_output = expected
-        return result
 
-    raise ValueError(
-        "Could not extract evaluation fields from spans. "
-        "No Strands agent span (scope.name=='strands.telemetry.tracer' with "
-        "gen_ai.operation.name=='invoke_agent') found. "
-        "Provide a customer_mapper for custom or unsupported span formats."
-    )
+    @property
+    @abc.abstractmethod
+    def scope_name(self) -> str:
+        """The primary OTel scope this mapper handles, e.g. 'strands.telemetry.tracer'."""
+
+    @property
+    def scope_names(self) -> List[str]:
+        """All OTel scope names this mapper handles. Override to support multiple scopes."""
+        return [self.scope_name]
+
+    @abc.abstractmethod
+    def map(self, session_spans: List[Dict[str, Any]]) -> Optional[SpanMapResult]:
+        """Extract evaluation fields from spans. Return None if nothing found."""
+
+    def _filter_scope_spans(self, session_spans: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Filter to only spans matching this mapper's scope_names."""
+        names = set(self.scope_names)
+        return [s for s in session_spans if s.get("scope", {}).get("name") in names]

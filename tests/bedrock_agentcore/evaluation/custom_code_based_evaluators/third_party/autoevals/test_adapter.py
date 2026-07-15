@@ -50,7 +50,7 @@ def _mock_scorer(score=0.9, rationale="Good answer"):
 class TestAutoevalsAdapterSuccess:
     def test_returns_pass_when_score_above_threshold(self):
         scorer = _mock_scorer(score=0.8)
-        adapter = AutoevalsAdapter(scorer=scorer)
+        adapter = AutoevalsAdapter(metric=scorer, threshold=0.5)
 
         result = adapter(_make_evaluator_input())
 
@@ -61,7 +61,7 @@ class TestAutoevalsAdapterSuccess:
 
     def test_returns_fail_when_score_below_threshold(self):
         scorer = _mock_scorer(score=0.3)
-        adapter = AutoevalsAdapter(scorer=scorer)
+        adapter = AutoevalsAdapter(metric=scorer, threshold=0.5)
 
         result = adapter(_make_evaluator_input())
 
@@ -70,7 +70,7 @@ class TestAutoevalsAdapterSuccess:
 
     def test_custom_threshold(self):
         scorer = _mock_scorer(score=0.6)
-        adapter = AutoevalsAdapter(scorer=scorer, threshold=0.7)
+        adapter = AutoevalsAdapter(metric=scorer, threshold=0.7)
 
         result = adapter(_make_evaluator_input())
 
@@ -78,21 +78,30 @@ class TestAutoevalsAdapterSuccess:
 
     def test_custom_threshold_pass(self):
         scorer = _mock_scorer(score=0.8)
-        adapter = AutoevalsAdapter(scorer=scorer, threshold=0.7)
+        adapter = AutoevalsAdapter(metric=scorer, threshold=0.7)
 
         result = adapter(_make_evaluator_input())
 
         assert result.label == "Pass"
 
-    def test_default_threshold_is_half(self):
+    def test_default_threshold_is_none(self):
         scorer = _mock_scorer()
-        adapter = AutoevalsAdapter(scorer=scorer)
+        adapter = AutoevalsAdapter(metric=scorer)
 
-        assert adapter.threshold == 0.5
+        assert adapter.threshold is None
+
+    def test_no_threshold_returns_none_label(self):
+        scorer = _mock_scorer(score=0.85)
+        adapter = AutoevalsAdapter(metric=scorer)
+
+        result = adapter(_make_evaluator_input())
+
+        assert result.value == 0.85
+        assert result.label is None
 
     def test_scorer_eval_called_with_input_and_output(self):
         scorer = _mock_scorer()
-        adapter = AutoevalsAdapter(scorer=scorer)
+        adapter = AutoevalsAdapter(metric=scorer)
 
         adapter(_make_evaluator_input())
 
@@ -101,11 +110,11 @@ class TestAutoevalsAdapterSuccess:
         assert call_kwargs["input"] == "What is AI?"
         assert call_kwargs["output"] == "AI is artificial intelligence."
 
-    def test_custom_customer_mapper(self):
+    def test_custom_custom_mapper(self):
         scorer = _mock_scorer()
         adapter = AutoevalsAdapter(
-            scorer=scorer,
-            customer_mapper=lambda ev: {
+            metric=scorer,
+            custom_mapper=lambda ev: {
                 "input": "custom input",
                 "output": "custom output",
             },
@@ -129,7 +138,7 @@ class TestAutoevalsAdapterErrors:
             }
         ]
         scorer = _mock_scorer()
-        adapter = AutoevalsAdapter(scorer=scorer)
+        adapter = AutoevalsAdapter(metric=scorer)
 
         result = adapter(_make_evaluator_input(spans=spans))
 
@@ -152,7 +161,7 @@ class TestAutoevalsAdapterErrors:
             }
         ]
         scorer = _mock_scorer()
-        adapter = AutoevalsAdapter(scorer=scorer)
+        adapter = AutoevalsAdapter(metric=scorer)
 
         result = adapter(_make_evaluator_input(spans=spans))
 
@@ -162,7 +171,7 @@ class TestAutoevalsAdapterErrors:
     def test_scorer_exception_returns_error(self):
         scorer = _mock_scorer()
         scorer.eval = MagicMock(side_effect=RuntimeError("API error"))
-        adapter = AutoevalsAdapter(scorer=scorer)
+        adapter = AutoevalsAdapter(metric=scorer)
 
         result = adapter(_make_evaluator_input())
 
@@ -172,7 +181,7 @@ class TestAutoevalsAdapterErrors:
     def test_never_raises(self):
         scorer = _mock_scorer()
         scorer.eval = MagicMock(side_effect=Exception("unexpected"))
-        adapter = AutoevalsAdapter(scorer=scorer)
+        adapter = AutoevalsAdapter(metric=scorer)
 
         result = adapter(_make_evaluator_input())
 
@@ -181,9 +190,17 @@ class TestAutoevalsAdapterErrors:
 
 
 class TestAutoevalsAdapterEdgeCases:
-    def test_score_none_returns_fail(self):
+    def test_score_none_without_threshold_returns_error(self):
         scorer = _mock_scorer(score=None)
-        adapter = AutoevalsAdapter(scorer=scorer)
+        adapter = AutoevalsAdapter(metric=scorer)
+
+        result = adapter(_make_evaluator_input())
+
+        assert result.errorCode is not None
+
+    def test_score_none_with_threshold_returns_fail(self):
+        scorer = _mock_scorer(score=None)
+        adapter = AutoevalsAdapter(metric=scorer, threshold=0.5)
 
         result = adapter(_make_evaluator_input())
 
@@ -196,7 +213,7 @@ class TestAutoevalsAdapterEdgeCases:
         result_obj.score = 0.9
         scorer.eval = MagicMock(return_value=result_obj)
 
-        adapter = AutoevalsAdapter(scorer=scorer)
+        adapter = AutoevalsAdapter(metric=scorer)
 
         result = adapter(_make_evaluator_input())
 

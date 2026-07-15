@@ -1,0 +1,946 @@
+{
+  "sessionSpans": [
+    {
+      "name": "call_llm",
+      "context": {
+        "trace_id": "0xf936ec7cbe5c11101515a754ee766ce8",
+        "span_id": "0x59b6aeb6f3558680",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": "0x8637cd04cfe455dd",
+      "start_time": "2026-05-18T00:19:03.281045Z",
+      "end_time": "2026-05-18T00:19:04.305690Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "session.id": "test_session",
+        "gen_ai.operation.name": "generate_content",
+        "gen_ai.agent.name": "googleInMemory",
+        "gen_ai.conversation.id": "test_session",
+        "user.id": "test_user",
+        "gen_ai.system": "gcp.vertex.agent",
+        "gen_ai.request.model": "gemini-2.5-flash",
+        "gcp.vertex.agent.invocation_id": "e-9478bccf-b4c5-41f3-a4d4-771c1685d90a",
+        "gcp.vertex.agent.session_id": "test_session",
+        "gcp.vertex.agent.event_id": "f9617a7b-842e-41b2-8f88-e5dd757b98e0",
+        "gcp.vertex.agent.llm_request": "{\"model\": \"gemini-2.5-flash\", \"config\": {\"http_options\": {\"headers\": {\"x-goog-api-client\": \"google-adk/1.33.0 gl-python/3.13.1\", \"user-agent\": \"google-adk/1.33.0 gl-python/3.13.1\"}}, \"system_instruction\": \"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\", \"tools\": [{\"function_declarations\": [{\"description\": \"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\", \"name\": \"search_flights\", \"parameters\": {\"properties\": {\"origin\": {\"type\": \"STRING\"}, \"destination\": {\"type\": \"STRING\"}, \"date\": {\"type\": \"STRING\"}}, \"required\": [\"origin\", \"destination\", \"date\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_flight\", \"parameters\": {\"properties\": {\"flight_id\": {\"type\": \"STRING\"}}, \"required\": [\"flight_id\"], \"type\": \"OBJECT\"}}, {\"description\": \"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\", \"name\": \"search_hotels\", \"parameters\": {\"properties\": {\"city\": {\"type\": \"STRING\"}, \"checkin\": {\"type\": \"STRING\"}, \"checkout\": {\"type\": \"STRING\"}}, \"required\": [\"city\", \"checkin\", \"checkout\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_hotel\", \"parameters\": {\"properties\": {\"hotel_id\": {\"type\": \"STRING\"}, \"checkin\": {\"type\": \"STRING\"}, \"checkout\": {\"type\": \"STRING\"}}, \"required\": [\"hotel_id\", \"checkin\", \"checkout\"], \"type\": \"OBJECT\"}}, {\"description\": \"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\", \"name\": \"search_activities\", \"parameters\": {\"properties\": {\"city\": {\"type\": \"STRING\"}}, \"required\": [\"city\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_activity\", \"parameters\": {\"properties\": {\"activity_id\": {\"type\": \"STRING\"}, \"date\": {\"type\": \"STRING\"}}, \"required\": [\"activity_id\", \"date\"], \"type\": \"OBJECT\"}}]}]}, \"contents\": [{\"parts\": [{\"text\": \"Hey, how can you help me\"}], \"role\": \"user\"}]}",
+        "gcp.vertex.agent.llm_response": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"text\":\"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"candidates_token_count\":29,\"prompt_token_count\":713,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":713}],\"total_token_count\":742}}",
+        "gen_ai.usage.input_tokens": 713,
+        "gen_ai.usage.output_tokens": 29,
+        "gen_ai.response.finish_reasons": [
+          "stop"
+        ],
+        "llm.provider": "google",
+        "input.value": "{\"model\":\"gemini-2.5-flash\",\"contents\":[{\"parts\":[{\"text\":\"Hey, how can you help me\"}],\"role\":\"user\"}],\"config\":{\"http_options\":{\"headers\":{\"x-goog-api-client\":\"google-adk/1.33.0 gl-python/3.13.1\",\"user-agent\":\"google-adk/1.33.0 gl-python/3.13.1\"}},\"system_instruction\":\"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\",\"tools\":[{\"function_declarations\":[{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}]}]},\"live_connect_config\":{\"input_audio_transcription\":{},\"output_audio_transcription\":{}}}",
+        "input.mime_type": "application/json",
+        "llm.tools.0.tool.json_schema": "{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.1.tool.json_schema": "{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.2.tool.json_schema": "{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.3.tool.json_schema": "{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.4.tool.json_schema": "{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.5.tool.json_schema": "{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}",
+        "llm.model_name": "gemini-2.5-flash",
+        "llm.invocation_parameters": "{\"http_options\":{\"headers\":{\"x-goog-api-client\":\"google-adk/1.33.0 gl-python/3.13.1\",\"user-agent\":\"google-adk/1.33.0 gl-python/3.13.1\"}},\"system_instruction\":\"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\",\"tools\":[{\"function_declarations\":[{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}]}]}",
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.0.message.content": "You are a travel planning assistant. Help users plan trips by:\n- Searching and booking flights\n- Finding and booking hotels\n- Suggesting and booking activities\n\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\nAlways use the airport code when calling tools, not the full city name.\n\n\nYou are an agent. Your internal name is \"googleInMemory\". The description about you is \"Travel planning assistant\".",
+        "llm.input_messages.1.message.role": "user",
+        "llm.input_messages.1.message.contents.0.message_content.text": "Hey, how can you help me",
+        "llm.input_messages.1.message.contents.0.message_content.type": "text",
+        "output.value": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"text\":\"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"candidates_token_count\":29,\"prompt_token_count\":713,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":713}],\"total_token_count\":742}}",
+        "output.mime_type": "application/json",
+        "llm.token_count.total": 742,
+        "llm.token_count.prompt": 713,
+        "llm.token_count.completion": 29,
+        "llm.output_messages.0.message.role": "model",
+        "llm.output_messages.0.message.contents.0.message_content.text": "I can help you plan your trip! I can:\n- Search and book flights\n- Find and book hotels\n- Suggest and book activities",
+        "llm.output_messages.0.message.contents.0.message_content.type": "text",
+        "openinference.span.kind": "LLM"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-000"
+    },
+    {
+      "name": "agent_run [googleInMemory]",
+      "context": {
+        "trace_id": "0xf936ec7cbe5c11101515a754ee766ce8",
+        "span_id": "0x8637cd04cfe455dd",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": "0xccd96d9db1cd2c89",
+      "start_time": "2026-05-18T00:19:02.996234Z",
+      "end_time": "2026-05-18T00:19:04.305801Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "agent.name": "googleInMemory",
+        "session.id": "test_session",
+        "user.id": "test_user",
+        "gen_ai.operation.name": "invoke_agent",
+        "gen_ai.agent.description": "Travel planning assistant",
+        "gen_ai.agent.name": "googleInMemory",
+        "gen_ai.conversation.id": "test_session",
+        "output.value": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"text\":\"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"candidates_token_count\":29,\"prompt_token_count\":713,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":713}],\"total_token_count\":742},\"invocation_id\":\"e-9478bccf-b4c5-41f3-a4d4-771c1685d90a\",\"author\":\"googleInMemory\",\"actions\":{\"state_delta\":{},\"artifact_delta\":{},\"requested_auth_configs\":{},\"requested_tool_confirmations\":{}},\"id\":\"f9617a7b-842e-41b2-8f88-e5dd757b98e0\",\"timestamp\":1779063543.280948}",
+        "output.mime_type": "application/json",
+        "openinference.span.kind": "AGENT"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-001"
+    },
+    {
+      "name": "invocation [googleInMemory]",
+      "context": {
+        "trace_id": "0xf936ec7cbe5c11101515a754ee766ce8",
+        "span_id": "0xccd96d9db1cd2c89",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": null,
+      "start_time": "2026-05-18T00:19:02.995909Z",
+      "end_time": "2026-05-18T00:19:04.305836Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "input.value": "{\"user_id\": \"test_user\", \"session_id\": \"test_session\", \"invocation_id\": null, \"new_message\": {\"parts\": [{\"text\": \"Hey, how can you help me\"}], \"role\": \"user\"}, \"state_delta\": null, \"run_config\": null}",
+        "input.mime_type": "application/json",
+        "user.id": "test_user",
+        "session.id": "test_session",
+        "output.value": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"text\":\"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"candidates_token_count\":29,\"prompt_token_count\":713,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":713}],\"total_token_count\":742},\"invocation_id\":\"e-9478bccf-b4c5-41f3-a4d4-771c1685d90a\",\"author\":\"googleInMemory\",\"actions\":{\"state_delta\":{},\"artifact_delta\":{},\"requested_auth_configs\":{},\"requested_tool_confirmations\":{}},\"id\":\"f9617a7b-842e-41b2-8f88-e5dd757b98e0\",\"timestamp\":1779063543.280948}",
+        "output.mime_type": "application/json",
+        "openinference.span.kind": "CHAIN"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-002"
+    },
+    {
+      "name": "execute_tool search_flights",
+      "context": {
+        "trace_id": "0xc5663c3f398e198c64d7146028bc4c8d",
+        "span_id": "0x636dccb74f3f9803",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": "0x50d95f0a5f47a133",
+      "start_time": "2026-05-18T00:19:06.149522Z",
+      "end_time": "2026-05-18T00:19:06.149879Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "session.id": "test_session",
+        "user.id": "test_user",
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.description": "Search for available flights between cities.\nArgs:\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\n    destination: Destination airport code.\n    date: Travel date (e.g., 2025-03-15).\nReturns:\n    dict: Flight search results.",
+        "gen_ai.tool.name": "search_flights",
+        "gen_ai.tool.type": "FunctionTool",
+        "gcp.vertex.agent.llm_request": "{}",
+        "gcp.vertex.agent.llm_response": "{}",
+        "gcp.vertex.agent.tool_call_args": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}",
+        "gen_ai.tool.call.id": "adk-a3b3401f-7ded-491d-bbe8-bbd05cde8741",
+        "gcp.vertex.agent.event_id": "3cbe853c-cb3f-431f-af53-92a509f97974",
+        "gcp.vertex.agent.tool_response": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\", \"flights\": [{\"flight_id\": \"AA101\", \"departure\": \"06:00\", \"arrival\": \"14:30\", \"price\": 420, \"airline\": \"American\"}, {\"flight_id\": \"DL205\", \"departure\": \"09:15\", \"arrival\": \"17:45\", \"price\": 385, \"airline\": \"Delta\"}, {\"flight_id\": \"UA330\", \"departure\": \"14:00\", \"arrival\": \"22:30\", \"price\": 350, \"airline\": \"United\"}, {\"flight_id\": \"AA115\", \"departure\": \"16:30\", \"arrival\": \"01:00\", \"price\": 310, \"airline\": \"American\"}, {\"flight_id\": \"DL420\", \"departure\": \"20:00\", \"arrival\": \"04:30\", \"price\": 290, \"airline\": \"Delta\"}]}",
+        "tool.name": "search_flights",
+        "tool.description": "Search for available flights between cities.\nArgs:\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\n    destination: Destination airport code.\n    date: Travel date (e.g., 2025-03-15).\nReturns:\n    dict: Flight search results.",
+        "tool.parameters": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}",
+        "input.value": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}",
+        "input.mime_type": "application/json",
+        "output.value": "{\"id\":\"adk-a3b3401f-7ded-491d-bbe8-bbd05cde8741\",\"name\":\"search_flights\",\"response\":{\"origin\":\"SEA\",\"destination\":\"NYC\",\"date\":\"2025-03-15\",\"flights\":[{\"flight_id\":\"AA101\",\"departure\":\"06:00\",\"arrival\":\"14:30\",\"price\":420,\"airline\":\"American\"},{\"flight_id\":\"DL205\",\"departure\":\"09:15\",\"arrival\":\"17:45\",\"price\":385,\"airline\":\"Delta\"},{\"flight_id\":\"UA330\",\"departure\":\"14:00\",\"arrival\":\"22:30\",\"price\":350,\"airline\":\"United\"},{\"flight_id\":\"AA115\",\"departure\":\"16:30\",\"arrival\":\"01:00\",\"price\":310,\"airline\":\"American\"},{\"flight_id\":\"DL420\",\"departure\":\"20:00\",\"arrival\":\"04:30\",\"price\":290,\"airline\":\"Delta\"}]}}",
+        "output.mime_type": "application/json",
+        "openinference.span.kind": "TOOL"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-003"
+    },
+    {
+      "name": "call_llm",
+      "context": {
+        "trace_id": "0xc5663c3f398e198c64d7146028bc4c8d",
+        "span_id": "0x50d95f0a5f47a133",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": "0xcfb46936b280499f",
+      "start_time": "2026-05-18T00:19:04.309625Z",
+      "end_time": "2026-05-18T00:19:06.149997Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "session.id": "test_session",
+        "gen_ai.operation.name": "generate_content",
+        "gen_ai.agent.name": "googleInMemory",
+        "gen_ai.conversation.id": "test_session",
+        "user.id": "test_user",
+        "gen_ai.system": "gcp.vertex.agent",
+        "gen_ai.request.model": "gemini-2.5-flash",
+        "gcp.vertex.agent.invocation_id": "e-8eda8949-1dbd-4c74-bdb6-f56e280f5df4",
+        "gcp.vertex.agent.session_id": "test_session",
+        "gcp.vertex.agent.event_id": "41bf3e09-0d76-49b5-a5ce-c646aea37d4f",
+        "gcp.vertex.agent.llm_request": "{\"model\": \"gemini-2.5-flash\", \"config\": {\"http_options\": {\"headers\": {\"x-goog-api-client\": \"google-adk/1.33.0 gl-python/3.13.1\", \"user-agent\": \"google-adk/1.33.0 gl-python/3.13.1\"}}, \"system_instruction\": \"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\", \"tools\": [{\"function_declarations\": [{\"description\": \"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\", \"name\": \"search_flights\", \"parameters\": {\"properties\": {\"origin\": {\"type\": \"STRING\"}, \"destination\": {\"type\": \"STRING\"}, \"date\": {\"type\": \"STRING\"}}, \"required\": [\"origin\", \"destination\", \"date\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_flight\", \"parameters\": {\"properties\": {\"flight_id\": {\"type\": \"STRING\"}}, \"required\": [\"flight_id\"], \"type\": \"OBJECT\"}}, {\"description\": \"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\", \"name\": \"search_hotels\", \"parameters\": {\"properties\": {\"city\": {\"type\": \"STRING\"}, \"checkin\": {\"type\": \"STRING\"}, \"checkout\": {\"type\": \"STRING\"}}, \"required\": [\"city\", \"checkin\", \"checkout\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_hotel\", \"parameters\": {\"properties\": {\"hotel_id\": {\"type\": \"STRING\"}, \"checkin\": {\"type\": \"STRING\"}, \"checkout\": {\"type\": \"STRING\"}}, \"required\": [\"hotel_id\", \"checkin\", \"checkout\"], \"type\": \"OBJECT\"}}, {\"description\": \"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\", \"name\": \"search_activities\", \"parameters\": {\"properties\": {\"city\": {\"type\": \"STRING\"}}, \"required\": [\"city\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_activity\", \"parameters\": {\"properties\": {\"activity_id\": {\"type\": \"STRING\"}, \"date\": {\"type\": \"STRING\"}}, \"required\": [\"activity_id\", \"date\"], \"type\": \"OBJECT\"}}]}]}, \"contents\": [{\"parts\": [{\"text\": \"Hey, how can you help me\"}], \"role\": \"user\"}, {\"parts\": [{\"text\": \"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}], \"role\": \"model\"}, {\"parts\": [{\"text\": \"Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days\"}], \"role\": \"user\"}]}",
+        "gcp.vertex.agent.llm_response": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"function_call\":{\"args\":{\"origin\":\"SEA\",\"destination\":\"NYC\",\"date\":\"2025-03-15\"},\"name\":\"search_flights\"},\"thought_signature\":\"CtEGAQw51seqAksm_DEkpp-ldMFGFgt910IDaFMz4G5qtOJwkXRv0JcbKas179PGCPSsUFdh8SgXcJxMFCXzpWQ7vd6IsDEFuE-uMGNljrRug2lKR-V6E2_XAH3V91IyOskTg5R66hOf-QtKwMDhpiQldYiAlkhjYJHdC6T7iWEcQ_03hsESL_mvo_aKmeXecW_5E92Zt4v6vrdZQcCLtqsIPv20RyqrnrlDwSvzPXSg1X2QGIo8P7Rbfqz2S_vuiBxodMM6XbNfKHmncqaOxAxcGNrgt4dlHgBW1l-rg1w-7meR6lqTmLhlr1KnhiWN7SgRAPKfAy1e3qiL5Qnqfw9HAiD9ULgaTmo95mnQVX2s60G2g7NvopjgByfxJsDiiIo7eUvQuxECoP73LH5Es0GMz7-fhus86qgB85qqeCo-j77oXGmjUOtZQAdDN_b08BUZSifAtCJd5HR02yPpwnyYX1I9ShIoz8JB33WSiSD3Gw4YSuchdzZy8gexFDX-aBs2Q9iqwjf41hET_3tKbsUDb5-FgCmmNvLHTTh8ffHwbdsWty7edbEHRPw3-krGHCxj_yn8oFoPyril2atXMYzhHC3DLXjMPx-aVE5BJUpiqf1KwvdBdHeqLp7Jq1P5N30yIlAOljnFmlCMhdfg6sNSbZula8xROlP5lVpClC6H0HTi2b_gKhSDBl4gJCgW8AK9jEa8dMWRwr91K2-XnbXP_k0hCXQrQGzi90xbbcMd8-C1RpW9_cD0kC0Zk6mXV9MJZY_R1wcaeA3Yud3iPrs4lMXHJ8546J3nr3Tslg2m7NIo_o5P_N7boAHcHzMBShIsEnWcRk48krdjAvbUXaMnhDN-21GErP3XOcIrXN988ez2_jFp3jwOVhxZ9nTIeMO28UTuaJABqWgCWJh2glbhtSuWA--CR6skVds2kxOmimZP_4N_aXiKh1dRI5KikMApi05EHi9-ZuA4_SQIEqnm0tl8qUK1ljwlK3o-DE5Z93Qm0Cndc26yY-9FUyPqPBZ4jRI09jTTH1PcsduZYMawIi9Gj7iyGdd0D-hxAdwnSxZYiTthhvogo7S9AMQZDGNQnPQuVIo4daRWtQqTYMQ52uonLml1YSfgFBE4NWCT_TS4\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"candidates_token_count\":34,\"prompt_token_count\":776,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":776}],\"thoughts_token_count\":232,\"total_token_count\":1042}}",
+        "gen_ai.usage.input_tokens": 776,
+        "gen_ai.usage.output_tokens": 34,
+        "gen_ai.usage.experimental.reasoning_tokens": 232,
+        "gen_ai.response.finish_reasons": [
+          "stop"
+        ],
+        "llm.provider": "google",
+        "input.value": "{\"model\":\"gemini-2.5-flash\",\"contents\":[{\"parts\":[{\"text\":\"Hey, how can you help me\"}],\"role\":\"user\"},{\"parts\":[{\"text\":\"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}],\"role\":\"model\"},{\"parts\":[{\"text\":\"Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days\"}],\"role\":\"user\"}],\"config\":{\"http_options\":{\"headers\":{\"x-goog-api-client\":\"google-adk/1.33.0 gl-python/3.13.1\",\"user-agent\":\"google-adk/1.33.0 gl-python/3.13.1\"}},\"system_instruction\":\"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\",\"tools\":[{\"function_declarations\":[{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}]}]},\"live_connect_config\":{\"input_audio_transcription\":{},\"output_audio_transcription\":{}}}",
+        "input.mime_type": "application/json",
+        "llm.tools.0.tool.json_schema": "{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.1.tool.json_schema": "{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.2.tool.json_schema": "{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.3.tool.json_schema": "{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.4.tool.json_schema": "{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.5.tool.json_schema": "{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}",
+        "llm.model_name": "gemini-2.5-flash",
+        "llm.invocation_parameters": "{\"http_options\":{\"headers\":{\"x-goog-api-client\":\"google-adk/1.33.0 gl-python/3.13.1\",\"user-agent\":\"google-adk/1.33.0 gl-python/3.13.1\"}},\"system_instruction\":\"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\",\"tools\":[{\"function_declarations\":[{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}]}]}",
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.0.message.content": "You are a travel planning assistant. Help users plan trips by:\n- Searching and booking flights\n- Finding and booking hotels\n- Suggesting and booking activities\n\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\nAlways use the airport code when calling tools, not the full city name.\n\n\nYou are an agent. Your internal name is \"googleInMemory\". The description about you is \"Travel planning assistant\".",
+        "llm.input_messages.1.message.role": "user",
+        "llm.input_messages.1.message.contents.0.message_content.text": "Hey, how can you help me",
+        "llm.input_messages.1.message.contents.0.message_content.type": "text",
+        "llm.input_messages.2.message.role": "model",
+        "llm.input_messages.2.message.contents.0.message_content.text": "I can help you plan your trip! I can:\n- Search and book flights\n- Find and book hotels\n- Suggest and book activities",
+        "llm.input_messages.2.message.contents.0.message_content.type": "text",
+        "llm.input_messages.3.message.role": "user",
+        "llm.input_messages.3.message.contents.0.message_content.text": "Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days",
+        "llm.input_messages.3.message.contents.0.message_content.type": "text",
+        "output.value": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"function_call\":{\"args\":{\"origin\":\"SEA\",\"destination\":\"NYC\",\"date\":\"2025-03-15\"},\"name\":\"search_flights\"},\"thought_signature\":\"CtEGAQw51seqAksm_DEkpp-ldMFGFgt910IDaFMz4G5qtOJwkXRv0JcbKas179PGCPSsUFdh8SgXcJxMFCXzpWQ7vd6IsDEFuE-uMGNljrRug2lKR-V6E2_XAH3V91IyOskTg5R66hOf-QtKwMDhpiQldYiAlkhjYJHdC6T7iWEcQ_03hsESL_mvo_aKmeXecW_5E92Zt4v6vrdZQcCLtqsIPv20RyqrnrlDwSvzPXSg1X2QGIo8P7Rbfqz2S_vuiBxodMM6XbNfKHmncqaOxAxcGNrgt4dlHgBW1l-rg1w-7meR6lqTmLhlr1KnhiWN7SgRAPKfAy1e3qiL5Qnqfw9HAiD9ULgaTmo95mnQVX2s60G2g7NvopjgByfxJsDiiIo7eUvQuxECoP73LH5Es0GMz7-fhus86qgB85qqeCo-j77oXGmjUOtZQAdDN_b08BUZSifAtCJd5HR02yPpwnyYX1I9ShIoz8JB33WSiSD3Gw4YSuchdzZy8gexFDX-aBs2Q9iqwjf41hET_3tKbsUDb5-FgCmmNvLHTTh8ffHwbdsWty7edbEHRPw3-krGHCxj_yn8oFoPyril2atXMYzhHC3DLXjMPx-aVE5BJUpiqf1KwvdBdHeqLp7Jq1P5N30yIlAOljnFmlCMhdfg6sNSbZula8xROlP5lVpClC6H0HTi2b_gKhSDBl4gJCgW8AK9jEa8dMWRwr91K2-XnbXP_k0hCXQrQGzi90xbbcMd8-C1RpW9_cD0kC0Zk6mXV9MJZY_R1wcaeA3Yud3iPrs4lMXHJ8546J3nr3Tslg2m7NIo_o5P_N7boAHcHzMBShIsEnWcRk48krdjAvbUXaMnhDN-21GErP3XOcIrXN988ez2_jFp3jwOVhxZ9nTIeMO28UTuaJABqWgCWJh2glbhtSuWA--CR6skVds2kxOmimZP_4N_aXiKh1dRI5KikMApi05EHi9-ZuA4_SQIEqnm0tl8qUK1ljwlK3o-DE5Z93Qm0Cndc26yY-9FUyPqPBZ4jRI09jTTH1PcsduZYMawIi9Gj7iyGdd0D-hxAdwnSxZYiTthhvogo7S9AMQZDGNQnPQuVIo4daRWtQqTYMQ52uonLml1YSfgFBE4NWCT_TS4\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"candidates_token_count\":34,\"prompt_token_count\":776,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":776}],\"thoughts_token_count\":232,\"total_token_count\":1042}}",
+        "output.mime_type": "application/json",
+        "llm.token_count.total": 1042,
+        "llm.token_count.prompt": 776,
+        "llm.token_count.completion_details.reasoning": 232,
+        "llm.token_count.completion": 266,
+        "llm.output_messages.0.message.role": "model",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.name": "search_flights",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}",
+        "openinference.span.kind": "LLM"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-004"
+    },
+    {
+      "name": "execute_tool book_flight",
+      "context": {
+        "trace_id": "0xc5663c3f398e198c64d7146028bc4c8d",
+        "span_id": "0x5090e2ebaee40fea",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": "0x53f69244b3bb23e0",
+      "start_time": "2026-05-18T00:19:07.379288Z",
+      "end_time": "2026-05-18T00:19:07.379585Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "session.id": "test_session",
+        "user.id": "test_user",
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.description": "Book a specific flight by ID.\nArgs:\n    flight_id: The flight ID to book (e.g., AA101).\nReturns:\n    dict: Booking confirmation.",
+        "gen_ai.tool.name": "book_flight",
+        "gen_ai.tool.type": "FunctionTool",
+        "gcp.vertex.agent.llm_request": "{}",
+        "gcp.vertex.agent.llm_response": "{}",
+        "gcp.vertex.agent.tool_call_args": "{\"flight_id\": \"DL420\"}",
+        "gen_ai.tool.call.id": "adk-40d88227-f5e8-40c5-b68d-bff46d190f25",
+        "gcp.vertex.agent.event_id": "d40a9cb3-b247-4b35-be71-b371cf24ebdf",
+        "gcp.vertex.agent.tool_response": "{\"booking_id\": \"FBDL420\", \"flight_id\": \"DL420\", \"status\": \"confirmed\"}",
+        "tool.name": "book_flight",
+        "tool.description": "Book a specific flight by ID.\nArgs:\n    flight_id: The flight ID to book (e.g., AA101).\nReturns:\n    dict: Booking confirmation.",
+        "tool.parameters": "{\"flight_id\": \"DL420\"}",
+        "input.value": "{\"flight_id\": \"DL420\"}",
+        "input.mime_type": "application/json",
+        "output.value": "{\"id\":\"adk-40d88227-f5e8-40c5-b68d-bff46d190f25\",\"name\":\"book_flight\",\"response\":{\"booking_id\":\"FBDL420\",\"flight_id\":\"DL420\",\"status\":\"confirmed\"}}",
+        "output.mime_type": "application/json",
+        "openinference.span.kind": "TOOL"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-005"
+    },
+    {
+      "name": "call_llm",
+      "context": {
+        "trace_id": "0xc5663c3f398e198c64d7146028bc4c8d",
+        "span_id": "0x53f69244b3bb23e0",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": "0xcfb46936b280499f",
+      "start_time": "2026-05-18T00:19:06.153210Z",
+      "end_time": "2026-05-18T00:19:07.379712Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "session.id": "test_session",
+        "gen_ai.operation.name": "generate_content",
+        "gen_ai.agent.name": "googleInMemory",
+        "gen_ai.conversation.id": "test_session",
+        "user.id": "test_user",
+        "gen_ai.system": "gcp.vertex.agent",
+        "gen_ai.request.model": "gemini-2.5-flash",
+        "gcp.vertex.agent.invocation_id": "e-8eda8949-1dbd-4c74-bdb6-f56e280f5df4",
+        "gcp.vertex.agent.session_id": "test_session",
+        "gcp.vertex.agent.event_id": "cdb4ff5a-32fb-4cec-bb57-c0e5e7ef0b90",
+        "gcp.vertex.agent.llm_request": "{\"model\": \"gemini-2.5-flash\", \"config\": {\"http_options\": {\"headers\": {\"x-goog-api-client\": \"google-adk/1.33.0 gl-python/3.13.1\", \"user-agent\": \"google-adk/1.33.0 gl-python/3.13.1\"}}, \"system_instruction\": \"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\", \"tools\": [{\"function_declarations\": [{\"description\": \"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\", \"name\": \"search_flights\", \"parameters\": {\"properties\": {\"origin\": {\"type\": \"STRING\"}, \"destination\": {\"type\": \"STRING\"}, \"date\": {\"type\": \"STRING\"}}, \"required\": [\"origin\", \"destination\", \"date\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_flight\", \"parameters\": {\"properties\": {\"flight_id\": {\"type\": \"STRING\"}}, \"required\": [\"flight_id\"], \"type\": \"OBJECT\"}}, {\"description\": \"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\", \"name\": \"search_hotels\", \"parameters\": {\"properties\": {\"city\": {\"type\": \"STRING\"}, \"checkin\": {\"type\": \"STRING\"}, \"checkout\": {\"type\": \"STRING\"}}, \"required\": [\"city\", \"checkin\", \"checkout\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_hotel\", \"parameters\": {\"properties\": {\"hotel_id\": {\"type\": \"STRING\"}, \"checkin\": {\"type\": \"STRING\"}, \"checkout\": {\"type\": \"STRING\"}}, \"required\": [\"hotel_id\", \"checkin\", \"checkout\"], \"type\": \"OBJECT\"}}, {\"description\": \"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\", \"name\": \"search_activities\", \"parameters\": {\"properties\": {\"city\": {\"type\": \"STRING\"}}, \"required\": [\"city\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_activity\", \"parameters\": {\"properties\": {\"activity_id\": {\"type\": \"STRING\"}, \"date\": {\"type\": \"STRING\"}}, \"required\": [\"activity_id\", \"date\"], \"type\": \"OBJECT\"}}]}]}, \"contents\": [{\"parts\": [{\"text\": \"Hey, how can you help me\"}], \"role\": \"user\"}, {\"parts\": [{\"text\": \"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}], \"role\": \"model\"}, {\"parts\": [{\"text\": \"Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days\"}], \"role\": \"user\"}, {\"parts\": [{\"function_call\": {\"args\": {\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}, \"name\": \"search_flights\"}, \"thought_signature\": \"CtEGAQw51seqAksm_DEkpp-ldMFGFgt910IDaFMz4G5qtOJwkXRv0JcbKas179PGCPSsUFdh8SgXcJxMFCXzpWQ7vd6IsDEFuE-uMGNljrRug2lKR-V6E2_XAH3V91IyOskTg5R66hOf-QtKwMDhpiQldYiAlkhjYJHdC6T7iWEcQ_03hsESL_mvo_aKmeXecW_5E92Zt4v6vrdZQcCLtqsIPv20RyqrnrlDwSvzPXSg1X2QGIo8P7Rbfqz2S_vuiBxodMM6XbNfKHmncqaOxAxcGNrgt4dlHgBW1l-rg1w-7meR6lqTmLhlr1KnhiWN7SgRAPKfAy1e3qiL5Qnqfw9HAiD9ULgaTmo95mnQVX2s60G2g7NvopjgByfxJsDiiIo7eUvQuxECoP73LH5Es0GMz7-fhus86qgB85qqeCo-j77oXGmjUOtZQAdDN_b08BUZSifAtCJd5HR02yPpwnyYX1I9ShIoz8JB33WSiSD3Gw4YSuchdzZy8gexFDX-aBs2Q9iqwjf41hET_3tKbsUDb5-FgCmmNvLHTTh8ffHwbdsWty7edbEHRPw3-krGHCxj_yn8oFoPyril2atXMYzhHC3DLXjMPx-aVE5BJUpiqf1KwvdBdHeqLp7Jq1P5N30yIlAOljnFmlCMhdfg6sNSbZula8xROlP5lVpClC6H0HTi2b_gKhSDBl4gJCgW8AK9jEa8dMWRwr91K2-XnbXP_k0hCXQrQGzi90xbbcMd8-C1RpW9_cD0kC0Zk6mXV9MJZY_R1wcaeA3Yud3iPrs4lMXHJ8546J3nr3Tslg2m7NIo_o5P_N7boAHcHzMBShIsEnWcRk48krdjAvbUXaMnhDN-21GErP3XOcIrXN988ez2_jFp3jwOVhxZ9nTIeMO28UTuaJABqWgCWJh2glbhtSuWA--CR6skVds2kxOmimZP_4N_aXiKh1dRI5KikMApi05EHi9-ZuA4_SQIEqnm0tl8qUK1ljwlK3o-DE5Z93Qm0Cndc26yY-9FUyPqPBZ4jRI09jTTH1PcsduZYMawIi9Gj7iyGdd0D-hxAdwnSxZYiTthhvogo7S9AMQZDGNQnPQuVIo4daRWtQqTYMQ52uonLml1YSfgFBE4NWCT_TS4\"}], \"role\": \"model\"}, {\"parts\": [{\"function_response\": {\"name\": \"search_flights\", \"response\": {\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\", \"flights\": [{\"flight_id\": \"AA101\", \"departure\": \"06:00\", \"arrival\": \"14:30\", \"price\": 420, \"airline\": \"American\"}, {\"flight_id\": \"DL205\", \"departure\": \"09:15\", \"arrival\": \"17:45\", \"price\": 385, \"airline\": \"Delta\"}, {\"flight_id\": \"UA330\", \"departure\": \"14:00\", \"arrival\": \"22:30\", \"price\": 350, \"airline\": \"United\"}, {\"flight_id\": \"AA115\", \"departure\": \"16:30\", \"arrival\": \"01:00\", \"price\": 310, \"airline\": \"American\"}, {\"flight_id\": \"DL420\", \"departure\": \"20:00\", \"arrival\": \"04:30\", \"price\": 290, \"airline\": \"Delta\"}]}}}], \"role\": \"user\"}]}",
+        "gcp.vertex.agent.llm_response": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"function_call\":{\"args\":{\"flight_id\":\"DL420\"},\"name\":\"book_flight\"},\"thought_signature\":\"CskCAQw51sfz8bBiFaWlEcpzAz6QwgWXmhPKfDs4-1qGuqsBA6v_jVp-35nIEMY4MPX0BNfRCkK-G7PTxfq6o8l0ql4-mes3QbstKfMeDB90C3POlILy8gxOJdcSrpgDzomso2OO9tULWfs6OSOTngFpOQF4qDsioFB1E4bsm_h3US7YMIuWuc7YIgTqTIM8TPpkSu8gUREdE6g3jKGQtpBL9hJm1AflkITyySNB8A5DZZSGm8-J55HHihMZYJo7c6G63Z7MiqctjJ7KiduF-AfS9OlsVux_HdHUXtNX3agvVLuc9unkgMNzzpXlQEUMW9NbL4pyBESB6F-UntztnKiEd_SAsrFrQh0_3aZK5i83YHAoY9-EEHzMeKMKuigeMxaYOCxWoP5Jpp0EVE605kUirQdsFWuUDtUJPtNifDEpQfzaMlMT-m7IeFk=\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"cache_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":630}],\"cached_content_token_count\":630,\"candidates_token_count\":20,\"prompt_token_count\":1074,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":1074}],\"thoughts_token_count\":111,\"total_token_count\":1205}}",
+        "gen_ai.usage.input_tokens": 1074,
+        "gen_ai.usage.output_tokens": 20,
+        "gen_ai.usage.experimental.reasoning_tokens": 111,
+        "gen_ai.response.finish_reasons": [
+          "stop"
+        ],
+        "llm.provider": "google",
+        "input.value": "{\"model\":\"gemini-2.5-flash\",\"contents\":[{\"parts\":[{\"text\":\"Hey, how can you help me\"}],\"role\":\"user\"},{\"parts\":[{\"text\":\"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}],\"role\":\"model\"},{\"parts\":[{\"text\":\"Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days\"}],\"role\":\"user\"},{\"parts\":[{\"function_call\":{\"args\":{\"origin\":\"SEA\",\"destination\":\"NYC\",\"date\":\"2025-03-15\"},\"name\":\"search_flights\"},\"thought_signature\":\"CtEGAQw51seqAksm_DEkpp-ldMFGFgt910IDaFMz4G5qtOJwkXRv0JcbKas179PGCPSsUFdh8SgXcJxMFCXzpWQ7vd6IsDEFuE-uMGNljrRug2lKR-V6E2_XAH3V91IyOskTg5R66hOf-QtKwMDhpiQldYiAlkhjYJHdC6T7iWEcQ_03hsESL_mvo_aKmeXecW_5E92Zt4v6vrdZQcCLtqsIPv20RyqrnrlDwSvzPXSg1X2QGIo8P7Rbfqz2S_vuiBxodMM6XbNfKHmncqaOxAxcGNrgt4dlHgBW1l-rg1w-7meR6lqTmLhlr1KnhiWN7SgRAPKfAy1e3qiL5Qnqfw9HAiD9ULgaTmo95mnQVX2s60G2g7NvopjgByfxJsDiiIo7eUvQuxECoP73LH5Es0GMz7-fhus86qgB85qqeCo-j77oXGmjUOtZQAdDN_b08BUZSifAtCJd5HR02yPpwnyYX1I9ShIoz8JB33WSiSD3Gw4YSuchdzZy8gexFDX-aBs2Q9iqwjf41hET_3tKbsUDb5-FgCmmNvLHTTh8ffHwbdsWty7edbEHRPw3-krGHCxj_yn8oFoPyril2atXMYzhHC3DLXjMPx-aVE5BJUpiqf1KwvdBdHeqLp7Jq1P5N30yIlAOljnFmlCMhdfg6sNSbZula8xROlP5lVpClC6H0HTi2b_gKhSDBl4gJCgW8AK9jEa8dMWRwr91K2-XnbXP_k0hCXQrQGzi90xbbcMd8-C1RpW9_cD0kC0Zk6mXV9MJZY_R1wcaeA3Yud3iPrs4lMXHJ8546J3nr3Tslg2m7NIo_o5P_N7boAHcHzMBShIsEnWcRk48krdjAvbUXaMnhDN-21GErP3XOcIrXN988ez2_jFp3jwOVhxZ9nTIeMO28UTuaJABqWgCWJh2glbhtSuWA--CR6skVds2kxOmimZP_4N_aXiKh1dRI5KikMApi05EHi9-ZuA4_SQIEqnm0tl8qUK1ljwlK3o-DE5Z93Qm0Cndc26yY-9FUyPqPBZ4jRI09jTTH1PcsduZYMawIi9Gj7iyGdd0D-hxAdwnSxZYiTthhvogo7S9AMQZDGNQnPQuVIo4daRWtQqTYMQ52uonLml1YSfgFBE4NWCT_TS4\"}],\"role\":\"model\"},{\"parts\":[{\"function_response\":{\"name\":\"search_flights\",\"response\":{\"origin\":\"SEA\",\"destination\":\"NYC\",\"date\":\"2025-03-15\",\"flights\":[{\"flight_id\":\"AA101\",\"departure\":\"06:00\",\"arrival\":\"14:30\",\"price\":420,\"airline\":\"American\"},{\"flight_id\":\"DL205\",\"departure\":\"09:15\",\"arrival\":\"17:45\",\"price\":385,\"airline\":\"Delta\"},{\"flight_id\":\"UA330\",\"departure\":\"14:00\",\"arrival\":\"22:30\",\"price\":350,\"airline\":\"United\"},{\"flight_id\":\"AA115\",\"departure\":\"16:30\",\"arrival\":\"01:00\",\"price\":310,\"airline\":\"American\"},{\"flight_id\":\"DL420\",\"departure\":\"20:00\",\"arrival\":\"04:30\",\"price\":290,\"airline\":\"Delta\"}]}}}],\"role\":\"user\"}],\"config\":{\"http_options\":{\"headers\":{\"x-goog-api-client\":\"google-adk/1.33.0 gl-python/3.13.1\",\"user-agent\":\"google-adk/1.33.0 gl-python/3.13.1\"}},\"system_instruction\":\"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\",\"tools\":[{\"function_declarations\":[{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}]}]},\"live_connect_config\":{\"input_audio_transcription\":{},\"output_audio_transcription\":{}}}",
+        "input.mime_type": "application/json",
+        "llm.tools.0.tool.json_schema": "{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.1.tool.json_schema": "{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.2.tool.json_schema": "{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.3.tool.json_schema": "{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.4.tool.json_schema": "{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.5.tool.json_schema": "{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}",
+        "llm.model_name": "gemini-2.5-flash",
+        "llm.invocation_parameters": "{\"http_options\":{\"headers\":{\"x-goog-api-client\":\"google-adk/1.33.0 gl-python/3.13.1\",\"user-agent\":\"google-adk/1.33.0 gl-python/3.13.1\"}},\"system_instruction\":\"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\",\"tools\":[{\"function_declarations\":[{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}]}]}",
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.0.message.content": "You are a travel planning assistant. Help users plan trips by:\n- Searching and booking flights\n- Finding and booking hotels\n- Suggesting and booking activities\n\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\nAlways use the airport code when calling tools, not the full city name.\n\n\nYou are an agent. Your internal name is \"googleInMemory\". The description about you is \"Travel planning assistant\".",
+        "llm.input_messages.1.message.role": "user",
+        "llm.input_messages.1.message.contents.0.message_content.text": "Hey, how can you help me",
+        "llm.input_messages.1.message.contents.0.message_content.type": "text",
+        "llm.input_messages.2.message.role": "model",
+        "llm.input_messages.2.message.contents.0.message_content.text": "I can help you plan your trip! I can:\n- Search and book flights\n- Find and book hotels\n- Suggest and book activities",
+        "llm.input_messages.2.message.contents.0.message_content.type": "text",
+        "llm.input_messages.3.message.role": "user",
+        "llm.input_messages.3.message.contents.0.message_content.text": "Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days",
+        "llm.input_messages.3.message.contents.0.message_content.type": "text",
+        "llm.input_messages.4.message.role": "model",
+        "llm.input_messages.4.message.tool_calls.0.tool_call.function.name": "search_flights",
+        "llm.input_messages.4.message.tool_calls.0.tool_call.function.arguments": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}",
+        "llm.input_messages.5.message.role": "tool",
+        "llm.input_messages.5.message.name": "search_flights",
+        "llm.input_messages.5.message.content": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\", \"flights\": [{\"flight_id\": \"AA101\", \"departure\": \"06:00\", \"arrival\": \"14:30\", \"price\": 420, \"airline\": \"American\"}, {\"flight_id\": \"DL205\", \"departure\": \"09:15\", \"arrival\": \"17:45\", \"price\": 385, \"airline\": \"Delta\"}, {\"flight_id\": \"UA330\", \"departure\": \"14:00\", \"arrival\": \"22:30\", \"price\": 350, \"airline\": \"United\"}, {\"flight_id\": \"AA115\", \"departure\": \"16:30\", \"arrival\": \"01:00\", \"price\": 310, \"airline\": \"American\"}, {\"flight_id\": \"DL420\", \"departure\": \"20:00\", \"arrival\": \"04:30\", \"price\": 290, \"airline\": \"Delta\"}]}",
+        "output.value": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"function_call\":{\"args\":{\"flight_id\":\"DL420\"},\"name\":\"book_flight\"},\"thought_signature\":\"CskCAQw51sfz8bBiFaWlEcpzAz6QwgWXmhPKfDs4-1qGuqsBA6v_jVp-35nIEMY4MPX0BNfRCkK-G7PTxfq6o8l0ql4-mes3QbstKfMeDB90C3POlILy8gxOJdcSrpgDzomso2OO9tULWfs6OSOTngFpOQF4qDsioFB1E4bsm_h3US7YMIuWuc7YIgTqTIM8TPpkSu8gUREdE6g3jKGQtpBL9hJm1AflkITyySNB8A5DZZSGm8-J55HHihMZYJo7c6G63Z7MiqctjJ7KiduF-AfS9OlsVux_HdHUXtNX3agvVLuc9unkgMNzzpXlQEUMW9NbL4pyBESB6F-UntztnKiEd_SAsrFrQh0_3aZK5i83YHAoY9-EEHzMeKMKuigeMxaYOCxWoP5Jpp0EVE605kUirQdsFWuUDtUJPtNifDEpQfzaMlMT-m7IeFk=\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"cache_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":630}],\"cached_content_token_count\":630,\"candidates_token_count\":20,\"prompt_token_count\":1074,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":1074}],\"thoughts_token_count\":111,\"total_token_count\":1205}}",
+        "output.mime_type": "application/json",
+        "llm.token_count.total": 1205,
+        "llm.token_count.prompt": 1074,
+        "llm.token_count.completion_details.reasoning": 111,
+        "llm.token_count.completion": 131,
+        "llm.output_messages.0.message.role": "model",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.name": "book_flight",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments": "{\"flight_id\": \"DL420\"}",
+        "openinference.span.kind": "LLM"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-006"
+    },
+    {
+      "name": "execute_tool search_hotels",
+      "context": {
+        "trace_id": "0xc5663c3f398e198c64d7146028bc4c8d",
+        "span_id": "0x130bbe279e532b6e",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": "0x6c553e8efe7ac1be",
+      "start_time": "2026-05-18T00:19:08.593415Z",
+      "end_time": "2026-05-18T00:19:08.593675Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "session.id": "test_session",
+        "user.id": "test_user",
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.description": "Search for available hotels in a city.\nArgs:\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\n    checkin: Check-in date.\n    checkout: Check-out date.\nReturns:\n    dict: Hotel search results.",
+        "gen_ai.tool.name": "search_hotels",
+        "gen_ai.tool.type": "FunctionTool",
+        "gcp.vertex.agent.llm_request": "{}",
+        "gcp.vertex.agent.llm_response": "{}",
+        "gcp.vertex.agent.tool_call_args": "{\"checkout\": \"2025-03-18\", \"city\": \"NYC\", \"checkin\": \"2025-03-15\"}",
+        "gen_ai.tool.call.id": "adk-c8fa2b80-8289-4243-abbc-466145ae0d7c",
+        "gcp.vertex.agent.event_id": "9600f728-af51-4b74-87ec-dfac6403693f",
+        "gcp.vertex.agent.tool_response": "{\"city\": \"NYC\", \"checkin\": \"2025-03-15\", \"checkout\": \"2025-03-18\", \"hotels\": [{\"hotel_id\": \"NYC001\", \"name\": \"The Plaza\", \"price_per_night\": 450, \"rating\": 5, \"neighborhood\": \"Midtown\"}, {\"hotel_id\": \"NYC002\", \"name\": \"Pod 51\", \"price_per_night\": 120, \"rating\": 3, \"neighborhood\": \"Midtown\"}, {\"hotel_id\": \"NYC003\", \"name\": \"The Standard\", \"price_per_night\": 280, \"rating\": 4, \"neighborhood\": \"Meatpacking\"}, {\"hotel_id\": \"NYC004\", \"name\": \"Ace Hotel\", \"price_per_night\": 220, \"rating\": 4, \"neighborhood\": \"NoMad\"}, {\"hotel_id\": \"NYC005\", \"name\": \"citizenM Times Square\", \"price_per_night\": 175, \"rating\": 4, \"neighborhood\": \"Times Square\"}]}",
+        "tool.name": "search_hotels",
+        "tool.description": "Search for available hotels in a city.\nArgs:\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\n    checkin: Check-in date.\n    checkout: Check-out date.\nReturns:\n    dict: Hotel search results.",
+        "tool.parameters": "{\"checkout\": \"2025-03-18\", \"city\": \"NYC\", \"checkin\": \"2025-03-15\"}",
+        "input.value": "{\"checkout\": \"2025-03-18\", \"city\": \"NYC\", \"checkin\": \"2025-03-15\"}",
+        "input.mime_type": "application/json",
+        "output.value": "{\"id\":\"adk-c8fa2b80-8289-4243-abbc-466145ae0d7c\",\"name\":\"search_hotels\",\"response\":{\"city\":\"NYC\",\"checkin\":\"2025-03-15\",\"checkout\":\"2025-03-18\",\"hotels\":[{\"hotel_id\":\"NYC001\",\"name\":\"The Plaza\",\"price_per_night\":450,\"rating\":5,\"neighborhood\":\"Midtown\"},{\"hotel_id\":\"NYC002\",\"name\":\"Pod 51\",\"price_per_night\":120,\"rating\":3,\"neighborhood\":\"Midtown\"},{\"hotel_id\":\"NYC003\",\"name\":\"The Standard\",\"price_per_night\":280,\"rating\":4,\"neighborhood\":\"Meatpacking\"},{\"hotel_id\":\"NYC004\",\"name\":\"Ace Hotel\",\"price_per_night\":220,\"rating\":4,\"neighborhood\":\"NoMad\"},{\"hotel_id\":\"NYC005\",\"name\":\"citizenM Times Square\",\"price_per_night\":175,\"rating\":4,\"neighborhood\":\"Times Square\"}]}}",
+        "output.mime_type": "application/json",
+        "openinference.span.kind": "TOOL"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-007"
+    },
+    {
+      "name": "call_llm",
+      "context": {
+        "trace_id": "0xc5663c3f398e198c64d7146028bc4c8d",
+        "span_id": "0x6c553e8efe7ac1be",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": "0xcfb46936b280499f",
+      "start_time": "2026-05-18T00:19:07.382880Z",
+      "end_time": "2026-05-18T00:19:08.593790Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "session.id": "test_session",
+        "gen_ai.operation.name": "generate_content",
+        "gen_ai.agent.name": "googleInMemory",
+        "gen_ai.conversation.id": "test_session",
+        "user.id": "test_user",
+        "gen_ai.system": "gcp.vertex.agent",
+        "gen_ai.request.model": "gemini-2.5-flash",
+        "gcp.vertex.agent.invocation_id": "e-8eda8949-1dbd-4c74-bdb6-f56e280f5df4",
+        "gcp.vertex.agent.session_id": "test_session",
+        "gcp.vertex.agent.event_id": "e5d9ae64-eaed-45da-b35f-98ef62d13624",
+        "gcp.vertex.agent.llm_request": "{\"model\": \"gemini-2.5-flash\", \"config\": {\"http_options\": {\"headers\": {\"x-goog-api-client\": \"google-adk/1.33.0 gl-python/3.13.1\", \"user-agent\": \"google-adk/1.33.0 gl-python/3.13.1\"}}, \"system_instruction\": \"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\", \"tools\": [{\"function_declarations\": [{\"description\": \"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\", \"name\": \"search_flights\", \"parameters\": {\"properties\": {\"origin\": {\"type\": \"STRING\"}, \"destination\": {\"type\": \"STRING\"}, \"date\": {\"type\": \"STRING\"}}, \"required\": [\"origin\", \"destination\", \"date\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_flight\", \"parameters\": {\"properties\": {\"flight_id\": {\"type\": \"STRING\"}}, \"required\": [\"flight_id\"], \"type\": \"OBJECT\"}}, {\"description\": \"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\", \"name\": \"search_hotels\", \"parameters\": {\"properties\": {\"city\": {\"type\": \"STRING\"}, \"checkin\": {\"type\": \"STRING\"}, \"checkout\": {\"type\": \"STRING\"}}, \"required\": [\"city\", \"checkin\", \"checkout\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_hotel\", \"parameters\": {\"properties\": {\"hotel_id\": {\"type\": \"STRING\"}, \"checkin\": {\"type\": \"STRING\"}, \"checkout\": {\"type\": \"STRING\"}}, \"required\": [\"hotel_id\", \"checkin\", \"checkout\"], \"type\": \"OBJECT\"}}, {\"description\": \"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\", \"name\": \"search_activities\", \"parameters\": {\"properties\": {\"city\": {\"type\": \"STRING\"}}, \"required\": [\"city\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_activity\", \"parameters\": {\"properties\": {\"activity_id\": {\"type\": \"STRING\"}, \"date\": {\"type\": \"STRING\"}}, \"required\": [\"activity_id\", \"date\"], \"type\": \"OBJECT\"}}]}]}, \"contents\": [{\"parts\": [{\"text\": \"Hey, how can you help me\"}], \"role\": \"user\"}, {\"parts\": [{\"text\": \"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}], \"role\": \"model\"}, {\"parts\": [{\"text\": \"Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days\"}], \"role\": \"user\"}, {\"parts\": [{\"function_call\": {\"args\": {\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}, \"name\": \"search_flights\"}, \"thought_signature\": \"CtEGAQw51seqAksm_DEkpp-ldMFGFgt910IDaFMz4G5qtOJwkXRv0JcbKas179PGCPSsUFdh8SgXcJxMFCXzpWQ7vd6IsDEFuE-uMGNljrRug2lKR-V6E2_XAH3V91IyOskTg5R66hOf-QtKwMDhpiQldYiAlkhjYJHdC6T7iWEcQ_03hsESL_mvo_aKmeXecW_5E92Zt4v6vrdZQcCLtqsIPv20RyqrnrlDwSvzPXSg1X2QGIo8P7Rbfqz2S_vuiBxodMM6XbNfKHmncqaOxAxcGNrgt4dlHgBW1l-rg1w-7meR6lqTmLhlr1KnhiWN7SgRAPKfAy1e3qiL5Qnqfw9HAiD9ULgaTmo95mnQVX2s60G2g7NvopjgByfxJsDiiIo7eUvQuxECoP73LH5Es0GMz7-fhus86qgB85qqeCo-j77oXGmjUOtZQAdDN_b08BUZSifAtCJd5HR02yPpwnyYX1I9ShIoz8JB33WSiSD3Gw4YSuchdzZy8gexFDX-aBs2Q9iqwjf41hET_3tKbsUDb5-FgCmmNvLHTTh8ffHwbdsWty7edbEHRPw3-krGHCxj_yn8oFoPyril2atXMYzhHC3DLXjMPx-aVE5BJUpiqf1KwvdBdHeqLp7Jq1P5N30yIlAOljnFmlCMhdfg6sNSbZula8xROlP5lVpClC6H0HTi2b_gKhSDBl4gJCgW8AK9jEa8dMWRwr91K2-XnbXP_k0hCXQrQGzi90xbbcMd8-C1RpW9_cD0kC0Zk6mXV9MJZY_R1wcaeA3Yud3iPrs4lMXHJ8546J3nr3Tslg2m7NIo_o5P_N7boAHcHzMBShIsEnWcRk48krdjAvbUXaMnhDN-21GErP3XOcIrXN988ez2_jFp3jwOVhxZ9nTIeMO28UTuaJABqWgCWJh2glbhtSuWA--CR6skVds2kxOmimZP_4N_aXiKh1dRI5KikMApi05EHi9-ZuA4_SQIEqnm0tl8qUK1ljwlK3o-DE5Z93Qm0Cndc26yY-9FUyPqPBZ4jRI09jTTH1PcsduZYMawIi9Gj7iyGdd0D-hxAdwnSxZYiTthhvogo7S9AMQZDGNQnPQuVIo4daRWtQqTYMQ52uonLml1YSfgFBE4NWCT_TS4\"}], \"role\": \"model\"}, {\"parts\": [{\"function_response\": {\"name\": \"search_flights\", \"response\": {\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\", \"flights\": [{\"flight_id\": \"AA101\", \"departure\": \"06:00\", \"arrival\": \"14:30\", \"price\": 420, \"airline\": \"American\"}, {\"flight_id\": \"DL205\", \"departure\": \"09:15\", \"arrival\": \"17:45\", \"price\": 385, \"airline\": \"Delta\"}, {\"flight_id\": \"UA330\", \"departure\": \"14:00\", \"arrival\": \"22:30\", \"price\": 350, \"airline\": \"United\"}, {\"flight_id\": \"AA115\", \"departure\": \"16:30\", \"arrival\": \"01:00\", \"price\": 310, \"airline\": \"American\"}, {\"flight_id\": \"DL420\", \"departure\": \"20:00\", \"arrival\": \"04:30\", \"price\": 290, \"airline\": \"Delta\"}]}}}], \"role\": \"user\"}, {\"parts\": [{\"function_call\": {\"args\": {\"flight_id\": \"DL420\"}, \"name\": \"book_flight\"}, \"thought_signature\": \"CskCAQw51sfz8bBiFaWlEcpzAz6QwgWXmhPKfDs4-1qGuqsBA6v_jVp-35nIEMY4MPX0BNfRCkK-G7PTxfq6o8l0ql4-mes3QbstKfMeDB90C3POlILy8gxOJdcSrpgDzomso2OO9tULWfs6OSOTngFpOQF4qDsioFB1E4bsm_h3US7YMIuWuc7YIgTqTIM8TPpkSu8gUREdE6g3jKGQtpBL9hJm1AflkITyySNB8A5DZZSGm8-J55HHihMZYJo7c6G63Z7MiqctjJ7KiduF-AfS9OlsVux_HdHUXtNX3agvVLuc9unkgMNzzpXlQEUMW9NbL4pyBESB6F-UntztnKiEd_SAsrFrQh0_3aZK5i83YHAoY9-EEHzMeKMKuigeMxaYOCxWoP5Jpp0EVE605kUirQdsFWuUDtUJPtNifDEpQfzaMlMT-m7IeFk=\"}], \"role\": \"model\"}, {\"parts\": [{\"function_response\": {\"name\": \"book_flight\", \"response\": {\"booking_id\": \"FBDL420\", \"flight_id\": \"DL420\", \"status\": \"confirmed\"}}}], \"role\": \"user\"}]}",
+        "gcp.vertex.agent.llm_response": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"function_call\":{\"args\":{\"checkout\":\"2025-03-18\",\"city\":\"NYC\",\"checkin\":\"2025-03-15\"},\"name\":\"search_hotels\"},\"thought_signature\":\"CpkCAQw51sc12TyNC7V4eoEwBIpXKwpIMdj2yUFwjiJwvm6quLi_v1VfnJAIMHWqH1MAn4lY5KrA-3QijHT7TYZatFsLIHxcCq7JLmsufd7C33GOnN71h-zecVaAbieijkMy780v1Rtl0SOGGvrFEzZ4IKbxGxOJoNx_xk1NJqpCg5tKho2oNuUf90gE1r385Y1yqRWl-DabNGz3W6jKfZDXYrRUZy6Q_JPdZsKmaTp-g0DE1Fcmr9vS6uicX-HFAbTzfkwoslMMMJWmCBBUEl3n4qOo1gc9SoWY2bceH_icxJVU8kshjQM-ukBs4VNkuPXLjfSlsJTmJVlGdMx3ZAp2_vYdgvKsTyLqWZ4Cg7AsThyrjkjlmsIObQM=\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"cache_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":600}],\"cached_content_token_count\":600,\"candidates_token_count\":44,\"prompt_token_count\":1133,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":1133}],\"thoughts_token_count\":94,\"total_token_count\":1271}}",
+        "gen_ai.usage.input_tokens": 1133,
+        "gen_ai.usage.output_tokens": 44,
+        "gen_ai.usage.experimental.reasoning_tokens": 94,
+        "gen_ai.response.finish_reasons": [
+          "stop"
+        ],
+        "llm.provider": "google",
+        "input.value": "{\"model\":\"gemini-2.5-flash\",\"contents\":[{\"parts\":[{\"text\":\"Hey, how can you help me\"}],\"role\":\"user\"},{\"parts\":[{\"text\":\"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}],\"role\":\"model\"},{\"parts\":[{\"text\":\"Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days\"}],\"role\":\"user\"},{\"parts\":[{\"function_call\":{\"args\":{\"origin\":\"SEA\",\"destination\":\"NYC\",\"date\":\"2025-03-15\"},\"name\":\"search_flights\"},\"thought_signature\":\"CtEGAQw51seqAksm_DEkpp-ldMFGFgt910IDaFMz4G5qtOJwkXRv0JcbKas179PGCPSsUFdh8SgXcJxMFCXzpWQ7vd6IsDEFuE-uMGNljrRug2lKR-V6E2_XAH3V91IyOskTg5R66hOf-QtKwMDhpiQldYiAlkhjYJHdC6T7iWEcQ_03hsESL_mvo_aKmeXecW_5E92Zt4v6vrdZQcCLtqsIPv20RyqrnrlDwSvzPXSg1X2QGIo8P7Rbfqz2S_vuiBxodMM6XbNfKHmncqaOxAxcGNrgt4dlHgBW1l-rg1w-7meR6lqTmLhlr1KnhiWN7SgRAPKfAy1e3qiL5Qnqfw9HAiD9ULgaTmo95mnQVX2s60G2g7NvopjgByfxJsDiiIo7eUvQuxECoP73LH5Es0GMz7-fhus86qgB85qqeCo-j77oXGmjUOtZQAdDN_b08BUZSifAtCJd5HR02yPpwnyYX1I9ShIoz8JB33WSiSD3Gw4YSuchdzZy8gexFDX-aBs2Q9iqwjf41hET_3tKbsUDb5-FgCmmNvLHTTh8ffHwbdsWty7edbEHRPw3-krGHCxj_yn8oFoPyril2atXMYzhHC3DLXjMPx-aVE5BJUpiqf1KwvdBdHeqLp7Jq1P5N30yIlAOljnFmlCMhdfg6sNSbZula8xROlP5lVpClC6H0HTi2b_gKhSDBl4gJCgW8AK9jEa8dMWRwr91K2-XnbXP_k0hCXQrQGzi90xbbcMd8-C1RpW9_cD0kC0Zk6mXV9MJZY_R1wcaeA3Yud3iPrs4lMXHJ8546J3nr3Tslg2m7NIo_o5P_N7boAHcHzMBShIsEnWcRk48krdjAvbUXaMnhDN-21GErP3XOcIrXN988ez2_jFp3jwOVhxZ9nTIeMO28UTuaJABqWgCWJh2glbhtSuWA--CR6skVds2kxOmimZP_4N_aXiKh1dRI5KikMApi05EHi9-ZuA4_SQIEqnm0tl8qUK1ljwlK3o-DE5Z93Qm0Cndc26yY-9FUyPqPBZ4jRI09jTTH1PcsduZYMawIi9Gj7iyGdd0D-hxAdwnSxZYiTthhvogo7S9AMQZDGNQnPQuVIo4daRWtQqTYMQ52uonLml1YSfgFBE4NWCT_TS4\"}],\"role\":\"model\"},{\"parts\":[{\"function_response\":{\"name\":\"search_flights\",\"response\":{\"origin\":\"SEA\",\"destination\":\"NYC\",\"date\":\"2025-03-15\",\"flights\":[{\"flight_id\":\"AA101\",\"departure\":\"06:00\",\"arrival\":\"14:30\",\"price\":420,\"airline\":\"American\"},{\"flight_id\":\"DL205\",\"departure\":\"09:15\",\"arrival\":\"17:45\",\"price\":385,\"airline\":\"Delta\"},{\"flight_id\":\"UA330\",\"departure\":\"14:00\",\"arrival\":\"22:30\",\"price\":350,\"airline\":\"United\"},{\"flight_id\":\"AA115\",\"departure\":\"16:30\",\"arrival\":\"01:00\",\"price\":310,\"airline\":\"American\"},{\"flight_id\":\"DL420\",\"departure\":\"20:00\",\"arrival\":\"04:30\",\"price\":290,\"airline\":\"Delta\"}]}}}],\"role\":\"user\"},{\"parts\":[{\"function_call\":{\"args\":{\"flight_id\":\"DL420\"},\"name\":\"book_flight\"},\"thought_signature\":\"CskCAQw51sfz8bBiFaWlEcpzAz6QwgWXmhPKfDs4-1qGuqsBA6v_jVp-35nIEMY4MPX0BNfRCkK-G7PTxfq6o8l0ql4-mes3QbstKfMeDB90C3POlILy8gxOJdcSrpgDzomso2OO9tULWfs6OSOTngFpOQF4qDsioFB1E4bsm_h3US7YMIuWuc7YIgTqTIM8TPpkSu8gUREdE6g3jKGQtpBL9hJm1AflkITyySNB8A5DZZSGm8-J55HHihMZYJo7c6G63Z7MiqctjJ7KiduF-AfS9OlsVux_HdHUXtNX3agvVLuc9unkgMNzzpXlQEUMW9NbL4pyBESB6F-UntztnKiEd_SAsrFrQh0_3aZK5i83YHAoY9-EEHzMeKMKuigeMxaYOCxWoP5Jpp0EVE605kUirQdsFWuUDtUJPtNifDEpQfzaMlMT-m7IeFk=\"}],\"role\":\"model\"},{\"parts\":[{\"function_response\":{\"name\":\"book_flight\",\"response\":{\"booking_id\":\"FBDL420\",\"flight_id\":\"DL420\",\"status\":\"confirmed\"}}}],\"role\":\"user\"}],\"config\":{\"http_options\":{\"headers\":{\"x-goog-api-client\":\"google-adk/1.33.0 gl-python/3.13.1\",\"user-agent\":\"google-adk/1.33.0 gl-python/3.13.1\"}},\"system_instruction\":\"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\",\"tools\":[{\"function_declarations\":[{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}]}]},\"live_connect_config\":{\"input_audio_transcription\":{},\"output_audio_transcription\":{}}}",
+        "input.mime_type": "application/json",
+        "llm.tools.0.tool.json_schema": "{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.1.tool.json_schema": "{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.2.tool.json_schema": "{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.3.tool.json_schema": "{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.4.tool.json_schema": "{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.5.tool.json_schema": "{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}",
+        "llm.model_name": "gemini-2.5-flash",
+        "llm.invocation_parameters": "{\"http_options\":{\"headers\":{\"x-goog-api-client\":\"google-adk/1.33.0 gl-python/3.13.1\",\"user-agent\":\"google-adk/1.33.0 gl-python/3.13.1\"}},\"system_instruction\":\"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\",\"tools\":[{\"function_declarations\":[{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}]}]}",
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.0.message.content": "You are a travel planning assistant. Help users plan trips by:\n- Searching and booking flights\n- Finding and booking hotels\n- Suggesting and booking activities\n\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\nAlways use the airport code when calling tools, not the full city name.\n\n\nYou are an agent. Your internal name is \"googleInMemory\". The description about you is \"Travel planning assistant\".",
+        "llm.input_messages.1.message.role": "user",
+        "llm.input_messages.1.message.contents.0.message_content.text": "Hey, how can you help me",
+        "llm.input_messages.1.message.contents.0.message_content.type": "text",
+        "llm.input_messages.2.message.role": "model",
+        "llm.input_messages.2.message.contents.0.message_content.text": "I can help you plan your trip! I can:\n- Search and book flights\n- Find and book hotels\n- Suggest and book activities",
+        "llm.input_messages.2.message.contents.0.message_content.type": "text",
+        "llm.input_messages.3.message.role": "user",
+        "llm.input_messages.3.message.contents.0.message_content.text": "Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days",
+        "llm.input_messages.3.message.contents.0.message_content.type": "text",
+        "llm.input_messages.4.message.role": "model",
+        "llm.input_messages.4.message.tool_calls.0.tool_call.function.name": "search_flights",
+        "llm.input_messages.4.message.tool_calls.0.tool_call.function.arguments": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}",
+        "llm.input_messages.5.message.role": "tool",
+        "llm.input_messages.5.message.name": "search_flights",
+        "llm.input_messages.5.message.content": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\", \"flights\": [{\"flight_id\": \"AA101\", \"departure\": \"06:00\", \"arrival\": \"14:30\", \"price\": 420, \"airline\": \"American\"}, {\"flight_id\": \"DL205\", \"departure\": \"09:15\", \"arrival\": \"17:45\", \"price\": 385, \"airline\": \"Delta\"}, {\"flight_id\": \"UA330\", \"departure\": \"14:00\", \"arrival\": \"22:30\", \"price\": 350, \"airline\": \"United\"}, {\"flight_id\": \"AA115\", \"departure\": \"16:30\", \"arrival\": \"01:00\", \"price\": 310, \"airline\": \"American\"}, {\"flight_id\": \"DL420\", \"departure\": \"20:00\", \"arrival\": \"04:30\", \"price\": 290, \"airline\": \"Delta\"}]}",
+        "llm.input_messages.6.message.role": "model",
+        "llm.input_messages.6.message.tool_calls.0.tool_call.function.name": "book_flight",
+        "llm.input_messages.6.message.tool_calls.0.tool_call.function.arguments": "{\"flight_id\": \"DL420\"}",
+        "llm.input_messages.7.message.role": "tool",
+        "llm.input_messages.7.message.name": "book_flight",
+        "llm.input_messages.7.message.content": "{\"booking_id\": \"FBDL420\", \"flight_id\": \"DL420\", \"status\": \"confirmed\"}",
+        "output.value": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"function_call\":{\"args\":{\"checkout\":\"2025-03-18\",\"city\":\"NYC\",\"checkin\":\"2025-03-15\"},\"name\":\"search_hotels\"},\"thought_signature\":\"CpkCAQw51sc12TyNC7V4eoEwBIpXKwpIMdj2yUFwjiJwvm6quLi_v1VfnJAIMHWqH1MAn4lY5KrA-3QijHT7TYZatFsLIHxcCq7JLmsufd7C33GOnN71h-zecVaAbieijkMy780v1Rtl0SOGGvrFEzZ4IKbxGxOJoNx_xk1NJqpCg5tKho2oNuUf90gE1r385Y1yqRWl-DabNGz3W6jKfZDXYrRUZy6Q_JPdZsKmaTp-g0DE1Fcmr9vS6uicX-HFAbTzfkwoslMMMJWmCBBUEl3n4qOo1gc9SoWY2bceH_icxJVU8kshjQM-ukBs4VNkuPXLjfSlsJTmJVlGdMx3ZAp2_vYdgvKsTyLqWZ4Cg7AsThyrjkjlmsIObQM=\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"cache_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":600}],\"cached_content_token_count\":600,\"candidates_token_count\":44,\"prompt_token_count\":1133,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":1133}],\"thoughts_token_count\":94,\"total_token_count\":1271}}",
+        "output.mime_type": "application/json",
+        "llm.token_count.total": 1271,
+        "llm.token_count.prompt": 1133,
+        "llm.token_count.completion_details.reasoning": 94,
+        "llm.token_count.completion": 138,
+        "llm.output_messages.0.message.role": "model",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.name": "search_hotels",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments": "{\"checkout\": \"2025-03-18\", \"city\": \"NYC\", \"checkin\": \"2025-03-15\"}",
+        "openinference.span.kind": "LLM"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-008"
+    },
+    {
+      "name": "execute_tool book_hotel",
+      "context": {
+        "trace_id": "0xc5663c3f398e198c64d7146028bc4c8d",
+        "span_id": "0x8e8968c3a16562b0",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": "0x4c7fea215c773081",
+      "start_time": "2026-05-18T00:19:09.885251Z",
+      "end_time": "2026-05-18T00:19:09.885436Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "session.id": "test_session",
+        "user.id": "test_user",
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.description": "Book a specific hotel by ID.\nArgs:\n    hotel_id: The hotel ID to book.\n    checkin: Check-in date.\n    checkout: Check-out date.\nReturns:\n    dict: Booking confirmation.",
+        "gen_ai.tool.name": "book_hotel",
+        "gen_ai.tool.type": "FunctionTool",
+        "gcp.vertex.agent.llm_request": "{}",
+        "gcp.vertex.agent.llm_response": "{}",
+        "gcp.vertex.agent.tool_call_args": "{\"checkout\": \"2025-03-18\", \"hotel_id\": \"NYC001\", \"checkin\": \"2025-03-15\"}",
+        "gen_ai.tool.call.id": "adk-1fa36e44-f946-4a5a-8761-b9a8d9c9b214",
+        "gcp.vertex.agent.event_id": "51ffc691-01d4-4225-b933-26b58715a115",
+        "gcp.vertex.agent.tool_response": "{\"booking_id\": \"HBNYC001\", \"hotel_id\": \"NYC001\", \"checkin\": \"2025-03-15\", \"checkout\": \"2025-03-18\", \"status\": \"confirmed\"}",
+        "tool.name": "book_hotel",
+        "tool.description": "Book a specific hotel by ID.\nArgs:\n    hotel_id: The hotel ID to book.\n    checkin: Check-in date.\n    checkout: Check-out date.\nReturns:\n    dict: Booking confirmation.",
+        "tool.parameters": "{\"checkout\": \"2025-03-18\", \"hotel_id\": \"NYC001\", \"checkin\": \"2025-03-15\"}",
+        "input.value": "{\"checkout\": \"2025-03-18\", \"hotel_id\": \"NYC001\", \"checkin\": \"2025-03-15\"}",
+        "input.mime_type": "application/json",
+        "output.value": "{\"id\":\"adk-1fa36e44-f946-4a5a-8761-b9a8d9c9b214\",\"name\":\"book_hotel\",\"response\":{\"booking_id\":\"HBNYC001\",\"hotel_id\":\"NYC001\",\"checkin\":\"2025-03-15\",\"checkout\":\"2025-03-18\",\"status\":\"confirmed\"}}",
+        "output.mime_type": "application/json",
+        "openinference.span.kind": "TOOL"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-009"
+    },
+    {
+      "name": "call_llm",
+      "context": {
+        "trace_id": "0xc5663c3f398e198c64d7146028bc4c8d",
+        "span_id": "0x4c7fea215c773081",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": "0xcfb46936b280499f",
+      "start_time": "2026-05-18T00:19:08.595607Z",
+      "end_time": "2026-05-18T00:19:09.885646Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "session.id": "test_session",
+        "gen_ai.operation.name": "generate_content",
+        "gen_ai.agent.name": "googleInMemory",
+        "gen_ai.conversation.id": "test_session",
+        "user.id": "test_user",
+        "gen_ai.system": "gcp.vertex.agent",
+        "gen_ai.request.model": "gemini-2.5-flash",
+        "gcp.vertex.agent.invocation_id": "e-8eda8949-1dbd-4c74-bdb6-f56e280f5df4",
+        "gcp.vertex.agent.session_id": "test_session",
+        "gcp.vertex.agent.event_id": "1a105db6-8d11-498e-a091-497c90c7f7ea",
+        "gcp.vertex.agent.llm_request": "{\"model\": \"gemini-2.5-flash\", \"config\": {\"http_options\": {\"headers\": {\"x-goog-api-client\": \"google-adk/1.33.0 gl-python/3.13.1\", \"user-agent\": \"google-adk/1.33.0 gl-python/3.13.1\"}}, \"system_instruction\": \"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\", \"tools\": [{\"function_declarations\": [{\"description\": \"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\", \"name\": \"search_flights\", \"parameters\": {\"properties\": {\"origin\": {\"type\": \"STRING\"}, \"destination\": {\"type\": \"STRING\"}, \"date\": {\"type\": \"STRING\"}}, \"required\": [\"origin\", \"destination\", \"date\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_flight\", \"parameters\": {\"properties\": {\"flight_id\": {\"type\": \"STRING\"}}, \"required\": [\"flight_id\"], \"type\": \"OBJECT\"}}, {\"description\": \"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\", \"name\": \"search_hotels\", \"parameters\": {\"properties\": {\"city\": {\"type\": \"STRING\"}, \"checkin\": {\"type\": \"STRING\"}, \"checkout\": {\"type\": \"STRING\"}}, \"required\": [\"city\", \"checkin\", \"checkout\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_hotel\", \"parameters\": {\"properties\": {\"hotel_id\": {\"type\": \"STRING\"}, \"checkin\": {\"type\": \"STRING\"}, \"checkout\": {\"type\": \"STRING\"}}, \"required\": [\"hotel_id\", \"checkin\", \"checkout\"], \"type\": \"OBJECT\"}}, {\"description\": \"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\", \"name\": \"search_activities\", \"parameters\": {\"properties\": {\"city\": {\"type\": \"STRING\"}}, \"required\": [\"city\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_activity\", \"parameters\": {\"properties\": {\"activity_id\": {\"type\": \"STRING\"}, \"date\": {\"type\": \"STRING\"}}, \"required\": [\"activity_id\", \"date\"], \"type\": \"OBJECT\"}}]}]}, \"contents\": [{\"parts\": [{\"text\": \"Hey, how can you help me\"}], \"role\": \"user\"}, {\"parts\": [{\"text\": \"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}], \"role\": \"model\"}, {\"parts\": [{\"text\": \"Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days\"}], \"role\": \"user\"}, {\"parts\": [{\"function_call\": {\"args\": {\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}, \"name\": \"search_flights\"}, \"thought_signature\": \"CtEGAQw51seqAksm_DEkpp-ldMFGFgt910IDaFMz4G5qtOJwkXRv0JcbKas179PGCPSsUFdh8SgXcJxMFCXzpWQ7vd6IsDEFuE-uMGNljrRug2lKR-V6E2_XAH3V91IyOskTg5R66hOf-QtKwMDhpiQldYiAlkhjYJHdC6T7iWEcQ_03hsESL_mvo_aKmeXecW_5E92Zt4v6vrdZQcCLtqsIPv20RyqrnrlDwSvzPXSg1X2QGIo8P7Rbfqz2S_vuiBxodMM6XbNfKHmncqaOxAxcGNrgt4dlHgBW1l-rg1w-7meR6lqTmLhlr1KnhiWN7SgRAPKfAy1e3qiL5Qnqfw9HAiD9ULgaTmo95mnQVX2s60G2g7NvopjgByfxJsDiiIo7eUvQuxECoP73LH5Es0GMz7-fhus86qgB85qqeCo-j77oXGmjUOtZQAdDN_b08BUZSifAtCJd5HR02yPpwnyYX1I9ShIoz8JB33WSiSD3Gw4YSuchdzZy8gexFDX-aBs2Q9iqwjf41hET_3tKbsUDb5-FgCmmNvLHTTh8ffHwbdsWty7edbEHRPw3-krGHCxj_yn8oFoPyril2atXMYzhHC3DLXjMPx-aVE5BJUpiqf1KwvdBdHeqLp7Jq1P5N30yIlAOljnFmlCMhdfg6sNSbZula8xROlP5lVpClC6H0HTi2b_gKhSDBl4gJCgW8AK9jEa8dMWRwr91K2-XnbXP_k0hCXQrQGzi90xbbcMd8-C1RpW9_cD0kC0Zk6mXV9MJZY_R1wcaeA3Yud3iPrs4lMXHJ8546J3nr3Tslg2m7NIo_o5P_N7boAHcHzMBShIsEnWcRk48krdjAvbUXaMnhDN-21GErP3XOcIrXN988ez2_jFp3jwOVhxZ9nTIeMO28UTuaJABqWgCWJh2glbhtSuWA--CR6skVds2kxOmimZP_4N_aXiKh1dRI5KikMApi05EHi9-ZuA4_SQIEqnm0tl8qUK1ljwlK3o-DE5Z93Qm0Cndc26yY-9FUyPqPBZ4jRI09jTTH1PcsduZYMawIi9Gj7iyGdd0D-hxAdwnSxZYiTthhvogo7S9AMQZDGNQnPQuVIo4daRWtQqTYMQ52uonLml1YSfgFBE4NWCT_TS4\"}], \"role\": \"model\"}, {\"parts\": [{\"function_response\": {\"name\": \"search_flights\", \"response\": {\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\", \"flights\": [{\"flight_id\": \"AA101\", \"departure\": \"06:00\", \"arrival\": \"14:30\", \"price\": 420, \"airline\": \"American\"}, {\"flight_id\": \"DL205\", \"departure\": \"09:15\", \"arrival\": \"17:45\", \"price\": 385, \"airline\": \"Delta\"}, {\"flight_id\": \"UA330\", \"departure\": \"14:00\", \"arrival\": \"22:30\", \"price\": 350, \"airline\": \"United\"}, {\"flight_id\": \"AA115\", \"departure\": \"16:30\", \"arrival\": \"01:00\", \"price\": 310, \"airline\": \"American\"}, {\"flight_id\": \"DL420\", \"departure\": \"20:00\", \"arrival\": \"04:30\", \"price\": 290, \"airline\": \"Delta\"}]}}}], \"role\": \"user\"}, {\"parts\": [{\"function_call\": {\"args\": {\"flight_id\": \"DL420\"}, \"name\": \"book_flight\"}, \"thought_signature\": \"CskCAQw51sfz8bBiFaWlEcpzAz6QwgWXmhPKfDs4-1qGuqsBA6v_jVp-35nIEMY4MPX0BNfRCkK-G7PTxfq6o8l0ql4-mes3QbstKfMeDB90C3POlILy8gxOJdcSrpgDzomso2OO9tULWfs6OSOTngFpOQF4qDsioFB1E4bsm_h3US7YMIuWuc7YIgTqTIM8TPpkSu8gUREdE6g3jKGQtpBL9hJm1AflkITyySNB8A5DZZSGm8-J55HHihMZYJo7c6G63Z7MiqctjJ7KiduF-AfS9OlsVux_HdHUXtNX3agvVLuc9unkgMNzzpXlQEUMW9NbL4pyBESB6F-UntztnKiEd_SAsrFrQh0_3aZK5i83YHAoY9-EEHzMeKMKuigeMxaYOCxWoP5Jpp0EVE605kUirQdsFWuUDtUJPtNifDEpQfzaMlMT-m7IeFk=\"}], \"role\": \"model\"}, {\"parts\": [{\"function_response\": {\"name\": \"book_flight\", \"response\": {\"booking_id\": \"FBDL420\", \"flight_id\": \"DL420\", \"status\": \"confirmed\"}}}], \"role\": \"user\"}, {\"parts\": [{\"function_call\": {\"args\": {\"checkout\": \"2025-03-18\", \"city\": \"NYC\", \"checkin\": \"2025-03-15\"}, \"name\": \"search_hotels\"}, \"thought_signature\": \"CpkCAQw51sc12TyNC7V4eoEwBIpXKwpIMdj2yUFwjiJwvm6quLi_v1VfnJAIMHWqH1MAn4lY5KrA-3QijHT7TYZatFsLIHxcCq7JLmsufd7C33GOnN71h-zecVaAbieijkMy780v1Rtl0SOGGvrFEzZ4IKbxGxOJoNx_xk1NJqpCg5tKho2oNuUf90gE1r385Y1yqRWl-DabNGz3W6jKfZDXYrRUZy6Q_JPdZsKmaTp-g0DE1Fcmr9vS6uicX-HFAbTzfkwoslMMMJWmCBBUEl3n4qOo1gc9SoWY2bceH_icxJVU8kshjQM-ukBs4VNkuPXLjfSlsJTmJVlGdMx3ZAp2_vYdgvKsTyLqWZ4Cg7AsThyrjkjlmsIObQM=\"}], \"role\": \"model\"}, {\"parts\": [{\"function_response\": {\"name\": \"search_hotels\", \"response\": {\"city\": \"NYC\", \"checkin\": \"2025-03-15\", \"checkout\": \"2025-03-18\", \"hotels\": [{\"hotel_id\": \"NYC001\", \"name\": \"The Plaza\", \"price_per_night\": 450, \"rating\": 5, \"neighborhood\": \"Midtown\"}, {\"hotel_id\": \"NYC002\", \"name\": \"Pod 51\", \"price_per_night\": 120, \"rating\": 3, \"neighborhood\": \"Midtown\"}, {\"hotel_id\": \"NYC003\", \"name\": \"The Standard\", \"price_per_night\": 280, \"rating\": 4, \"neighborhood\": \"Meatpacking\"}, {\"hotel_id\": \"NYC004\", \"name\": \"Ace Hotel\", \"price_per_night\": 220, \"rating\": 4, \"neighborhood\": \"NoMad\"}, {\"hotel_id\": \"NYC005\", \"name\": \"citizenM Times Square\", \"price_per_night\": 175, \"rating\": 4, \"neighborhood\": \"Times Square\"}]}}}], \"role\": \"user\"}]}",
+        "gcp.vertex.agent.llm_response": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"function_call\":{\"args\":{\"checkout\":\"2025-03-18\",\"hotel_id\":\"NYC001\",\"checkin\":\"2025-03-15\"},\"name\":\"book_hotel\"},\"thought_signature\":\"Cv0CAQw51sdWLL5in3nBFgml8dqvWtv0a23Fs9vp50Qp-CkFv4kQqt8p69W7FfedW6qMM9XPtRO18u3bjunx6wMI23UQbvDLzSjqijWQAMcudUwxImjw-P8H4JEHoU9sPy5NV4nYxOufOmKQ2Wb7B1qMjZzN7dvcLbU-dc6SgaWcWicIfW_mORZFo24w16TWo73kmo7O4ivzRmkyyzZTyxgtFcZ5nf1KgNzHZPcnRBuvdnfgkFUwvbmrPp4mWvBhvv3nBbtwJiQf7fDguhmqjT19CUo98otIiPNQUca3iHBsuWQJKhG492nlQsxJWci0SfYXshITIiuIzH_7fs7CoTopfdb4O7lolPr7AtoZQClnMG9-YLv4bkbCjPHxD2tCS7mvLki5YBHbOtDWlsCvBr6t1xPI7gI-9YXrm78PD7wbJ6146ZZ5s2Rhj-_9EdXEsru5gKF5jCEYtj9sZSTWJqFhIFMavVZ02asl_yueIBDkQOH2NE2k4wJxqvxAPQR9\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"cache_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":629}],\"cached_content_token_count\":629,\"candidates_token_count\":49,\"prompt_token_count\":1446,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":1446}],\"thoughts_token_count\":120,\"total_token_count\":1615}}",
+        "gen_ai.usage.input_tokens": 1446,
+        "gen_ai.usage.output_tokens": 49,
+        "gen_ai.usage.experimental.reasoning_tokens": 120,
+        "gen_ai.response.finish_reasons": [
+          "stop"
+        ],
+        "llm.provider": "google",
+        "input.value": "{\"model\":\"gemini-2.5-flash\",\"contents\":[{\"parts\":[{\"text\":\"Hey, how can you help me\"}],\"role\":\"user\"},{\"parts\":[{\"text\":\"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}],\"role\":\"model\"},{\"parts\":[{\"text\":\"Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days\"}],\"role\":\"user\"},{\"parts\":[{\"function_call\":{\"args\":{\"origin\":\"SEA\",\"destination\":\"NYC\",\"date\":\"2025-03-15\"},\"name\":\"search_flights\"},\"thought_signature\":\"CtEGAQw51seqAksm_DEkpp-ldMFGFgt910IDaFMz4G5qtOJwkXRv0JcbKas179PGCPSsUFdh8SgXcJxMFCXzpWQ7vd6IsDEFuE-uMGNljrRug2lKR-V6E2_XAH3V91IyOskTg5R66hOf-QtKwMDhpiQldYiAlkhjYJHdC6T7iWEcQ_03hsESL_mvo_aKmeXecW_5E92Zt4v6vrdZQcCLtqsIPv20RyqrnrlDwSvzPXSg1X2QGIo8P7Rbfqz2S_vuiBxodMM6XbNfKHmncqaOxAxcGNrgt4dlHgBW1l-rg1w-7meR6lqTmLhlr1KnhiWN7SgRAPKfAy1e3qiL5Qnqfw9HAiD9ULgaTmo95mnQVX2s60G2g7NvopjgByfxJsDiiIo7eUvQuxECoP73LH5Es0GMz7-fhus86qgB85qqeCo-j77oXGmjUOtZQAdDN_b08BUZSifAtCJd5HR02yPpwnyYX1I9ShIoz8JB33WSiSD3Gw4YSuchdzZy8gexFDX-aBs2Q9iqwjf41hET_3tKbsUDb5-FgCmmNvLHTTh8ffHwbdsWty7edbEHRPw3-krGHCxj_yn8oFoPyril2atXMYzhHC3DLXjMPx-aVE5BJUpiqf1KwvdBdHeqLp7Jq1P5N30yIlAOljnFmlCMhdfg6sNSbZula8xROlP5lVpClC6H0HTi2b_gKhSDBl4gJCgW8AK9jEa8dMWRwr91K2-XnbXP_k0hCXQrQGzi90xbbcMd8-C1RpW9_cD0kC0Zk6mXV9MJZY_R1wcaeA3Yud3iPrs4lMXHJ8546J3nr3Tslg2m7NIo_o5P_N7boAHcHzMBShIsEnWcRk48krdjAvbUXaMnhDN-21GErP3XOcIrXN988ez2_jFp3jwOVhxZ9nTIeMO28UTuaJABqWgCWJh2glbhtSuWA--CR6skVds2kxOmimZP_4N_aXiKh1dRI5KikMApi05EHi9-ZuA4_SQIEqnm0tl8qUK1ljwlK3o-DE5Z93Qm0Cndc26yY-9FUyPqPBZ4jRI09jTTH1PcsduZYMawIi9Gj7iyGdd0D-hxAdwnSxZYiTthhvogo7S9AMQZDGNQnPQuVIo4daRWtQqTYMQ52uonLml1YSfgFBE4NWCT_TS4\"}],\"role\":\"model\"},{\"parts\":[{\"function_response\":{\"name\":\"search_flights\",\"response\":{\"origin\":\"SEA\",\"destination\":\"NYC\",\"date\":\"2025-03-15\",\"flights\":[{\"flight_id\":\"AA101\",\"departure\":\"06:00\",\"arrival\":\"14:30\",\"price\":420,\"airline\":\"American\"},{\"flight_id\":\"DL205\",\"departure\":\"09:15\",\"arrival\":\"17:45\",\"price\":385,\"airline\":\"Delta\"},{\"flight_id\":\"UA330\",\"departure\":\"14:00\",\"arrival\":\"22:30\",\"price\":350,\"airline\":\"United\"},{\"flight_id\":\"AA115\",\"departure\":\"16:30\",\"arrival\":\"01:00\",\"price\":310,\"airline\":\"American\"},{\"flight_id\":\"DL420\",\"departure\":\"20:00\",\"arrival\":\"04:30\",\"price\":290,\"airline\":\"Delta\"}]}}}],\"role\":\"user\"},{\"parts\":[{\"function_call\":{\"args\":{\"flight_id\":\"DL420\"},\"name\":\"book_flight\"},\"thought_signature\":\"CskCAQw51sfz8bBiFaWlEcpzAz6QwgWXmhPKfDs4-1qGuqsBA6v_jVp-35nIEMY4MPX0BNfRCkK-G7PTxfq6o8l0ql4-mes3QbstKfMeDB90C3POlILy8gxOJdcSrpgDzomso2OO9tULWfs6OSOTngFpOQF4qDsioFB1E4bsm_h3US7YMIuWuc7YIgTqTIM8TPpkSu8gUREdE6g3jKGQtpBL9hJm1AflkITyySNB8A5DZZSGm8-J55HHihMZYJo7c6G63Z7MiqctjJ7KiduF-AfS9OlsVux_HdHUXtNX3agvVLuc9unkgMNzzpXlQEUMW9NbL4pyBESB6F-UntztnKiEd_SAsrFrQh0_3aZK5i83YHAoY9-EEHzMeKMKuigeMxaYOCxWoP5Jpp0EVE605kUirQdsFWuUDtUJPtNifDEpQfzaMlMT-m7IeFk=\"}],\"role\":\"model\"},{\"parts\":[{\"function_response\":{\"name\":\"book_flight\",\"response\":{\"booking_id\":\"FBDL420\",\"flight_id\":\"DL420\",\"status\":\"confirmed\"}}}],\"role\":\"user\"},{\"parts\":[{\"function_call\":{\"args\":{\"checkout\":\"2025-03-18\",\"city\":\"NYC\",\"checkin\":\"2025-03-15\"},\"name\":\"search_hotels\"},\"thought_signature\":\"CpkCAQw51sc12TyNC7V4eoEwBIpXKwpIMdj2yUFwjiJwvm6quLi_v1VfnJAIMHWqH1MAn4lY5KrA-3QijHT7TYZatFsLIHxcCq7JLmsufd7C33GOnN71h-zecVaAbieijkMy780v1Rtl0SOGGvrFEzZ4IKbxGxOJoNx_xk1NJqpCg5tKho2oNuUf90gE1r385Y1yqRWl-DabNGz3W6jKfZDXYrRUZy6Q_JPdZsKmaTp-g0DE1Fcmr9vS6uicX-HFAbTzfkwoslMMMJWmCBBUEl3n4qOo1gc9SoWY2bceH_icxJVU8kshjQM-ukBs4VNkuPXLjfSlsJTmJVlGdMx3ZAp2_vYdgvKsTyLqWZ4Cg7AsThyrjkjlmsIObQM=\"}],\"role\":\"model\"},{\"parts\":[{\"function_response\":{\"name\":\"search_hotels\",\"response\":{\"city\":\"NYC\",\"checkin\":\"2025-03-15\",\"checkout\":\"2025-03-18\",\"hotels\":[{\"hotel_id\":\"NYC001\",\"name\":\"The Plaza\",\"price_per_night\":450,\"rating\":5,\"neighborhood\":\"Midtown\"},{\"hotel_id\":\"NYC002\",\"name\":\"Pod 51\",\"price_per_night\":120,\"rating\":3,\"neighborhood\":\"Midtown\"},{\"hotel_id\":\"NYC003\",\"name\":\"The Standard\",\"price_per_night\":280,\"rating\":4,\"neighborhood\":\"Meatpacking\"},{\"hotel_id\":\"NYC004\",\"name\":\"Ace Hotel\",\"price_per_night\":220,\"rating\":4,\"neighborhood\":\"NoMad\"},{\"hotel_id\":\"NYC005\",\"name\":\"citizenM Times Square\",\"price_per_night\":175,\"rating\":4,\"neighborhood\":\"Times Square\"}]}}}],\"role\":\"user\"}],\"config\":{\"http_options\":{\"headers\":{\"x-goog-api-client\":\"google-adk/1.33.0 gl-python/3.13.1\",\"user-agent\":\"google-adk/1.33.0 gl-python/3.13.1\"}},\"system_instruction\":\"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\",\"tools\":[{\"function_declarations\":[{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}]}]},\"live_connect_config\":{\"input_audio_transcription\":{},\"output_audio_transcription\":{}}}",
+        "input.mime_type": "application/json",
+        "llm.tools.0.tool.json_schema": "{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.1.tool.json_schema": "{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.2.tool.json_schema": "{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.3.tool.json_schema": "{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.4.tool.json_schema": "{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.5.tool.json_schema": "{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}",
+        "llm.model_name": "gemini-2.5-flash",
+        "llm.invocation_parameters": "{\"http_options\":{\"headers\":{\"x-goog-api-client\":\"google-adk/1.33.0 gl-python/3.13.1\",\"user-agent\":\"google-adk/1.33.0 gl-python/3.13.1\"}},\"system_instruction\":\"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\",\"tools\":[{\"function_declarations\":[{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}]}]}",
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.0.message.content": "You are a travel planning assistant. Help users plan trips by:\n- Searching and booking flights\n- Finding and booking hotels\n- Suggesting and booking activities\n\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\nAlways use the airport code when calling tools, not the full city name.\n\n\nYou are an agent. Your internal name is \"googleInMemory\". The description about you is \"Travel planning assistant\".",
+        "llm.input_messages.1.message.role": "user",
+        "llm.input_messages.1.message.contents.0.message_content.text": "Hey, how can you help me",
+        "llm.input_messages.1.message.contents.0.message_content.type": "text",
+        "llm.input_messages.2.message.role": "model",
+        "llm.input_messages.2.message.contents.0.message_content.text": "I can help you plan your trip! I can:\n- Search and book flights\n- Find and book hotels\n- Suggest and book activities",
+        "llm.input_messages.2.message.contents.0.message_content.type": "text",
+        "llm.input_messages.3.message.role": "user",
+        "llm.input_messages.3.message.contents.0.message_content.text": "Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days",
+        "llm.input_messages.3.message.contents.0.message_content.type": "text",
+        "llm.input_messages.4.message.role": "model",
+        "llm.input_messages.4.message.tool_calls.0.tool_call.function.name": "search_flights",
+        "llm.input_messages.4.message.tool_calls.0.tool_call.function.arguments": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}",
+        "llm.input_messages.5.message.role": "tool",
+        "llm.input_messages.5.message.name": "search_flights",
+        "llm.input_messages.5.message.content": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\", \"flights\": [{\"flight_id\": \"AA101\", \"departure\": \"06:00\", \"arrival\": \"14:30\", \"price\": 420, \"airline\": \"American\"}, {\"flight_id\": \"DL205\", \"departure\": \"09:15\", \"arrival\": \"17:45\", \"price\": 385, \"airline\": \"Delta\"}, {\"flight_id\": \"UA330\", \"departure\": \"14:00\", \"arrival\": \"22:30\", \"price\": 350, \"airline\": \"United\"}, {\"flight_id\": \"AA115\", \"departure\": \"16:30\", \"arrival\": \"01:00\", \"price\": 310, \"airline\": \"American\"}, {\"flight_id\": \"DL420\", \"departure\": \"20:00\", \"arrival\": \"04:30\", \"price\": 290, \"airline\": \"Delta\"}]}",
+        "llm.input_messages.6.message.role": "model",
+        "llm.input_messages.6.message.tool_calls.0.tool_call.function.name": "book_flight",
+        "llm.input_messages.6.message.tool_calls.0.tool_call.function.arguments": "{\"flight_id\": \"DL420\"}",
+        "llm.input_messages.7.message.role": "tool",
+        "llm.input_messages.7.message.name": "book_flight",
+        "llm.input_messages.7.message.content": "{\"booking_id\": \"FBDL420\", \"flight_id\": \"DL420\", \"status\": \"confirmed\"}",
+        "llm.input_messages.8.message.role": "model",
+        "llm.input_messages.8.message.tool_calls.0.tool_call.function.name": "search_hotels",
+        "llm.input_messages.8.message.tool_calls.0.tool_call.function.arguments": "{\"checkout\": \"2025-03-18\", \"city\": \"NYC\", \"checkin\": \"2025-03-15\"}",
+        "llm.input_messages.9.message.role": "tool",
+        "llm.input_messages.9.message.name": "search_hotels",
+        "llm.input_messages.9.message.content": "{\"city\": \"NYC\", \"checkin\": \"2025-03-15\", \"checkout\": \"2025-03-18\", \"hotels\": [{\"hotel_id\": \"NYC001\", \"name\": \"The Plaza\", \"price_per_night\": 450, \"rating\": 5, \"neighborhood\": \"Midtown\"}, {\"hotel_id\": \"NYC002\", \"name\": \"Pod 51\", \"price_per_night\": 120, \"rating\": 3, \"neighborhood\": \"Midtown\"}, {\"hotel_id\": \"NYC003\", \"name\": \"The Standard\", \"price_per_night\": 280, \"rating\": 4, \"neighborhood\": \"Meatpacking\"}, {\"hotel_id\": \"NYC004\", \"name\": \"Ace Hotel\", \"price_per_night\": 220, \"rating\": 4, \"neighborhood\": \"NoMad\"}, {\"hotel_id\": \"NYC005\", \"name\": \"citizenM Times Square\", \"price_per_night\": 175, \"rating\": 4, \"neighborhood\": \"Times Square\"}]}",
+        "output.value": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"function_call\":{\"args\":{\"checkout\":\"2025-03-18\",\"hotel_id\":\"NYC001\",\"checkin\":\"2025-03-15\"},\"name\":\"book_hotel\"},\"thought_signature\":\"Cv0CAQw51sdWLL5in3nBFgml8dqvWtv0a23Fs9vp50Qp-CkFv4kQqt8p69W7FfedW6qMM9XPtRO18u3bjunx6wMI23UQbvDLzSjqijWQAMcudUwxImjw-P8H4JEHoU9sPy5NV4nYxOufOmKQ2Wb7B1qMjZzN7dvcLbU-dc6SgaWcWicIfW_mORZFo24w16TWo73kmo7O4ivzRmkyyzZTyxgtFcZ5nf1KgNzHZPcnRBuvdnfgkFUwvbmrPp4mWvBhvv3nBbtwJiQf7fDguhmqjT19CUo98otIiPNQUca3iHBsuWQJKhG492nlQsxJWci0SfYXshITIiuIzH_7fs7CoTopfdb4O7lolPr7AtoZQClnMG9-YLv4bkbCjPHxD2tCS7mvLki5YBHbOtDWlsCvBr6t1xPI7gI-9YXrm78PD7wbJ6146ZZ5s2Rhj-_9EdXEsru5gKF5jCEYtj9sZSTWJqFhIFMavVZ02asl_yueIBDkQOH2NE2k4wJxqvxAPQR9\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"cache_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":629}],\"cached_content_token_count\":629,\"candidates_token_count\":49,\"prompt_token_count\":1446,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":1446}],\"thoughts_token_count\":120,\"total_token_count\":1615}}",
+        "output.mime_type": "application/json",
+        "llm.token_count.total": 1615,
+        "llm.token_count.prompt": 1446,
+        "llm.token_count.completion_details.reasoning": 120,
+        "llm.token_count.completion": 169,
+        "llm.output_messages.0.message.role": "model",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.name": "book_hotel",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments": "{\"checkout\": \"2025-03-18\", \"hotel_id\": \"NYC001\", \"checkin\": \"2025-03-15\"}",
+        "openinference.span.kind": "LLM"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-010"
+    },
+    {
+      "name": "call_llm",
+      "context": {
+        "trace_id": "0xc5663c3f398e198c64d7146028bc4c8d",
+        "span_id": "0x927c6c91c6c36883",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": "0xcfb46936b280499f",
+      "start_time": "2026-05-18T00:19:09.889138Z",
+      "end_time": "2026-05-18T00:19:11.529888Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "session.id": "test_session",
+        "gen_ai.operation.name": "generate_content",
+        "gen_ai.agent.name": "googleInMemory",
+        "gen_ai.conversation.id": "test_session",
+        "user.id": "test_user",
+        "gen_ai.system": "gcp.vertex.agent",
+        "gen_ai.request.model": "gemini-2.5-flash",
+        "gcp.vertex.agent.invocation_id": "e-8eda8949-1dbd-4c74-bdb6-f56e280f5df4",
+        "gcp.vertex.agent.session_id": "test_session",
+        "gcp.vertex.agent.event_id": "80a35b40-e712-4b91-9c0e-6d54c4f84a09",
+        "gcp.vertex.agent.llm_request": "{\"model\": \"gemini-2.5-flash\", \"config\": {\"http_options\": {\"headers\": {\"x-goog-api-client\": \"google-adk/1.33.0 gl-python/3.13.1\", \"user-agent\": \"google-adk/1.33.0 gl-python/3.13.1\"}}, \"system_instruction\": \"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\", \"tools\": [{\"function_declarations\": [{\"description\": \"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\", \"name\": \"search_flights\", \"parameters\": {\"properties\": {\"origin\": {\"type\": \"STRING\"}, \"destination\": {\"type\": \"STRING\"}, \"date\": {\"type\": \"STRING\"}}, \"required\": [\"origin\", \"destination\", \"date\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_flight\", \"parameters\": {\"properties\": {\"flight_id\": {\"type\": \"STRING\"}}, \"required\": [\"flight_id\"], \"type\": \"OBJECT\"}}, {\"description\": \"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\", \"name\": \"search_hotels\", \"parameters\": {\"properties\": {\"city\": {\"type\": \"STRING\"}, \"checkin\": {\"type\": \"STRING\"}, \"checkout\": {\"type\": \"STRING\"}}, \"required\": [\"city\", \"checkin\", \"checkout\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_hotel\", \"parameters\": {\"properties\": {\"hotel_id\": {\"type\": \"STRING\"}, \"checkin\": {\"type\": \"STRING\"}, \"checkout\": {\"type\": \"STRING\"}}, \"required\": [\"hotel_id\", \"checkin\", \"checkout\"], \"type\": \"OBJECT\"}}, {\"description\": \"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\", \"name\": \"search_activities\", \"parameters\": {\"properties\": {\"city\": {\"type\": \"STRING\"}}, \"required\": [\"city\"], \"type\": \"OBJECT\"}}, {\"description\": \"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\", \"name\": \"book_activity\", \"parameters\": {\"properties\": {\"activity_id\": {\"type\": \"STRING\"}, \"date\": {\"type\": \"STRING\"}}, \"required\": [\"activity_id\", \"date\"], \"type\": \"OBJECT\"}}]}]}, \"contents\": [{\"parts\": [{\"text\": \"Hey, how can you help me\"}], \"role\": \"user\"}, {\"parts\": [{\"text\": \"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}], \"role\": \"model\"}, {\"parts\": [{\"text\": \"Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days\"}], \"role\": \"user\"}, {\"parts\": [{\"function_call\": {\"args\": {\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}, \"name\": \"search_flights\"}, \"thought_signature\": \"CtEGAQw51seqAksm_DEkpp-ldMFGFgt910IDaFMz4G5qtOJwkXRv0JcbKas179PGCPSsUFdh8SgXcJxMFCXzpWQ7vd6IsDEFuE-uMGNljrRug2lKR-V6E2_XAH3V91IyOskTg5R66hOf-QtKwMDhpiQldYiAlkhjYJHdC6T7iWEcQ_03hsESL_mvo_aKmeXecW_5E92Zt4v6vrdZQcCLtqsIPv20RyqrnrlDwSvzPXSg1X2QGIo8P7Rbfqz2S_vuiBxodMM6XbNfKHmncqaOxAxcGNrgt4dlHgBW1l-rg1w-7meR6lqTmLhlr1KnhiWN7SgRAPKfAy1e3qiL5Qnqfw9HAiD9ULgaTmo95mnQVX2s60G2g7NvopjgByfxJsDiiIo7eUvQuxECoP73LH5Es0GMz7-fhus86qgB85qqeCo-j77oXGmjUOtZQAdDN_b08BUZSifAtCJd5HR02yPpwnyYX1I9ShIoz8JB33WSiSD3Gw4YSuchdzZy8gexFDX-aBs2Q9iqwjf41hET_3tKbsUDb5-FgCmmNvLHTTh8ffHwbdsWty7edbEHRPw3-krGHCxj_yn8oFoPyril2atXMYzhHC3DLXjMPx-aVE5BJUpiqf1KwvdBdHeqLp7Jq1P5N30yIlAOljnFmlCMhdfg6sNSbZula8xROlP5lVpClC6H0HTi2b_gKhSDBl4gJCgW8AK9jEa8dMWRwr91K2-XnbXP_k0hCXQrQGzi90xbbcMd8-C1RpW9_cD0kC0Zk6mXV9MJZY_R1wcaeA3Yud3iPrs4lMXHJ8546J3nr3Tslg2m7NIo_o5P_N7boAHcHzMBShIsEnWcRk48krdjAvbUXaMnhDN-21GErP3XOcIrXN988ez2_jFp3jwOVhxZ9nTIeMO28UTuaJABqWgCWJh2glbhtSuWA--CR6skVds2kxOmimZP_4N_aXiKh1dRI5KikMApi05EHi9-ZuA4_SQIEqnm0tl8qUK1ljwlK3o-DE5Z93Qm0Cndc26yY-9FUyPqPBZ4jRI09jTTH1PcsduZYMawIi9Gj7iyGdd0D-hxAdwnSxZYiTthhvogo7S9AMQZDGNQnPQuVIo4daRWtQqTYMQ52uonLml1YSfgFBE4NWCT_TS4\"}], \"role\": \"model\"}, {\"parts\": [{\"function_response\": {\"name\": \"search_flights\", \"response\": {\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\", \"flights\": [{\"flight_id\": \"AA101\", \"departure\": \"06:00\", \"arrival\": \"14:30\", \"price\": 420, \"airline\": \"American\"}, {\"flight_id\": \"DL205\", \"departure\": \"09:15\", \"arrival\": \"17:45\", \"price\": 385, \"airline\": \"Delta\"}, {\"flight_id\": \"UA330\", \"departure\": \"14:00\", \"arrival\": \"22:30\", \"price\": 350, \"airline\": \"United\"}, {\"flight_id\": \"AA115\", \"departure\": \"16:30\", \"arrival\": \"01:00\", \"price\": 310, \"airline\": \"American\"}, {\"flight_id\": \"DL420\", \"departure\": \"20:00\", \"arrival\": \"04:30\", \"price\": 290, \"airline\": \"Delta\"}]}}}], \"role\": \"user\"}, {\"parts\": [{\"function_call\": {\"args\": {\"flight_id\": \"DL420\"}, \"name\": \"book_flight\"}, \"thought_signature\": \"CskCAQw51sfz8bBiFaWlEcpzAz6QwgWXmhPKfDs4-1qGuqsBA6v_jVp-35nIEMY4MPX0BNfRCkK-G7PTxfq6o8l0ql4-mes3QbstKfMeDB90C3POlILy8gxOJdcSrpgDzomso2OO9tULWfs6OSOTngFpOQF4qDsioFB1E4bsm_h3US7YMIuWuc7YIgTqTIM8TPpkSu8gUREdE6g3jKGQtpBL9hJm1AflkITyySNB8A5DZZSGm8-J55HHihMZYJo7c6G63Z7MiqctjJ7KiduF-AfS9OlsVux_HdHUXtNX3agvVLuc9unkgMNzzpXlQEUMW9NbL4pyBESB6F-UntztnKiEd_SAsrFrQh0_3aZK5i83YHAoY9-EEHzMeKMKuigeMxaYOCxWoP5Jpp0EVE605kUirQdsFWuUDtUJPtNifDEpQfzaMlMT-m7IeFk=\"}], \"role\": \"model\"}, {\"parts\": [{\"function_response\": {\"name\": \"book_flight\", \"response\": {\"booking_id\": \"FBDL420\", \"flight_id\": \"DL420\", \"status\": \"confirmed\"}}}], \"role\": \"user\"}, {\"parts\": [{\"function_call\": {\"args\": {\"checkout\": \"2025-03-18\", \"city\": \"NYC\", \"checkin\": \"2025-03-15\"}, \"name\": \"search_hotels\"}, \"thought_signature\": \"CpkCAQw51sc12TyNC7V4eoEwBIpXKwpIMdj2yUFwjiJwvm6quLi_v1VfnJAIMHWqH1MAn4lY5KrA-3QijHT7TYZatFsLIHxcCq7JLmsufd7C33GOnN71h-zecVaAbieijkMy780v1Rtl0SOGGvrFEzZ4IKbxGxOJoNx_xk1NJqpCg5tKho2oNuUf90gE1r385Y1yqRWl-DabNGz3W6jKfZDXYrRUZy6Q_JPdZsKmaTp-g0DE1Fcmr9vS6uicX-HFAbTzfkwoslMMMJWmCBBUEl3n4qOo1gc9SoWY2bceH_icxJVU8kshjQM-ukBs4VNkuPXLjfSlsJTmJVlGdMx3ZAp2_vYdgvKsTyLqWZ4Cg7AsThyrjkjlmsIObQM=\"}], \"role\": \"model\"}, {\"parts\": [{\"function_response\": {\"name\": \"search_hotels\", \"response\": {\"city\": \"NYC\", \"checkin\": \"2025-03-15\", \"checkout\": \"2025-03-18\", \"hotels\": [{\"hotel_id\": \"NYC001\", \"name\": \"The Plaza\", \"price_per_night\": 450, \"rating\": 5, \"neighborhood\": \"Midtown\"}, {\"hotel_id\": \"NYC002\", \"name\": \"Pod 51\", \"price_per_night\": 120, \"rating\": 3, \"neighborhood\": \"Midtown\"}, {\"hotel_id\": \"NYC003\", \"name\": \"The Standard\", \"price_per_night\": 280, \"rating\": 4, \"neighborhood\": \"Meatpacking\"}, {\"hotel_id\": \"NYC004\", \"name\": \"Ace Hotel\", \"price_per_night\": 220, \"rating\": 4, \"neighborhood\": \"NoMad\"}, {\"hotel_id\": \"NYC005\", \"name\": \"citizenM Times Square\", \"price_per_night\": 175, \"rating\": 4, \"neighborhood\": \"Times Square\"}]}}}], \"role\": \"user\"}, {\"parts\": [{\"function_call\": {\"args\": {\"checkout\": \"2025-03-18\", \"hotel_id\": \"NYC001\", \"checkin\": \"2025-03-15\"}, \"name\": \"book_hotel\"}, \"thought_signature\": \"Cv0CAQw51sdWLL5in3nBFgml8dqvWtv0a23Fs9vp50Qp-CkFv4kQqt8p69W7FfedW6qMM9XPtRO18u3bjunx6wMI23UQbvDLzSjqijWQAMcudUwxImjw-P8H4JEHoU9sPy5NV4nYxOufOmKQ2Wb7B1qMjZzN7dvcLbU-dc6SgaWcWicIfW_mORZFo24w16TWo73kmo7O4ivzRmkyyzZTyxgtFcZ5nf1KgNzHZPcnRBuvdnfgkFUwvbmrPp4mWvBhvv3nBbtwJiQf7fDguhmqjT19CUo98otIiPNQUca3iHBsuWQJKhG492nlQsxJWci0SfYXshITIiuIzH_7fs7CoTopfdb4O7lolPr7AtoZQClnMG9-YLv4bkbCjPHxD2tCS7mvLki5YBHbOtDWlsCvBr6t1xPI7gI-9YXrm78PD7wbJ6146ZZ5s2Rhj-_9EdXEsru5gKF5jCEYtj9sZSTWJqFhIFMavVZ02asl_yueIBDkQOH2NE2k4wJxqvxAPQR9\"}], \"role\": \"model\"}, {\"parts\": [{\"function_response\": {\"name\": \"book_hotel\", \"response\": {\"booking_id\": \"HBNYC001\", \"hotel_id\": \"NYC001\", \"checkin\": \"2025-03-15\", \"checkout\": \"2025-03-18\", \"status\": \"confirmed\"}}}], \"role\": \"user\"}]}",
+        "gcp.vertex.agent.llm_response": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"text\":\"I have booked the cheapest flight from SEA to NYC for 2025-03-15, flight ID DL420.\\nI have also booked the most expensive hotel, The Plaza (NYC001), in NYC for 3 days, with check-in on 2025-03-15 and check-out on 2025-03-18.\",\"thought_signature\":\"Cv8BAQw51sfq7TsTHB518qk08198V0y3Cj1DPyobLB9Ftdfx1nJCYypS6C3mhoX3Y3FIn5RuBldkLtBBsHLCy_PCYYto-G2aYSH-hjI7WmMMIotUjkDU0kytoYa_Ci7mjIfVrmKBYlTD4RnE1Dhm40D9l6ZJMihrTHXrjV9Xe0bdDjg8sdhUXkf4Gr1HCmcj9SFuVEeNIwGTZXCZsbhm2AhRvjxobyCtSVIztgbg6xbhDSG2N1yYeKvEnTlafC8D7UgonkwcSe4-dwGrosPKke0pDTySozNj1pNs7d3J1MqxdRI0oelLfb8zSHS5QGFkEM1Wrjg-tFszlvBR2lClh6jO\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"candidates_token_count\":88,\"prompt_token_count\":1565,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":1565}],\"thoughts_token_count\":80,\"total_token_count\":1733}}",
+        "gen_ai.usage.input_tokens": 1565,
+        "gen_ai.usage.output_tokens": 88,
+        "gen_ai.usage.experimental.reasoning_tokens": 80,
+        "gen_ai.response.finish_reasons": [
+          "stop"
+        ],
+        "llm.provider": "google",
+        "input.value": "{\"model\":\"gemini-2.5-flash\",\"contents\":[{\"parts\":[{\"text\":\"Hey, how can you help me\"}],\"role\":\"user\"},{\"parts\":[{\"text\":\"I can help you plan your trip! I can:\\n- Search and book flights\\n- Find and book hotels\\n- Suggest and book activities\"}],\"role\":\"model\"},{\"parts\":[{\"text\":\"Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days\"}],\"role\":\"user\"},{\"parts\":[{\"function_call\":{\"args\":{\"origin\":\"SEA\",\"destination\":\"NYC\",\"date\":\"2025-03-15\"},\"name\":\"search_flights\"},\"thought_signature\":\"CtEGAQw51seqAksm_DEkpp-ldMFGFgt910IDaFMz4G5qtOJwkXRv0JcbKas179PGCPSsUFdh8SgXcJxMFCXzpWQ7vd6IsDEFuE-uMGNljrRug2lKR-V6E2_XAH3V91IyOskTg5R66hOf-QtKwMDhpiQldYiAlkhjYJHdC6T7iWEcQ_03hsESL_mvo_aKmeXecW_5E92Zt4v6vrdZQcCLtqsIPv20RyqrnrlDwSvzPXSg1X2QGIo8P7Rbfqz2S_vuiBxodMM6XbNfKHmncqaOxAxcGNrgt4dlHgBW1l-rg1w-7meR6lqTmLhlr1KnhiWN7SgRAPKfAy1e3qiL5Qnqfw9HAiD9ULgaTmo95mnQVX2s60G2g7NvopjgByfxJsDiiIo7eUvQuxECoP73LH5Es0GMz7-fhus86qgB85qqeCo-j77oXGmjUOtZQAdDN_b08BUZSifAtCJd5HR02yPpwnyYX1I9ShIoz8JB33WSiSD3Gw4YSuchdzZy8gexFDX-aBs2Q9iqwjf41hET_3tKbsUDb5-FgCmmNvLHTTh8ffHwbdsWty7edbEHRPw3-krGHCxj_yn8oFoPyril2atXMYzhHC3DLXjMPx-aVE5BJUpiqf1KwvdBdHeqLp7Jq1P5N30yIlAOljnFmlCMhdfg6sNSbZula8xROlP5lVpClC6H0HTi2b_gKhSDBl4gJCgW8AK9jEa8dMWRwr91K2-XnbXP_k0hCXQrQGzi90xbbcMd8-C1RpW9_cD0kC0Zk6mXV9MJZY_R1wcaeA3Yud3iPrs4lMXHJ8546J3nr3Tslg2m7NIo_o5P_N7boAHcHzMBShIsEnWcRk48krdjAvbUXaMnhDN-21GErP3XOcIrXN988ez2_jFp3jwOVhxZ9nTIeMO28UTuaJABqWgCWJh2glbhtSuWA--CR6skVds2kxOmimZP_4N_aXiKh1dRI5KikMApi05EHi9-ZuA4_SQIEqnm0tl8qUK1ljwlK3o-DE5Z93Qm0Cndc26yY-9FUyPqPBZ4jRI09jTTH1PcsduZYMawIi9Gj7iyGdd0D-hxAdwnSxZYiTthhvogo7S9AMQZDGNQnPQuVIo4daRWtQqTYMQ52uonLml1YSfgFBE4NWCT_TS4\"}],\"role\":\"model\"},{\"parts\":[{\"function_response\":{\"name\":\"search_flights\",\"response\":{\"origin\":\"SEA\",\"destination\":\"NYC\",\"date\":\"2025-03-15\",\"flights\":[{\"flight_id\":\"AA101\",\"departure\":\"06:00\",\"arrival\":\"14:30\",\"price\":420,\"airline\":\"American\"},{\"flight_id\":\"DL205\",\"departure\":\"09:15\",\"arrival\":\"17:45\",\"price\":385,\"airline\":\"Delta\"},{\"flight_id\":\"UA330\",\"departure\":\"14:00\",\"arrival\":\"22:30\",\"price\":350,\"airline\":\"United\"},{\"flight_id\":\"AA115\",\"departure\":\"16:30\",\"arrival\":\"01:00\",\"price\":310,\"airline\":\"American\"},{\"flight_id\":\"DL420\",\"departure\":\"20:00\",\"arrival\":\"04:30\",\"price\":290,\"airline\":\"Delta\"}]}}}],\"role\":\"user\"},{\"parts\":[{\"function_call\":{\"args\":{\"flight_id\":\"DL420\"},\"name\":\"book_flight\"},\"thought_signature\":\"CskCAQw51sfz8bBiFaWlEcpzAz6QwgWXmhPKfDs4-1qGuqsBA6v_jVp-35nIEMY4MPX0BNfRCkK-G7PTxfq6o8l0ql4-mes3QbstKfMeDB90C3POlILy8gxOJdcSrpgDzomso2OO9tULWfs6OSOTngFpOQF4qDsioFB1E4bsm_h3US7YMIuWuc7YIgTqTIM8TPpkSu8gUREdE6g3jKGQtpBL9hJm1AflkITyySNB8A5DZZSGm8-J55HHihMZYJo7c6G63Z7MiqctjJ7KiduF-AfS9OlsVux_HdHUXtNX3agvVLuc9unkgMNzzpXlQEUMW9NbL4pyBESB6F-UntztnKiEd_SAsrFrQh0_3aZK5i83YHAoY9-EEHzMeKMKuigeMxaYOCxWoP5Jpp0EVE605kUirQdsFWuUDtUJPtNifDEpQfzaMlMT-m7IeFk=\"}],\"role\":\"model\"},{\"parts\":[{\"function_response\":{\"name\":\"book_flight\",\"response\":{\"booking_id\":\"FBDL420\",\"flight_id\":\"DL420\",\"status\":\"confirmed\"}}}],\"role\":\"user\"},{\"parts\":[{\"function_call\":{\"args\":{\"checkout\":\"2025-03-18\",\"city\":\"NYC\",\"checkin\":\"2025-03-15\"},\"name\":\"search_hotels\"},\"thought_signature\":\"CpkCAQw51sc12TyNC7V4eoEwBIpXKwpIMdj2yUFwjiJwvm6quLi_v1VfnJAIMHWqH1MAn4lY5KrA-3QijHT7TYZatFsLIHxcCq7JLmsufd7C33GOnN71h-zecVaAbieijkMy780v1Rtl0SOGGvrFEzZ4IKbxGxOJoNx_xk1NJqpCg5tKho2oNuUf90gE1r385Y1yqRWl-DabNGz3W6jKfZDXYrRUZy6Q_JPdZsKmaTp-g0DE1Fcmr9vS6uicX-HFAbTzfkwoslMMMJWmCBBUEl3n4qOo1gc9SoWY2bceH_icxJVU8kshjQM-ukBs4VNkuPXLjfSlsJTmJVlGdMx3ZAp2_vYdgvKsTyLqWZ4Cg7AsThyrjkjlmsIObQM=\"}],\"role\":\"model\"},{\"parts\":[{\"function_response\":{\"name\":\"search_hotels\",\"response\":{\"city\":\"NYC\",\"checkin\":\"2025-03-15\",\"checkout\":\"2025-03-18\",\"hotels\":[{\"hotel_id\":\"NYC001\",\"name\":\"The Plaza\",\"price_per_night\":450,\"rating\":5,\"neighborhood\":\"Midtown\"},{\"hotel_id\":\"NYC002\",\"name\":\"Pod 51\",\"price_per_night\":120,\"rating\":3,\"neighborhood\":\"Midtown\"},{\"hotel_id\":\"NYC003\",\"name\":\"The Standard\",\"price_per_night\":280,\"rating\":4,\"neighborhood\":\"Meatpacking\"},{\"hotel_id\":\"NYC004\",\"name\":\"Ace Hotel\",\"price_per_night\":220,\"rating\":4,\"neighborhood\":\"NoMad\"},{\"hotel_id\":\"NYC005\",\"name\":\"citizenM Times Square\",\"price_per_night\":175,\"rating\":4,\"neighborhood\":\"Times Square\"}]}}}],\"role\":\"user\"},{\"parts\":[{\"function_call\":{\"args\":{\"checkout\":\"2025-03-18\",\"hotel_id\":\"NYC001\",\"checkin\":\"2025-03-15\"},\"name\":\"book_hotel\"},\"thought_signature\":\"Cv0CAQw51sdWLL5in3nBFgml8dqvWtv0a23Fs9vp50Qp-CkFv4kQqt8p69W7FfedW6qMM9XPtRO18u3bjunx6wMI23UQbvDLzSjqijWQAMcudUwxImjw-P8H4JEHoU9sPy5NV4nYxOufOmKQ2Wb7B1qMjZzN7dvcLbU-dc6SgaWcWicIfW_mORZFo24w16TWo73kmo7O4ivzRmkyyzZTyxgtFcZ5nf1KgNzHZPcnRBuvdnfgkFUwvbmrPp4mWvBhvv3nBbtwJiQf7fDguhmqjT19CUo98otIiPNQUca3iHBsuWQJKhG492nlQsxJWci0SfYXshITIiuIzH_7fs7CoTopfdb4O7lolPr7AtoZQClnMG9-YLv4bkbCjPHxD2tCS7mvLki5YBHbOtDWlsCvBr6t1xPI7gI-9YXrm78PD7wbJ6146ZZ5s2Rhj-_9EdXEsru5gKF5jCEYtj9sZSTWJqFhIFMavVZ02asl_yueIBDkQOH2NE2k4wJxqvxAPQR9\"}],\"role\":\"model\"},{\"parts\":[{\"function_response\":{\"name\":\"book_hotel\",\"response\":{\"booking_id\":\"HBNYC001\",\"hotel_id\":\"NYC001\",\"checkin\":\"2025-03-15\",\"checkout\":\"2025-03-18\",\"status\":\"confirmed\"}}}],\"role\":\"user\"}],\"config\":{\"http_options\":{\"headers\":{\"x-goog-api-client\":\"google-adk/1.33.0 gl-python/3.13.1\",\"user-agent\":\"google-adk/1.33.0 gl-python/3.13.1\"}},\"system_instruction\":\"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\",\"tools\":[{\"function_declarations\":[{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}]}]},\"live_connect_config\":{\"input_audio_transcription\":{},\"output_audio_transcription\":{}}}",
+        "input.mime_type": "application/json",
+        "llm.tools.0.tool.json_schema": "{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.1.tool.json_schema": "{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.2.tool.json_schema": "{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.3.tool.json_schema": "{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.4.tool.json_schema": "{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}}",
+        "llm.tools.5.tool.json_schema": "{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}",
+        "llm.model_name": "gemini-2.5-flash",
+        "llm.invocation_parameters": "{\"http_options\":{\"headers\":{\"x-goog-api-client\":\"google-adk/1.33.0 gl-python/3.13.1\",\"user-agent\":\"google-adk/1.33.0 gl-python/3.13.1\"}},\"system_instruction\":\"You are a travel planning assistant. Help users plan trips by:\\n- Searching and booking flights\\n- Finding and booking hotels\\n- Suggesting and booking activities\\n\\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\\nAlways use the airport code when calling tools, not the full city name.\\n\\n\\nYou are an agent. Your internal name is \\\"googleInMemory\\\". The description about you is \\\"Travel planning assistant\\\".\",\"tools\":[{\"function_declarations\":[{\"description\":\"Search for available flights between cities.\\nArgs:\\n    origin: Origin airport code (e.g., SEA, NYC, LAX, MIA).\\n    destination: Destination airport code.\\n    date: Travel date (e.g., 2025-03-15).\\nReturns:\\n    dict: Flight search results.\\n\",\"name\":\"search_flights\",\"parameters\":{\"properties\":{\"origin\":{\"type\":\"STRING\"},\"destination\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"origin\",\"destination\",\"date\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific flight by ID.\\nArgs:\\n    flight_id: The flight ID to book (e.g., AA101).\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_flight\",\"parameters\":{\"properties\":{\"flight_id\":{\"type\":\"STRING\"}},\"required\":[\"flight_id\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for available hotels in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Hotel search results.\\n\",\"name\":\"search_hotels\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"city\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific hotel by ID.\\nArgs:\\n    hotel_id: The hotel ID to book.\\n    checkin: Check-in date.\\n    checkout: Check-out date.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_hotel\",\"parameters\":{\"properties\":{\"hotel_id\":{\"type\":\"STRING\"},\"checkin\":{\"type\":\"STRING\"},\"checkout\":{\"type\":\"STRING\"}},\"required\":[\"hotel_id\",\"checkin\",\"checkout\"],\"type\":\"OBJECT\"}},{\"description\":\"Search for activities in a city.\\nArgs:\\n    city: City airport code (e.g., NYC, LAX, SEA, MIA).\\nReturns:\\n    dict: Available activities.\\n\",\"name\":\"search_activities\",\"parameters\":{\"properties\":{\"city\":{\"type\":\"STRING\"}},\"required\":[\"city\"],\"type\":\"OBJECT\"}},{\"description\":\"Book a specific activity by ID.\\nArgs:\\n    activity_id: The activity ID to book.\\n    date: Date for the activity.\\nReturns:\\n    dict: Booking confirmation.\\n\",\"name\":\"book_activity\",\"parameters\":{\"properties\":{\"activity_id\":{\"type\":\"STRING\"},\"date\":{\"type\":\"STRING\"}},\"required\":[\"activity_id\",\"date\"],\"type\":\"OBJECT\"}}]}]}",
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.0.message.content": "You are a travel planning assistant. Help users plan trips by:\n- Searching and booking flights\n- Finding and booking hotels\n- Suggesting and booking activities\n\nIMPORTANT: All data is indexed by airport/city codes (e.g., NYC, LAX, SEA, MIA).\nAlways use the airport code when calling tools, not the full city name.\n\n\nYou are an agent. Your internal name is \"googleInMemory\". The description about you is \"Travel planning assistant\".",
+        "llm.input_messages.1.message.role": "user",
+        "llm.input_messages.1.message.contents.0.message_content.text": "Hey, how can you help me",
+        "llm.input_messages.1.message.contents.0.message_content.type": "text",
+        "llm.input_messages.2.message.role": "model",
+        "llm.input_messages.2.message.contents.0.message_content.text": "I can help you plan your trip! I can:\n- Search and book flights\n- Find and book hotels\n- Suggest and book activities",
+        "llm.input_messages.2.message.contents.0.message_content.type": "text",
+        "llm.input_messages.3.message.role": "user",
+        "llm.input_messages.3.message.contents.0.message_content.text": "Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days",
+        "llm.input_messages.3.message.contents.0.message_content.type": "text",
+        "llm.input_messages.4.message.role": "model",
+        "llm.input_messages.4.message.tool_calls.0.tool_call.function.name": "search_flights",
+        "llm.input_messages.4.message.tool_calls.0.tool_call.function.arguments": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\"}",
+        "llm.input_messages.5.message.role": "tool",
+        "llm.input_messages.5.message.name": "search_flights",
+        "llm.input_messages.5.message.content": "{\"origin\": \"SEA\", \"destination\": \"NYC\", \"date\": \"2025-03-15\", \"flights\": [{\"flight_id\": \"AA101\", \"departure\": \"06:00\", \"arrival\": \"14:30\", \"price\": 420, \"airline\": \"American\"}, {\"flight_id\": \"DL205\", \"departure\": \"09:15\", \"arrival\": \"17:45\", \"price\": 385, \"airline\": \"Delta\"}, {\"flight_id\": \"UA330\", \"departure\": \"14:00\", \"arrival\": \"22:30\", \"price\": 350, \"airline\": \"United\"}, {\"flight_id\": \"AA115\", \"departure\": \"16:30\", \"arrival\": \"01:00\", \"price\": 310, \"airline\": \"American\"}, {\"flight_id\": \"DL420\", \"departure\": \"20:00\", \"arrival\": \"04:30\", \"price\": 290, \"airline\": \"Delta\"}]}",
+        "llm.input_messages.6.message.role": "model",
+        "llm.input_messages.6.message.tool_calls.0.tool_call.function.name": "book_flight",
+        "llm.input_messages.6.message.tool_calls.0.tool_call.function.arguments": "{\"flight_id\": \"DL420\"}",
+        "llm.input_messages.7.message.role": "tool",
+        "llm.input_messages.7.message.name": "book_flight",
+        "llm.input_messages.7.message.content": "{\"booking_id\": \"FBDL420\", \"flight_id\": \"DL420\", \"status\": \"confirmed\"}",
+        "llm.input_messages.8.message.role": "model",
+        "llm.input_messages.8.message.tool_calls.0.tool_call.function.name": "search_hotels",
+        "llm.input_messages.8.message.tool_calls.0.tool_call.function.arguments": "{\"checkout\": \"2025-03-18\", \"city\": \"NYC\", \"checkin\": \"2025-03-15\"}",
+        "llm.input_messages.9.message.role": "tool",
+        "llm.input_messages.9.message.name": "search_hotels",
+        "llm.input_messages.9.message.content": "{\"city\": \"NYC\", \"checkin\": \"2025-03-15\", \"checkout\": \"2025-03-18\", \"hotels\": [{\"hotel_id\": \"NYC001\", \"name\": \"The Plaza\", \"price_per_night\": 450, \"rating\": 5, \"neighborhood\": \"Midtown\"}, {\"hotel_id\": \"NYC002\", \"name\": \"Pod 51\", \"price_per_night\": 120, \"rating\": 3, \"neighborhood\": \"Midtown\"}, {\"hotel_id\": \"NYC003\", \"name\": \"The Standard\", \"price_per_night\": 280, \"rating\": 4, \"neighborhood\": \"Meatpacking\"}, {\"hotel_id\": \"NYC004\", \"name\": \"Ace Hotel\", \"price_per_night\": 220, \"rating\": 4, \"neighborhood\": \"NoMad\"}, {\"hotel_id\": \"NYC005\", \"name\": \"citizenM Times Square\", \"price_per_night\": 175, \"rating\": 4, \"neighborhood\": \"Times Square\"}]}",
+        "llm.input_messages.10.message.role": "model",
+        "llm.input_messages.10.message.tool_calls.0.tool_call.function.name": "book_hotel",
+        "llm.input_messages.10.message.tool_calls.0.tool_call.function.arguments": "{\"checkout\": \"2025-03-18\", \"hotel_id\": \"NYC001\", \"checkin\": \"2025-03-15\"}",
+        "llm.input_messages.11.message.role": "tool",
+        "llm.input_messages.11.message.name": "book_hotel",
+        "llm.input_messages.11.message.content": "{\"booking_id\": \"HBNYC001\", \"hotel_id\": \"NYC001\", \"checkin\": \"2025-03-15\", \"checkout\": \"2025-03-18\", \"status\": \"confirmed\"}",
+        "output.value": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"text\":\"I have booked the cheapest flight from SEA to NYC for 2025-03-15, flight ID DL420.\\nI have also booked the most expensive hotel, The Plaza (NYC001), in NYC for 3 days, with check-in on 2025-03-15 and check-out on 2025-03-18.\",\"thought_signature\":\"Cv8BAQw51sfq7TsTHB518qk08198V0y3Cj1DPyobLB9Ftdfx1nJCYypS6C3mhoX3Y3FIn5RuBldkLtBBsHLCy_PCYYto-G2aYSH-hjI7WmMMIotUjkDU0kytoYa_Ci7mjIfVrmKBYlTD4RnE1Dhm40D9l6ZJMihrTHXrjV9Xe0bdDjg8sdhUXkf4Gr1HCmcj9SFuVEeNIwGTZXCZsbhm2AhRvjxobyCtSVIztgbg6xbhDSG2N1yYeKvEnTlafC8D7UgonkwcSe4-dwGrosPKke0pDTySozNj1pNs7d3J1MqxdRI0oelLfb8zSHS5QGFkEM1Wrjg-tFszlvBR2lClh6jO\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"candidates_token_count\":88,\"prompt_token_count\":1565,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":1565}],\"thoughts_token_count\":80,\"total_token_count\":1733}}",
+        "output.mime_type": "application/json",
+        "llm.token_count.total": 1733,
+        "llm.token_count.prompt": 1565,
+        "llm.token_count.completion_details.reasoning": 80,
+        "llm.token_count.completion": 168,
+        "llm.output_messages.0.message.role": "model",
+        "llm.output_messages.0.message.contents.0.message_content.text": "I have booked the cheapest flight from SEA to NYC for 2025-03-15, flight ID DL420.\nI have also booked the most expensive hotel, The Plaza (NYC001), in NYC for 3 days, with check-in on 2025-03-15 and check-out on 2025-03-18.",
+        "llm.output_messages.0.message.contents.0.message_content.type": "text",
+        "openinference.span.kind": "LLM"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-011"
+    },
+    {
+      "name": "agent_run [googleInMemory]",
+      "context": {
+        "trace_id": "0xc5663c3f398e198c64d7146028bc4c8d",
+        "span_id": "0xcfb46936b280499f",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": "0x0bab37949dff85f6",
+      "start_time": "2026-05-18T00:19:04.306448Z",
+      "end_time": "2026-05-18T00:19:11.530008Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "agent.name": "googleInMemory",
+        "session.id": "test_session",
+        "user.id": "test_user",
+        "gen_ai.operation.name": "invoke_agent",
+        "gen_ai.agent.description": "Travel planning assistant",
+        "gen_ai.agent.name": "googleInMemory",
+        "gen_ai.conversation.id": "test_session",
+        "output.value": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"text\":\"I have booked the cheapest flight from SEA to NYC for 2025-03-15, flight ID DL420.\\nI have also booked the most expensive hotel, The Plaza (NYC001), in NYC for 3 days, with check-in on 2025-03-15 and check-out on 2025-03-18.\",\"thought_signature\":\"Cv8BAQw51sfq7TsTHB518qk08198V0y3Cj1DPyobLB9Ftdfx1nJCYypS6C3mhoX3Y3FIn5RuBldkLtBBsHLCy_PCYYto-G2aYSH-hjI7WmMMIotUjkDU0kytoYa_Ci7mjIfVrmKBYlTD4RnE1Dhm40D9l6ZJMihrTHXrjV9Xe0bdDjg8sdhUXkf4Gr1HCmcj9SFuVEeNIwGTZXCZsbhm2AhRvjxobyCtSVIztgbg6xbhDSG2N1yYeKvEnTlafC8D7UgonkwcSe4-dwGrosPKke0pDTySozNj1pNs7d3J1MqxdRI0oelLfb8zSHS5QGFkEM1Wrjg-tFszlvBR2lClh6jO\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"candidates_token_count\":88,\"prompt_token_count\":1565,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":1565}],\"thoughts_token_count\":80,\"total_token_count\":1733},\"invocation_id\":\"e-8eda8949-1dbd-4c74-bdb6-f56e280f5df4\",\"author\":\"googleInMemory\",\"actions\":{\"state_delta\":{},\"artifact_delta\":{},\"requested_auth_configs\":{},\"requested_tool_confirmations\":{}},\"id\":\"80a35b40-e712-4b91-9c0e-6d54c4f84a09\",\"timestamp\":1779063549.88907}",
+        "output.mime_type": "application/json",
+        "openinference.span.kind": "AGENT"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-012"
+    },
+    {
+      "name": "invocation [googleInMemory]",
+      "context": {
+        "trace_id": "0xc5663c3f398e198c64d7146028bc4c8d",
+        "span_id": "0x0bab37949dff85f6",
+        "trace_state": "[]"
+      },
+      "kind": "SpanKind.INTERNAL",
+      "parent_id": null,
+      "start_time": "2026-05-18T00:19:04.306131Z",
+      "end_time": "2026-05-18T00:19:11.530047Z",
+      "status": {
+        "status_code": "OK"
+      },
+      "attributes": {
+        "input.value": "{\"user_id\": \"test_user\", \"session_id\": \"test_session\", \"invocation_id\": null, \"new_message\": {\"parts\": [{\"text\": \"Book the cheapest flight from SEA to NYC for 2025-03-15 and book the most expensive hotel for the next 3 days\"}], \"role\": \"user\"}, \"state_delta\": null, \"run_config\": null}",
+        "input.mime_type": "application/json",
+        "user.id": "test_user",
+        "session.id": "test_session",
+        "output.value": "{\"model_version\":\"gemini-2.5-flash\",\"content\":{\"parts\":[{\"text\":\"I have booked the cheapest flight from SEA to NYC for 2025-03-15, flight ID DL420.\\nI have also booked the most expensive hotel, The Plaza (NYC001), in NYC for 3 days, with check-in on 2025-03-15 and check-out on 2025-03-18.\",\"thought_signature\":\"Cv8BAQw51sfq7TsTHB518qk08198V0y3Cj1DPyobLB9Ftdfx1nJCYypS6C3mhoX3Y3FIn5RuBldkLtBBsHLCy_PCYYto-G2aYSH-hjI7WmMMIotUjkDU0kytoYa_Ci7mjIfVrmKBYlTD4RnE1Dhm40D9l6ZJMihrTHXrjV9Xe0bdDjg8sdhUXkf4Gr1HCmcj9SFuVEeNIwGTZXCZsbhm2AhRvjxobyCtSVIztgbg6xbhDSG2N1yYeKvEnTlafC8D7UgonkwcSe4-dwGrosPKke0pDTySozNj1pNs7d3J1MqxdRI0oelLfb8zSHS5QGFkEM1Wrjg-tFszlvBR2lClh6jO\"}],\"role\":\"model\"},\"finish_reason\":\"STOP\",\"usage_metadata\":{\"candidates_token_count\":88,\"prompt_token_count\":1565,\"prompt_tokens_details\":[{\"modality\":\"TEXT\",\"token_count\":1565}],\"thoughts_token_count\":80,\"total_token_count\":1733},\"invocation_id\":\"e-8eda8949-1dbd-4c74-bdb6-f56e280f5df4\",\"author\":\"googleInMemory\",\"actions\":{\"state_delta\":{},\"artifact_delta\":{},\"requested_auth_configs\":{},\"requested_tool_confirmations\":{}},\"id\":\"80a35b40-e712-4b91-9c0e-6d54c4f84a09\",\"timestamp\":1779063549.88907}",
+        "output.mime_type": "application/json",
+        "openinference.span.kind": "CHAIN"
+      },
+      "events": [],
+      "links": [],
+      "resource": {
+        "attributes": {
+          "telemetry.sdk.language": "python",
+          "telemetry.sdk.name": "opentelemetry",
+          "telemetry.sdk.version": "1.41.1",
+          "service.name": "unknown_service"
+        },
+        "schema_url": ""
+      },
+      "scope": {
+        "name": "openinference.instrumentation.google_adk",
+        "version": "0.1.13"
+      },
+      "traceId": "custom-trace-google-adk-001",
+      "spanId": "custom-span-013"
+    }
+  ]
+}

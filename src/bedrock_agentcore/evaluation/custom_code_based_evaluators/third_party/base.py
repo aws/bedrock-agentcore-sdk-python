@@ -62,10 +62,17 @@ class BaseAdapter(abc.ABC):
     def _filter_spans_by_target(self, evaluator_input: EvaluatorInput) -> List[Dict]:
         """Filter session spans based on evaluationLevel and evaluationTarget.
 
-        Per the AgentCore code-based evaluator contract:
-        - TRACE: only spans matching target_trace_id
-        - TOOL_CALL: only the span matching target_span_id
-        - SESSION: all spans (no filtering)
+        The service passes ALL session spans in every Lambda invocation without
+        pre-filtering. It fans out one Lambda call per evaluation target (one per
+        trace at TRACE level, one per span at TOOL_CALL level) and provides the
+        target ID so the Lambda can scope its evaluation. We filter here because
+        the service-side _invoke_single_eval_target passes session_spans directly
+        into the payload without filtering.
+
+        Levels:
+        - SESSION: all spans (no filtering) — one call for the entire session
+        - TRACE: only spans matching target_trace_id (service sends exactly one)
+        - TOOL_CALL: only the span matching target_span_id (service sends exactly one)
         """
         spans = evaluator_input.session_spans
 

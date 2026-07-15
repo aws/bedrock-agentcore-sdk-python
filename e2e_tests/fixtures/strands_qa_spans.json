@@ -1,0 +1,1568 @@
+{
+  "sessionSpans": [
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "opentelemetry.instrumentation.botocore.bedrock-runtime",
+        "version": "0.54b1"
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "ab1e28ec92da0a19",
+      "parentSpanId": "fadc61a404d58d10",
+      "flags": 256,
+      "name": "chat us.anthropic.claude-3-5-haiku-20241022-v1:0",
+      "kind": "CLIENT",
+      "startTimeUnixNano": 1761095779363615161,
+      "endTimeUnixNano": 1761095781251897931,
+      "durationNano": 1888282770,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "rpc.service": "Bedrock Runtime",
+        "aws.remote.resource.identifier": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "aws.remote.operation": "ConverseStream",
+        "server.address": "bedrock-runtime.us-west-2.amazonaws.com",
+        "aws.request_id": "74d396cd-ee0e-408d-a8ee-9ed6df08bf16",
+        "aws.local.operation": "UnmappedOperation",
+        "aws.span.kind": "CLIENT",
+        "aws.auth.region": "us-west-2",
+        "rpc.method": "ConverseStream",
+        "gen_ai.response.finish_reasons": [
+          "tool_use"
+        ],
+        "server.port": 443,
+        "gen_ai.request.model": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "http.response.status_code": 200,
+        "gen_ai.system": "aws.bedrock",
+        "telemetry.extended": "true",
+        "gen_ai.usage.output_tokens": 112,
+        "rpc.system": "aws-api",
+        "aws.remote.service": "AWS::BedrockRuntime",
+        "http.status_code": 200,
+        "aws.region": "us-west-2",
+        "aws.remote.resource.type": "AWS::Bedrock::Model",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.usage.input_tokens": 1633,
+        "retry_attempts": 0,
+        "PlatformType": "AWS::BedrockAgentCore",
+        "aws.auth.account.access_key": "ASIATXHRK3N4DYWRFVDS",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer",
+        "version": ""
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "fadc61a404d58d10",
+      "parentSpanId": "cd49143c860efa0a",
+      "flags": 256,
+      "name": "chat",
+      "kind": "CLIENT",
+      "startTimeUnixNano": 1761095779363033071,
+      "endTimeUnixNano": 1761095781252343870,
+      "durationNano": 1889310799,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "gen_ai.usage.prompt_tokens": 1633,
+        "telemetry.extended": "true",
+        "gen_ai.usage.output_tokens": 112,
+        "aws.remote.resource.identifier": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "gen_ai.server.request.duration": 1883,
+        "gen_ai.usage.total_tokens": 1745,
+        "gen_ai.usage.completion_tokens": 112,
+        "gen_ai.event.start_time": "2025-10-22T01:16:19.363038+00:00",
+        "aws.remote.service": "strands-agents",
+        "gen_ai.server.time_to_first_token": 668,
+        "aws.local.environment": "bedrock-agentcore:default",
+        "aws.remote.operation": "chat",
+        "aws.local.operation": "UnmappedOperation",
+        "aws.span.kind": "CLIENT",
+        "aws.remote.resource.type": "GenAI::Model",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.event.end_time": "2025-10-22T01:16:21.252306+00:00",
+        "gen_ai.usage.input_tokens": 1633,
+        "gen_ai.request.model": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454",
+        "gen_ai.system": "strands-agents"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer",
+        "version": ""
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "587a33338e09997d",
+      "parentSpanId": "cd49143c860efa0a",
+      "flags": 256,
+      "name": "execute_tool calculate_bmi",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1761095781294631895,
+      "endTimeUnixNano": 1761095781295273684,
+      "durationNano": 641789,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "gen_ai.tool.status": "success",
+        "gen_ai.tool.call.id": "tooluse_hlTb-_GASxiNBcAjIUoorg",
+        "gen_ai.tool.description": "Calculate BMI and provide health category.",
+        "gen_ai.tool.json_schema": "{\"properties\": {\"weight_kg\": {\"description\": \"Parameter weight_kg\", \"type\": \"number\"}, \"height_m\": {\"description\": \"Parameter height_m\", \"type\": \"number\"}}, \"required\": [\"weight_kg\", \"height_m\"], \"type\": \"object\"}",
+        "gen_ai.event.start_time": "2025-10-22T01:16:21.294646+00:00",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.event.end_time": "2025-10-22T01:16:21.295255+00:00",
+        "gen_ai.tool.name": "calculate_bmi",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454",
+        "gen_ai.system": "strands-agents"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer",
+        "version": ""
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "cd49143c860efa0a",
+      "parentSpanId": "2350ab0c61aa843c",
+      "flags": 256,
+      "name": "execute_event_loop_cycle",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1761095779362818190,
+      "endTimeUnixNano": 1761095781320746215,
+      "durationNano": 1957928025,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "gen_ai.event.end_time": "2025-10-22T01:16:21.320731+00:00",
+        "event_loop.cycle_id": "bb684bd0-cd6f-4a97-b93b-30d71924a8cf",
+        "gen_ai.event.start_time": "2025-10-22T01:16:19.362825+00:00",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "opentelemetry.instrumentation.botocore.bedrock-runtime",
+        "version": "0.54b1"
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "562920782a95c42a",
+      "parentSpanId": "b11e2be68b3b663d",
+      "flags": 256,
+      "name": "chat us.anthropic.claude-3-5-haiku-20241022-v1:0",
+      "kind": "CLIENT",
+      "startTimeUnixNano": 1761095781342714068,
+      "endTimeUnixNano": 1761095786327346916,
+      "durationNano": 4984632848,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "rpc.service": "Bedrock Runtime",
+        "aws.remote.resource.identifier": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "aws.remote.operation": "ConverseStream",
+        "server.address": "bedrock-runtime.us-west-2.amazonaws.com",
+        "aws.request_id": "2d7e086b-3381-4355-bf23-0ef7edf7fdb5",
+        "aws.local.operation": "UnmappedOperation",
+        "aws.span.kind": "CLIENT",
+        "aws.auth.region": "us-west-2",
+        "rpc.method": "ConverseStream",
+        "gen_ai.response.finish_reasons": [
+          "tool_use"
+        ],
+        "server.port": 443,
+        "gen_ai.request.model": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "http.response.status_code": 200,
+        "gen_ai.system": "aws.bedrock",
+        "telemetry.extended": "true",
+        "gen_ai.usage.output_tokens": 386,
+        "rpc.system": "aws-api",
+        "aws.remote.service": "AWS::BedrockRuntime",
+        "http.status_code": 200,
+        "aws.region": "us-west-2",
+        "aws.remote.resource.type": "AWS::Bedrock::Model",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.usage.input_tokens": 1779,
+        "retry_attempts": 0,
+        "PlatformType": "AWS::BedrockAgentCore",
+        "aws.auth.account.access_key": "ASIATXHRK3N4DYWRFVDS",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer",
+        "version": ""
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "b11e2be68b3b663d",
+      "parentSpanId": "ec0ac222a708a988",
+      "flags": 256,
+      "name": "chat",
+      "kind": "CLIENT",
+      "startTimeUnixNano": 1761095781342177921,
+      "endTimeUnixNano": 1761095786327767737,
+      "durationNano": 4985589816,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "gen_ai.usage.prompt_tokens": 1779,
+        "telemetry.extended": "true",
+        "gen_ai.usage.output_tokens": 386,
+        "aws.remote.resource.identifier": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "gen_ai.server.request.duration": 4980,
+        "gen_ai.usage.total_tokens": 2165,
+        "gen_ai.usage.completion_tokens": 386,
+        "gen_ai.event.start_time": "2025-10-22T01:16:21.342184+00:00",
+        "aws.remote.service": "strands-agents",
+        "gen_ai.server.time_to_first_token": 612,
+        "aws.local.environment": "bedrock-agentcore:default",
+        "aws.remote.operation": "chat",
+        "aws.local.operation": "UnmappedOperation",
+        "aws.span.kind": "CLIENT",
+        "aws.remote.resource.type": "GenAI::Model",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.event.end_time": "2025-10-22T01:16:26.327732+00:00",
+        "gen_ai.usage.input_tokens": 1779,
+        "gen_ai.request.model": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454",
+        "gen_ai.system": "strands-agents"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer",
+        "version": ""
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "2126f32782320fef",
+      "parentSpanId": "ec0ac222a708a988",
+      "flags": 256,
+      "name": "execute_tool calculate_daily_calories",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1761095786363590404,
+      "endTimeUnixNano": 1761095786365007549,
+      "durationNano": 1417145,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "gen_ai.tool.status": "success",
+        "gen_ai.tool.call.id": "tooluse_5vo0OTi8QTSwSRbYag1ctA",
+        "gen_ai.tool.description": "Calculate daily caloric needs.",
+        "gen_ai.tool.json_schema": "{\"properties\": {\"age\": {\"description\": \"Parameter age\", \"type\": \"integer\"}, \"gender\": {\"description\": \"Parameter gender\", \"type\": \"string\"}, \"weight_kg\": {\"description\": \"Parameter weight_kg\", \"type\": \"number\"}, \"height_cm\": {\"description\": \"Parameter height_cm\", \"type\": \"number\"}, \"activity_level\": {\"description\": \"Parameter activity_level\", \"type\": \"string\"}}, \"required\": [\"age\", \"gender\", \"weight_kg\", \"height_cm\", \"activity_level\"], \"type\": \"object\"}",
+        "gen_ai.event.start_time": "2025-10-22T01:16:26.363604+00:00",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.event.end_time": "2025-10-22T01:16:26.364991+00:00",
+        "gen_ai.tool.name": "calculate_daily_calories",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454",
+        "gen_ai.system": "strands-agents"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer",
+        "version": ""
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "eee7c10f7b6fb4c6",
+      "parentSpanId": "ec0ac222a708a988",
+      "flags": 256,
+      "name": "execute_tool calculate_daily_calories",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1761095786363943187,
+      "endTimeUnixNano": 1761095786398628426,
+      "durationNano": 34685239,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "gen_ai.tool.status": "success",
+        "gen_ai.tool.call.id": "tooluse_hxel_gvgQp-IDffSfSR_Bg",
+        "gen_ai.tool.description": "Calculate daily caloric needs.",
+        "gen_ai.tool.json_schema": "{\"properties\": {\"age\": {\"description\": \"Parameter age\", \"type\": \"integer\"}, \"gender\": {\"description\": \"Parameter gender\", \"type\": \"string\"}, \"weight_kg\": {\"description\": \"Parameter weight_kg\", \"type\": \"number\"}, \"height_cm\": {\"description\": \"Parameter height_cm\", \"type\": \"number\"}, \"activity_level\": {\"description\": \"Parameter activity_level\", \"type\": \"string\"}}, \"required\": [\"age\", \"gender\", \"weight_kg\", \"height_cm\", \"activity_level\"], \"type\": \"object\"}",
+        "gen_ai.event.start_time": "2025-10-22T01:16:26.363951+00:00",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.event.end_time": "2025-10-22T01:16:26.398612+00:00",
+        "gen_ai.tool.name": "calculate_daily_calories",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454",
+        "gen_ai.system": "strands-agents"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer",
+        "version": ""
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "55b968f934a3b63c",
+      "parentSpanId": "ec0ac222a708a988",
+      "flags": 256,
+      "name": "execute_tool calculate_daily_calories",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1761095786364403609,
+      "endTimeUnixNano": 1761095786426657143,
+      "durationNano": 62253534,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "gen_ai.tool.status": "success",
+        "gen_ai.tool.call.id": "tooluse_uM32dN2cReCwaUGQvR7D9A",
+        "gen_ai.tool.description": "Calculate daily caloric needs.",
+        "gen_ai.tool.json_schema": "{\"properties\": {\"age\": {\"description\": \"Parameter age\", \"type\": \"integer\"}, \"gender\": {\"description\": \"Parameter gender\", \"type\": \"string\"}, \"weight_kg\": {\"description\": \"Parameter weight_kg\", \"type\": \"number\"}, \"height_cm\": {\"description\": \"Parameter height_cm\", \"type\": \"number\"}, \"activity_level\": {\"description\": \"Parameter activity_level\", \"type\": \"string\"}}, \"required\": [\"age\", \"gender\", \"weight_kg\", \"height_cm\", \"activity_level\"], \"type\": \"object\"}",
+        "gen_ai.event.start_time": "2025-10-22T01:16:26.364414+00:00",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.event.end_time": "2025-10-22T01:16:26.426640+00:00",
+        "gen_ai.tool.name": "calculate_daily_calories",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454",
+        "gen_ai.system": "strands-agents"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer",
+        "version": ""
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "ec0ac222a708a988",
+      "parentSpanId": "2350ab0c61aa843c",
+      "flags": 256,
+      "name": "execute_event_loop_cycle",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1761095781341916894,
+      "endTimeUnixNano": 1761095786462270085,
+      "durationNano": 5120353191,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "gen_ai.event.end_time": "2025-10-22T01:16:26.462255+00:00",
+        "event_loop.cycle_id": "cf51d920-b212-4ea7-974b-5bb41f2566e2",
+        "gen_ai.event.start_time": "2025-10-22T01:16:21.341928+00:00",
+        "event_loop.parent_cycle_id": "bb684bd0-cd6f-4a97-b93b-30d71924a8cf",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "opentelemetry.instrumentation.botocore.bedrock-runtime",
+        "version": "0.54b1"
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "ca0aabff4d86c1f7",
+      "parentSpanId": "2057aef26927bb59",
+      "flags": 256,
+      "name": "chat us.anthropic.claude-3-5-haiku-20241022-v1:0",
+      "kind": "CLIENT",
+      "startTimeUnixNano": 1761095786501502027,
+      "endTimeUnixNano": 1761095794592038536,
+      "durationNano": 8090536509,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "rpc.service": "Bedrock Runtime",
+        "aws.remote.resource.identifier": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "aws.remote.operation": "ConverseStream",
+        "server.address": "bedrock-runtime.us-west-2.amazonaws.com",
+        "aws.request_id": "fb66e2b6-7d86-41e9-9008-b13d5ecb63be",
+        "aws.local.operation": "UnmappedOperation",
+        "aws.span.kind": "CLIENT",
+        "aws.auth.region": "us-west-2",
+        "rpc.method": "ConverseStream",
+        "gen_ai.response.finish_reasons": [
+          "end_turn"
+        ],
+        "server.port": 443,
+        "gen_ai.request.model": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "http.response.status_code": 200,
+        "gen_ai.system": "aws.bedrock",
+        "telemetry.extended": "true",
+        "gen_ai.usage.output_tokens": 415,
+        "rpc.system": "aws-api",
+        "aws.remote.service": "AWS::BedrockRuntime",
+        "http.status_code": 200,
+        "aws.region": "us-west-2",
+        "aws.remote.resource.type": "AWS::Bedrock::Model",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.usage.input_tokens": 2323,
+        "retry_attempts": 0,
+        "PlatformType": "AWS::BedrockAgentCore",
+        "aws.auth.account.access_key": "ASIATXHRK3N4DYWRFVDS",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer",
+        "version": ""
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "2057aef26927bb59",
+      "parentSpanId": "be6ffc10f27c2ba6",
+      "flags": 256,
+      "name": "chat",
+      "kind": "CLIENT",
+      "startTimeUnixNano": 1761095786500880428,
+      "endTimeUnixNano": 1761095794592486655,
+      "durationNano": 8091606227,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "gen_ai.usage.prompt_tokens": 2323,
+        "telemetry.extended": "true",
+        "gen_ai.usage.output_tokens": 415,
+        "aws.remote.resource.identifier": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "gen_ai.server.request.duration": 8086,
+        "gen_ai.usage.total_tokens": 2738,
+        "gen_ai.usage.completion_tokens": 415,
+        "gen_ai.event.start_time": "2025-10-22T01:16:26.500887+00:00",
+        "aws.remote.service": "strands-agents",
+        "gen_ai.server.time_to_first_token": 1535,
+        "aws.local.environment": "bedrock-agentcore:default",
+        "aws.remote.operation": "chat",
+        "aws.local.operation": "UnmappedOperation",
+        "aws.span.kind": "CLIENT",
+        "aws.remote.resource.type": "GenAI::Model",
+        "gen_ai.operation.name": "chat",
+        "gen_ai.event.end_time": "2025-10-22T01:16:34.592450+00:00",
+        "gen_ai.usage.input_tokens": 2323,
+        "gen_ai.request.model": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454",
+        "gen_ai.system": "strands-agents"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer",
+        "version": ""
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "be6ffc10f27c2ba6",
+      "parentSpanId": "2350ab0c61aa843c",
+      "flags": 256,
+      "name": "execute_event_loop_cycle",
+      "kind": "INTERNAL",
+      "startTimeUnixNano": 1761095786500515388,
+      "endTimeUnixNano": 1761095794631999326,
+      "durationNano": 8131483938,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "gen_ai.event.end_time": "2025-10-22T01:16:34.631981+00:00",
+        "event_loop.cycle_id": "cc03e42b-404a-43ac-a3bf-2daab4a226dc",
+        "gen_ai.event.start_time": "2025-10-22T01:16:26.500526+00:00",
+        "event_loop.parent_cycle_id": "cf51d920-b212-4ea7-974b-5bb41f2566e2",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454",
+        "aws.local.environment": "bedrock-agentcore:default"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer",
+        "version": ""
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "2350ab0c61aa843c",
+      "parentSpanId": "b27ec4dceba1758a",
+      "flags": 256,
+      "name": "invoke_agent healthcare_assistant",
+      "kind": "CLIENT",
+      "startTimeUnixNano": 1761095779362591044,
+      "endTimeUnixNano": 1761095794664485288,
+      "durationNano": 15301894244,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "aws.remote.resource.identifier": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "gen_ai.usage.cache_write_input_tokens": 0,
+        "gen_ai.agent.name": "healthcare_assistant",
+        "gen_ai.event.start_time": "2025-10-22T01:16:19.362607+00:00",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "aws.remote.operation": "invoke_agent",
+        "aws.local.operation": "UnmappedOperation",
+        "aws.span.kind": "CLIENT",
+        "gen_ai.event.end_time": "2025-10-22T01:16:34.664456+00:00",
+        "gen_ai.request.model": "us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "gen_ai.agent.tools": "[\"calculate_bmi\", \"calculate_medication_dosage\", \"assess_symptoms\", \"check_drug_interactions\", \"calculate_daily_calories\"]",
+        "gen_ai.system": "strands-agents",
+        "gen_ai.usage.prompt_tokens": 10328,
+        "telemetry.extended": "true",
+        "gen_ai.usage.output_tokens": 1501,
+        "gen_ai.usage.total_tokens": 11829,
+        "gen_ai.usage.completion_tokens": 1501,
+        "aws.remote.service": "strands-agents",
+        "aws.remote.resource.type": "GenAI::Model",
+        "gen_ai.operation.name": "invoke_agent",
+        "gen_ai.usage.input_tokens": 10328,
+        "gen_ai.usage.cache_read_input_tokens": 0,
+        "PlatformType": "AWS::BedrockAgentCore",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "status": {
+        "code": "OK"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "opentelemetry.instrumentation.starlette",
+        "version": "0.54b1"
+      },
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "b27ec4dceba1758a",
+      "parentSpanId": "0067cb52d494f5fc",
+      "flags": 768,
+      "name": "POST /invocations",
+      "kind": "SERVER",
+      "startTimeUnixNano": 1761095779361791875,
+      "endTimeUnixNano": 1761095794700232853,
+      "durationNano": 15338440978,
+      "attributes": {
+        "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+        "net.peer.port": 36600,
+        "telemetry.extended": "true",
+        "http.target": "/invocations",
+        "http.flavor": "1.1",
+        "http.url": "http://127.0.0.1:8080/invocations",
+        "net.peer.ip": "127.0.0.1",
+        "http.host": "127.0.0.1:8080",
+        "aws.local.environment": "bedrock-agentcore:default",
+        "http.status_code": 200,
+        "aws.local.operation": "POST /invocations",
+        "aws.span.kind": "SERVER",
+        "http.server_name": "cell01.us-west-2.prod.arp.kepler-analytics.aws.dev",
+        "net.host.port": 8080,
+        "http.route": "/invocations",
+        "PlatformType": "AWS::BedrockAgentCore",
+        "http.method": "POST",
+        "http.response.status_code": 200,
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454",
+        "http.scheme": "http"
+      },
+      "status": {
+        "code": "UNSET"
+      }
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer"
+      },
+      "timeUnixNano": 1761095781252343870,
+      "observedTimeUnixNano": 1761095781252625732,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": {
+                "content": "[{\"text\": \"Based on the calculation, the recommended dosage of acetaminophen for someone weighing 65 kg is 650 mg.\\n\\nImportant safety notes:\\n1. This is a general guideline and should not replace professional medical advice.\\n2. Always follow the specific instructions on the medication packaging or from your healthcare provider.\\n3. Do not exceed the maximum daily dosage, which is typically 4000 mg per day for adults.\\n4. If you have any liver conditions, are taking other medications, or have concerns, consult with a healthcare professional before taking any medication.\\n\\nAcetaminophen (also known as Tylenol) is commonly used for pain relief and reducing fever. However, it's crucial to:\\n- Use the lowest effective dose\\n- Avoid alcohol while taking this medication\\n- Be cautious of other medications that might contain acetaminophen to prevent overdosing\\n\\nDo you have any other questions about medication or dosage?\"}]"
+              },
+              "role": "assistant"
+            },
+            {
+              "content": {
+                "message": "[{\"text\": \"I'll help you calculate your BMI and daily caloric needs, and then provide some general information about diabetes management.\\n\\nFirst, let's calculate your BMI:\"}, {\"toolUse\": {\"toolUseId\": \"tooluse_hlTb-_GASxiNBcAjIUoorg\", \"name\": \"calculate_bmi\", \"input\": {\"weight_kg\": 80, \"height_m\": 1.8}}}]",
+                "finish_reason": "tool_use"
+              },
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": {
+                "content": "[{\"text\": \"I'm 45 years old, weigh 80kg, 180cm tall, and have diabetes. Calculate my BMI and daily caloric needs, then tell me about diabetes management\"}]"
+              },
+              "role": "user"
+            },
+            {
+              "content": {
+                "content": "[{\"toolResult\": {\"toolUseId\": \"tooluse_Yo1_ozwMR7-OWldywCf34Q\", \"status\": \"success\", \"content\": [{\"text\": \"acetaminophen: 650.0mg recommended (based on 10mg/kg)\"}]}}]"
+              },
+              "role": "tool"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "strands.telemetry.tracer",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "flags": 1,
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "fadc61a404d58d10"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer"
+      },
+      "timeUnixNano": 1761095781295273684,
+      "observedTimeUnixNano": 1761095781295417996,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": {
+                "message": "[{\"text\": \"BMI: 24.7 (Normal weight). Normal range is 18.5-24.9.\"}]",
+                "id": "tooluse_hlTb-_GASxiNBcAjIUoorg"
+              },
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": {
+                "content": "{\"weight_kg\": 80, \"height_m\": 1.8}",
+                "role": "tool",
+                "id": "tooluse_hlTb-_GASxiNBcAjIUoorg"
+              },
+              "role": "tool"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "strands.telemetry.tracer",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "flags": 1,
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "587a33338e09997d"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer"
+      },
+      "timeUnixNano": 1761095781320746215,
+      "observedTimeUnixNano": 1761095781320908734,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": {
+                "content": "[{\"text\": \"Based on the calculation, the recommended dosage of acetaminophen for someone weighing 65 kg is 650 mg.\\n\\nImportant safety notes:\\n1. This is a general guideline and should not replace professional medical advice.\\n2. Always follow the specific instructions on the medication packaging or from your healthcare provider.\\n3. Do not exceed the maximum daily dosage, which is typically 4000 mg per day for adults.\\n4. If you have any liver conditions, are taking other medications, or have concerns, consult with a healthcare professional before taking any medication.\\n\\nAcetaminophen (also known as Tylenol) is commonly used for pain relief and reducing fever. However, it's crucial to:\\n- Use the lowest effective dose\\n- Avoid alcohol while taking this medication\\n- Be cautious of other medications that might contain acetaminophen to prevent overdosing\\n\\nDo you have any other questions about medication or dosage?\"}]"
+              },
+              "role": "assistant"
+            },
+            {
+              "content": {
+                "message": "[{\"text\": \"I'll help you calculate your BMI and daily caloric needs, and then provide some general information about diabetes management.\\n\\nFirst, let's calculate your BMI:\"}, {\"toolUse\": {\"toolUseId\": \"tooluse_hlTb-_GASxiNBcAjIUoorg\", \"name\": \"calculate_bmi\", \"input\": {\"weight_kg\": 80, \"height_m\": 1.8}}}]",
+                "tool.result": "[{\"toolResult\": {\"toolUseId\": \"tooluse_hlTb-_GASxiNBcAjIUoorg\", \"status\": \"success\", \"content\": [{\"text\": \"BMI: 24.7 (Normal weight). Normal range is 18.5-24.9.\"}]}}]"
+              },
+              "role": "assistant"
+            },
+            {
+              "content": "[{\"toolResult\": {\"toolUseId\": \"tooluse_hlTb-_GASxiNBcAjIUoorg\", \"status\": \"success\", \"content\": [{\"text\": \"BMI: 24.7 (Normal weight). Normal range is 18.5-24.9.\"}]}}]",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": {
+                "content": "[{\"text\": \"I'm 45 years old, weigh 80kg, 180cm tall, and have diabetes. Calculate my BMI and daily caloric needs, then tell me about diabetes management\"}]"
+              },
+              "role": "user"
+            },
+            {
+              "content": {
+                "content": "[{\"toolResult\": {\"toolUseId\": \"tooluse_Yo1_ozwMR7-OWldywCf34Q\", \"status\": \"success\", \"content\": [{\"text\": \"acetaminophen: 650.0mg recommended (based on 10mg/kg)\"}]}}]"
+              },
+              "role": "tool"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "strands.telemetry.tracer",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "flags": 1,
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "cd49143c860efa0a"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer"
+      },
+      "timeUnixNano": 1761095786327767737,
+      "observedTimeUnixNano": 1761095786328026492,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": {
+                "content": "[{\"text\": \"I'll help you calculate your BMI and daily caloric needs, and then provide some general information about diabetes management.\\n\\nFirst, let's calculate your BMI:\"}, {\"toolUse\": {\"toolUseId\": \"tooluse_hlTb-_GASxiNBcAjIUoorg\", \"name\": \"calculate_bmi\", \"input\": {\"weight_kg\": 80, \"height_m\": 1.8}}}]"
+              },
+              "role": "assistant"
+            },
+            {
+              "content": {
+                "message": "[{\"text\": \"Now, I'll calculate your daily caloric needs. Since you didn't specify your activity level, I'll provide calculations for different activity levels:\"}, {\"toolUse\": {\"toolUseId\": \"tooluse_5vo0OTi8QTSwSRbYag1ctA\", \"name\": \"calculate_daily_calories\", \"input\": {\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"sedentary\"}}}, {\"toolUse\": {\"toolUseId\": \"tooluse_hxel_gvgQp-IDffSfSR_Bg\", \"name\": \"calculate_daily_calories\", \"input\": {\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"moderate\"}}}, {\"toolUse\": {\"toolUseId\": \"tooluse_uM32dN2cReCwaUGQvR7D9A\", \"name\": \"calculate_daily_calories\", \"input\": {\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"active\"}}}]",
+                "finish_reason": "tool_use"
+              },
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": {
+                "content": "[{\"text\": \"I'm 45 years old, weigh 80kg, 180cm tall, and have diabetes. Calculate my BMI and daily caloric needs, then tell me about diabetes management\"}]"
+              },
+              "role": "user"
+            },
+            {
+              "content": {
+                "content": "[{\"toolResult\": {\"toolUseId\": \"tooluse_hlTb-_GASxiNBcAjIUoorg\", \"status\": \"success\", \"content\": [{\"text\": \"BMI: 24.7 (Normal weight). Normal range is 18.5-24.9.\"}]}}]"
+              },
+              "role": "tool"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "strands.telemetry.tracer",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "flags": 1,
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "b11e2be68b3b663d"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer"
+      },
+      "timeUnixNano": 1761095786365007549,
+      "observedTimeUnixNano": 1761095786365144067,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": {
+                "message": "[{\"text\": \"Daily caloric needs: 2122 calories (BMR: 1768, Activity: sedentary)\"}]",
+                "id": "tooluse_5vo0OTi8QTSwSRbYag1ctA"
+              },
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": {
+                "content": "{\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"sedentary\"}",
+                "role": "tool",
+                "id": "tooluse_5vo0OTi8QTSwSRbYag1ctA"
+              },
+              "role": "tool"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "strands.telemetry.tracer",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "flags": 1,
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "2126f32782320fef"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer"
+      },
+      "timeUnixNano": 1761095786398628426,
+      "observedTimeUnixNano": 1761095786398750919,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": {
+                "message": "[{\"text\": \"Daily caloric needs: 2741 calories (BMR: 1768, Activity: moderate)\"}]",
+                "id": "tooluse_hxel_gvgQp-IDffSfSR_Bg"
+              },
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": {
+                "content": "{\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"moderate\"}",
+                "role": "tool",
+                "id": "tooluse_hxel_gvgQp-IDffSfSR_Bg"
+              },
+              "role": "tool"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "strands.telemetry.tracer",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "flags": 1,
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "eee7c10f7b6fb4c6"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer"
+      },
+      "timeUnixNano": 1761095786426657143,
+      "observedTimeUnixNano": 1761095786426780173,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": {
+                "message": "[{\"text\": \"Daily caloric needs: 3051 calories (BMR: 1768, Activity: active)\"}]",
+                "id": "tooluse_uM32dN2cReCwaUGQvR7D9A"
+              },
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": {
+                "content": "{\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"active\"}",
+                "role": "tool",
+                "id": "tooluse_uM32dN2cReCwaUGQvR7D9A"
+              },
+              "role": "tool"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "strands.telemetry.tracer",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "flags": 1,
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "55b968f934a3b63c"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer"
+      },
+      "timeUnixNano": 1761095786462270085,
+      "observedTimeUnixNano": 1761095786462436931,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": {
+                "content": "[{\"text\": \"I'll help you calculate your BMI and daily caloric needs, and then provide some general information about diabetes management.\\n\\nFirst, let's calculate your BMI:\"}, {\"toolUse\": {\"toolUseId\": \"tooluse_hlTb-_GASxiNBcAjIUoorg\", \"name\": \"calculate_bmi\", \"input\": {\"weight_kg\": 80, \"height_m\": 1.8}}}]"
+              },
+              "role": "assistant"
+            },
+            {
+              "content": {
+                "message": "[{\"text\": \"Now, I'll calculate your daily caloric needs. Since you didn't specify your activity level, I'll provide calculations for different activity levels:\"}, {\"toolUse\": {\"toolUseId\": \"tooluse_5vo0OTi8QTSwSRbYag1ctA\", \"name\": \"calculate_daily_calories\", \"input\": {\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"sedentary\"}}}, {\"toolUse\": {\"toolUseId\": \"tooluse_hxel_gvgQp-IDffSfSR_Bg\", \"name\": \"calculate_daily_calories\", \"input\": {\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"moderate\"}}}, {\"toolUse\": {\"toolUseId\": \"tooluse_uM32dN2cReCwaUGQvR7D9A\", \"name\": \"calculate_daily_calories\", \"input\": {\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"active\"}}}]",
+                "tool.result": "[{\"toolResult\": {\"toolUseId\": \"tooluse_5vo0OTi8QTSwSRbYag1ctA\", \"status\": \"success\", \"content\": [{\"text\": \"Daily caloric needs: 2122 calories (BMR: 1768, Activity: sedentary)\"}]}}, {\"toolResult\": {\"toolUseId\": \"tooluse_hxel_gvgQp-IDffSfSR_Bg\", \"status\": \"success\", \"content\": [{\"text\": \"Daily caloric needs: 2741 calories (BMR: 1768, Activity: moderate)\"}]}}, {\"toolResult\": {\"toolUseId\": \"tooluse_uM32dN2cReCwaUGQvR7D9A\", \"status\": \"success\", \"content\": [{\"text\": \"Daily caloric needs: 3051 calories (BMR: 1768, Activity: active)\"}]}}]"
+              },
+              "role": "assistant"
+            },
+            {
+              "content": "[{\"toolResult\": {\"toolUseId\": \"tooluse_5vo0OTi8QTSwSRbYag1ctA\", \"status\": \"success\", \"content\": [{\"text\": \"Daily caloric needs: 2122 calories (BMR: 1768, Activity: sedentary)\"}]}}, {\"toolResult\": {\"toolUseId\": \"tooluse_hxel_gvgQp-IDffSfSR_Bg\", \"status\": \"success\", \"content\": [{\"text\": \"Daily caloric needs: 2741 calories (BMR: 1768, Activity: moderate)\"}]}}, {\"toolResult\": {\"toolUseId\": \"tooluse_uM32dN2cReCwaUGQvR7D9A\", \"status\": \"success\", \"content\": [{\"text\": \"Daily caloric needs: 3051 calories (BMR: 1768, Activity: active)\"}]}}]",
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": {
+                "content": "[{\"text\": \"I'm 45 years old, weigh 80kg, 180cm tall, and have diabetes. Calculate my BMI and daily caloric needs, then tell me about diabetes management\"}]"
+              },
+              "role": "user"
+            },
+            {
+              "content": {
+                "content": "[{\"toolResult\": {\"toolUseId\": \"tooluse_hlTb-_GASxiNBcAjIUoorg\", \"status\": \"success\", \"content\": [{\"text\": \"BMI: 24.7 (Normal weight). Normal range is 18.5-24.9.\"}]}}]"
+              },
+              "role": "tool"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "strands.telemetry.tracer",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "flags": 1,
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "ec0ac222a708a988"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer"
+      },
+      "timeUnixNano": 1761095794592486655,
+      "observedTimeUnixNano": 1761095794592753802,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": {
+                "content": "[{\"text\": \"Now, I'll calculate your daily caloric needs. Since you didn't specify your activity level, I'll provide calculations for different activity levels:\"}, {\"toolUse\": {\"toolUseId\": \"tooluse_5vo0OTi8QTSwSRbYag1ctA\", \"name\": \"calculate_daily_calories\", \"input\": {\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"sedentary\"}}}, {\"toolUse\": {\"toolUseId\": \"tooluse_hxel_gvgQp-IDffSfSR_Bg\", \"name\": \"calculate_daily_calories\", \"input\": {\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"moderate\"}}}, {\"toolUse\": {\"toolUseId\": \"tooluse_uM32dN2cReCwaUGQvR7D9A\", \"name\": \"calculate_daily_calories\", \"input\": {\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"active\"}}}]"
+              },
+              "role": "assistant"
+            },
+            {
+              "content": {
+                "message": "[{\"text\": \"Let me break down the results:\\n\\nBMI Calculation:\\n- Your weight: 80 kg\\n- Your height: 1.8 m\\n- Your BMI: 24.7 (Normal weight category)\\n\\nDaily Caloric Needs:\\n- Sedentary: 2,122 calories\\n- Moderate activity: 2,741 calories\\n- Active: 3,051 calories\\n\\nDiabetes Management Advice:\\n1. Diet Management:\\n   - Focus on a balanced diet with complex carbohydrates\\n   - Choose foods with a low glycemic index\\n   - Control portion sizes\\n   - Include plenty of vegetables, lean proteins, and whole grains\\n   - Limit processed foods and sugary drinks\\n\\n2. Blood Sugar Monitoring:\\n   - Regularly check blood glucose levels\\n   - Keep a log of your readings\\n   - Work with your healthcare provider to understand your target ranges\\n\\n3. Physical Activity:\\n   - Aim for at least 150 minutes of moderate exercise per week\\n   - Include both aerobic exercise and strength training\\n   - Your calorie needs vary based on activity level, so adjust accordingly\\n\\n4. Medication and Treatment:\\n   - Take prescribed medications consistently\\n   - Follow your doctor's recommendations for insulin or other diabetes medications\\n   - Have regular check-ups to monitor your condition\\n\\n5. Lifestyle Considerations:\\n   - Maintain a healthy weight (your current BMI is in the normal range)\\n   - Manage stress\\n   - Get adequate sleep\\n   - Avoid smoking and limit alcohol consumption\\n\\nImportant Reminders:\\n- This advice is general. Always consult with your healthcare provider for personalized diabetes management.\\n- Your specific treatment plan should be tailored to your individual health needs.\\n- Regular medical check-ups are crucial for managing diabetes effectively.\\n\\nWould you like more detailed information about any aspect of diabetes management?\"}]",
+                "finish_reason": "end_turn"
+              },
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": {
+                "content": "[{\"text\": \"I'm 45 years old, weigh 80kg, 180cm tall, and have diabetes. Calculate my BMI and daily caloric needs, then tell me about diabetes management\"}]"
+              },
+              "role": "user"
+            },
+            {
+              "content": {
+                "content": "[{\"toolResult\": {\"toolUseId\": \"tooluse_5vo0OTi8QTSwSRbYag1ctA\", \"status\": \"success\", \"content\": [{\"text\": \"Daily caloric needs: 2122 calories (BMR: 1768, Activity: sedentary)\"}]}}, {\"toolResult\": {\"toolUseId\": \"tooluse_hxel_gvgQp-IDffSfSR_Bg\", \"status\": \"success\", \"content\": [{\"text\": \"Daily caloric needs: 2741 calories (BMR: 1768, Activity: moderate)\"}]}}, {\"toolResult\": {\"toolUseId\": \"tooluse_uM32dN2cReCwaUGQvR7D9A\", \"status\": \"success\", \"content\": [{\"text\": \"Daily caloric needs: 3051 calories (BMR: 1768, Activity: active)\"}]}}]"
+              },
+              "role": "tool"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "strands.telemetry.tracer",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "flags": 1,
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "2057aef26927bb59"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer"
+      },
+      "timeUnixNano": 1761095794631999326,
+      "observedTimeUnixNano": 1761095794632175717,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": {
+                "content": "[{\"text\": \"Now, I'll calculate your daily caloric needs. Since you didn't specify your activity level, I'll provide calculations for different activity levels:\"}, {\"toolUse\": {\"toolUseId\": \"tooluse_5vo0OTi8QTSwSRbYag1ctA\", \"name\": \"calculate_daily_calories\", \"input\": {\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"sedentary\"}}}, {\"toolUse\": {\"toolUseId\": \"tooluse_hxel_gvgQp-IDffSfSR_Bg\", \"name\": \"calculate_daily_calories\", \"input\": {\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"moderate\"}}}, {\"toolUse\": {\"toolUseId\": \"tooluse_uM32dN2cReCwaUGQvR7D9A\", \"name\": \"calculate_daily_calories\", \"input\": {\"age\": 45, \"gender\": \"male\", \"weight_kg\": 80, \"height_cm\": 180, \"activity_level\": \"active\"}}}]"
+              },
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": {
+                "content": "[{\"text\": \"I'm 45 years old, weigh 80kg, 180cm tall, and have diabetes. Calculate my BMI and daily caloric needs, then tell me about diabetes management\"}]"
+              },
+              "role": "user"
+            },
+            {
+              "content": {
+                "content": "[{\"toolResult\": {\"toolUseId\": \"tooluse_5vo0OTi8QTSwSRbYag1ctA\", \"status\": \"success\", \"content\": [{\"text\": \"Daily caloric needs: 2122 calories (BMR: 1768, Activity: sedentary)\"}]}}, {\"toolResult\": {\"toolUseId\": \"tooluse_hxel_gvgQp-IDffSfSR_Bg\", \"status\": \"success\", \"content\": [{\"text\": \"Daily caloric needs: 2741 calories (BMR: 1768, Activity: moderate)\"}]}}, {\"toolResult\": {\"toolUseId\": \"tooluse_uM32dN2cReCwaUGQvR7D9A\", \"status\": \"success\", \"content\": [{\"text\": \"Daily caloric needs: 3051 calories (BMR: 1768, Activity: active)\"}]}}]"
+              },
+              "role": "tool"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "strands.telemetry.tracer",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "flags": 1,
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "be6ffc10f27c2ba6"
+    },
+    {
+      "resource": {
+        "attributes": {
+          "deployment.environment.name": "bedrock-agentcore:default",
+          "aws.local.service": "strands_healthcare_single_agent.DEFAULT",
+          "service.name": "strands_healthcare_single_agent.DEFAULT",
+          "cloud.region": "us-west-2",
+          "aws.log.stream.names": "otel-rt-logs",
+          "telemetry.sdk.name": "opentelemetry",
+          "aws.service.type": "gen_ai_agent",
+          "telemetry.sdk.language": "python",
+          "cloud.provider": "aws",
+          "cloud.resource_id": "arn:aws:bedrock-agentcore:us-west-2:256056679288:runtime/strands_healthcare_single_agent-eH7QgGA0ml/runtime-endpoint/DEFAULT:DEFAULT",
+          "aws.log.group.names": "/aws/bedrock-agentcore/runtimes/strands_healthcare_single_agent-eH7QgGA0ml-DEFAULT",
+          "telemetry.sdk.version": "1.33.1",
+          "cloud.platform": "aws_bedrock_agentcore",
+          "telemetry.auto.version": "0.12.1-aws"
+        }
+      },
+      "scope": {
+        "name": "strands.telemetry.tracer"
+      },
+      "timeUnixNano": 1761095794664485288,
+      "observedTimeUnixNano": 1761095794664616996,
+      "severityNumber": 9,
+      "severityText": "",
+      "body": {
+        "output": {
+          "messages": [
+            {
+              "content": {
+                "message": "Let me break down the results:\n\nBMI Calculation:\n- Your weight: 80 kg\n- Your height: 1.8 m\n- Your BMI: 24.7 (Normal weight category)\n\nDaily Caloric Needs:\n- Sedentary: 2,122 calories\n- Moderate activity: 2,741 calories\n- Active: 3,051 calories\n\nDiabetes Management Advice:\n1. Diet Management:\n   - Focus on a balanced diet with complex carbohydrates\n   - Choose foods with a low glycemic index\n   - Control portion sizes\n   - Include plenty of vegetables, lean proteins, and whole grains\n   - Limit processed foods and sugary drinks\n\n2. Blood Sugar Monitoring:\n   - Regularly check blood glucose levels\n   - Keep a log of your readings\n   - Work with your healthcare provider to understand your target ranges\n\n3. Physical Activity:\n   - Aim for at least 150 minutes of moderate exercise per week\n   - Include both aerobic exercise and strength training\n   - Your calorie needs vary based on activity level, so adjust accordingly\n\n4. Medication and Treatment:\n   - Take prescribed medications consistently\n   - Follow your doctor's recommendations for insulin or other diabetes medications\n   - Have regular check-ups to monitor your condition\n\n5. Lifestyle Considerations:\n   - Maintain a healthy weight (your current BMI is in the normal range)\n   - Manage stress\n   - Get adequate sleep\n   - Avoid smoking and limit alcohol consumption\n\nImportant Reminders:\n- This advice is general. Always consult with your healthcare provider for personalized diabetes management.\n- Your specific treatment plan should be tailored to your individual health needs.\n- Regular medical check-ups are crucial for managing diabetes effectively.\n\nWould you like more detailed information about any aspect of diabetes management?\n",
+                "finish_reason": "end_turn"
+              },
+              "role": "assistant"
+            }
+          ]
+        },
+        "input": {
+          "messages": [
+            {
+              "content": "You are a healthcare assistant AI. You help users with:\n        - BMI calculations and health assessments\n        - Medication dosage calculations\n        - Symptom assessment and triage\n        - Drug interaction checks\n        - Daily caloric needs calculation\n\n        Always remind users that your advice is for informational purposes only and \n        they should consult healthcare professionals for medical decisions.\n\n        For urgent symptoms (severity 7+ or chest pain, breathing issues), \n        always recommend immediate medical attention.",
+              "role": "system"
+            },
+            {
+              "content": {
+                "content": "[{\"text\": \"I'm 45 years old, weigh 80kg, 180cm tall, and have diabetes. Calculate my BMI and daily caloric needs, then tell me about diabetes management\"}]"
+              },
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "attributes": {
+        "event.name": "strands.telemetry.tracer",
+        "session.id": "f161c701-5657-4a49-bcbd-2e62b6211454"
+      },
+      "flags": 1,
+      "traceId": "68f830632a7a139f03c3164669a47d7f",
+      "spanId": "2350ab0c61aa843c"
+    }
+  ]
+}

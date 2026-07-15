@@ -91,13 +91,13 @@ class TestDeepEvalAdapterSuccess:
         assert test_case.input == "What is AI?"
         assert test_case.actual_output == "AI is artificial intelligence."
 
-    def test_custom_customer_mapper(self):
+    def test_custom_custom_mapper(self):
         from deepeval.test_case import LLMTestCase
 
         metric = _mock_metric()
         adapter = DeepEvalAdapter(
             metric=metric,
-            customer_mapper=lambda ev: LLMTestCase(
+            custom_mapper=lambda ev: LLMTestCase(
                 input="mapped input",
                 actual_output="mapped output",
             ),
@@ -140,12 +140,6 @@ class TestDeepEvalAdapterSuccess:
 
         test_case = metric.measure.call_args[0][0]
         assert test_case.expected_output == "AI stands for artificial intelligence."
-
-    def test_model_override_sets_metric_model(self):
-        metric = _mock_metric()
-        DeepEvalAdapter(metric=metric, model="bedrock/anthropic.claude-3")
-
-        assert metric.model == "bedrock/anthropic.claude-3"
 
     def test_label_uses_metric_success_true(self):
         metric = _mock_metric(score=0.3, threshold=0.7)
@@ -210,7 +204,7 @@ class TestDeepEvalAdapterErrors:
 
         assert result.errorCode == "MISSING_REQUIRED_FIELD"
         assert "input" in result.errorMessage
-        assert "customer_mapper" in result.errorMessage
+        assert "custom_mapper" in result.errorMessage
         metric.measure.assert_not_called()
 
     def test_metric_measure_exception_returns_error(self):
@@ -236,7 +230,7 @@ class TestDeepEvalAdapterErrors:
 
         assert result.errorCode == "MISSING_REQUIRED_FIELD"
         assert "retrieval_context" in result.errorMessage
-        assert "customer_mapper" in result.errorMessage
+        assert "custom_mapper" in result.errorMessage
 
     def test_never_raises(self):
         metric = _mock_metric()
