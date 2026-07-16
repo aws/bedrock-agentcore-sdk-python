@@ -230,3 +230,4 @@ Dockerfile
 CLAUDE.md
 .omc/
 .deepeval/
+e2e_tests/
