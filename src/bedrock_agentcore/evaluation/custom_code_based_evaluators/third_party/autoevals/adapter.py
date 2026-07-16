@@ -93,6 +93,7 @@ class AutoevalsAdapter(BaseAdapter):
         label = None
         if self.threshold is not None:
             label = "Pass" if score is not None and score >= self.threshold else "Fail"
-        explanation = getattr(eval_result, "metadata", {}).get("rationale", "") if hasattr(eval_result, "metadata") else ""
+        metadata = getattr(eval_result, "metadata", None)
+        explanation = metadata.get("rationale", "") if isinstance(metadata, dict) else ""
 
         return EvaluatorOutput(value=score, label=label, explanation=explanation)

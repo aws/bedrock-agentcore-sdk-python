@@ -18,16 +18,31 @@ from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_
 
 logger = logging.getLogger(__name__)
 
-# Amazon ADOT distro scope not recognized by strands-evals detect_otel_mapper
+# Amazon ADOT distro scope not yet recognized by strands-evals detect_otel_mapper.
+# Uses the same span format as opentelemetry.instrumentation.langchain — LangChainOtelSessionMapper
+# handles both. Workaround until strands-evals adds native support.
 SCOPE_AMAZON_OTEL_LANGCHAIN = "amazon.opentelemetry.distro.instrumentation.langchain"
+
+
+def _extract_session_id(session_spans: List[Dict[str, Any]]) -> str:
+    """Extract session ID from span attributes."""
+    for span in session_spans:
+        attrs = span.get("attributes", {})
+        if isinstance(attrs, dict):
+            session_id = attrs.get("session.id")
+            if session_id:
+                return session_id
+    return "default"
 
 
 def _detect_mapper(session_spans: List[Dict[str, Any]]):
     """Detect the appropriate mapper, extending strands-evals for edge cases.
 
-    Handles:
-    - Amazon ADOT distro scope (not recognized by strands-evals)
-    - CloudWatch split format where body is on a separate entry from the scope span
+    We check scope names before falling back to detect_otel_mapper because:
+    - detect_otel_mapper doesn't recognize amazon.opentelemetry.distro scope
+    - detect_otel_mapper misidentifies CloudWatch split format (body on separate
+      entries) as StrandsInMemorySessionMapper (which expects ReadableSpan objects)
+    - Our pre-check handles both cases correctly, then falls back for other formats
     """
     from strands_evals.mappers import CloudWatchSessionMapper
     from strands_evals.mappers.utils import get_body
@@ -80,8 +95,10 @@ def map_spans(
         warnings.filterwarnings("ignore", category=DeprecationWarning, module="strands_evals")
         mapper = _detect_mapper(session_spans)
 
+    session_id = _extract_session_id(session_spans)
+
     try:
-        session = mapper.map_to_session(session_spans, session_id="eval")
+        session = mapper.map_to_session(session_spans, session_id=session_id)
     except Exception as e:
         raise ValueError(
             f"Could not extract evaluation fields from spans using {type(mapper).__name__}: {e}. "
