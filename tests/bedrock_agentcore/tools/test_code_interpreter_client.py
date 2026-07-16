@@ -838,12 +838,12 @@ class TestCodeInterpreterClient:
         # Act
         client.install_packages(["pandas>=2.0", "numpy<2.0", "scikit-learn==1.3.0"])
 
-        # Assert
+        # Assert - version specifiers are shell-quoted (harmless; pip sees the original)
         client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
             codeInterpreterIdentifier="test.identifier",
             sessionId="test-session-id",
             name="executeCommand",
-            arguments={"command": "pip install pandas>=2.0 numpy<2.0 scikit-learn==1.3.0"},
+            arguments={"command": "pip install 'pandas>=2.0' 'numpy<2.0' scikit-learn==1.3.0"},
         )
 
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
@@ -913,6 +913,52 @@ class TestCodeInterpreterClient:
         # Act & Assert - dollar sign
         with pytest.raises(ValueError, match="Invalid package name"):
             client.install_packages(["pandas$HOME"])
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_install_packages_extras_group_metacharacters_rejected(self, mock_boto3):
+        """Extras groups containing characters outside valid extra names are rejected."""
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        # Act & Assert - metacharacters inside an extras group are not valid extra names
+        with pytest.raises(ValueError, match="Invalid package name"):
+            client.install_packages(["requests[$(id)]"])
+
+        with pytest.raises(ValueError, match="Invalid package name"):
+            client.install_packages(["flask[`whoami`]"])
+
+        with pytest.raises(ValueError, match="Invalid package name"):
+            client.install_packages(["pandas[a b c]"])
+
+    @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
+    def test_install_packages_valid_extras_allowed(self, mock_boto3):
+        """Legitimate pip extras (comma-separated identifiers) must still work."""
+        # Arrange
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        client = CodeInterpreter("us-west-2")
+        client.identifier = "test.identifier"
+        client.session_id = "test-session-id"
+
+        mock_response = {"result": "success"}
+        client.data_plane_client.invoke_code_interpreter.return_value = mock_response
+
+        # Act
+        client.install_packages(["pandas[security]", "celery[redis,auth]"])
+
+        # Assert
+        client.data_plane_client.invoke_code_interpreter.assert_called_once_with(
+            codeInterpreterIdentifier="test.identifier",
+            sessionId="test-session-id",
+            name="executeCommand",
+            arguments={"command": "pip install 'pandas[security]' 'celery[redis,auth]'"},
+        )
 
     @patch("bedrock_agentcore.tools.code_interpreter_client.boto3")
     def test_download_file_text(self, mock_boto3):
