@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.18.1] - 2026-07-17
+
+### Fixed
+- fix: tighten package specifier validation in install_packages() (#581) (3c4b4ee)
+
+### Other Changes
+- chore(deps): bump python-multipart from 0.0.27 to 0.0.31 (#527) (986801f)
+- chore(deps): bump soupsieve from 2.8 to 2.8.4 (#575) (1a79821)
+- chore(deps): bump cryptography from 46.0.7 to 48.0.1 (#531) (3a4361e)
+- chore(deps): bump pyjwt from 2.12.0 to 2.13.0 (#525) (8e1abcf)
+- chore(deps): bump starlette from 0.49.1 to 1.3.1 (#530) (738eb0f)
+
 ## [1.18.0] - 2026-07-10
 
 ### Fixed
