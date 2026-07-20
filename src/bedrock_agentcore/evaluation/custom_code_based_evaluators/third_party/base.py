@@ -9,6 +9,9 @@ from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_
     SpanMapResult,
     map_spans,
 )
+from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers.common import (
+    FieldExtractionError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +38,7 @@ class BaseAdapter(abc.ABC):
         """
         try:
             return self._run(evaluator_input)
-        except ValueError as e:
+        except FieldExtractionError as e:
             logger.error("Field extraction failed: %s", e)
             return EvaluatorOutput(
                 label="Error",

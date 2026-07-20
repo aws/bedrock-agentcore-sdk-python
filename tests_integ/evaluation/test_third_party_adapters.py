@@ -90,18 +90,19 @@ class TestDeepEvalAdapterIntegration:
         assert isinstance(result, EvaluatorOutput)
         assert result.errorCode == "MISSING_REQUIRED_FIELD" or result.value is not None
 
-    def test_with_field_mapper(self):
+    def test_with_custom_mapper(self):
         from deepeval.metrics import BiasMetric
+        from deepeval.test_case import LLMTestCase
 
         from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.deepeval import DeepEvalAdapter
 
         metric = BiasMetric(threshold=0.5)
         adapter = DeepEvalAdapter(
             metric=metric,
-            field_mapper=lambda ev: {
-                "input": "Is Python a good language?",
-                "actual_output": "Python is a versatile programming language used widely.",
-            },
+            custom_mapper=lambda ev: LLMTestCase(
+                input="Is Python a good language?",
+                actual_output="Python is a versatile programming language used widely.",
+            ),
         )
 
         result = adapter(_make_agent_evaluator_input())
@@ -110,8 +111,8 @@ class TestDeepEvalAdapterIntegration:
         assert result.value is not None
 
 
-class TestAutoevalsAdapterIntegration:
-    """Integration tests for AutoevalsAdapter with real Autoevals scorers."""
+class TestAutoEvalsAdapterIntegration:
+    """Integration tests for AutoEvalsAdapter with real Autoevals scorers."""
 
     @pytest.fixture(autouse=True)
     def check_autoevals(self):
@@ -121,10 +122,10 @@ class TestAutoevalsAdapterIntegration:
     def test_factuality_scorer(self):
         from autoevals import Factuality
 
-        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoevalsAdapter
+        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoEvalsAdapter
 
         scorer = Factuality()
-        adapter = AutoevalsAdapter(scorer=scorer)
+        adapter = AutoEvalsAdapter(metric=scorer)
 
         evaluator_input = _make_agent_evaluator_input()
         evaluator_input.session_spans[0]["span_events"][0]["body"]["output"]["messages"] = [
@@ -140,28 +141,28 @@ class TestAutoevalsAdapterIntegration:
     def test_custom_threshold(self):
         from autoevals import Factuality
 
-        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoevalsAdapter
+        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoEvalsAdapter
 
         scorer = Factuality()
-        adapter = AutoevalsAdapter(scorer=scorer, threshold=0.9)
+        adapter = AutoEvalsAdapter(metric=scorer, threshold=0.9)
 
         result = adapter(_make_agent_evaluator_input())
 
         assert isinstance(result, EvaluatorOutput)
         assert result.value is not None
 
-    def test_with_field_mapper(self):
+    def test_with_custom_mapper(self):
         from autoevals import Factuality
 
-        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoevalsAdapter
+        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoEvalsAdapter
 
         scorer = Factuality()
-        adapter = AutoevalsAdapter(
-            scorer=scorer,
-            field_mapper=lambda ev: {
+        adapter = AutoEvalsAdapter(
+            metric=scorer,
+            custom_mapper=lambda ev: {
                 "input": "What is 2+2?",
-                "actual_output": "4",
-                "expected_output": "4",
+                "output": "4",
+                "expected": "4",
             },
         )
 

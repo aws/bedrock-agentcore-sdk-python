@@ -13,6 +13,7 @@ from strands_evals.mappers.utils import get_scope_name
 from strands_evals.types.trace import AgentInvocationSpan, Session, ToolExecutionSpan
 
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers.common import (
+    FieldExtractionError,
     SpanMapResult,
 )
 
@@ -52,9 +53,7 @@ def _detect_mapper(session_spans: List[Dict[str, Any]]):
 
     for span in session_spans:
         scope_name = get_scope_name(span)
-        if scope_name == SCOPE_AMAZON_OTEL_LANGCHAIN:
-            return LangChainOtelSessionMapper()
-        if scope_name == "opentelemetry.instrumentation.langchain":
+        if scope_name in (SCOPE_AMAZON_OTEL_LANGCHAIN, "opentelemetry.instrumentation.langchain"):
             return LangChainOtelSessionMapper()
         if scope_name == "openinference.instrumentation.langchain":
             return OpenInferenceSessionMapper()
@@ -100,7 +99,7 @@ def map_spans(
     try:
         session = mapper.map_to_session(session_spans, session_id=session_id)
     except Exception as e:
-        raise ValueError(
+        raise FieldExtractionError(
             f"Could not extract evaluation fields from spans using {type(mapper).__name__}: {e}. "
             f"Provide a custom_mapper for custom or unsupported span formats."
         ) from e
@@ -136,6 +135,11 @@ def _session_to_span_map_result(session: Session) -> SpanMapResult:
 
     Extracts the last AgentInvocationSpan for input/output and all
     ToolExecutionSpans for retrieval_context and tools_called.
+
+    Note: Currently scoped to trace-level evaluation only. Only the last
+    AgentInvocationSpan is used — session-level multi-turn evaluators
+    (e.g. ConversationCompleteness) are not supported. Use custom_mapper
+    for multi-turn evaluation needs.
     """
     agent_span = None
     tool_spans: List[ToolExecutionSpan] = []
@@ -148,7 +152,7 @@ def _session_to_span_map_result(session: Session) -> SpanMapResult:
                 tool_spans.append(span)
 
     if agent_span is None:
-        raise ValueError(
+        raise FieldExtractionError(
             "No AgentInvocationSpan found in session. "
             "Provide a custom_mapper for custom or unsupported span formats."
         )

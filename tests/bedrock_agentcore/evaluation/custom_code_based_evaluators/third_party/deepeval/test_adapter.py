@@ -236,9 +236,9 @@ class TestDeepEvalAdapterErrors:
         assert "LLM timeout" in result.errorMessage
 
     def test_missing_params_error_caught(self):
-        metric = _mock_metric()
+        from deepeval.errors import MissingTestCaseParamsError
 
-        MissingTestCaseParamsError = type("MissingTestCaseParamsError", (Exception,), {})
+        metric = _mock_metric()
         metric.measure = MagicMock(
             side_effect=MissingTestCaseParamsError("retrieval_context is required")
         )
@@ -246,7 +246,7 @@ class TestDeepEvalAdapterErrors:
 
         result = adapter(_make_evaluator_input())
 
-        assert result.errorCode in ("MISSING_REQUIRED_FIELD", "FIELD_EXTRACTION_ERROR")
+        assert result.errorCode == "MISSING_REQUIRED_FIELD"
         assert "retrieval_context" in result.errorMessage
         assert "custom_mapper" in result.errorMessage
 

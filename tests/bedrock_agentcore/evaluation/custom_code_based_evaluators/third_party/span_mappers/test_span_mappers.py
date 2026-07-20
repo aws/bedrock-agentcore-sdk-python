@@ -99,17 +99,16 @@ class TestMapSpans:
 
         assert result.assertions == ["Fact 1", "Fact 2"]
 
-    def test_span_map_result_to_dict(self):
+    def test_span_map_result_fields(self):
         result = SpanMapResult(
             input="hello",
             actual_output="world",
             retrieval_context=["ctx1"],
             tools_called=[{"name": "tool1", "input_parameters": {"a": 1}, "output": "result"}],
         )
-        d = result.to_dict()
-        assert d["input"] == "hello"
-        assert d["actual_output"] == "world"
-        assert d["retrieval_context"] == ["ctx1"]
-        assert d["tools_called"] == [{"name": "tool1", "input_parameters": {"a": 1}, "output": "result"}]
-        assert "expected_output" not in d
-        assert "system_prompt" not in d
+        assert result.input == "hello"
+        assert result.actual_output == "world"
+        assert result.retrieval_context == ["ctx1"]
+        assert result.tools_called == [{"name": "tool1", "input_parameters": {"a": 1}, "output": "result"}]
+        assert result.expected_output is None
+        assert result.system_prompt is None

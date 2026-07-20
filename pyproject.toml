@@ -175,7 +175,9 @@ datasets = [
 ]
 deepeval = [
     "deepeval>=2.0.0",
+    "strands-agents-evals>=1.0.0,<2.0.0",
 ]
 autoevals = [
     "autoevals>=0.0.50",
+    "strands-agents-evals>=1.0.0,<2.0.0",
 ]

@@ -3,6 +3,7 @@
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
+from deepeval.errors import MissingTestCaseParamsError
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase, ToolCall
 
@@ -73,8 +74,8 @@ class DeepEvalAdapter(BaseAdapter):
                     errorMessage=f"Field(s) {missing} required by {metric_name} but not found in evaluation event. "
                     f"Provide a custom_mapper or ensure spans contain the necessary data.",
                 )
-            # assertions from reference_inputs take precedence over span-extracted context
-            context = result.assertions if result.assertions else result.context
+            # context = ground truth assertions only (not tool outputs)
+            context = result.assertions if result.assertions else None
             test_case = LLMTestCase(
                 input=result.input,
                 actual_output=result.actual_output,
@@ -87,14 +88,14 @@ class DeepEvalAdapter(BaseAdapter):
 
         try:
             self.metric.measure(test_case)
-        except Exception as e:
-            if type(e).__name__ == "MissingTestCaseParamsError":
-                return EvaluatorOutput(
-                    label="Error",
-                    errorCode="MISSING_REQUIRED_FIELD",
-                    errorMessage=f"{type(self.metric).__name__} requires fields not extracted from spans: {e}. "
-                    f"Provide a custom_mapper to supply custom fields from your trace data.",
-                )
+        except MissingTestCaseParamsError as e:
+            return EvaluatorOutput(
+                label="Error",
+                errorCode="MISSING_REQUIRED_FIELD",
+                errorMessage=f"{type(self.metric).__name__} requires fields not extracted from spans: {e}. "
+                f"Provide a custom_mapper to supply custom fields from your trace data.",
+            )
+        except Exception:
             raise
 
         score = self.metric.score

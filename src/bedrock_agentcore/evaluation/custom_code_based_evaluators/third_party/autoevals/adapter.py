@@ -9,16 +9,16 @@ from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.base 
 logger = logging.getLogger(__name__)
 
 
-class AutoevalsAdapter(BaseAdapter):
+class AutoEvalsAdapter(BaseAdapter):
     """Adapter that runs an Autoevals scorer against AgentCore evaluation events.
 
     Example (default span mapping)::
 
         from autoevals import Factuality
-        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoevalsAdapter
+        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoEvalsAdapter
 
         scorer = Factuality()
-        adapter = AutoevalsAdapter(metric=scorer)
+        adapter = AutoEvalsAdapter(metric=scorer)
 
     Example (custom mapper returning eval kwargs)::
 
@@ -31,7 +31,7 @@ class AutoevalsAdapter(BaseAdapter):
                 "expected": "the expected answer",
             }
 
-        adapter = AutoevalsAdapter(
+        adapter = AutoEvalsAdapter(
             metric=Factuality(),
             custom_mapper=my_mapper,
         )
