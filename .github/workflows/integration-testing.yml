@@ -124,8 +124,8 @@ jobs:
             ignore: ""
           # TODO: expand to full tests_integ/memory once test stability is addressed
           - group: memory
-            path: tests_integ/memory/test_controlplane.py tests_integ/memory/test_memory_client.py tests_integ/memory/integrations/test_session_manager.py
-            timeout: 15
+            path: tests_integ/memory/test_controlplane.py tests_integ/memory/test_memory_client.py tests_integ/memory/integrations/test_session_manager.py tests_integ/memory/integrations/test_memory_store.py
+            timeout: 30
             extra-deps: ""
             ignore: ""
           - group: evaluation
@@ -189,7 +189,7 @@ jobs:
           EXTRA_DEPS: ${{ matrix.extra-deps }}
         run: |
           pip install -e .
-          pip install --no-cache-dir pytest pytest-xdist pytest-order pytest-rerunfailures requests strands-agents uvicorn httpx starlette websockets $EXTRA_DEPS
+          pip install --no-cache-dir pytest pytest-asyncio pytest-xdist pytest-order pytest-rerunfailures requests strands-agents uvicorn httpx starlette websockets $EXTRA_DEPS
 
       - name: Run integration tests
         env:
@@ -198,6 +198,7 @@ jobs:
           MEMORY_KINESIS_ARN: ${{ secrets.MEMORY_KINESIS_ARN }}
           MEMORY_ROLE_ARN: ${{ secrets.MEMORY_ROLE_ARN }}
           MEMORY_PREPOPULATED_ID: ${{ secrets.MEMORY_PREPOPULATED_ID }}
+          MEMORY_STORE_TEST_ID: ${{ secrets.MEMORY_STORE_TEST_ID }}
           RESOURCE_POLICY_TEST_ARN: ${{ secrets.RESOURCE_POLICY_TEST_ARN }}
           RESOURCE_POLICY_TEST_PRINCIPAL: ${{ secrets.RESOURCE_POLICY_TEST_PRINCIPAL }}
           GATEWAY_ROLE_ARN: ${{ secrets.GATEWAY_ROLE_ARN }}

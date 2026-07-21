@@ -1,6 +1,6 @@
 # Strands AgentCore Memory Examples
 
-This directory contains comprehensive examples demonstrating how to use the Strands AgentCoreMemorySessionManager with Amazon Bedrock AgentCore Memory for persistent conversation storage and intelligent retrieval (Supports STM and LTM).
+This directory documents the Strands `AgentCoreMemorySessionManager` for persistent conversation storage and the native `AgentCoreMemoryStore` integration for Strands-managed long-term memory (LTM).
 
 ## Quick Setup
 
@@ -23,6 +23,147 @@ Basic memory functionality for conversation persistence within a session.
 
 ### 2. Long-Term Memory (LTM)
 Advanced memory with multiple strategies for user preferences, facts, and session summaries.
+
+---
+
+## Native Strands long-term memory stores
+
+`AgentCoreMemoryStore` plugs AgentCore long-term memory directly into Strands' `MemoryManager`.
+It complements `AgentCoreMemorySessionManager`: use the session manager for AgentCore-backed
+conversation persistence (STM), and use memory stores for Strands-native long-term recall and
+extraction. This integration requires `strands-agents>=1.46.0`.
+
+### One namespace
+
+A store is recall-only by default. Set `writable=True` on exactly one store when Strands should
+send messages to AgentCore for server-side long-term extraction:
+
+```python
+from strands import Agent
+from strands.memory import MemoryManager
+
+from bedrock_agentcore.memory.integrations.strands import AgentCoreMemoryStore
+
+store = AgentCoreMemoryStore(
+    memory_id=MEM_ID,
+    actor_id=ACTOR_ID,
+    session_id=SESSION_ID,
+    namespace="/facts/{actorId}/",
+    writable=True,
+    extraction=True,
+    region_name="us-east-1",
+)
+manager = MemoryManager(stores=[store])
+agent = Agent(memory_manager=manager)
+agent("Remember that I prefer window seats.")
+```
+
+`namespace` performs exact-prefix retrieval. Use `namespace_path` instead to search a namespace
+subtree. The integration resolves `{actorId}` and `{sessionId}` client-side; other placeholders and
+malformed braces must be substituted before constructing the store.
+
+### Multiple namespaces
+
+`create_agentcore_memory_stores` returns `list[MemoryStore]` for direct `MemoryManager` composition. Each
+item is a concrete `AgentCoreMemoryStore`; the factory shares one boto3 client and prevents duplicate
+writes by allowing at most one writer:
+
+```python
+from strands.memory import IntervalTrigger, MemoryManager, MemoryMessageFilter
+
+from bedrock_agentcore.memory.integrations.strands import create_agentcore_memory_stores
+
+stores = create_agentcore_memory_stores(
+    memory_id=MEM_ID,
+    actor_id=ACTOR_ID,
+    session_id=SESSION_ID,
+    namespaces=[
+        {
+            "namespace": "/preferences/{actorId}/",
+            "max_search_results": 5,
+            "min_score": 0.7,
+        },
+        {
+            "namespace": "/facts/{actorId}/",
+            "max_search_results": 10,
+            "min_score": 0.3,
+        },
+    ],
+    extraction={
+        "cadence": IntervalTrigger(turns=10),
+        "filter": MemoryMessageFilter(exclude=["toolUse", "toolResult", "image"]),
+    },
+    region_name="us-east-1",
+)
+manager = MemoryManager(stores=stores)
+```
+
+With extraction enabled, the first namespace not explicitly marked `writable=False` becomes the
+writer. Set `writable=True` on one namespace to choose it explicitly. Omit `extraction` (or pass
+`False`) for recall-only stores.
+
+### Search and write behavior
+
+- Search defaults to 5 results. `min_score` enables client-side score filtering and over-fetches by
+  a factor of 4 (configurable with `over_fetch_factor`); only the over-fetched `topK` is capped at 100.
+- Returned metadata uses reserved keys `_id`, `_score`, `_namespaces`, and `_createdAt`.
+- Writes preserve user/assistant roles, ignore blank and tool-only messages, and batch up to 50
+  consecutive turns per AgentCore event by default. `max_turns_per_event` accepts any positive integer.
+- `metadata_provider` returns scalar strings, finite numbers, or booleans. Values are serialized with
+  ECMAScript-compatible scalar text before AgentCore's value-character validation; `None`, arrays,
+  objects, non-finite numbers, and strings outside `[a-zA-Z0-9\s._:/=+@-]` are rejected locally.
+- Direct `AgentCoreMemoryStore(...)` construction accepts `extraction_mode="SKIP"` to omit long-term
+  extraction for its events. The multi-namespace factory intentionally does not expose this option.
+- `add_messages()` is the supported write interface. The flat-string Strands `add()` API is not
+  implemented because it loses role and turn information.
+
+### Batching, cadence, and flush
+
+Three separate controls determine write timing and cost:
+
+1. **Batching is always on.** Each flush packs its role-tagged messages into as few `create_event`
+   requests as `max_turns_per_event` allows. A turn with several messages is not one request per message.
+2. **Cadence controls when buffered messages are dispatched across turns.** `extraction=True` uses
+   Strands' default trigger. Pass an extraction config with an `IntervalTrigger` (or another Strands
+   trigger) to tune cadence. Cadence only batches across invocations when the same `MemoryManager` is
+   reused and the application does not flush after every turn.
+3. **`flush()` is the durability boundary, not a server-extraction barrier.** It waits for in-flight
+   client `create_event` calls to settle. AgentCore's server-side extraction remains eventually
+   consistent, so newly written long-term records may not be immediately searchable.
+
+A synchronous `agent(...)` invocation automatically flushes at its boundary in Strands 1.46. Async
+entry points do not: after `await agent.invoke_async(...)` or async streaming, explicitly call
+`await manager.flush()` at the application boundary where writes must be durable.
+
+Reuse one manager per `(actor_id, session_id)` while that session is active. Reuse keeps trigger state
+and buffered turns alive, allowing a coarser cadence to reduce calls. Flushing after every invocation
+is the durable default (roughly one batched event per turn); flushing less often can lower write cost
+but risks losing the unflushed tail if the process or runtime is reclaimed. The application owns
+manager caching and eviction.
+
+### Namespace and error contract
+
+Recall works only when the query namespace matches the concrete namespace where AgentCore stored the
+extracted record. Writes do not target the store's read namespace: `create_event` appends to the shared
+`(memory_id, actor_id, session_id)` stream, and the resource's strategies decide which namespaces receive
+extracted records. That is why a store set must have at most one writer.
+
+- AgentCore resolves strategy placeholders at extraction/write time, but retrieval does not resolve
+  placeholders. The store resolves only `{actorId}` and `{sessionId}` and rejects remaining braces at
+  construction. Pre-resolve values such as `{memoryStrategyId}` yourself.
+- Match the namespace template used when provisioning the strategy. `namespace` queries one exact
+  prefix; `namespace_path` queries a parent subtree.
+- A namespace containing `{sessionId}` is session-scoped. A store for session B cannot recall records
+  extracted under session A; use a stable session id or actor-only namespace for cross-session recall.
+- The store consumes an existing memory resource. Strategy definitions, expiry, encryption, indexed keys,
+  and record streaming are control-plane concerns configured separately; the store does not provision them.
+- Writes and extraction are eventually consistent. A successful flush proves client writes settled,
+  not that extraction is complete.
+- Write failures propagate so Strands can roll back and retry the buffered batch. Retrieval failures
+  propagate to `MemoryManager`, which applies its normal per-store partial-failure behavior.
+
+The integration calls the boto3 `bedrock-agentcore` data-plane client directly. AWS credentials use
+boto3's normal credential chain; no credentials are stored by the integration.
 
 ---
 

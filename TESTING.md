@@ -30,6 +30,22 @@ uv run pytest tests_integ/memory/test_controlplane.py -xvs -k "integration"
 uv run pytest tests_integ/memory/test_memory_client.py -xvs
 ```
 
+### Strands memory-store integration
+
+The native Strands long-term memory integration reuses a pre-provisioned memory and also invokes a
+live Bedrock model. It never creates a memory resource. Set `MEMORY_STORE_TEST_ID` to a resource with
+semantic `/facts/{actorId}/` and summary `/summaries/{actorId}/{sessionId}` strategies; if it is unset,
+the test falls back to `MEMORY_PREPOPULATED_ID`:
+
+```bash
+AWS_PROFILE=<profile> BEDROCK_TEST_REGION=us-west-2 \
+  MEMORY_STORE_TEST_ID=<pre-provisioned-memory-id> \
+  uv run pytest tests_integ/memory/integrations/test_memory_store.py -xvs
+```
+
+Set `STRANDS_TEST_MODEL_ID` to override the default test model. Long-term extraction is eventually
+consistent, so the tests poll for records and may take several minutes.
+
 ### Pre-populated memory setup
 
 Retrieval tests require a memory with data already extracted into `/facts/`, `/preferences/`, and `/summaries/` namespaces. Create one once per account:
@@ -77,9 +93,15 @@ uv run pytest tests_integ/tools -xvs
 
 ## CI
 
-Integration tests run via `integration-testing.yml` on PRs to main. The workflow runs runtime, memory (stream delivery only), and evaluation tests in parallel.
+Integration tests run via `integration-testing.yml` on PRs to main. The workflow runs runtime,
+control-plane/client/session-manager/native memory-store memory tests, evaluation, services, policy,
+gateway, identity, payments, and tools in parallel. Stream delivery tests require
+`MEMORY_KINESIS_ARN` and `MEMORY_ROLE_ARN`; native memory-store tests require
+`MEMORY_STORE_TEST_ID` or fall back to `MEMORY_PREPOPULATED_ID`.
 
-Stream delivery tests fail in CI unless `MEMORY_KINESIS_ARN` and `MEMORY_ROLE_ARN` secrets are configured on the repo. Other memory integration tests are not yet run in CI due to provisioning times and flaky LLM-dependent assertions — CI support is planned once test stability is addressed.
+Changes to `.github/workflows/` trigger the workflow security gate and require maintainer security
+review plus manual approval. Integration tests do not run automatically for such PR changes; a
+maintainer must trigger the checks through the repository's approved process.
 
 ## Conventions
 

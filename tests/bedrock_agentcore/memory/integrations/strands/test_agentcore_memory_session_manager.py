@@ -3722,9 +3722,14 @@ class TestAsyncMode:
         registry = HookRegistry()
         manager.register_hooks(registry)
 
-        for event_type in (MultiAgentInitializedEvent, AfterNodeCallEvent, AfterMultiAgentInvocationEvent):
-            callbacks = registry._registered_callbacks.get(event_type, [])
-            assert callbacks, f"No callbacks registered for {event_type.__name__}"
+        events = (
+            MultiAgentInitializedEvent(source=Mock()),
+            AfterNodeCallEvent(source=Mock(), node_id="node"),
+            AfterMultiAgentInvocationEvent(source=Mock()),
+        )
+        for event in events:
+            callbacks = list(registry.get_callbacks_for(event))
+            assert callbacks, f"No callbacks registered for {type(event).__name__}"
             assert all(asyncio.iscoroutinefunction(cb) for cb in callbacks)
 
     def test_async_mode_logs_sync_invocation_warning(self, mock_memory_client, caplog):
@@ -3746,15 +3751,20 @@ class TestAsyncMode:
         manager.register_hooks(registry)
 
         # BidiAgentInitializedEvent dispatches via the sync hook path, so its callback must NOT be a coroutine.
-        init_callbacks = registry._registered_callbacks.get(BidiAgentInitializedEvent, [])
+        init_event = BidiAgentInitializedEvent(agent=Mock())
+        init_callbacks = list(registry.get_callbacks_for(init_event))
         assert init_callbacks, "No callbacks registered for BidiAgentInitializedEvent"
         assert not any(asyncio.iscoroutinefunction(cb) for cb in init_callbacks)
 
         # BidiMessageAddedEvent and BidiAfterInvocationEvent dispatch via invoke_callbacks_async,
         # so their callbacks should be async to keep the event loop unblocked.
-        for event_type in (BidiMessageAddedEvent, BidiAfterInvocationEvent):
-            callbacks = registry._registered_callbacks.get(event_type, [])
-            assert callbacks, f"No callbacks registered for {event_type.__name__}"
+        events = (
+            BidiMessageAddedEvent(agent=Mock(), message={"role": "user", "content": [{"text": "hello"}]}),
+            BidiAfterInvocationEvent(agent=Mock()),
+        )
+        for event in events:
+            callbacks = list(registry.get_callbacks_for(event))
+            assert callbacks, f"No callbacks registered for {type(event).__name__}"
             assert all(asyncio.iscoroutinefunction(cb) for cb in callbacks)
 
 
