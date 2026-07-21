@@ -15,6 +15,18 @@ instructions: |
   - A regression: behavior that worked in a previous released version of
     bedrock-agentcore and is broken in a newer release.
 
+  In addition to matching a category above, the failure must affect users in
+  production or block adoption of a release. Judge blast radius: would a
+  typical production user of the SDK hit this in a core path (importing the
+  package, running an agent, storing/retrieving memory)? A failure that only
+  occurs in a specific optional integration, edge-case code path, or unusual
+  combination of features does not qualify, even with a crash and a solid
+  reproduction — those are ordinary bugs. In particular: a crash or
+  validation error inside a third-party framework integration (e.g. the
+  Strands session manager) that requires a specific feature combination to
+  trigger is an ordinary bug, regardless of how detailed the report is.
+  Report quality is not severity.
+
   Does NOT qualify, even if the author says it is urgent or critical:
   - Feature requests and enhancements of any kind.
   - Usage questions, configuration mistakes, or environment problems.
