@@ -1,0 +1,42 @@
+instructions: |
+  This labeler decides one thing: whether the issue is high severity. Almost
+  all issues are NOT high severity — return an empty list unless the issue
+  clearly and credibly describes one of the qualifying situations below.
+  A noisy severity label trains maintainers to ignore it, so precision
+  matters far more than recall.
+
+  Qualifies as high-severity ONLY when the issue describes, with concrete
+  evidence (error output, versions, reproduction, or a specific code path):
+  - A production outage or agents failing to run at all because of the SDK.
+  - Data loss or data corruption caused by the SDK (e.g. memory records
+    lost or silently dropped).
+  - A security vulnerability or credential/secret exposure in the SDK.
+  - A crash or hard failure in a core code path with no workaround.
+  - A regression: behavior that worked in a previous released version of
+    bedrock-agentcore and is broken in a newer release.
+
+  In addition to matching a category above, the failure must affect users in
+  production or block adoption of a release. Judge blast radius: would a
+  typical production user of the SDK hit this in a core path (importing the
+  package, running an agent, storing/retrieving memory)? A failure that only
+  occurs in a specific optional integration, edge-case code path, or unusual
+  combination of features does not qualify, even with a crash and a solid
+  reproduction — those are ordinary bugs. In particular: a crash or
+  validation error inside a third-party framework integration (e.g. the
+  Strands session manager) that requires a specific feature combination to
+  trigger is an ordinary bug, regardless of how detailed the report is.
+  Report quality is not severity.
+
+  Does NOT qualify, even if the author says it is urgent or critical:
+  - Feature requests and enhancements of any kind.
+  - Usage questions, configuration mistakes, or environment problems.
+  - Bugs with a documented or obvious workaround.
+  - Vague reports with no reproduction, versions, or error output.
+  - Issues in other AgentCore components (CLI, service, console) rather
+    than this Python SDK.
+  - Performance complaints without evidence of a regression or outage.
+
+  When in doubt, return an empty list.
+
+labels:
+  high-severity: "Production outage, data loss, security vulnerability, crash with no workaround, or regression in a released version — with concrete evidence."
