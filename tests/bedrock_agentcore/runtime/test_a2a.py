@@ -2,11 +2,11 @@ import contextvars
 import uuid
 from unittest.mock import patch
 
+from a2a.helpers import new_task_from_user_message
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
-from a2a.types import AgentCapabilities, AgentCard, AgentSkill, Part, TextPart
-from a2a.utils import new_task
+from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill, Part
 from starlette.testclient import TestClient
 
 from bedrock_agentcore.runtime.a2a import (
@@ -27,12 +27,12 @@ class _EchoExecutor(AgentExecutor):
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         self.last_call_context = context.call_context
-        task = context.current_task or new_task(context.message)
+        task = context.current_task or new_task_from_user_message(context.message)
         if not context.current_task:
             await event_queue.enqueue_event(task)
         updater = TaskUpdater(event_queue, task.id, task.context_id)
         user_text = context.get_user_input()
-        await updater.add_artifact([Part(root=TextPart(text=f"echo: {user_text}"))])
+        await updater.add_artifact([Part(text=f"echo: {user_text}")])
         await updater.complete()
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
@@ -43,12 +43,18 @@ def _make_agent_card() -> AgentCard:
     return AgentCard(
         name="test-agent",
         description="A test agent",
-        url="http://localhost:9000",
         version="1.0.0",
         capabilities=AgentCapabilities(streaming=True),
         skills=[AgentSkill(id="echo", name="echo", description="Echoes input", tags=["echo"])],
         default_input_modes=["text"],
         default_output_modes=["text"],
+        supported_interfaces=[
+            AgentInterface(
+                protocol_binding="JSONRPC",
+                protocol_version="1.0",
+                url="http://localhost:9000",
+            )
+        ],
     )
 
 
@@ -62,9 +68,9 @@ def _jsonrpc_request(method: str, params: dict | None = None) -> dict:
 def _send_message_params(text: str = "hello") -> dict:
     return {
         "message": {
-            "message_id": str(uuid.uuid4()),
-            "role": "user",
-            "parts": [{"kind": "text", "text": text}],
+            "messageId": str(uuid.uuid4()),
+            "role": "ROLE_USER",
+            "parts": [{"text": text}],
         }
     }
 
@@ -117,47 +123,64 @@ class TestBuildA2AApp:
     def test_message_send_executes_and_returns_completed_task(self):
         """Verify the full RPC path: JSON-RPC request -> executor -> completed task."""
         app = build_a2a_app(_EchoExecutor(), _make_agent_card())
-        client = TestClient(app, raise_server_exceptions=False)
-        resp = client.post("/", json=_jsonrpc_request("message/send", _send_message_params("unit-test")))
+        client = TestClient(app, raise_server_exceptions=False, headers={"A2A-Version": "1.0"})
+        resp = client.post("/", json=_jsonrpc_request("SendMessage", _send_message_params("unit-test")))
         assert resp.status_code == 200
         body = resp.json()
         assert "result" in body
-        task = body["result"]
-        assert task["status"]["state"] == "completed"
+        task = body["result"]["task"]
+        assert task["status"]["state"] == "TASK_STATE_COMPLETED"
         assert task["artifacts"][0]["parts"][0]["text"] == "echo: unit-test"
+
+    def test_v03_message_send_remains_compatible(self):
+        app = build_a2a_app(_EchoExecutor(), _make_agent_card())
+        client = TestClient(app, raise_server_exceptions=False)
+        params = {
+            "message": {
+                "message_id": str(uuid.uuid4()),
+                "role": "user",
+                "parts": [{"kind": "text", "text": "compat"}],
+            }
+        }
+
+        resp = client.post("/", json=_jsonrpc_request("message/send", params))
+
+        assert resp.status_code == 200
+        assert resp.json()["result"]["status"]["state"] == "completed"
+        assert resp.json()["result"]["artifacts"][0]["parts"][0]["text"] == "echo: compat"
 
     def test_custom_task_store_is_used_for_persistence(self):
         """Verify that a custom task_store actually stores the task."""
         store = InMemoryTaskStore()
         app = build_a2a_app(_EchoExecutor(), _make_agent_card(), task_store=store)
-        client = TestClient(app, raise_server_exceptions=False)
+        client = TestClient(app, raise_server_exceptions=False, headers={"A2A-Version": "1.0"})
 
         # Send a message so a task gets created
-        resp = client.post("/", json=_jsonrpc_request("message/send", _send_message_params("store-test")))
-        task_id = resp.json()["result"]["id"]
+        resp = client.post("/", json=_jsonrpc_request("SendMessage", _send_message_params("store-test")))
+        task_id = resp.json()["result"]["task"]["id"]
 
         # Retrieve from the same store via tasks/get
-        resp2 = client.post("/", json=_jsonrpc_request("tasks/get", {"id": task_id}))
+        resp2 = client.post("/", json=_jsonrpc_request("GetTask", {"id": task_id}))
         assert resp2.json()["result"]["id"] == task_id
 
     def test_agent_card_url_auto_populated_from_env(self):
-        """When AGENTCORE_RUNTIME_URL is set, agent_card.url is overridden."""
+        """When AGENTCORE_RUNTIME_URL is set, the JSON-RPC interface URL is overridden."""
         card = _make_agent_card()
-        assert card.url == "http://localhost:9000"
+        assert card.supported_interfaces[0].url == "http://localhost:9000"
         with patch.dict("os.environ", {"AGENTCORE_RUNTIME_URL": "https://deployed.example.com/"}):
             build_a2a_app(_EchoExecutor(), card)
-        assert card.url == "https://deployed.example.com/"
+        assert card.supported_interfaces[0].url == "https://deployed.example.com/"
 
     def test_agent_card_url_unchanged_without_env(self):
-        """When AGENTCORE_RUNTIME_URL is not set, agent_card.url stays as-is."""
+        """When AGENTCORE_RUNTIME_URL is not set, the JSON-RPC interface URL stays as-is."""
         card = _make_agent_card()
-        original_url = card.url
+        original_url = card.supported_interfaces[0].url
         with patch.dict("os.environ", {}, clear=False):
             import os
 
             os.environ.pop("AGENTCORE_RUNTIME_URL", None)
             build_a2a_app(_EchoExecutor(), card)
-        assert card.url == original_url
+        assert card.supported_interfaces[0].url == original_url
 
     def test_auto_builds_card_when_none_provided(self):
         """When agent_card is omitted, a default card is built automatically."""
@@ -167,7 +190,7 @@ class TestBuildA2AApp:
         assert resp.status_code == 200
         body = resp.json()
         assert body["name"] == "agent"
-        assert body["url"] == "http://localhost:9000/"
+        assert body["supportedInterfaces"][0]["url"] == "http://localhost:9000/"
 
     def test_auto_builds_card_from_strands_executor(self):
         """When executor has .agent with name/description, card is built from it."""
@@ -192,7 +215,7 @@ class TestBuildA2AApp:
             app = build_a2a_app(_EchoExecutor())
         client = TestClient(app)
         resp = client.get("/.well-known/agent-card.json")
-        assert resp.json()["url"] == "https://prod.example.com/"
+        assert resp.json()["supportedInterfaces"][0]["url"] == "https://prod.example.com/"
 
 
 class TestBedrockCallContextBuilder:
@@ -334,11 +357,11 @@ class TestBedrockCallContextBuilder:
             executor = _EchoExecutor()
             builder = BedrockCallContextBuilder()
             app = build_a2a_app(executor, _make_agent_card(), context_builder=builder)
-            client = TestClient(app, raise_server_exceptions=False)
+            client = TestClient(app, raise_server_exceptions=False, headers={"A2A-Version": "1.0"})
 
             client.post(
                 "/",
-                json=_jsonrpc_request("message/send", _send_message_params("ctx-test")),
+                json=_jsonrpc_request("SendMessage", _send_message_params("ctx-test")),
                 headers={
                     "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": "unit-sess",
                     "X-Amzn-Bedrock-AgentCore-Runtime-Request-Id": "unit-req",
@@ -349,7 +372,7 @@ class TestBedrockCallContextBuilder:
             ctx = executor.last_call_context
             assert ctx is not None
             assert ctx.state["session_id"] == "unit-sess"
-            assert ctx.state["request_id"] == "unit-req"
+            assert ctx.state["bedrock_request_id"] == "unit-req"
             assert ctx.state["workload_access_token"] == "unit-token"
 
         self._run_in_isolated_context(_test)
