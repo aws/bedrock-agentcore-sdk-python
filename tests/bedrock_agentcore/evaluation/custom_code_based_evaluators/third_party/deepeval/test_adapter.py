@@ -287,3 +287,108 @@ class TestDeepEvalAdapterEdgeCases:
         result = adapter(_make_evaluator_input())
 
         assert result.label == "Pass"
+
+
+class TestDeepEvalAdapterConversational:
+    """Tests for ConversationalTestCase support."""
+
+    def test_conversational_metric_with_multi_turn_spans(self):
+        """Test that BaseConversationalMetric gets ConversationalTestCase."""
+        from deepeval.metrics import BaseConversationalMetric
+        from deepeval.test_case import ConversationalTestCase
+
+        metric = MagicMock(spec=BaseConversationalMetric)
+        type(metric).__name__ = "KnowledgeRetentionMetric"
+        metric.threshold = 0.5
+        metric.score = 0.8
+        metric.reason = "Good retention"
+        del metric.success
+
+        def measure_side_effect(test_case):
+            assert isinstance(test_case, ConversationalTestCase)
+            assert len(test_case.turns) == 4
+            metric.score = 0.8
+            metric.reason = "Good retention"
+
+        metric.measure = MagicMock(side_effect=measure_side_effect)
+
+        adapter = DeepEvalAdapter(metric=metric)
+
+        # Multi-turn session: 2 traces, each with an invoke_agent span
+        spans = [
+            # Trace 1 - metadata
+            {
+                "traceId": "t1",
+                "spanId": "s1",
+                "scope": {"name": "strands.telemetry.tracer"},
+                "name": "invoke_agent",
+                "kind": "INTERNAL",
+                "startTimeUnixNano": 1000000000,
+                "endTimeUnixNano": 2000000000,
+                "attributes": {"gen_ai.operation.name": "invoke_agent", "session.id": "test"},
+                "status": {"code": "UNSET"},
+            },
+            # Trace 1 - body
+            {
+                "traceId": "t1",
+                "spanId": "s1",
+                "scope": {"name": "strands.telemetry.tracer"},
+                "timeUnixNano": 2000000000,
+                "observedTimeUnixNano": 2000000001,
+                "severityNumber": 9,
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": {"content": '[{"text": "Hello"}]'}}]},
+                    "output": {"messages": [{"role": "assistant", "content": {"message": "Hi there!"}}]},
+                },
+            },
+            # Trace 2 - metadata
+            {
+                "traceId": "t2",
+                "spanId": "s2",
+                "scope": {"name": "strands.telemetry.tracer"},
+                "name": "invoke_agent",
+                "kind": "INTERNAL",
+                "startTimeUnixNano": 3000000000,
+                "endTimeUnixNano": 4000000000,
+                "attributes": {"gen_ai.operation.name": "invoke_agent", "session.id": "test"},
+                "status": {"code": "UNSET"},
+            },
+            # Trace 2 - body
+            {
+                "traceId": "t2",
+                "spanId": "s2",
+                "scope": {"name": "strands.telemetry.tracer"},
+                "timeUnixNano": 4000000000,
+                "observedTimeUnixNano": 4000000001,
+                "severityNumber": 9,
+                "body": {
+                    "input": {"messages": [{"role": "user", "content": {"content": '[{"text": "What is AI?"}]'}}]},
+                    "output": {"messages": [{"role": "assistant", "content": {"message": "AI is artificial intelligence."}}]},
+                },
+            },
+        ]
+
+        evaluator_input = EvaluatorInput(
+            evaluation_level="SESSION",
+            session_spans=spans,
+        )
+
+        result = adapter(evaluator_input)
+
+        assert result.value == 0.8
+        assert result.label == "Pass"
+        metric.measure.assert_called_once()
+
+    def test_conversational_metric_single_turn_returns_error(self):
+        """Test that single-turn spans return error for conversational metric."""
+        from deepeval.metrics import BaseConversationalMetric
+
+        metric = MagicMock(spec=BaseConversationalMetric)
+        type(metric).__name__ = "KnowledgeRetentionMetric"
+
+        adapter = DeepEvalAdapter(metric=metric)
+
+        result = adapter(_make_evaluator_input())
+
+        assert result.errorCode == "FIELD_EXTRACTION_ERROR"
+        assert "multi-turn" in result.errorMessage.lower() or "Multiple" in result.errorMessage

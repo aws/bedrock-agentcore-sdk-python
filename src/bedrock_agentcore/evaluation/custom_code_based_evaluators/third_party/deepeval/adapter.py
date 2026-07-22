@@ -4,8 +4,9 @@ import logging
 from typing import Any, Callable, Dict, List, Optional
 
 from deepeval.errors import MissingTestCaseParamsError
-from deepeval.metrics import BaseMetric
-from deepeval.test_case import LLMTestCase, ToolCall
+from deepeval.metrics import BaseConversationalMetric, BaseMetric
+from deepeval.test_case import ConversationalTestCase, LLMTestCase, ToolCall
+from deepeval.test_case.conversational_test_case import Turn
 
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.models import EvaluatorInput, EvaluatorOutput
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.base import BaseAdapter
@@ -59,6 +60,8 @@ class DeepEvalAdapter(BaseAdapter):
         """Run the DeepEval metric pipeline."""
         if self.custom_mapper is not None:
             test_case = self.custom_mapper(evaluator_input)
+        elif isinstance(self.metric, BaseConversationalMetric):
+            test_case = self._build_conversational_test_case(evaluator_input)
         else:
             result = self._default_extract(evaluator_input)
             if not result.input or not result.actual_output:
@@ -105,6 +108,25 @@ class DeepEvalAdapter(BaseAdapter):
         label = "Pass" if success else "Fail"
 
         return EvaluatorOutput(value=score, label=label, explanation=reason)
+
+    def _build_conversational_test_case(self, evaluator_input: EvaluatorInput) -> ConversationalTestCase:
+        """Build a ConversationalTestCase for multi-turn metrics.
+
+        Extracts all agent invocation turns from the session spans and
+        constructs alternating user/assistant Turn objects.
+        """
+        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers.common import (
+            FieldExtractionError,
+        )
+
+        result = self._default_extract(evaluator_input)
+        if not result.turns:
+            raise FieldExtractionError(
+                "Multi-turn metric requires multiple conversation turns but only a single turn was found. "
+                "Ensure the session contains multiple traces/invocations, or use a single-turn metric instead."
+            )
+        turns = [Turn(role=t["role"], content=t["content"]) for t in result.turns]
+        return ConversationalTestCase(turns=turns)
 
     @staticmethod
     def _build_tool_calls(tools_called: List[Dict[str, Any]]) -> List[ToolCall]:

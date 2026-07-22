@@ -19,10 +19,6 @@ from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_
 
 logger = logging.getLogger(__name__)
 
-# Amazon ADOT distro scope not yet recognized by strands-evals detect_otel_mapper.
-# Uses the same span format as opentelemetry.instrumentation.langchain — LangChainOtelSessionMapper
-# handles both. Workaround until strands-evals adds native support.
-SCOPE_AMAZON_OTEL_LANGCHAIN = "amazon.opentelemetry.distro.instrumentation.langchain"
 
 
 def _extract_session_id(session_spans: List[Dict[str, Any]]) -> str:
@@ -40,10 +36,9 @@ def _detect_mapper(session_spans: List[Dict[str, Any]]):
     """Detect the appropriate mapper, extending strands-evals for edge cases.
 
     We check scope names before falling back to detect_otel_mapper because:
-    - detect_otel_mapper doesn't recognize amazon.opentelemetry.distro scope
     - detect_otel_mapper misidentifies CloudWatch split format (body on separate
       entries) as StrandsInMemorySessionMapper (which expects ReadableSpan objects)
-    - Our pre-check handles both cases correctly, then falls back for other formats
+    - Our pre-check handles this case correctly, then falls back for other formats
     """
     from strands_evals.mappers import CloudWatchSessionMapper
     from strands_evals.mappers.utils import get_body
@@ -53,7 +48,7 @@ def _detect_mapper(session_spans: List[Dict[str, Any]]):
 
     for span in session_spans:
         scope_name = get_scope_name(span)
-        if scope_name in (SCOPE_AMAZON_OTEL_LANGCHAIN, "opentelemetry.instrumentation.langchain"):
+        if scope_name == "opentelemetry.instrumentation.langchain":
             return LangChainOtelSessionMapper()
         if scope_name == "openinference.instrumentation.langchain":
             return OpenInferenceSessionMapper()
@@ -133,21 +128,19 @@ def map_spans(
 def _session_to_span_map_result(session: Session) -> SpanMapResult:
     """Bridge strands-evals Session to SpanMapResult.
 
-    Extracts the last AgentInvocationSpan for input/output and all
-    ToolExecutionSpans for retrieval_context and tools_called.
-
-    Note: Currently scoped to trace-level evaluation only. Only the last
-    AgentInvocationSpan is used — session-level multi-turn evaluators
-    (e.g. ConversationCompleteness) are not supported. Use custom_mapper
-    for multi-turn evaluation needs.
+    Extracts the last AgentInvocationSpan for input/output (single-turn),
+    all ToolExecutionSpans for retrieval_context and tools_called, and
+    all AgentInvocationSpans as turns (multi-turn / session-level).
     """
     agent_span = None
+    agent_spans: List[AgentInvocationSpan] = []
     tool_spans: List[ToolExecutionSpan] = []
 
     for trace in session.traces:
         for span in trace.spans:
             if isinstance(span, AgentInvocationSpan):
                 agent_span = span
+                agent_spans.append(span)
             elif isinstance(span, ToolExecutionSpan):
                 tool_spans.append(span)
 
@@ -171,11 +164,18 @@ def _session_to_span_map_result(session: Session) -> SpanMapResult:
         if ts.tool_call and ts.tool_call.name
     ]
 
+    # Build turns for multi-turn / session-level evaluation
+    turns = []
+    for span in agent_spans:
+        turns.append({"role": "user", "content": span.user_prompt})
+        turns.append({"role": "assistant", "content": span.agent_response})
+
     return SpanMapResult(
         input=agent_span.user_prompt,
         actual_output=agent_span.agent_response,
         retrieval_context=retrieval_context if retrieval_context else None,
-        context=retrieval_context if retrieval_context else None,
+        context=None,
         system_prompt=agent_span.system_prompt,
         tools_called=tools_called if tools_called else None,
+        turns=turns if len(turns) > 2 else None,
     )

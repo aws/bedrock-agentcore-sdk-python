@@ -21,3 +21,4 @@ class SpanMapResult:
     tools_called: Optional[List[Dict[str, Any]]] = None
     expected_tools: Optional[List[Dict[str, Any]]] = None
     assertions: Optional[List[str]] = None
+    turns: Optional[List[Dict[str, Any]]] = None
