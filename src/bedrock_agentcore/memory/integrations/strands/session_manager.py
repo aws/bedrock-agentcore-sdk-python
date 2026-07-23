@@ -789,6 +789,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             messages = self.converter.events_to_messages(events)
             if self.config.filter_restored_tool_context:
                 messages = self._filter_restored_tool_context(messages)
+            if self.config.retrieval_config:
+                messages = self._filter_restored_user_context(messages)
             if limit is not None:
                 return messages[offset : offset + limit]
             else:
@@ -823,6 +825,40 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 )
             )
 
+        return filtered_messages
+
+    def _filter_restored_user_context(self, messages: list[SessionMessage]) -> list[SessionMessage]:
+        """Strip previously-injected <context_tag> blocks from restored user messages.
+
+        Without this, the context block that was prepended to each user message during
+        a prior turn is reloaded from storage on every subsequent turn, causing the
+        injected context to accumulate O(turns × records) across the conversation.
+        Fresh context is re-injected by retrieve_customer_context on each new turn.
+        """
+        open_tag = f"<{self.config.context_tag}>"
+        filtered_messages: list[SessionMessage] = []
+        for session_message in messages:
+            message = session_message.to_message()
+            if message.get("role") != "user":
+                filtered_messages.append(session_message)
+                continue
+            filtered_content = [
+                block
+                for block in message.get("content", [])
+                if not (isinstance(block, dict) and block.get("text", "").startswith(open_tag))
+            ]
+            if not filtered_content:
+                filtered_messages.append(session_message)
+                continue
+            filtered_messages.append(
+                SessionMessage(
+                    message={"role": message["role"], "content": filtered_content},
+                    message_id=session_message.message_id,
+                    redact_message=session_message.redact_message,
+                    created_at=session_message.created_at,
+                    updated_at=session_message.updated_at,
+                )
+            )
         return filtered_messages
 
     # endregion SessionRepository interface implementation
