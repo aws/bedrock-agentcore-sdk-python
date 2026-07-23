@@ -154,13 +154,14 @@ dev = [
     "langchain>=1.0.0",
     "langgraph>=1.0.0",
     "langchain-mcp-adapters>=0.1.0",
-    "a2a-sdk[http-server]>=0.3,<1.0",
+    "a2a-sdk[http-server]>=1.0.1,<2.0",
     "ag-ui-protocol>=0.1.10",
     "mcp-proxy-for-aws>=0.1.0",
 ]
 
 [project.optional-dependencies]
-a2a = ["a2a-sdk[http-server]>=0.3,<1.0"]
+a2a = ["a2a-sdk[http-server]>=0.3,<0.4"]
+a2a-v1 = ["a2a-sdk[http-server]>=1.0.1,<2.0"]
 ag-ui = ["ag-ui-protocol>=0.1.10"]
 strands-agents = [
     "strands-agents>=1.20.0",
@@ -181,4 +182,16 @@ simulation = [
 ]
 datasets = [
     "requests>=2.31.0",
+]
+
+[tool.uv]
+conflicts = [
+    [
+        { extra = "a2a" },
+        { extra = "a2a-v1" },
+    ],
+    [
+        { extra = "a2a" },
+        { group = "dev" },
+    ],
 ]
