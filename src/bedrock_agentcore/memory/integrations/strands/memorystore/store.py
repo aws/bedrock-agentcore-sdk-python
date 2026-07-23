@@ -207,7 +207,10 @@ class AgentCoreMemoryStore(_MemoryStoreBase):
             raise ValueError(f"AgentCoreMemoryStore.search: max_search_results must be a positive integer, got {want}")
         top_k = want
         if self._min_score is not None:
-            top_k = min(math.ceil(want * self._over_fetch_factor), MAX_TOPK)
+            # Clamp before converting to int: unlike JavaScript's Math.ceil, Python's
+            # math.ceil cannot convert an overflowed infinite product.
+            over_fetch = want * self._over_fetch_factor
+            top_k = MAX_TOPK if over_fetch >= MAX_TOPK else math.ceil(over_fetch)
         kwargs: dict[str, Any] = {
             "memoryId": self._memory_id,
             "searchCriteria": {"searchQuery": query, "topK": top_k},

@@ -129,7 +129,7 @@ async def test_score_floor_overfetches_filters_and_trims() -> None:
 
 @pytest.mark.parametrize(
     ("want", "factor", "expected"),
-    [(3, 10, 30), (5, 1.5, 8), (50, 3, 100)],
+    [(3, 10, 30), (5, 1.5, 8), (50, 3, 100), (5, 1e308, 100)],
 )
 async def test_custom_overfetch_is_ceiled_and_capped(want: int, factor: float, expected: int) -> None:
     """Keep AgentCore ``topK`` integral and no larger than 100."""
