@@ -1,28 +1,13 @@
-"""Shared protocol and utilities for memory converters."""
+"""Compatibility alias for the session manager converter protocol."""
 
-from typing import Any, Protocol, Tuple
+import sys
+from typing import TYPE_CHECKING
 
-from strands.types.session import SessionMessage
+from ..memorysessionmanager.converters import protocol as _canonical_module
 
-CONVERSATIONAL_MAX_SIZE = 100000
+if TYPE_CHECKING:
+    from ..memorysessionmanager.converters.protocol import CONVERSATIONAL_MAX_SIZE as CONVERSATIONAL_MAX_SIZE
+    from ..memorysessionmanager.converters.protocol import MemoryConverter as MemoryConverter
+    from ..memorysessionmanager.converters.protocol import exceeds_conversational_limit as exceeds_conversational_limit
 
-
-class MemoryConverter(Protocol):
-    """Protocol for converting between Strands messages and STM event payloads."""
-
-    @staticmethod
-    def message_to_payload(session_message: SessionMessage) -> list[Tuple[str, str]]:
-        """Convert SessionMessage to STM event payload format."""
-
-    @staticmethod
-    def events_to_messages(events: list[dict[str, Any]]) -> list[SessionMessage]:
-        """Convert STM events to SessionMessages."""
-
-    @staticmethod
-    def exceeds_conversational_limit(message: tuple[str, str]) -> bool:
-        """Check if message exceeds conversational payload size limit."""
-
-
-def exceeds_conversational_limit(message: tuple[str, str]) -> bool:
-    """Check if message exceeds the conversational payload size limit."""
-    return sum(len(text) for text in message) >= CONVERSATIONAL_MAX_SIZE
+sys.modules[__name__] = _canonical_module

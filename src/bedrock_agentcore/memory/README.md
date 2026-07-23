@@ -157,12 +157,6 @@ The original client interface. While still supported, we recommend migrating to 
 - List and manage memory records
 - Actor and session management
 
-## Strands long-term memory integration
-
-For Strands Agents, `AgentCoreMemoryStore` implements the native async `MemoryStore` interface for
-long-term recall and extraction. It supports exact/subtree namespaces and multi-namespace factories.
-See [the Strands integration guide](integrations/strands/README.md#native-strands-long-term-memory-stores).
-
 ## Quick Start
 
 ```python
