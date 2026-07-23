@@ -39,12 +39,12 @@ def _check_a2a_sdk() -> None:
 
 
 def _build_agent_card(executor: Any, url: str) -> Any:
-    """Build an AgentCard by introspecting a StrandsA2AExecutor.
+    """Build an AgentCard by introspecting an executor.
 
     Extracts name/description from ``executor.agent``. Falls back to generic
     defaults for other executors.
     """
-    from a2a.types import AgentCapabilities, AgentCard, AgentSkill
+    from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
 
     name = "agent"
     description = "A Bedrock AgentCore agent"
@@ -57,12 +57,36 @@ def _build_agent_card(executor: Any, url: str) -> Any:
     return AgentCard(
         name=name,
         description=description,
-        url=url,
         version="0.1.0",
         capabilities=AgentCapabilities(streaming=True),
         skills=[AgentSkill(id="main", name=name, description=description, tags=["main"])],
         default_input_modes=["text"],
         default_output_modes=["text"],
+        supported_interfaces=[
+            AgentInterface(
+                protocol_binding="JSONRPC",
+                protocol_version="1.0",
+                url=url,
+            )
+        ],
+    )
+
+
+def _set_jsonrpc_url(agent_card: Any, url: str) -> None:
+    """Set the runtime URL on the card's JSON-RPC interface."""
+    from a2a.types import AgentInterface
+
+    for interface in agent_card.supported_interfaces:
+        if interface.protocol_binding == "JSONRPC":
+            interface.url = url
+            return
+
+    agent_card.supported_interfaces.append(
+        AgentInterface(
+            protocol_binding="JSONRPC",
+            protocol_version="1.0",
+            url=url,
+        )
     )
 
 
@@ -97,7 +121,7 @@ def build_runtime_url(agent_arn: str, region: Optional[str] = None) -> str:
 class BedrockCallContextBuilder:
     """Extracts Bedrock runtime headers and propagates them into BedrockAgentCoreContext.
 
-    Implements the a2a-sdk CallContextBuilder ABC so the A2A server
+    Implements the a2a-sdk ServerCallContextBuilder ABC so the A2A server
     automatically calls ``build()`` on every incoming request.
     """
 
@@ -160,6 +184,8 @@ class BedrockCallContextBuilder:
         _ensure_baggage_processor_registered()
 
         state = {
+            "headers": dict(headers),
+            "bedrock_request_id": request_id,
             "request_id": request_id,
             "session_id": session_id,
         }
@@ -174,9 +200,9 @@ class BedrockCallContextBuilder:
 # Register as a virtual subclass so isinstance checks pass without
 # requiring a2a-sdk to be importable at class-definition time.
 try:
-    from a2a.server.apps import CallContextBuilder
+    from a2a.server.routes import ServerCallContextBuilder
 
-    CallContextBuilder.register(BedrockCallContextBuilder)
+    ServerCallContextBuilder.register(BedrockCallContextBuilder)
 except Exception:  # pragma: no cover
     pass
 
@@ -196,7 +222,7 @@ def build_a2a_app(
         agent_card: Optional ``a2a.types.AgentCard`` describing the agent.
             If ``None``, one is built automatically by introspecting the executor.
         task_store: Optional ``TaskStore``; defaults to ``InMemoryTaskStore``.
-        context_builder: Optional ``CallContextBuilder``; defaults to
+        context_builder: Optional ``ServerCallContextBuilder``; defaults to
             ``BedrockCallContextBuilder``.
         ping_handler: Optional callback returning a ``PingStatus``.
 
@@ -207,8 +233,8 @@ def build_a2a_app(
 
     _check_a2a_sdk()
 
-    from a2a.server.apps import A2AStarletteApplication
     from a2a.server.request_handlers import DefaultRequestHandler
+    from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
     from a2a.server.tasks import InMemoryTaskStore
     from starlette.applications import Starlette
     from starlette.responses import JSONResponse
@@ -219,7 +245,7 @@ def build_a2a_app(
     if agent_card is None:
         agent_card = _build_agent_card(executor, runtime_url)
     elif os.environ.get(AGENTCORE_RUNTIME_URL_ENV):
-        agent_card.url = runtime_url
+        _set_jsonrpc_url(agent_card, runtime_url)
 
     if task_store is None:
         task_store = InMemoryTaskStore()
@@ -229,12 +255,17 @@ def build_a2a_app(
     http_handler = DefaultRequestHandler(
         agent_executor=executor,
         task_store=task_store,
+        agent_card=agent_card,
     )
 
-    a2a_app = A2AStarletteApplication(
-        agent_card=agent_card,
-        http_handler=http_handler,
-        context_builder=context_builder,
+    routes = create_agent_card_routes(agent_card)
+    routes.extend(
+        create_jsonrpc_routes(
+            request_handler=http_handler,
+            rpc_url="/",
+            context_builder=context_builder,
+            enable_v0_3_compat=True,
+        )
     )
 
     def _handle_ping(request: Any) -> JSONResponse:
@@ -248,19 +279,15 @@ def build_a2a_app(
             status = PingStatus.HEALTHY
         return JSONResponse({"status": status.value})
 
-    # Build the Starlette app with /ping included upfront, then add A2A routes,
-    # so we don't depend on mutating app.routes after build().
-    app = Starlette(routes=[Route("/ping", _handle_ping, methods=["GET"])])
-    a2a_app.add_routes_to_app(app)
-
-    return app
+    routes.insert(0, Route("/ping", _handle_ping, methods=["GET"]))
+    return Starlette(routes=routes)
 
 
 def serve_a2a(
     executor: Any,
     agent_card: Any = None,
     *,
-    port: int = 9000,
+    port: Optional[int] = None,
     host: Optional[str] = None,
     task_store: Any = None,
     context_builder: Any = None,
@@ -273,10 +300,11 @@ def serve_a2a(
         executor: An ``AgentExecutor`` that implements the agent logic.
         agent_card: Optional ``a2a.types.AgentCard`` describing the agent.
             If ``None``, one is built automatically by introspecting the executor.
-        port: Port to serve on (default 9000).
+        port: Port to serve on. Defaults to the ``PORT`` environment variable,
+            or 9000 when it is unset.
         host: Host to bind to; auto-detected if ``None``.
         task_store: Optional ``TaskStore``; defaults to ``InMemoryTaskStore``.
-        context_builder: Optional ``CallContextBuilder``; defaults to
+        context_builder: Optional ``ServerCallContextBuilder``; defaults to
             ``BedrockCallContextBuilder``.
         ping_handler: Optional callback returning a ``PingStatus``.
         **kwargs: Additional arguments forwarded to ``uvicorn.run()``.
@@ -284,6 +312,8 @@ def serve_a2a(
     import os
 
     import uvicorn
+
+    resolved_port = port if port is not None else int(os.environ.get("PORT", "9000"))
 
     app = build_a2a_app(
         executor,
@@ -301,7 +331,7 @@ def serve_a2a(
 
     uvicorn_params: dict[str, Any] = {
         "host": host,
-        "port": port,
+        "port": resolved_port,
         "log_level": "info",
     }
     uvicorn_params.update(kwargs)
