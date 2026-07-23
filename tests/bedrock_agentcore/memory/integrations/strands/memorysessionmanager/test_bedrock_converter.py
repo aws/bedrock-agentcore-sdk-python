@@ -5,7 +5,9 @@ from unittest.mock import patch
 
 from strands.types.session import SessionMessage
 
-from bedrock_agentcore.memory.integrations.strands.bedrock_converter import AgentCoreMemoryConverter
+from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.bedrock_converter import (
+    AgentCoreMemoryConverter,
+)
 
 
 def _make_conversational_event(session_messages):
@@ -72,7 +74,7 @@ class TestAgentCoreMemoryConverter:
         assert len(result) == 1
         assert result[0].message["role"] == "user"
 
-    @patch("bedrock_agentcore.memory.integrations.strands.bedrock_converter.logger")
+    @patch("bedrock_agentcore.memory.integrations.strands.memorysessionmanager.bedrock_converter.logger")
     def test_events_to_messages_blob_invalid_json(self, mock_logger):
         """Test handling invalid JSON in blob events."""
         events = [{"payload": [{"blob": "invalid json"}]}]
@@ -82,7 +84,7 @@ class TestAgentCoreMemoryConverter:
         assert len(result) == 0
         mock_logger.error.assert_called()
 
-    @patch("bedrock_agentcore.memory.integrations.strands.bedrock_converter.logger")
+    @patch("bedrock_agentcore.memory.integrations.strands.memorysessionmanager.bedrock_converter.logger")
     def test_events_to_messages_blob_invalid_session_message(self, mock_logger):
         """Test handling invalid SessionMessage in blob events."""
         blob_data = ["invalid", "user"]
@@ -343,7 +345,7 @@ class TestAgentCoreMemoryConverter:
         assert result[0].message["content"][0]["text"] == "First"
         assert result[1].message["content"][0]["text"] == "Second"
 
-    @patch("bedrock_agentcore.memory.integrations.strands.bedrock_converter.logger")
+    @patch("bedrock_agentcore.memory.integrations.strands.memorysessionmanager.bedrock_converter.logger")
     def test_events_to_messages_malformed_payload_does_not_break_batch(self, mock_logger):
         """Test a malformed blob payload between two valid conversational payloads in a single event."""
         msg1 = SessionMessage(

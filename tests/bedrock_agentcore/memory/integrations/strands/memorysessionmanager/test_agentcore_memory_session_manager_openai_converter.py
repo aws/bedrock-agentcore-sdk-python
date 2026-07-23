@@ -4,9 +4,11 @@ from unittest.mock import Mock, patch
 
 from strands.types.session import Session, SessionMessage, SessionType
 
-from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig
-from bedrock_agentcore.memory.integrations.strands.converters import OpenAIConverseConverter
-from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
+from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.config import AgentCoreMemoryConfig
+from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.converters import OpenAIConverseConverter
+from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager import (
+    AgentCoreMemorySessionManager,
+)
 
 
 def test_create_message_uses_tool_role_with_openai_converter():
@@ -25,7 +27,7 @@ def test_create_message_uses_tool_role_with_openai_converter():
 
     with (
         patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ),
         patch("boto3.Session") as mock_boto_session,
@@ -79,7 +81,7 @@ def test_list_messages_filters_restored_tool_context():
 
     with (
         patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ),
         patch("boto3.Session") as mock_boto_session,

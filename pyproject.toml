@@ -26,8 +26,8 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "boto3>=1.43.31",
-    "botocore>=1.43.31",
+    "boto3>=1.43.35",
+    "botocore>=1.43.35",
     "pydantic>=2.0.0,<2.41.3",
     "urllib3>=1.26.0",
     "starlette>=0.46.2",
@@ -149,7 +149,7 @@ dev = [
     "ruff>=0.12.0",
     "websockets>=14.1",
     "wheel>=0.45.1",
-    "strands-agents>=1.20.0",
+    "strands-agents>=1.46.0",
     "strands-agents-evals>=0.1.0",
     "langchain>=1.0.0",
     "langgraph>=1.0.0",
@@ -163,7 +163,7 @@ dev = [
 a2a = ["a2a-sdk[http-server]>=0.3,<1.0"]
 ag-ui = ["ag-ui-protocol>=0.1.10"]
 strands-agents = [
-    "strands-agents>=1.20.0",
+    "strands-agents>=1.46.0",
     "mcp>=1.23.0,<2.0.0",
 ]
 langgraph = [

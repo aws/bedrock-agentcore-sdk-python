@@ -3,7 +3,10 @@
 import pytest
 from pydantic import ValidationError
 
-from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
+from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.config import (
+    AgentCoreMemoryConfig,
+    RetrievalConfig,
+)
 
 
 class TestRetrievalConfig:

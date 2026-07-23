@@ -4,7 +4,7 @@ import json
 
 from strands.types.session import SessionMessage
 
-from bedrock_agentcore.memory.integrations.strands.converters import OpenAIConverseConverter
+from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.converters import OpenAIConverseConverter
 
 
 def test_tool_result_message_serializes_as_openai_tool_role():

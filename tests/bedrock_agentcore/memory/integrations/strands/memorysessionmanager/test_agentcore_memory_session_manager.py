@@ -26,12 +26,16 @@ from strands.hooks.registry import HookRegistry
 from strands.types.exceptions import SessionException
 from strands.types.session import Session, SessionAgent, SessionMessage, SessionType
 
-from bedrock_agentcore.memory.integrations.strands.bedrock_converter import (
+from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.bedrock_converter import (
     CONVERSATIONAL_MAX_SIZE,
     AgentCoreMemoryConverter,
 )
-from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, PersistenceMode, RetrievalConfig
-from bedrock_agentcore.memory.integrations.strands.session_manager import (
+from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.config import (
+    AgentCoreMemoryConfig,
+    PersistenceMode,
+    RetrievalConfig,
+)
+from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager import (
     AgentCoreMemorySessionManager,
     BufferedMessage,
 )
@@ -74,7 +78,7 @@ def _create_session_manager(config, mock_memory_client):
     """Helper to create a session manager with mocked dependencies."""
     with (
         patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ),
         patch("boto3.Session") as mock_boto_session,
@@ -125,7 +129,9 @@ class TestAgentCoreMemorySessionManager:
 
     def test_init_basic(self, agentcore_config):
         """Test basic initialization."""
-        with patch("bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient") as mock_client_class:
+        with patch(
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient"
+        ) as mock_client_class:
             mock_client = Mock()
             mock_client_class.return_value = mock_client
 
@@ -717,7 +723,7 @@ class TestAgentCoreMemorySessionManager:
         )
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -823,7 +829,7 @@ class TestAgentCoreMemorySessionManager:
         ]
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -861,7 +867,7 @@ class TestAgentCoreMemorySessionManager:
         mock_memory_client.retrieve_memories.return_value = [{"content": "User preference memory", "score": 0.9}]
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -902,7 +908,7 @@ class TestAgentCoreMemorySessionManager:
     def test_retrieve_contextual_memories_invalid_namespace(self, agentcore_config_with_retrieval, mock_memory_client):
         """Test contextual memory retrieval with invalid namespace."""
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -929,7 +935,7 @@ class TestAgentCoreMemorySessionManager:
         ]
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -955,7 +961,7 @@ class TestAgentCoreMemorySessionManager:
         mock_memory_client.retrieve_memories.side_effect = Exception("API Error")
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -1053,7 +1059,7 @@ class TestAgentCoreMemorySessionManager:
         mock_memory_client.retrieve_memories.side_effect = mock_retrieve_side_effect
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -1099,7 +1105,7 @@ class TestAgentCoreMemorySessionManager:
         mock_memory_client.retrieve_memories.return_value = [{"content": "User prefers morning meetings", "score": 0.8}]
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -1129,7 +1135,7 @@ class TestAgentCoreMemorySessionManager:
         boto_config = BotocoreConfig(user_agent_extra="custom-agent")
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -1147,7 +1153,7 @@ class TestAgentCoreMemorySessionManager:
     def test_retrieve_customer_context_no_messages(self, agentcore_config_with_retrieval, mock_memory_client):
         """Test retrieve_customer_context with no messages."""
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -1172,7 +1178,7 @@ class TestAgentCoreMemorySessionManager:
     def test_retrieve_customer_context_empty_content(self, agentcore_config_with_retrieval, mock_memory_client):
         """Empty content list on the last message must not raise IndexError."""
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -1197,7 +1203,7 @@ class TestAgentCoreMemorySessionManager:
     def test_retrieve_customer_context_no_config(self, agentcore_config, mock_memory_client):
         """Test retrieve_customer_context with no retrieval config."""
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -1226,7 +1232,7 @@ class TestAgentCoreMemorySessionManager:
         ]
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -1254,7 +1260,7 @@ class TestAgentCoreMemorySessionManager:
         mock_memory_client.retrieve_memories.side_effect = Exception("Memory error")
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -1295,7 +1301,7 @@ class TestAgentCoreMemorySessionManager:
         )
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -2520,7 +2526,7 @@ class TestThinkingModeCompatibility:
         ]
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -2561,7 +2567,7 @@ class TestThinkingModeCompatibility:
         ]
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -2612,7 +2618,7 @@ class TestThinkingModeCompatibility:
         ]
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -2652,7 +2658,7 @@ class TestThinkingModeCompatibility:
         ]
 
         with patch(
-            "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+            "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
             return_value=mock_memory_client,
         ):
             with patch("boto3.Session") as mock_boto_session:
@@ -2764,7 +2770,7 @@ class TestIntervalFlush:
 
         with (
             patch(
-                "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+                "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
                 return_value=mock_client,
             ),
             patch("boto3.Session") as mock_boto_session,
@@ -2800,7 +2806,7 @@ class TestIntervalFlush:
 
         with (
             patch(
-                "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+                "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
                 return_value=mock_client,
             ),
             patch("boto3.Session") as mock_boto_session,
@@ -2832,7 +2838,7 @@ class TestIntervalFlush:
 
         with (
             patch(
-                "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+                "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
                 return_value=mock_client,
             ),
             patch("boto3.Session") as mock_boto_session,
@@ -2876,7 +2882,7 @@ class TestIntervalFlush:
 
         with (
             patch(
-                "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+                "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
                 return_value=mock_client,
             ),
             patch("boto3.Session") as mock_boto_session,
@@ -2911,7 +2917,7 @@ class TestIntervalFlush:
 
         with (
             patch(
-                "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+                "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
                 return_value=mock_client,
             ),
             patch("boto3.Session") as mock_boto_session,
@@ -2958,7 +2964,7 @@ class TestIntervalFlush:
 
         with (
             patch(
-                "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+                "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
                 return_value=mock_client,
             ),
             patch("boto3.Session") as mock_boto_session,
@@ -3009,7 +3015,7 @@ class TestIntervalFlush:
 
         with (
             patch(
-                "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+                "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
                 return_value=mock_client,
             ),
             patch("boto3.Session") as mock_boto_session,
@@ -3065,7 +3071,7 @@ class TestIntervalFlush:
 
         with (
             patch(
-                "bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient",
+                "bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager.MemoryClient",
                 return_value=mock_client,
             ),
             patch("boto3.Session") as mock_boto_session,
@@ -3209,7 +3215,9 @@ class TestMetadataSupport:
 
     def test_metadata_reserved_keys_rejected(self, session_manager):
         """ValueError raised when user metadata contains reserved keys."""
-        from bedrock_agentcore.memory.integrations.strands.session_manager import RESERVED_METADATA_KEYS
+        from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager import (
+            RESERVED_METADATA_KEYS,
+        )
 
         session_message = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
 
@@ -3224,7 +3232,7 @@ class TestMetadataSupport:
 
     def test_metadata_max_keys_exceeded(self, session_manager):
         """ValueError raised when combined metadata exceeds MAX_METADATA_KEYS."""
-        from bedrock_agentcore.memory.integrations.strands.session_manager import MAX_METADATA_KEYS
+        from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager import MAX_METADATA_KEYS
 
         session_message = SessionMessage.from_message({"role": "user", "content": [{"text": "hello"}]}, 0)
         too_many = {f"key_{i}": {"stringValue": f"val_{i}"} for i in range(MAX_METADATA_KEYS + 1)}
@@ -3283,7 +3291,9 @@ class TestMetadataSupport:
 
     def test_blob_message_with_metadata(self, session_manager_with_metadata, mock_memory_client):
         """Blob messages also receive metadata."""
-        from bedrock_agentcore.memory.integrations.strands.bedrock_converter import CONVERSATIONAL_MAX_SIZE
+        from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.bedrock_converter import (
+            CONVERSATIONAL_MAX_SIZE,
+        )
 
         mock_memory_client.gmdp_client.create_event.return_value = {"event": {"eventId": "blob_1"}}
         big_text = "x" * (CONVERSATIONAL_MAX_SIZE + 100)
@@ -3722,9 +3732,14 @@ class TestAsyncMode:
         registry = HookRegistry()
         manager.register_hooks(registry)
 
-        for event_type in (MultiAgentInitializedEvent, AfterNodeCallEvent, AfterMultiAgentInvocationEvent):
-            callbacks = registry._registered_callbacks.get(event_type, [])
-            assert callbacks, f"No callbacks registered for {event_type.__name__}"
+        events = (
+            MultiAgentInitializedEvent(source=Mock()),
+            AfterNodeCallEvent(source=Mock(), node_id="node"),
+            AfterMultiAgentInvocationEvent(source=Mock()),
+        )
+        for event in events:
+            callbacks = list(registry.get_callbacks_for(event))
+            assert callbacks, f"No callbacks registered for {type(event).__name__}"
             assert all(asyncio.iscoroutinefunction(cb) for cb in callbacks)
 
     def test_async_mode_logs_sync_invocation_warning(self, mock_memory_client, caplog):
@@ -3733,7 +3748,9 @@ class TestAsyncMode:
         manager = _create_session_manager(config, mock_memory_client)
         registry = HookRegistry()
 
-        with caplog.at_level(logging.WARNING, logger="bedrock_agentcore.memory.integrations.strands.session_manager"):
+        with caplog.at_level(
+            logging.WARNING, logger="bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager"
+        ):
             manager.register_hooks(registry)
 
         assert any("async_mode=True" in rec.message and "stream_async" in rec.message for rec in caplog.records)
@@ -3746,15 +3763,20 @@ class TestAsyncMode:
         manager.register_hooks(registry)
 
         # BidiAgentInitializedEvent dispatches via the sync hook path, so its callback must NOT be a coroutine.
-        init_callbacks = registry._registered_callbacks.get(BidiAgentInitializedEvent, [])
+        init_event = BidiAgentInitializedEvent(agent=Mock())
+        init_callbacks = list(registry.get_callbacks_for(init_event))
         assert init_callbacks, "No callbacks registered for BidiAgentInitializedEvent"
         assert not any(asyncio.iscoroutinefunction(cb) for cb in init_callbacks)
 
         # BidiMessageAddedEvent and BidiAfterInvocationEvent dispatch via invoke_callbacks_async,
         # so their callbacks should be async to keep the event loop unblocked.
-        for event_type in (BidiMessageAddedEvent, BidiAfterInvocationEvent):
-            callbacks = registry._registered_callbacks.get(event_type, [])
-            assert callbacks, f"No callbacks registered for {event_type.__name__}"
+        events = (
+            BidiMessageAddedEvent(agent=Mock(), message={"role": "user", "content": [{"text": "hello"}]}),
+            BidiAfterInvocationEvent(agent=Mock()),
+        )
+        for event in events:
+            callbacks = list(registry.get_callbacks_for(event))
+            assert callbacks, f"No callbacks registered for {type(event).__name__}"
             assert all(asyncio.iscoroutinefunction(cb) for cb in callbacks)
 
 

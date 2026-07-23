@@ -1,7 +1,7 @@
 """
 Integration tests for AgentCore Memory Session Manager.
 
-Run with: python -m pytest tests_integ/memory/integrations/test_session_manager.py -v
+Run with: python -m pytest tests_integ/memory/integrations/strands/memorysessionmanager/test_session_manager.py -v
 """
 
 import json
@@ -16,9 +16,16 @@ from strands import Agent
 from strands.types.session import Session, SessionAgent, SessionType
 
 from bedrock_agentcore.memory import MemoryClient
-from bedrock_agentcore.memory.integrations.strands.bedrock_converter import AgentCoreMemoryConverter
-from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
-from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
+from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.bedrock_converter import (
+    AgentCoreMemoryConverter,
+)
+from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.config import (
+    AgentCoreMemoryConfig,
+    RetrievalConfig,
+)
+from bedrock_agentcore.memory.integrations.strands.memorysessionmanager.session_manager import (
+    AgentCoreMemorySessionManager,
+)
 from bedrock_agentcore.memory.models.filters import (
     EventMetadataFilter,
     LeftExpression,
