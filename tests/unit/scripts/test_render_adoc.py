@@ -58,6 +58,20 @@ class TestRenderProse:
     def test_plain_prose_passthrough(self):
         assert render_adoc.render_prose("just text") == ["just text"]
 
+    def test_generated_prose_uses_aws_style(self):
+        out = "\n".join(
+            render_adoc.render_prose(
+                "This AWS client is experimental. "
+                "This feature is in preview and may change in future releases. "
+                "Use a value (e.g., example)."
+            )
+        )
+        assert "might change" in out
+        assert "for example, example" in out
+        assert "This {aws} client" in out
+        assert " may change" not in out
+        assert "e.g." not in out
+
 
 class TestRenderEntry:
     def test_no_fence_leaks_in_description(self):
@@ -78,6 +92,32 @@ class TestRenderEntry:
         adoc = _render(_entry(params=[{"name": "name", "type": "str", "required": True, "description": "The name."}]))
         assert "`name`" in adoc
         assert "The name." in adoc
+
+    @pytest.mark.parametrize(
+        ("source", "expected"),
+        [
+            ("Optional WaitConfig.", "An optional WaitConfig."),
+            ("AWS region.", "The {aws} Region."),
+            ("id of the actor", "The ID of the actor"),
+            ("Behaviour manager.", "The behavior manager."),
+            ("Memory resource ID", "The memory resource ID"),
+            ("Strategy name.", "The name of the memory strategy."),
+        ],
+    )
+    def test_parameter_descriptions_use_aws_style(self, source, expected):
+        adoc = _render(
+            _entry(
+                params=[
+                    {
+                        "name": "value",
+                        "type": "str",
+                        "required": True,
+                        "description": source,
+                    }
+                ]
+            )
+        )
+        assert expected in adoc
 
     def test_example_stray_fence_stripped(self):
         # A closing fence plus trailing prose swept into the example must not leak.

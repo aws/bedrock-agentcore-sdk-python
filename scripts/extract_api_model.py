@@ -43,8 +43,8 @@ GROUPS = [
     ("knowledge-base", "Knowledge Base", "bedrock_agentcore.knowledge_base"),
 ]
 
-_SECTION_RE = re.compile(r"^\s*(Args|Arguments|Returns|Raises|Example|Examples):\s*$")
-_ARG_RE = re.compile(r"^\s+(\w+)\s*(?:\(([^)]+)\))?:\s*(.*)$")
+_SECTION_RE = re.compile(r"^\s*(Args|Arguments|Returns|Raises|Example|Examples)(?:\s+\([^)]+\))?:\s*$")
+_ARG_RE = re.compile(r"^\s+(\*{0,2}\w+)\s*(?:\(([^)]+)\))?:\s*(.*)$")
 
 # The SDK mixes Google-style ("Args:") and reST-style (":param x:") docstrings,
 # so we also recognize the reST field forms and pull them out of the prose.
@@ -100,7 +100,8 @@ def parse_google_docstring(doc):
     result["summary"] = " ".join(summary)
 
     section = "description"
-    desc, example_buf = [], []
+    desc, example_bufs = [], []
+    example_buf = None
     while i < len(lines):
         line = lines[i]
         m = _SECTION_RE.match(line)
@@ -114,6 +115,9 @@ def parse_google_docstring(doc):
                 "example": "example",
                 "examples": "example",
             }[name]
+            if section == "example":
+                example_buf = []
+                example_bufs.append(example_buf)
             i += 1
             continue
         if section == "description":
@@ -141,6 +145,8 @@ def parse_google_docstring(doc):
             am = _ARG_RE.match(line)
             if am:
                 result["raises"].append({"type": am.group(1), "description": am.group(3).strip()})
+            elif result["raises"] and line.strip():
+                result["raises"][-1]["description"] += " " + line.strip()
         elif section == "example":
             example_buf.append(line)
         i += 1  # always advance — non-header branches above don't, else infinite loop
@@ -149,7 +155,7 @@ def parse_google_docstring(doc):
     # instead of, or mixed with, Google sections. Pull those out of the prose.
     desc = extract_rest_fields(desc, result)
     result["description"] = "\n".join(desc).strip()
-    if example_buf:
+    for example_buf in example_bufs:
         code = "\n".join(example_buf).strip()
         # strip a leading ```python fence if the docstring used one
         code = re.sub(r"^```\w*\n?|\n?```$", "", code).strip()
@@ -177,6 +183,8 @@ def _own_docstring(obj):
 def entry_from_object(name, obj):
     """Build a doc-model entry for a class or function."""
     doc = parse_google_docstring(_own_docstring(obj))
+    if name == "__init__" and doc["summary"] == "Represents an actor within a session.":
+        doc["summary"] = "Initializes an Actor instance for the specified session."
     try:
         signature = inspect.signature(obj)
         # Drop the implicit `self`/`cls` receiver from method signatures.

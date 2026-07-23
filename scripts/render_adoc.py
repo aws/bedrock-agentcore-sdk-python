@@ -55,12 +55,48 @@ import textwrap
 SCHEMA_VERSION = 1
 
 
+def normalize_style(text):
+    """Apply style-safe substitutions to generated prose."""
+    if not text:
+        return ""
+    text = re.sub(r"\be\.g\.(?:,)?", "for example,", text, flags=re.IGNORECASE)
+    text = text.replace(
+        "This feature is in preview and may change in future releases.",
+        "This feature is in preview and might change in future releases.",
+    )
+    text = text.replace(
+        "This class provides convenient delegation to MemorySessionManager operations.",
+        "Use this class to delegate operations to MemorySessionManager.",
+    )
+    return re.sub(r"\bAWS\b", "{aws}", text)
+
+
+def normalize_param_description(text):
+    """Normalize recurring parameter-description style issues."""
+    text = normalize_style(clean_rst(text)).strip()
+    substitutions = (
+        (r"^Optional\b", "An optional"),
+        (r"^(?:\{aws\}|AWS)\s+region\b", "The {aws} Region"),
+        (r"^id of\b", "The ID of"),
+        (r"^Behaviour\b", "The behavior"),
+        (r"^Behavior\b", "The behavior"),
+        (r"^Memory resource ID\b", "The memory resource ID"),
+        (r"^Strategy name\b", "The name of the memory strategy"),
+        (r"^Strategy ID\b", "The ID of the memory strategy"),
+    )
+    for pattern, replacement in substitutions:
+        text = re.sub(pattern, replacement, text, count=1, flags=re.IGNORECASE)
+    return text
+
+
 def esc(text):
     """Escape AsciiDoc-significant characters in inline text."""
     if not text:
         return ""
     # Guard the couple of chars that start AsciiDoc markup in running prose.
-    return text.replace("|", "\\|").replace("{", "\\{")
+    marker = "\0AWS_ENTITY\0"
+    text = normalize_style(text).replace("{aws}", marker)
+    return text.replace("|", "\\|").replace("{", "\\{").replace(marker, "{aws}")
 
 
 # Match markdown code fences that may be indented (reST/Google docstrings often
@@ -94,7 +130,7 @@ def clean_rst(text):
     # Convert roles: :class:`Foo` -> `Foo`
     text = _RST_ROLE_RE.sub(r"`\1`", text)
 
-    return text
+    return normalize_style(text)
 
 
 _ADOC_ADMONITION_RE = re.compile(
@@ -171,7 +207,7 @@ def render_params(params, out):
         req = "" if p.get("required") else " _(optional)_"
         typ = f"`{p['type']}`" if p.get("type") else ""
         out.append(f"`{p['name']}`{req} {typ}::")
-        out.append(esc(clean_rst(p.get("description", ""))) or "_No description._")
+        out.append(esc(normalize_param_description(p.get("description", ""))) or "_No description._")
     out.append("")
 
 
