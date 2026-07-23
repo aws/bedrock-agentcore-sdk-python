@@ -6,6 +6,7 @@ extraction, health checks, and Docker host detection.
 
 import logging
 import uuid
+from importlib import import_module
 from typing import Any, Callable, Optional
 
 from ..config_bundle.baggage import _extract_baggage
@@ -34,8 +35,19 @@ def _check_a2a_sdk() -> None:
         import a2a  # noqa: F401
     except ImportError:
         raise ImportError(
-            'a2a-sdk is required for A2A protocol support. Install it with: pip install "bedrock-agentcore[a2a]"'
+            "a2a-sdk is required for A2A protocol support. Install "
+            '"bedrock-agentcore[a2a]" for a2a-sdk 0.3 or '
+            '"bedrock-agentcore[a2a-v1]" for a2a-sdk 1.x.'
         ) from None
+
+
+def _is_a2a_v1() -> bool:
+    """Return whether the installed a2a-sdk uses the v1 protocol API."""
+    try:
+        from a2a.types import StreamResponse  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 
 def _build_agent_card(executor: Any, url: str) -> Any:
@@ -44,7 +56,7 @@ def _build_agent_card(executor: Any, url: str) -> Any:
     Extracts name/description from ``executor.agent``. Falls back to generic
     defaults for other executors.
     """
-    from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
+    from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 
     name = "agent"
     description = "A Bedrock AgentCore agent"
@@ -54,14 +66,24 @@ def _build_agent_card(executor: Any, url: str) -> Any:
         name = getattr(agent, "name", None) or name
         description = getattr(agent, "description", None) or description
 
-    return AgentCard(
-        name=name,
-        description=description,
-        version="0.1.0",
-        capabilities=AgentCapabilities(streaming=True),
-        skills=[AgentSkill(id="main", name=name, description=description, tags=["main"])],
-        default_input_modes=["text"],
-        default_output_modes=["text"],
+    card_kwargs = {
+        "name": name,
+        "description": description,
+        "version": "0.1.0",
+        "capabilities": AgentCapabilities(streaming=True),
+        "skills": [AgentSkill(id="main", name=name, description=description, tags=["main"])],
+        "default_input_modes": ["text"],
+        "default_output_modes": ["text"],
+    }
+    agent_card_type: Any = AgentCard
+
+    if not _is_a2a_v1():
+        return agent_card_type(url=url, **card_kwargs)
+
+    from a2a.types import AgentInterface
+
+    return agent_card_type(
+        **card_kwargs,
         supported_interfaces=[
             AgentInterface(
                 protocol_binding="JSONRPC",
@@ -73,7 +95,11 @@ def _build_agent_card(executor: Any, url: str) -> Any:
 
 
 def _set_jsonrpc_url(agent_card: Any, url: str) -> None:
-    """Set the runtime URL on the card's JSON-RPC interface."""
+    """Set the runtime URL on an AgentCard."""
+    if not _is_a2a_v1():
+        agent_card.url = url
+        return
+
     from a2a.types import AgentInterface
 
     for interface in agent_card.supported_interfaces:
@@ -200,9 +226,13 @@ class BedrockCallContextBuilder:
 # Register as a virtual subclass so isinstance checks pass without
 # requiring a2a-sdk to be importable at class-definition time.
 try:
-    from a2a.server.routes import ServerCallContextBuilder
+    if _is_a2a_v1():
+        from a2a.server.routes import ServerCallContextBuilder
 
-    ServerCallContextBuilder.register(BedrockCallContextBuilder)
+        ServerCallContextBuilder.register(BedrockCallContextBuilder)
+    else:
+        apps_module = import_module("a2a.server.apps")
+        apps_module.CallContextBuilder.register(BedrockCallContextBuilder)
 except Exception:  # pragma: no cover
     pass
 
@@ -234,13 +264,13 @@ def build_a2a_app(
     _check_a2a_sdk()
 
     from a2a.server.request_handlers import DefaultRequestHandler
-    from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
     from a2a.server.tasks import InMemoryTaskStore
     from starlette.applications import Starlette
     from starlette.responses import JSONResponse
     from starlette.routing import Route
 
     runtime_url = os.environ.get(AGENTCORE_RUNTIME_URL_ENV, "http://localhost:9000/")
+    is_a2a_v1 = _is_a2a_v1()
 
     if agent_card is None:
         agent_card = _build_agent_card(executor, runtime_url)
@@ -252,21 +282,37 @@ def build_a2a_app(
     if context_builder is None:
         context_builder = BedrockCallContextBuilder()
 
-    http_handler = DefaultRequestHandler(
-        agent_executor=executor,
-        task_store=task_store,
-        agent_card=agent_card,
-    )
+    request_handler_type: Any = DefaultRequestHandler
+    if is_a2a_v1:
+        from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 
-    routes = create_agent_card_routes(agent_card)
-    routes.extend(
-        create_jsonrpc_routes(
-            request_handler=http_handler,
-            rpc_url="/",
-            context_builder=context_builder,
-            enable_v0_3_compat=True,
+        http_handler = request_handler_type(
+            agent_executor=executor,
+            task_store=task_store,
+            agent_card=agent_card,
         )
-    )
+        routes = create_agent_card_routes(agent_card)
+        routes.extend(
+            create_jsonrpc_routes(
+                request_handler=http_handler,
+                rpc_url="/",
+                context_builder=context_builder,
+                enable_v0_3_compat=True,
+            )
+        )
+    else:
+        a2a_app_type = import_module("a2a.server.apps").A2AStarletteApplication
+
+        http_handler = request_handler_type(
+            agent_executor=executor,
+            task_store=task_store,
+        )
+        a2a_app = a2a_app_type(
+            agent_card=agent_card,
+            http_handler=http_handler,
+            context_builder=context_builder,
+        )
+        routes = []
 
     def _handle_ping(request: Any) -> JSONResponse:
         try:
@@ -279,8 +325,10 @@ def build_a2a_app(
             status = PingStatus.HEALTHY
         return JSONResponse({"status": status.value})
 
-    routes.insert(0, Route("/ping", _handle_ping, methods=["GET"]))
-    return Starlette(routes=routes)
+    app = Starlette(routes=[Route("/ping", _handle_ping, methods=["GET"]), *routes])
+    if not is_a2a_v1:
+        a2a_app.add_routes_to_app(app)
+    return app
 
 
 def serve_a2a(

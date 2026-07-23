@@ -131,8 +131,16 @@ The AgentCore CLI generates AWS CDK under the hood. For full infrastructure-as-c
 
 Serve your agent using the [A2A (Agent-to-Agent) protocol](https://google.github.io/A2A/) on Bedrock AgentCore Runtime. Works with any framework that provides an a2a-sdk `AgentExecutor` (Strands, LangGraph, Google ADK, or custom).
 
+Strands currently uses a2a-sdk 0.3:
+
 ```bash
 pip install "bedrock-agentcore[a2a]"
+```
+
+For A2A protocol v1, install the mutually exclusive `a2a-v1` extra:
+
+```bash
+pip install "bedrock-agentcore[a2a-v1]"
 ```
 
 ```python
