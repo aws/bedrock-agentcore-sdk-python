@@ -382,11 +382,26 @@ class TestServeA2A:
     @patch("uvicorn.run")
     def test_default_localhost(self, mock_uvicorn_run):
         with patch.dict("os.environ", {}, clear=False):
+            import os
+
+            os.environ.pop("PORT", None)
             with patch("os.path.exists", return_value=False):
                 serve_a2a(_EchoExecutor(), _make_agent_card())
         kw = mock_uvicorn_run.call_args[1]
         assert kw["host"] == "127.0.0.1"
         assert kw["port"] == 9000
+
+    @patch("uvicorn.run")
+    def test_port_from_environment(self, mock_uvicorn_run):
+        with patch.dict("os.environ", {"PORT": "9001"}):
+            serve_a2a(_EchoExecutor(), _make_agent_card())
+        assert mock_uvicorn_run.call_args[1]["port"] == 9001
+
+    @patch("uvicorn.run")
+    def test_explicit_port_overrides_environment(self, mock_uvicorn_run):
+        with patch.dict("os.environ", {"PORT": "9001"}):
+            serve_a2a(_EchoExecutor(), _make_agent_card(), port=8888)
+        assert mock_uvicorn_run.call_args[1]["port"] == 8888
 
     @patch("uvicorn.run")
     def test_docker_detection_dockerenv(self, mock_uvicorn_run):

@@ -287,7 +287,7 @@ def serve_a2a(
     executor: Any,
     agent_card: Any = None,
     *,
-    port: int = 9000,
+    port: Optional[int] = None,
     host: Optional[str] = None,
     task_store: Any = None,
     context_builder: Any = None,
@@ -300,7 +300,8 @@ def serve_a2a(
         executor: An ``AgentExecutor`` that implements the agent logic.
         agent_card: Optional ``a2a.types.AgentCard`` describing the agent.
             If ``None``, one is built automatically by introspecting the executor.
-        port: Port to serve on (default 9000).
+        port: Port to serve on. Defaults to the ``PORT`` environment variable,
+            or 9000 when it is unset.
         host: Host to bind to; auto-detected if ``None``.
         task_store: Optional ``TaskStore``; defaults to ``InMemoryTaskStore``.
         context_builder: Optional ``ServerCallContextBuilder``; defaults to
@@ -311,6 +312,8 @@ def serve_a2a(
     import os
 
     import uvicorn
+
+    resolved_port = port if port is not None else int(os.environ.get("PORT", "9000"))
 
     app = build_a2a_app(
         executor,
@@ -328,7 +331,7 @@ def serve_a2a(
 
     uvicorn_params: dict[str, Any] = {
         "host": host,
-        "port": port,
+        "port": resolved_port,
         "log_level": "info",
     }
     uvicorn_params.update(kwargs)
