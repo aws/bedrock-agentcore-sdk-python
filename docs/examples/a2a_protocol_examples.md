@@ -4,11 +4,20 @@ This document explains how to serve your agent using the [A2A (Agent-to-Agent) p
 
 ## Installation
 
-A2A support requires the optional `a2a` extra:
+Use the `a2a` extra for a2a-sdk 0.3, including the current Strands A2A integration:
 
 ```bash
 pip install "bedrock-agentcore[a2a]"
 ```
+
+Use the mutually exclusive `a2a-v1` extra to opt in to A2A protocol v1:
+
+```bash
+pip install "bedrock-agentcore[a2a-v1]"
+```
+
+The runtime adapter detects the installed SDK major version. Do not install both
+extras in the same environment.
 
 ## Quick Start
 
