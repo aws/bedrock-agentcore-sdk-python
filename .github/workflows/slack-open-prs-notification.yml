@@ -2,7 +2,7 @@ name: Slack Open PRs Notification
 
 on:
   schedule:
-    - cron: '0 13 * * *'
+    - cron: '0 13 * * *' # 8:00 AM EST / 9:00 AM EDT (13:00 UTC)
   workflow_dispatch:
 
 permissions:
