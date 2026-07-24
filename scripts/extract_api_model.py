@@ -52,6 +52,15 @@ _REST_PARAM_RE = re.compile(r"^\s*:param\s+(\w+):\s*(.*)$")
 _REST_RETURNS_RE = re.compile(r"^\s*:returns?:\s*(.*)$")
 _REST_RAISES_RE = re.compile(r"^\s*:raises?\s+([\w.]+):\s*(.*)$")
 
+SUMMARY_OVERRIDES = {
+    "Actor": (
+        "Provides a handle for an actor within a session, delegating operations to the associated MemorySessionManager."
+    ),
+    "ActorProfile": "Describes the simulated actor's identity and objective.",
+    "BatchEvaluationSummary": "Provides aggregated results from a completed batch evaluation.",
+    "ConfigBundleRef": "References a configuration bundle version parsed from OTEL baggage.",
+}
+
 
 def extract_rest_fields(lines, result):
     """Pull reST field lines (:param:/:returns:/:raises:) out of `lines`.
@@ -183,6 +192,8 @@ def _own_docstring(obj):
 def entry_from_object(name, obj):
     """Build a doc-model entry for a class or function."""
     doc = parse_google_docstring(_own_docstring(obj))
+    if name in SUMMARY_OVERRIDES:
+        doc["summary"] = SUMMARY_OVERRIDES[name]
     if name == "__init__" and doc["summary"] == "Represents an actor within a session.":
         doc["summary"] = "Initializes an Actor instance for the specified session."
     try:

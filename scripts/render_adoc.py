@@ -60,10 +60,34 @@ def normalize_style(text):
     if not text:
         return ""
     text = re.sub(r"\be\.g\.(?:,)?", "for example,", text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"\bAWS Bedrock(?: AgentCore)? Code\s*Interpreter\b",
+        "AgentCore Code Interpreter",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"\bAWS Bedrock AgentCore\b", "Amazon Bedrock AgentCore", text)
+    text = re.sub(r"\bAWS Bedrock\b", "Amazon Bedrock", text)
+    text = re.sub(r"\bAgentCore Memory\b", "AgentCore memory", text)
+    text = re.sub(r"\bAgentCore Runtime\b", "AgentCore runtime", text)
+    text = text.replace(
+        "BedrockAgentCore Runtime Package.",
+        "Amazon Bedrock AgentCore runtime package.",
+    )
+    text = text.replace(
+        "Bedrock AgentCore Policy Engine client.",
+        "Policy Engine client for Amazon Bedrock AgentCore.",
+    )
+    text = text.replace(
+        "Client for Bedrock AgentCore Policy Engine operations.",
+        "Provides a client for Policy in AgentCore.",
+    )
+    text = re.sub(r"\bAgentCore SDK\b", "AgentCore Python SDK", text)
     text = text.replace(
         "This feature is in preview and may change in future releases.",
         "This feature is in preview and might change in future releases.",
     )
+    text = text.replace("validation will ensure", "validation ensures")
     text = text.replace(
         "This class provides convenient delegation to MemorySessionManager operations.",
         "Use this class to delegate operations to MemorySessionManager.",

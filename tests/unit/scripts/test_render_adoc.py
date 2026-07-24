@@ -72,6 +72,23 @@ class TestRenderProse:
         assert " may change" not in out
         assert "e.g." not in out
 
+    @pytest.mark.parametrize(
+        ("source", "expected"),
+        [
+            ("AWS Bedrock AgentCore client.", "Amazon Bedrock AgentCore client."),
+            ("AgentCore Memory client.", "AgentCore memory client."),
+            ("AgentCore Runtime endpoint.", "AgentCore runtime endpoint."),
+            ("AWS Bedrock Code Interpreter.", "AgentCore Code Interpreter."),
+            ("Bedrock AgentCore SDK tools.", "Bedrock AgentCore Python SDK tools."),
+            (
+                "If both values are set, validation will ensure they match.",
+                "If both values are set, validation ensures they match.",
+            ),
+        ],
+    )
+    def test_generated_prose_normalizes_service_names_and_voice(self, source, expected):
+        assert render_adoc.render_prose(source) == [expected]
+
 
 class TestRenderEntry:
     def test_no_fence_leaks_in_description(self):

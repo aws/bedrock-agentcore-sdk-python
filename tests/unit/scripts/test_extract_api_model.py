@@ -39,3 +39,14 @@ def test_multiline_fields_and_named_examples_are_preserved():
         '>>> run("runtime")',
         '>>> run("custom")',
     ]
+
+
+def test_public_class_summaries_use_action_verbs():
+    class Actor:
+        """Represents an actor within a session."""
+
+    Actor.__module__ = "bedrock_agentcore.memory"
+
+    entry = extract_api_model.entry_from_object("Actor", Actor)
+
+    assert entry["summary"].startswith("Provides a handle")
