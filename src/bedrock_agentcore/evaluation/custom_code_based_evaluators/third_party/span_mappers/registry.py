@@ -4,12 +4,7 @@ import logging
 import warnings
 from typing import Any, Dict, List, Optional
 
-from strands_evals.mappers import (
-    LangChainOtelSessionMapper,
-    OpenInferenceSessionMapper,
-    detect_otel_mapper,
-)
-from strands_evals.mappers.utils import get_scope_name
+from strands_evals.mappers import detect_otel_mapper
 from strands_evals.types.trace import AgentInvocationSpan, Session, ToolExecutionSpan
 
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers.common import (
@@ -33,35 +28,7 @@ def _extract_session_id(session_spans: List[Dict[str, Any]]) -> str:
 
 
 def _detect_mapper(session_spans: List[Dict[str, Any]]):
-    """Detect the appropriate mapper, extending strands-evals for edge cases.
-
-    We check scope names before falling back to detect_otel_mapper because:
-    - detect_otel_mapper misidentifies CloudWatch split format (body on separate
-      entries) as StrandsInMemorySessionMapper (which expects ReadableSpan objects)
-    - Our pre-check handles this case correctly, then falls back for other formats
-    """
-    from strands_evals.mappers import CloudWatchSessionMapper
-    from strands_evals.mappers.utils import get_body
-
-    has_strands_scope = False
-    has_body_entry = False
-
-    for span in session_spans:
-        scope_name = get_scope_name(span)
-        if scope_name == "opentelemetry.instrumentation.langchain":
-            return LangChainOtelSessionMapper()
-        if scope_name == "openinference.instrumentation.langchain":
-            return OpenInferenceSessionMapper()
-        if scope_name == "strands.telemetry.tracer":
-            has_strands_scope = True
-        if get_body(span) is not None:
-            has_body_entry = True
-
-    # CloudWatch split format: Strands scope on metadata entries, body on log entries
-    if has_strands_scope and has_body_entry:
-        return CloudWatchSessionMapper()
-
-    # Fallback to strands-evals auto-detection
+    """Detect the appropriate mapper using strands-evals auto-detection."""
     return detect_otel_mapper(session_spans)
 
 
