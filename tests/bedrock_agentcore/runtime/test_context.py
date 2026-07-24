@@ -253,6 +253,22 @@ class TestRequestContext:
 
         assert context.request is mock_request
 
+    def test_request_context_no_pydantic_v1_deprecation_warning(self):
+        """RequestContext must not raise PydanticDeprecatedSince20 on instantiation.
+
+        Regression guard: class-based Config triggers this warning in Pydantic v2;
+        ConfigDict does not.  If someone reverts the fix, this test will fail.
+        """
+        import warnings
+
+        from pydantic import PydanticDeprecatedSince20
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", PydanticDeprecatedSince20)
+            context = RequestContext(session_id="regression-check", request_headers={"X-Test": "1"})
+
+        assert context.session_id == "regression-check"
+
 
 class TestBedrockAgentCoreContextConfigBundles:
     """Tests for config bundle ContextVar methods on BedrockAgentCoreContext."""
