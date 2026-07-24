@@ -394,6 +394,72 @@ class TestAgentCoreMemorySessionManager:
         assert messages[1].message["role"] == "user"
         assert messages[0].message["role"] == "assistant"
 
+    def test_filter_restored_drops_tool_only_turn_and_merges_assistants(self, session_manager):
+        """A toolResult-only user turn is dropped, so the surrounding assistant turns merge."""
+        messages = [
+            SessionMessage(message={"role": "user", "content": [{"text": "hi"}]}, message_id=0),
+            SessionMessage(
+                message={
+                    "role": "assistant",
+                    "content": [{"text": "calling"}, {"toolUse": {"toolUseId": "t1", "name": "f", "input": {}}}],
+                },
+                message_id=1,
+            ),
+            SessionMessage(
+                message={
+                    "role": "user",
+                    "content": [{"toolResult": {"toolUseId": "t1", "status": "success", "content": [{"text": "ok"}]}}],
+                },
+                message_id=2,
+            ),
+            SessionMessage(message={"role": "assistant", "content": [{"text": "done"}]}, message_id=3),
+        ]
+
+        result = session_manager._filter_restored_tool_context(messages)
+
+        assert [m.message for m in result] == [
+            {"role": "user", "content": [{"text": "hi"}]},
+            {"role": "assistant", "content": [{"text": "calling"}, {"text": "done"}]},
+        ]
+
+    def test_filter_restored_drops_leading_non_user_turns(self, session_manager):
+        """Restored history must start on a user turn."""
+        messages = [
+            SessionMessage(message={"role": "assistant", "content": [{"text": "orphan"}]}, message_id=0),
+            SessionMessage(message={"role": "user", "content": [{"text": "hi"}]}, message_id=1),
+            SessionMessage(message={"role": "assistant", "content": [{"text": "answer"}]}, message_id=2),
+        ]
+
+        result = session_manager._filter_restored_tool_context(messages)
+
+        assert [m.message for m in result] == [
+            {"role": "user", "content": [{"text": "hi"}]},
+            {"role": "assistant", "content": [{"text": "answer"}]},
+        ]
+
+    def test_filter_restored_preserves_trailing_assistant_turn(self, session_manager):
+        """The trailing assistant turn is kept; the runtime appends the next user turn."""
+        messages = [
+            SessionMessage(message={"role": "user", "content": [{"text": "hi"}]}, message_id=0),
+            SessionMessage(message={"role": "assistant", "content": [{"text": "answer"}]}, message_id=1),
+        ]
+
+        result = session_manager._filter_restored_tool_context(messages)
+
+        assert [m.message for m in result] == [
+            {"role": "user", "content": [{"text": "hi"}]},
+            {"role": "assistant", "content": [{"text": "answer"}]},
+        ]
+
+    def test_filter_restored_all_assistant_history_becomes_empty(self, session_manager):
+        """History with no user turn is dropped entirely."""
+        messages = [
+            SessionMessage(message={"role": "assistant", "content": [{"text": "a"}]}, message_id=0),
+            SessionMessage(message={"role": "assistant", "content": [{"text": "b"}]}, message_id=1),
+        ]
+
+        assert session_manager._filter_restored_tool_context(messages) == []
+
     def test_events_to_messages_empty_payload(self, session_manager):
         """Test converting Bedrock events with empty payload."""
         events = [
