@@ -2,15 +2,31 @@ version = 1
 revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
-    "python_full_version >= '3.13'",
-    "python_full_version >= '3.11' and python_full_version < '3.13'",
-    "python_full_version < '3.11'",
+    "python_full_version >= '3.13' and extra != 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1'",
+    "python_full_version >= '3.11' and python_full_version < '3.13' and extra != 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1'",
+    "python_full_version < '3.11' and extra != 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1'",
+    "python_full_version >= '3.13' and extra == 'extra-17-bedrock-agentcore-a2a' and extra != 'extra-17-bedrock-agentcore-a2a-v1' and extra != 'group-17-bedrock-agentcore-dev'",
+    "python_full_version < '3.13' and extra == 'extra-17-bedrock-agentcore-a2a' and extra != 'extra-17-bedrock-agentcore-a2a-v1' and extra != 'group-17-bedrock-agentcore-dev'",
+    "python_full_version >= '3.13' and extra != 'extra-17-bedrock-agentcore-a2a' and extra != 'extra-17-bedrock-agentcore-a2a-v1'",
+    "python_full_version >= '3.11' and python_full_version < '3.13' and extra != 'extra-17-bedrock-agentcore-a2a' and extra != 'extra-17-bedrock-agentcore-a2a-v1'",
+    "python_full_version < '3.11' and extra != 'extra-17-bedrock-agentcore-a2a' and extra != 'extra-17-bedrock-agentcore-a2a-v1'",
 ]
+conflicts = [[
+    { package = "bedrock-agentcore", extra = "a2a" },
+    { package = "bedrock-agentcore", extra = "a2a-v1" },
+], [
+    { package = "bedrock-agentcore", extra = "a2a" },
+    { package = "bedrock-agentcore", group = "dev" },
+]]
 
 [[package]]
 name = "a2a-sdk"
-version = "0.3.25"
+version = "0.3.26"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13'",
+    "python_full_version < '3.13'",
+]
 dependencies = [
     { name = "google-api-core" },
     { name = "httpx" },
@@ -18,14 +34,44 @@ dependencies = [
     { name = "protobuf" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/55/83/3c99b276d09656cce039464509f05bf385e5600d6dc046a131bbcf686930/a2a_sdk-0.3.25.tar.gz", hash = "sha256:afda85bab8d6af0c5d15e82f326c94190f6be8a901ce562d045a338b7127242f", size = 270638, upload-time = "2026-03-10T13:08:46.417Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/be/97/a6840e01795b182ce751ca165430d46459927cde9bfab838087cbb24aef7/a2a_sdk-0.3.26.tar.gz", hash = "sha256:44068e2d037afbb07ab899267439e9bc7eaa7ac2af94f1e8b239933c993ad52d", size = 274598, upload-time = "2026-04-09T15:21:13.902Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/f9/6a62520b7ecb945188a6e1192275f4732ff9341cd4629bc975a6c146aeab/a2a_sdk-0.3.25-py3-none-any.whl", hash = "sha256:2fce38faea82eb0b6f9f9c2bcf761b0d78612c80ef0e599b50d566db1b2654b5", size = 149609, upload-time = "2026-03-10T13:08:44.7Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/d5/51f4ee1bf3b736add42a542d3c8a3fd3fa85f3d36c17972127defc46c26f/a2a_sdk-0.3.26-py3-none-any.whl", hash = "sha256:754e0573f6d33b225c1d8d51f640efa69cbbed7bdfb06ce9c3540ea9f58d4a91", size = 151016, upload-time = "2026-04-09T15:21:12.35Z" },
 ]
 
 [package.optional-dependencies]
 http-server = [
     { name = "fastapi" },
+    { name = "sse-starlette" },
+    { name = "starlette" },
+]
+
+[[package]]
+name = "a2a-sdk"
+version = "1.1.2"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13'",
+    "python_full_version >= '3.11' and python_full_version < '3.13'",
+    "python_full_version < '3.11'",
+]
+dependencies = [
+    { name = "culsans", marker = "python_full_version < '3.13'" },
+    { name = "google-api-core" },
+    { name = "googleapis-common-protos" },
+    { name = "httpx" },
+    { name = "json-rpc" },
+    { name = "packaging" },
+    { name = "protobuf" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/38/cc/59b35c518d8289bd59d20d9d216ca29ccb41c4697eb85971efe41d1adaf3/a2a_sdk-1.1.2.tar.gz", hash = "sha256:f928d8bf9a0dc0a473ee8258bd5226c1b8520a85c70e7f233c3b9b0e30a1bd10", size = 379627, upload-time = "2026-07-22T13:40:51.409Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/33/d414a03d5ef5a7d6d09a20dc9f8094e7fb9edb488662ff99c535a2a62cf1/a2a_sdk-1.1.2-py3-none-any.whl", hash = "sha256:eb9a698f526dc45a9ea967d7804e7aa363ff273d2c44fbed699bc68c9399f9c9", size = 245981, upload-time = "2026-07-22T13:40:49.484Z" },
+]
+
+[package.optional-dependencies]
+http-server = [
     { name = "sse-starlette" },
     { name = "starlette" },
 ]
@@ -50,7 +96,7 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "caio" },
+    { name = "caio", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/67/e2/d7cb819de8df6b5c1968a2756c3cb4122d4fa2b8fc768b53b7c9e5edb646/aiofile-3.9.0.tar.gz", hash = "sha256:e5ad718bb148b265b6df1b3752c4d1d83024b93da9bd599df74b9d9ffcf7919b", size = 17943, upload-time = "2024-10-08T10:39:35.846Z" }
 wheels = [
@@ -66,7 +112,7 @@ resolution-markers = [
     "python_full_version >= '3.11' and python_full_version < '3.13'",
 ]
 dependencies = [
-    { name = "caio" },
+    { name = "caio", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/48/41/2fea7e193e061ce54eacc3b7bc0e6a99e4fcff43c78cf0a76dd781ed8334/aiofile-3.11.1.tar.gz", hash = "sha256:1f91912c6643d2a4e49ca4ae3514f0bf3867ce948a36d99a6411b8f4755f4cf9", size = 19342, upload-time = "2026-05-16T08:18:33.538Z" }
 wheels = [
@@ -89,7 +135,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohappyeyeballs" },
     { name = "aiosignal" },
-    { name = "async-timeout", marker = "python_full_version < '3.11'" },
+    { name = "async-timeout", marker = "python_full_version < '3.11' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
     { name = "attrs" },
     { name = "frozenlist" },
     { name = "multidict" },
@@ -203,12 +249,26 @@ wheels = [
 ]
 
 [[package]]
+name = "aiologic"
+version = "0.17.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "sniffio", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "wrapt", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f1/7a/d51f2fde1e8ae8a83431f8e97b7a71e9358cdb1d4d2ce6be387fa44d68de/aiologic-0.17.1.tar.gz", hash = "sha256:2e1b93b9e88ced318c2a63ad7b382688f40cbfe40e3d42258d49dc9c5aea179d", size = 252354, upload-time = "2026-06-27T20:41:33.25Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5b/d3/2d310b1b839014034dba0cba685e492df8a5c7ad32c19cab7e979eed6554/aiologic-0.17.1-py3-none-any.whl", hash = "sha256:c66b319830fedb7ca3d2b2125fa6f5b653f89418c2a27ea76f259ec5f00943c0", size = 161331, upload-time = "2026-06-27T20:41:31.877Z" },
+]
+
+[[package]]
 name = "aiosignal"
 version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "frozenlist" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/61/62/06741b579156360248d1ec624842ad0edf697050bbaf7c3e46394e106ad1/aiosignal-1.4.0.tar.gz", hash = "sha256:f47eecd9468083c2029cc99945502cb7708b082c232f9aca65da147157b251c7", size = 25007, upload-time = "2025-07-03T22:54:43.528Z" }
 wheels = [
@@ -238,10 +298,10 @@ name = "anyio"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
+    { name = "exceptiongroup", marker = "python_full_version < '3.11' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
     { name = "idna" },
     { name = "sniffio" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/95/7d/4c1bd541d4dffa1b52bd83fb8527089e097a106fc90b467a7313b105f840/anyio-4.9.0.tar.gz", hash = "sha256:673c0c244e15788651a4ff38710fea9675823028a6f08a5eda409e0c9840a028", size = 190949, upload-time = "2025-03-17T00:02:54.77Z" }
 wheels = [
@@ -389,7 +449,10 @@ dependencies = [
 
 [package.optional-dependencies]
 a2a = [
-    { name = "a2a-sdk", extra = ["http-server"] },
+    { name = "a2a-sdk", version = "0.3.26", source = { registry = "https://pypi.org/simple" }, extra = ["http-server"], marker = "extra == 'extra-17-bedrock-agentcore-a2a'" },
+]
+a2a-v1 = [
+    { name = "a2a-sdk", version = "1.1.2", source = { registry = "https://pypi.org/simple" }, extra = ["http-server"], marker = "extra == 'extra-17-bedrock-agentcore-a2a-v1' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
 ]
 ag-ui = [
     { name = "ag-ui-protocol" },
@@ -417,7 +480,7 @@ strands-agents-evals = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "a2a-sdk", extra = ["http-server"] },
+    { name = "a2a-sdk", version = "1.1.2", source = { registry = "https://pypi.org/simple" }, extra = ["http-server"], marker = "extra == 'extra-17-bedrock-agentcore-a2a-v1' or extra == 'group-17-bedrock-agentcore-dev' or extra != 'extra-17-bedrock-agentcore-a2a'" },
     { name = "ag-ui-protocol" },
     { name = "httpx" },
     { name = "langchain" },
@@ -441,7 +504,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "a2a-sdk", extras = ["http-server"], marker = "extra == 'a2a'", specifier = ">=0.3,<1.0" },
+    { name = "a2a-sdk", extras = ["http-server"], marker = "extra == 'a2a'", specifier = ">=0.3,<0.4" },
+    { name = "a2a-sdk", extras = ["http-server"], marker = "extra == 'a2a-v1'", specifier = ">=1.0.1,<2.0" },
     { name = "ag-ui-protocol", marker = "extra == 'ag-ui'", specifier = ">=0.1.10" },
     { name = "boto3", specifier = ">=1.43.31" },
     { name = "botocore", specifier = ">=1.43.31" },
@@ -462,11 +526,11 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.34.2" },
     { name = "websockets", specifier = ">=13.0" },
 ]
-provides-extras = ["a2a", "ag-ui", "strands-agents", "langgraph", "strands-agents-evals", "simulation", "datasets"]
+provides-extras = ["a2a", "a2a-v1", "ag-ui", "strands-agents", "langgraph", "strands-agents-evals", "simulation", "datasets"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "a2a-sdk", extras = ["http-server"], specifier = ">=0.3,<1.0" },
+    { name = "a2a-sdk", extras = ["http-server"], specifier = ">=1.0.1,<2.0" },
     { name = "ag-ui-protocol", specifier = ">=0.1.10" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "langchain", specifier = ">=1.0.0" },
@@ -573,7 +637,7 @@ name = "cffi"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
+    { name = "pycparser", marker = "implementation_name != 'PyPy' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/eb/56/b1ba7935a17738ae8453301356628e8147c79dbb825bcbc73dc7401f9846/cffi-2.0.0.tar.gz", hash = "sha256:44d1b5909021139fe36001ae048dbdde8214afa20200eda0f64c068cac5d5529", size = 523588, upload-time = "2025-09-08T23:24:04.541Z" }
 wheels = [
@@ -725,7 +789,7 @@ name = "click"
 version = "8.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/60/6c/8ca2efa64cf75a977a0d7fac081354553ebe483345c734fb6b6515d96bbc/click-8.2.1.tar.gz", hash = "sha256:27c491cc05d968d271d5a1db13e3b5a184636d9d930f148c50b038f0d0646202", size = 286342, upload-time = "2025-05-20T23:19:49.832Z" }
 wheels = [
@@ -815,8 +879,8 @@ name = "cryptography"
 version = "48.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "cffi", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/12/45/870e7f4bef50e5f53b9f51d4428aee5290eedf58ba443f16b1ebb7ab8e66/cryptography-48.0.1.tar.gz", hash = "sha256:266f4ee051abb2f725b74ef8072b521ce1feacf685a3364fa6a6b45548db791a", size = 832989, upload-time = "2026-06-09T22:32:31.8Z" }
 wheels = [
@@ -868,6 +932,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/42/3b/d35750e41d803d1e516fd6d6011f065424924da7af1748cef4cc9cb3ede1/cryptography-48.0.1-pp311-pypy311_pp73-manylinux_2_34_aarch64.whl", hash = "sha256:7e234ac052af99f2700826a5c29ea99d9c1b1f80341cde62d11c8154dc8e0bd9", size = 4640793, upload-time = "2026-06-09T22:32:26.331Z" },
     { url = "https://files.pythonhosted.org/packages/ca/aa/cdb7181fe865285e87e96825aaab239400f1de0c3bfba9bd9769b79f1a92/cryptography-48.0.1-pp311-pypy311_pp73-manylinux_2_34_x86_64.whl", hash = "sha256:33842cf0888951cef5bc7ac724ab844a42044c1727b967b7f8997289a0464f92", size = 4668505, upload-time = "2026-06-09T22:31:27.534Z" },
     { url = "https://files.pythonhosted.org/packages/5d/8c/ce3823c06c2804f194f9e64f0d67fa3f4094a39f2bb1a990cd03603af8fc/cryptography-48.0.1-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:6184ca7b174f28d7c703f1290d4b297217c45355f77a98f67e9b7f14549ac54a", size = 3742204, upload-time = "2026-06-09T22:31:34.773Z" },
+]
+
+[[package]]
+name = "culsans"
+version = "0.11.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiologic", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d9/e3/49afa1bc180e0d28008ec6bcdf82a4072d1c7a41032b5b759b60814ca4b0/culsans-0.11.0.tar.gz", hash = "sha256:0b43d0d05dce6106293d114c86e3fb4bfc63088cfe8ff08ed3fe36891447fe33", size = 107546, upload-time = "2025-12-31T23:15:38.196Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e0/5d/9fb19fb38f6d6120422064279ea5532e22b84aa2be8831d49607194feda3/culsans-0.11.0-py3-none-any.whl", hash = "sha256:278d118f63fc75b9db11b664b436a1b83cc30d9577127848ba41420e66eb5a47", size = 21811, upload-time = "2025-12-31T23:15:37.189Z" },
 ]
 
 [[package]]
@@ -950,7 +1027,7 @@ name = "exceptiongroup"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
 wheels = [
@@ -959,7 +1036,7 @@ wheels = [
 
 [[package]]
 name = "fastapi"
-version = "0.135.1"
+version = "0.139.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
@@ -968,9 +1045,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e7/7b/f8e0211e9380f7195ba3f3d40c292594fd81ba8ec4629e3854c353aaca45/fastapi-0.135.1.tar.gz", hash = "sha256:d04115b508d936d254cea545b7312ecaa58a7b3a0f84952535b4c9afae7668cd", size = 394962, upload-time = "2026-03-01T18:18:29.369Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cd/95/d3f0ae10836324a2eab98a52b61210ac609f08200bf4bb0dc8132d32f78a/fastapi-0.139.2.tar.gz", hash = "sha256:333145a6891e9b5b3cfceb69baf817e8240cde4d4588ae5a10bf56ffacb6255e", size = 423428, upload-time = "2026-07-16T15:06:17.912Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e4/72/42e900510195b23a56bde950d26a51f8b723846bfcaa0286e90287f0422b/fastapi-0.135.1-py3-none-any.whl", hash = "sha256:46e2fc5745924b7c840f71ddd277382af29ce1cdb7d5eab5bf697e3fb9999c9e", size = 116999, upload-time = "2026-03-01T18:18:30.831Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/c7/cb03251d9dfb177246a9809a76f189d21df32dbd4a845951881d11323b7f/fastapi-0.139.2-py3-none-any.whl", hash = "sha256:b9ad015a835173d59865e2f5d8296fbc2b317bf56a2ba1a5bfbdd03de2fd4b1c", size = 130234, upload-time = "2026-07-16T15:06:19.557Z" },
 ]
 
 [[package]]
@@ -978,7 +1055,7 @@ name = "fastmcp"
 version = "3.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "fastmcp-slim", extra = ["client", "server"] },
+    { name = "fastmcp-slim", extra = ["client", "server"], marker = "extra == 'extra-17-bedrock-agentcore-a2a-v1' or extra == 'group-17-bedrock-agentcore-dev' or extra != 'extra-17-bedrock-agentcore-a2a'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3b/a9/5c5a01b6abd5346bf60b97cfd29e4a86661940c27dd562bfcda07fd03519/fastmcp-3.3.1.tar.gz", hash = "sha256:979362ea557de42a5f40342563c7e4b236bcc8e7cd192715f50030695d1a71cd", size = 28681699, upload-time = "2026-05-15T15:50:39.673Z" }
 wheels = [
@@ -991,7 +1068,7 @@ version = "3.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "platformdirs" },
-    { name = "pydantic", extra = ["email"] },
+    { name = "pydantic", extra = ["email"], marker = "extra == 'extra-17-bedrock-agentcore-a2a-v1' or extra == 'group-17-bedrock-agentcore-dev' or extra != 'extra-17-bedrock-agentcore-a2a'" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
     { name = "rich" },
@@ -1009,7 +1086,7 @@ client = [
     { name = "httpx" },
     { name = "mcp" },
     { name = "opentelemetry-api" },
-    { name = "py-key-value-aio", extra = ["filetree", "keyring", "memory"] },
+    { name = "py-key-value-aio", extra = ["filetree", "keyring", "memory"], marker = "extra == 'extra-17-bedrock-agentcore-a2a-v1' or extra == 'group-17-bedrock-agentcore-dev' or extra != 'extra-17-bedrock-agentcore-a2a'" },
 ]
 server = [
     { name = "authlib" },
@@ -1023,7 +1100,7 @@ server = [
     { name = "openapi-pydantic" },
     { name = "opentelemetry-api" },
     { name = "packaging" },
-    { name = "py-key-value-aio", extra = ["filetree", "keyring", "memory"] },
+    { name = "py-key-value-aio", extra = ["filetree", "keyring", "memory"], marker = "extra == 'extra-17-bedrock-agentcore-a2a-v1' or extra == 'group-17-bedrock-agentcore-dev' or extra != 'extra-17-bedrock-agentcore-a2a'" },
     { name = "pyperclip" },
     { name = "python-multipart" },
     { name = "pyyaml" },
@@ -1377,6 +1454,15 @@ wheels = [
 ]
 
 [[package]]
+name = "json-rpc"
+version = "1.15.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6d/9e/59f4a5b7855ced7346ebf40a2e9a8942863f644378d956f68bcef2c88b90/json-rpc-1.15.0.tar.gz", hash = "sha256:e6441d56c1dcd54241c937d0a2dcd193bdf0bdc539b5316524713f554b7f85b9", size = 28854, upload-time = "2023-06-11T09:45:49.078Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/94/9e/820c4b086ad01ba7d77369fb8b11470a01fac9b4977f02e18659cf378b6b/json_rpc-1.15.0-py2.py3-none-any.whl", hash = "sha256:4a4668bbbe7116feb4abbd0f54e64a4adcf4b8f648f19ffa0848ad0f6606a9bf", size = 39450, upload-time = "2023-06-11T09:45:47.136Z" },
+]
+
+[[package]]
 name = "jsonpatch"
 version = "1.33"
 source = { registry = "https://pypi.org/simple" }
@@ -1593,7 +1679,7 @@ dependencies = [
     { name = "anyio" },
     { name = "distro" },
     { name = "httpx" },
-    { name = "orjson", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "orjson", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
     { name = "packaging" },
     { name = "pydantic" },
     { name = "requests" },
@@ -1706,12 +1792,12 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "python-multipart" },
-    { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "pywin32", marker = "sys_platform == 'win32' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
     { name = "sse-starlette" },
     { name = "starlette" },
     { name = "typing-extensions" },
     { name = "typing-inspection" },
-    { name = "uvicorn", marker = "sys_platform != 'emscripten'" },
+    { name = "uvicorn", marker = "sys_platform != 'emscripten' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/27/3c/347cf965d313f5d41764e7d46bea6ffe7d9ef13b983cc429b0340962a082/mcp-1.27.2.tar.gz", hash = "sha256:8e02db104096d1c25b28e64bde29a5c32b31bc241710213e12fd4d84985bdfef", size = 621116, upload-time = "2026-05-29T17:16:04.039Z" }
 wheels = [
@@ -1724,7 +1810,7 @@ version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "boto3" },
-    { name = "botocore", extra = ["crt"] },
+    { name = "botocore", extra = ["crt"], marker = "extra == 'extra-17-bedrock-agentcore-a2a-v1' or extra == 'group-17-bedrock-agentcore-dev' or extra != 'extra-17-bedrock-agentcore-a2a'" },
     { name = "fastmcp" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/15/a3/19c3ae54c5659edc105261820e13b9224a75e0c957ae8ae9fed7a7db5cb4/mcp_proxy_for_aws-1.6.0.tar.gz", hash = "sha256:b902240aafc087cd0252270bc69a59ec0c3bf971b9679def99479228a3fa48b4", size = 431203, upload-time = "2026-05-29T14:51:10.655Z" }
@@ -1784,7 +1870,7 @@ name = "multidict"
 version = "6.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/80/1e/5492c365f222f907de1039b91f922b93fa4f764c713ee858d235495d8f50/multidict-6.7.0.tar.gz", hash = "sha256:c6e99d9a65ca282e578dfea819cfa9c0a62b2499d8677392e09feaf305e9e6f5", size = 101834, upload-time = "2025-10-06T14:52:30.657Z" }
 wheels = [
@@ -2519,8 +2605,8 @@ wheels = [
 
 [package.optional-dependencies]
 filetree = [
-    { name = "aiofile", version = "3.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "aiofile", version = "3.11.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "aiofile", version = "3.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra != 'extra-17-bedrock-agentcore-a2a') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
+    { name = "aiofile", version = "3.11.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra != 'extra-17-bedrock-agentcore-a2a') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
     { name = "anyio" },
 ]
 keyring = [
@@ -2695,7 +2781,7 @@ name = "pyjwt"
 version = "2.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", hash = "sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423", size = 107515, upload-time = "2026-05-21T19:54:36.618Z" }
 wheels = [
@@ -2752,7 +2838,7 @@ name = "pytest-cov"
 version = "6.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "coverage", extra = ["toml"] },
+    { name = "coverage", extra = ["toml"], marker = "extra == 'extra-17-bedrock-agentcore-a2a-v1' or extra == 'group-17-bedrock-agentcore-dev' or extra != 'extra-17-bedrock-agentcore-a2a'" },
     { name = "pluggy" },
     { name = "pytest" },
 ]
@@ -2898,7 +2984,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
     { name = "rpds-py" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2f/db/98b5c277be99dd18bfd91dd04e1b759cad18d1a338188c936e92f921c7e2/referencing-0.36.2.tar.gz", hash = "sha256:df2e89862cd09deabbdba16944cc3f10feb6b3e6f18e902f7cc25609a34775aa", size = 74744, upload-time = "2025-01-25T08:48:16.138Z" }
 wheels = [
@@ -3214,7 +3300,7 @@ version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/eb/e3/7c1dc7381d9f8ab7d854328ebfa884e62cb3f3d8549ddfd37c7814f42afa/starlette-1.3.1.tar.gz", hash = "sha256:05d0213193f2fbaae60e2ecb593b4add4262ad4e46536b54abe36f11a71724e0", size = 2703240, upload-time = "2026-06-12T09:23:11.602Z" }
 wheels = [
@@ -3284,7 +3370,7 @@ dependencies = [
     { name = "sympy" },
     { name = "tenacity" },
     { name = "typing-extensions" },
-    { name = "tzdata", marker = "sys_platform == 'win32'" },
+    { name = "tzdata", marker = "sys_platform == 'win32' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
     { name = "watchdog" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c1/4e/c8c355cd7ca6d28f98231fd66fe5d4627c9ecd9ea79db21980ec429247e9/strands_agents_tools-0.2.22.tar.gz", hash = "sha256:99d202b329f12df8568f104d5301452526640fd0e4db164c0be23e0b22e3d350", size = 474105, upload-time = "2026-03-04T21:19:38.858Z" }
@@ -3508,7 +3594,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "h11" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1') or (extra == 'extra-17-bedrock-agentcore-a2a' and extra == 'group-17-bedrock-agentcore-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/5e/42/e0e305207bb88c6b8d3061399c6a961ffe5fbb7e2aa63c9234df7259e9cd/uvicorn-0.35.0.tar.gz", hash = "sha256:bc662f087f7cf2ce11a1d7fd70b90c9f98ef2e2831556dd078d131b96cc94a01", size = 78473, upload-time = "2025-06-28T16:15:46.058Z" }
 wheels = [
