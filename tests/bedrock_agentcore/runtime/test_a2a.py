@@ -393,9 +393,13 @@ class TestServeA2A:
 
     @patch("uvicorn.run")
     def test_port_from_environment(self, mock_uvicorn_run):
-        with patch.dict("os.environ", {"PORT": "9001"}):
-            serve_a2a(_EchoExecutor(), _make_agent_card())
-        assert mock_uvicorn_run.call_args[1]["port"] == 9001
+        with patch.dict("os.environ", {"PORT": "9001"}, clear=True):
+            serve_a2a(_EchoExecutor())
+
+        app = mock_uvicorn_run.call_args.args[0]
+        response = TestClient(app).get("/.well-known/agent-card.json")
+        assert mock_uvicorn_run.call_args.kwargs["port"] == 9001
+        assert response.json()["supportedInterfaces"][0]["url"] == "http://localhost:9001/"
 
     @patch("uvicorn.run")
     def test_explicit_port_overrides_environment(self, mock_uvicorn_run):

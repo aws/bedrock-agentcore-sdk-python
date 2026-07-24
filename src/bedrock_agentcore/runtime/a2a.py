@@ -211,6 +211,7 @@ def build_a2a_app(
     executor: Any,
     agent_card: Any = None,
     *,
+    runtime_url: Optional[str] = None,
     task_store: Any = None,
     context_builder: Any = None,
     ping_handler: Optional[Callable[[], PingStatus]] = None,
@@ -221,6 +222,9 @@ def build_a2a_app(
         executor: An ``AgentExecutor`` that implements the agent logic.
         agent_card: Optional ``a2a.types.AgentCard`` describing the agent.
             If ``None``, one is built automatically by introspecting the executor.
+        runtime_url: URL advertised by an automatically generated agent card.
+            Defaults to ``http://localhost:9000/``. ``AGENTCORE_RUNTIME_URL``
+            takes precedence when set.
         task_store: Optional ``TaskStore``; defaults to ``InMemoryTaskStore``.
         context_builder: Optional ``ServerCallContextBuilder``; defaults to
             ``BedrockCallContextBuilder``.
@@ -240,7 +244,7 @@ def build_a2a_app(
     from starlette.responses import JSONResponse
     from starlette.routing import Route
 
-    runtime_url = os.environ.get(AGENTCORE_RUNTIME_URL_ENV, "http://localhost:9000/")
+    runtime_url = os.environ.get(AGENTCORE_RUNTIME_URL_ENV, runtime_url or "http://localhost:9000/")
 
     if agent_card is None:
         agent_card = _build_agent_card(executor, runtime_url)
@@ -318,6 +322,7 @@ def serve_a2a(
     app = build_a2a_app(
         executor,
         agent_card,
+        runtime_url=f"http://localhost:{resolved_port}/",
         task_store=task_store,
         context_builder=context_builder,
         ping_handler=ping_handler,
