@@ -1,9 +1,6 @@
 name: Claude Security Review
 
 on:
-  push:
-    branches:
-      - feat/caller-workflows
   pull_request_target:
     types: [opened, reopened, synchronize, labeled]
     branches:
@@ -23,7 +20,7 @@ permissions:
 
 jobs:
   call:
-    uses: aws/agentcore-devx-devtools/.github/workflows/test-pr-security-review.yml@458c0a684af0f9e3a013ec05cd23851def4f9cab
+    uses: aws/agentcore-devx-devtools/.github/workflows/reusable-pr-security-review.yml@458c0a684af0f9e3a013ec05cd23851def4f9cab
     with:
       runner: ubuntu
       pr_number: ${{ inputs.pr_number || format('{0}', github.event.pull_request.number) }}

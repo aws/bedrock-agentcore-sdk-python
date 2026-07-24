@@ -1,17 +1,14 @@
 name: PR Auto-merge
 
 on:
-  push:
-    branches:
-      - feat/caller-workflows
   pull_request_review:
     types: [submitted]
 
 permissions:
-  contents: read
-  pull-requests: read
+  contents: write
+  pull-requests: write
 
 jobs:
   call:
-    uses: aws/agentcore-devx-devtools/.github/workflows/test-pr-automerge.yml@458c0a684af0f9e3a013ec05cd23851def4f9cab
+    uses: aws/agentcore-devx-devtools/.github/workflows/reusable-pr-automerge.yml@458c0a684af0f9e3a013ec05cd23851def4f9cab
     secrets: inherit

@@ -1,9 +1,6 @@
 name: Sync From Public
 
 on:
-  push:
-    branches:
-      - feat/caller-workflows
   schedule:
     - cron: '0 */6 * * *'
   workflow_dispatch:
@@ -15,5 +12,5 @@ permissions:
 
 jobs:
   call:
-    uses: aws/agentcore-devx-devtools/.github/workflows/test-sync-from-public.yml@458c0a684af0f9e3a013ec05cd23851def4f9cab
+    uses: aws/agentcore-devx-devtools/.github/workflows/reusable-sync-from-public.yml@458c0a684af0f9e3a013ec05cd23851def4f9cab
     secrets: inherit

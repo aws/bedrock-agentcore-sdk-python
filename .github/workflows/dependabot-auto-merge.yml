@@ -1,9 +1,6 @@
 name: Dependabot Auto-merge
 
 on:
-  push:
-    branches:
-      - feat/caller-workflows
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
@@ -13,5 +10,5 @@ permissions:
 
 jobs:
   call:
-    uses: aws/agentcore-devx-devtools/.github/workflows/test-dependabot-auto-merge.yml@458c0a684af0f9e3a013ec05cd23851def4f9cab
+    uses: aws/agentcore-devx-devtools/.github/workflows/reusable-dependabot-auto-merge.yml@458c0a684af0f9e3a013ec05cd23851def4f9cab
     secrets: inherit

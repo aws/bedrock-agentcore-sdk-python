@@ -1,9 +1,6 @@
 name: Slack Issue Notification
 
 on:
-  push:
-    branches:
-      - feat/caller-workflows
   issues:
     types: [opened]
   issue_comment:
@@ -17,7 +14,7 @@ permissions:
 
 jobs:
   call:
-    uses: aws/agentcore-devx-devtools/.github/workflows/test-slack-issue-notification.yml@458c0a684af0f9e3a013ec05cd23851def4f9cab
+    uses: aws/agentcore-devx-devtools/.github/workflows/reusable-slack-issue-notification.yml@458c0a684af0f9e3a013ec05cd23851def4f9cab
     with:
       runner: ubuntu
     secrets: inherit
