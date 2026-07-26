@@ -77,8 +77,9 @@ class DeepEvalAdapter(BaseAdapter):
                     errorMessage=f"Field(s) {missing} required by {metric_name} but not found in evaluation event. "
                     f"Provide a custom_mapper or ensure spans contain the necessary data.",
                 )
-            # context = ground truth assertions only (not tool outputs)
-            context = result.assertions if result.assertions else None
+            # context = assertions if provided, otherwise fall back to retrieval_context
+            # (HallucinationMetric uses context as ground truth to check against)
+            context = result.assertions if result.assertions else result.retrieval_context
             test_case = LLMTestCase(
                 input=result.input,
                 actual_output=result.actual_output,
