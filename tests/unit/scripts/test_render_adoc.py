@@ -79,9 +79,19 @@ class TestRenderProse:
             ("Bedrock AgentCore memory module.", "Amazon Bedrock AgentCore memory module."),
             ("The AWS region being used.", "The {aws} Region being used."),
             ("AgentCore Memory client.", "AgentCore memory client."),
-            ("AgentCore Runtime endpoint.", "AgentCore runtime endpoint."),
-            ("AWS Bedrock Code Interpreter.", "AgentCore Code Interpreter."),
-            ("AWS Code Interpreter.", "AgentCore Code Interpreter."),
+            ("AgentCore Runtime endpoint.", "Amazon Bedrock AgentCore runtime endpoint."),
+            (
+                "AgentCore runtime endpoint.",
+                "Amazon Bedrock AgentCore runtime endpoint.",
+            ),
+            (
+                "AWS Bedrock Code Interpreter.",
+                "Amazon Bedrock AgentCore Code Interpreter.",
+            ),
+            (
+                "AWS Code Interpreter.",
+                "Amazon Bedrock AgentCore Code Interpreter.",
+            ),
             ("Bedrock AgentCore SDK tools.", "Amazon Bedrock AgentCore Python SDK tools."),
             (
                 "Bedrock AgentCore Policy Engine client.",

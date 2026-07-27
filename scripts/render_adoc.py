@@ -62,7 +62,7 @@ def normalize_style(text):
     text = re.sub(r"\be\.g\.(?:,)?", "for example,", text, flags=re.IGNORECASE)
     text = re.sub(
         r"\bAWS (?:Bedrock(?: AgentCore)? )?Code\s*Interpreter\b",
-        "AgentCore Code Interpreter",
+        "Amazon Bedrock AgentCore Code Interpreter",
         text,
         flags=re.IGNORECASE,
     )
@@ -81,6 +81,16 @@ def normalize_style(text):
         "Amazon Bedrock AgentCore",
         text,
     )
+    text = re.sub(
+        r"(?<!Amazon Bedrock )\bAgentCore Code Interpreter\b",
+        "Amazon Bedrock AgentCore Code Interpreter",
+        text,
+    )
+    text = re.sub(
+        r"(?<!Amazon Bedrock )\bAgentCore runtime\b",
+        "Amazon Bedrock AgentCore runtime",
+        text,
+    )
     text = re.sub(r"\bAWS region\b", "AWS Region", text, flags=re.IGNORECASE)
     text = re.sub(r"\bAgentCore Memory\b", "AgentCore memory", text)
     text = re.sub(r"\bAgentCore Runtime\b", "AgentCore runtime", text)
@@ -97,11 +107,6 @@ def normalize_style(text):
     text = text.replace(
         "Delete all long-term memory records within a specific namespace.",
         "Deletes all long-term memory records in the specified namespace.",
-    )
-    text = text.replace(
-        "This method retrieves all memory records in the specified namespace and performs\n"
-        "batch deletion operations using the Amazon Bedrock AgentCore API, processing in chunks of 100.",
-        "Retrieves all records and deletes them in batches.",
     )
     text = text.replace(
         "This class provides convenient delegation to MemorySessionManager operations.",

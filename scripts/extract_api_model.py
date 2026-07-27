@@ -58,13 +58,17 @@ SUMMARY_OVERRIDES = {
         "Provides a handle for an actor within a session, delegating operations to the associated MemorySessionManager."
     ),
     "ActorProfile": "Describes the simulated actor's identity and objective.",
+    "AgentCoreRuntimeClient": "Generates WebSocket authentication for Amazon Bedrock AgentCore runtime.",
     "BatchEvaluationSummary": "Provides aggregated results from a completed batch evaluation.",
+    "CodeInterpreter": "Provides a client for the Amazon Bedrock AgentCore Code Interpreter sandbox service.",
     "ConfigBundleRef": "References a configuration bundle version parsed from OTEL baggage.",
+    "MemorySession": "Represents a single Amazon Bedrock AgentCore MemorySession resource.",
+    "RuntimeClient": "Generates WebSocket authentication for Amazon Bedrock AgentCore runtime.",
     "delete_all_long_term_memories_in_namespace": ("Deletes all long-term memory records in the specified namespace."),
 }
 
 DESCRIPTION_OVERRIDES = {
-    "delete_all_long_term_memories_in_namespace": "Retrieves all records and deletes them in batches.",
+    "delete_all_long_term_memories_in_namespace": "",
 }
 
 

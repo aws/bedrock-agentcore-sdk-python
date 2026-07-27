@@ -68,4 +68,20 @@ def test_internal_batch_size_is_removed_from_public_method_description():
     )
 
     assert entry["summary"] == "Deletes all long-term memory records in the specified namespace."
-    assert entry["description"] == "Retrieves all records and deletes them in batches."
+    assert entry["description"] == ""
+
+
+def test_public_service_classes_use_full_service_names():
+    class MemorySession:
+        """Represents a single, AgentCore MemorySession resource."""
+
+    class CodeInterpreter:
+        """Client for interacting with the AgentCore Code Interpreter sandbox service."""
+
+    memory_entry = extract_api_model.entry_from_object("MemorySession", MemorySession)
+    interpreter_entry = extract_api_model.entry_from_object("CodeInterpreter", CodeInterpreter)
+
+    assert memory_entry["summary"] == "Represents a single Amazon Bedrock AgentCore MemorySession resource."
+    assert interpreter_entry["summary"] == (
+        "Provides a client for the Amazon Bedrock AgentCore Code Interpreter sandbox service."
+    )
