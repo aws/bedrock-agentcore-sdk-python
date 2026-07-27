@@ -28,8 +28,18 @@ def _extract_session_id(session_spans: List[Dict[str, Any]]) -> str:
 
 
 def _detect_mapper(session_spans: List[Dict[str, Any]]):
-    """Detect the appropriate mapper using strands-evals auto-detection."""
-    return detect_otel_mapper(session_spans)
+    """Detect the appropriate mapper using strands-evals auto-detection.
+
+    When the service sends normalized dict spans (InMemory format without body),
+    StrandsInMemorySessionMapper expects ReadableSpan objects and fails on dicts.
+    In this case, fall back to CloudWatchSessionMapper which handles dicts.
+    """
+    from strands_evals.mappers import CloudWatchSessionMapper, StrandsInMemorySessionMapper
+
+    mapper = detect_otel_mapper(session_spans)
+    if isinstance(mapper, StrandsInMemorySessionMapper) and session_spans and isinstance(session_spans[0], dict):
+        return CloudWatchSessionMapper()
+    return mapper
 
 
 def map_spans(
@@ -66,7 +76,22 @@ def map_spans(
             f"Provide a custom_mapper for custom or unsupported span formats."
         ) from e
 
-    result = _session_to_span_map_result(session)
+    try:
+        result = _session_to_span_map_result(session)
+    except FieldExtractionError:
+        # Mapper couldn't find AgentInvocationSpan — try service format fallback
+        result = None
+
+    # Fallback: extract from service-normalized format (gen_ai events)
+    if result is None or not result.input or not result.actual_output:
+        service_result = _extract_from_service_format(session_spans)
+        if service_result:
+            result = service_result
+        elif result is None:
+            raise FieldExtractionError(
+                "No AgentInvocationSpan found in session and service format extraction failed. "
+                "Provide a custom_mapper for custom or unsupported span formats."
+            )
 
     if reference_inputs:
         ref = reference_inputs[0]
@@ -90,6 +115,59 @@ def map_spans(
                 result.assertions = assertion_texts
 
     return result
+
+
+def _extract_from_service_format(session_spans: List[Dict[str, Any]]) -> Optional[SpanMapResult]:
+    """Extract fields from service-normalized span format.
+
+    The AgentCore evaluation service sends spans with gen_ai semantic convention
+    events (gen_ai.user.message, gen_ai.choice) instead of body with input/output.
+    This handles that format as a fallback when strands-evals mappers can't parse it.
+    """
+    import json as _json
+
+    for span in session_spans:
+        scope = span.get("scope", {}).get("name", "")
+        events = span.get("events", [])
+        if "strands" not in scope or not events:
+            continue
+
+        user_input = None
+        assistant_output = None
+        system_prompt = None
+
+        for event in events:
+            event_name = event.get("name", "")
+            attrs = event.get("attributes", {})
+            content = attrs.get("content", "")
+
+            if event_name == "gen_ai.user.message" and content:
+                try:
+                    parts = _json.loads(content)
+                    user_input = " ".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
+                except (ValueError, TypeError):
+                    user_input = content
+            elif event_name == "gen_ai.choice" and attrs.get("message"):
+                try:
+                    parts = _json.loads(attrs["message"])
+                    assistant_output = " ".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
+                except (ValueError, TypeError):
+                    assistant_output = attrs["message"]
+            elif event_name == "gen_ai.system.message" and content:
+                try:
+                    parts = _json.loads(content)
+                    system_prompt = " ".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
+                except (ValueError, TypeError):
+                    system_prompt = content
+
+        if user_input and assistant_output:
+            return SpanMapResult(
+                input=user_input,
+                actual_output=assistant_output,
+                system_prompt=system_prompt,
+            )
+
+    return None
 
 
 def _session_to_span_map_result(session: Session) -> SpanMapResult:
