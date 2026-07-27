@@ -68,6 +68,40 @@ def esc(text):
 # leading-whitespace groups are stripped from the captured code.
 _FENCE_RE = re.compile(r"^[ \t]*```(\w*)[ \t]*\n(.*?)\n[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
 
+# RST admonitions (.. warning::, .. note::, etc.) followed by indented body.
+_RST_ADMONITION_RE = re.compile(
+    r"^[ \t]*\.\. (warning|note|tip|important|caution|danger)::\s*\n((?:[ \t]+\S[^\n]*\n?)+)",
+    re.MULTILINE,
+)
+
+# RST cross-reference roles: :class:`Foo`, :py:meth:`bar`, :func:`baz`, etc.
+_RST_ROLE_RE = re.compile(r":(?:py:)?(?:class|meth|func|attr|obj|exc|mod|data):`([^`]*)`")
+
+
+def clean_rst(text):
+    """Convert common RST constructs to AsciiDoc equivalents."""
+    if not text:
+        return text
+
+    # Convert admonitions: .. warning::\n    body  ->  [WARNING]\n====\nbody\n====
+    def _admonition_repl(m):
+        kind = m.group(1).upper()
+        body = textwrap.dedent(m.group(2)).strip()
+        return f"\n[{kind}]\n====\n{body}\n====\n"
+
+    text = _RST_ADMONITION_RE.sub(_admonition_repl, text)
+
+    # Convert roles: :class:`Foo` -> `Foo`
+    text = _RST_ROLE_RE.sub(r"`\1`", text)
+
+    return text
+
+
+_ADOC_ADMONITION_RE = re.compile(
+    r"^\[(WARNING|NOTE|TIP|IMPORTANT|CAUTION)\]\n====\n(.*?)\n====",
+    re.DOTALL | re.MULTILINE,
+)
+
 
 def render_prose(text):
     """Render description prose that may contain markdown ``` code fences.
@@ -76,15 +110,18 @@ def render_prose(text):
     (not just in @example). Left alone they leak literal backticks into the
     AsciiDoc. Split the prose on fences: escape the prose spans, and convert
     each fenced block into an AsciiDoc [source] block (verbatim, not escaped).
+
+    Also converts RST directives and roles to AsciiDoc equivalents.
     """
     if not text:
         return []
+    text = clean_rst(text)
     out = []
     pos = 0
     for m in _FENCE_RE.finditer(text):
         before = text[pos : m.start()].strip()
         if before:
-            out.append(esc(before))
+            out.extend(_escape_prose_segment(before))
             out.append("")
         lang = m.group(1) or ""
         out.append(f"[source,{lang}]" if lang else "[source]")
@@ -92,6 +129,27 @@ def render_prose(text):
         # Dedent the captured code (fences are often indented in docstrings).
         out.append(textwrap.dedent(m.group(2)).rstrip())
         out.append("----")
+        out.append("")
+        pos = m.end()
+    tail = text[pos:].strip()
+    if tail:
+        out.extend(_escape_prose_segment(tail))
+    return out
+
+
+def _escape_prose_segment(text):
+    """Escape a prose segment while preserving AsciiDoc admonition blocks."""
+    out = []
+    pos = 0
+    for m in _ADOC_ADMONITION_RE.finditer(text):
+        before = text[pos : m.start()].strip()
+        if before:
+            out.append(esc(before))
+            out.append("")
+        out.append(f"[{m.group(1)}]")
+        out.append("====")
+        out.append(m.group(2).strip())
+        out.append("====")
         out.append("")
         pos = m.end()
     tail = text[pos:].strip()
@@ -113,7 +171,7 @@ def render_params(params, out):
         req = "" if p.get("required") else " _(optional)_"
         typ = f"`{p['type']}`" if p.get("type") else ""
         out.append(f"`{p['name']}`{req} {typ}::")
-        out.append(esc(p.get("description", "")) or "_No description._")
+        out.append(esc(clean_rst(p.get("description", ""))) or "_No description._")
     out.append("")
 
 
@@ -123,7 +181,7 @@ def render_returns(returns, out):
     typ = f"`{returns['type']}` — " if returns.get("type") else ""
     out.append("*Returns*")
     out.append("")
-    out.append(f"{typ}{esc(returns.get('description', ''))}".strip())
+    out.append(f"{typ}{esc(clean_rst(returns.get('description', '')))}".strip())
     out.append("")
 
 
@@ -133,7 +191,7 @@ def render_raises(raises, out):
     out.append("*Raises*")
     out.append("")
     for r in raises:
-        out.append(f"`{r.get('type', 'Error')}`:: {esc(r.get('description', ''))}")
+        out.append(f"`{r.get('type', 'Error')}`:: {esc(clean_rst(r.get('description', '')))}")
     out.append("")
 
 
