@@ -76,10 +76,16 @@ class TestRenderProse:
         ("source", "expected"),
         [
             ("AWS Bedrock AgentCore client.", "Amazon Bedrock AgentCore client."),
+            ("Bedrock AgentCore memory module.", "Amazon Bedrock AgentCore memory module."),
+            ("The AWS region being used.", "The {aws} Region being used."),
             ("AgentCore Memory client.", "AgentCore memory client."),
             ("AgentCore Runtime endpoint.", "AgentCore runtime endpoint."),
             ("AWS Bedrock Code Interpreter.", "AgentCore Code Interpreter."),
-            ("Bedrock AgentCore SDK tools.", "Bedrock AgentCore Python SDK tools."),
+            ("Bedrock AgentCore SDK tools.", "Amazon Bedrock AgentCore Python SDK tools."),
+            (
+                "Bedrock AgentCore Policy Engine client.",
+                "Policy Engine client for Amazon Bedrock AgentCore.",
+            ),
             (
                 "If both values are set, validation will ensure they match.",
                 "If both values are set, validation ensures they match.",
@@ -114,6 +120,8 @@ class TestRenderEntry:
         ("source", "expected"),
         [
             ("Optional WaitConfig.", "An optional WaitConfig."),
+            ("Optional parameters for the request.", "Optional parameters for the request."),
+            ("Optional tags.", "Optional tags."),
             ("AWS region.", "The {aws} Region."),
             ("id of the actor", "The ID of the actor"),
             ("Behaviour manager.", "The behavior manager."),

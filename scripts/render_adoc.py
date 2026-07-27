@@ -66,14 +66,6 @@ def normalize_style(text):
         text,
         flags=re.IGNORECASE,
     )
-    text = re.sub(r"\bAWS Bedrock AgentCore\b", "Amazon Bedrock AgentCore", text)
-    text = re.sub(r"\bAWS Bedrock\b", "Amazon Bedrock", text)
-    text = re.sub(r"\bAgentCore Memory\b", "AgentCore memory", text)
-    text = re.sub(r"\bAgentCore Runtime\b", "AgentCore runtime", text)
-    text = text.replace(
-        "BedrockAgentCore Runtime Package.",
-        "Amazon Bedrock AgentCore runtime package.",
-    )
     text = text.replace(
         "Bedrock AgentCore Policy Engine client.",
         "Policy Engine client for Amazon Bedrock AgentCore.",
@@ -81,6 +73,20 @@ def normalize_style(text):
     text = text.replace(
         "Client for Bedrock AgentCore Policy Engine operations.",
         "Provides a client for Policy in AgentCore.",
+    )
+    text = re.sub(r"\bAWS Bedrock AgentCore\b", "Amazon Bedrock AgentCore", text)
+    text = re.sub(r"\bAWS Bedrock\b", "Amazon Bedrock", text)
+    text = re.sub(
+        r"(?<!Amazon )(?<!AWS )\bBedrock AgentCore\b",
+        "Amazon Bedrock AgentCore",
+        text,
+    )
+    text = re.sub(r"\bAWS region\b", "AWS Region", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bAgentCore Memory\b", "AgentCore memory", text)
+    text = re.sub(r"\bAgentCore Runtime\b", "AgentCore runtime", text)
+    text = text.replace(
+        "BedrockAgentCore Runtime Package.",
+        "Amazon Bedrock AgentCore runtime package.",
     )
     text = re.sub(r"\bAgentCore SDK\b", "AgentCore Python SDK", text)
     text = text.replace(
@@ -98,8 +104,9 @@ def normalize_style(text):
 def normalize_param_description(text):
     """Normalize recurring parameter-description style issues."""
     text = normalize_style(clean_rst(text)).strip()
+    optional_replacement = "Optional" if _starts_with_plural_noun(text) else "An optional"
     substitutions = (
-        (r"^Optional\b", "An optional"),
+        (r"^Optional\b", optional_replacement),
         (r"^(?:\{aws\}|AWS)\s+region\b", "The {aws} Region"),
         (r"^id of\b", "The ID of"),
         (r"^Behaviour\b", "The behavior"),
@@ -111,6 +118,15 @@ def normalize_param_description(text):
     for pattern, replacement in substitutions:
         text = re.sub(pattern, replacement, text, count=1, flags=re.IGNORECASE)
     return text
+
+
+def _starts_with_plural_noun(text):
+    """Return whether an Optional description starts with a likely plural noun."""
+    match = re.match(r"^Optional\s+([A-Za-z]+)\b", text, flags=re.IGNORECASE)
+    if not match:
+        return False
+    noun = match.group(1)
+    return noun.islower() and noun.endswith("s") and not noun.endswith(("is", "ss", "us"))
 
 
 def esc(text):
