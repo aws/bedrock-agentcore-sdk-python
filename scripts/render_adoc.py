@@ -91,6 +91,12 @@ def normalize_style(text):
         "Amazon Bedrock AgentCore runtime",
         text,
     )
+    text = re.sub(
+        r"(?<!Amazon Bedrock )\bAgentCore Identity\b",
+        "Amazon Bedrock AgentCore Identity",
+        text,
+    )
+    text = text.replace(", allowing applications to", " so applications can")
     text = re.sub(r"\bAWS region\b", "AWS Region", text, flags=re.IGNORECASE)
     text = re.sub(r"\bAgentCore Memory\b", "AgentCore memory", text)
     text = re.sub(r"\bAgentCore Runtime\b", "AgentCore runtime", text)

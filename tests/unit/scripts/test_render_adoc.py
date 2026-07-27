@@ -92,6 +92,14 @@ class TestRenderProse:
                 "AWS Code Interpreter.",
                 "Amazon Bedrock AgentCore Code Interpreter.",
             ),
+            (
+                "Retrieves an API key from AgentCore Identity.",
+                "Retrieves an API key from Amazon Bedrock AgentCore Identity.",
+            ),
+            (
+                "Provides credentials, allowing applications to connect.",
+                "Provides credentials so applications can connect.",
+            ),
             ("Bedrock AgentCore SDK tools.", "Amazon Bedrock AgentCore Python SDK tools."),
             (
                 "Bedrock AgentCore Policy Engine client.",
