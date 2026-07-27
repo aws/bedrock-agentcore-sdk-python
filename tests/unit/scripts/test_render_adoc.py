@@ -81,6 +81,7 @@ class TestRenderProse:
             ("AgentCore Memory client.", "AgentCore memory client."),
             ("AgentCore Runtime endpoint.", "AgentCore runtime endpoint."),
             ("AWS Bedrock Code Interpreter.", "AgentCore Code Interpreter."),
+            ("AWS Code Interpreter.", "AgentCore Code Interpreter."),
             ("Bedrock AgentCore SDK tools.", "Amazon Bedrock AgentCore Python SDK tools."),
             (
                 "Bedrock AgentCore Policy Engine client.",
