@@ -90,6 +90,10 @@ class TestRenderProse:
                 "If both values are set, validation will ensure they match.",
                 "If both values are set, validation ensures they match.",
             ),
+            (
+                "Delete all long-term memory records within a specific namespace.",
+                "Deletes all long-term memory records in the specified namespace.",
+            ),
         ],
     )
     def test_generated_prose_normalizes_service_names_and_voice(self, source, expected):

@@ -95,6 +95,15 @@ def normalize_style(text):
     )
     text = text.replace("validation will ensure", "validation ensures")
     text = text.replace(
+        "Delete all long-term memory records within a specific namespace.",
+        "Deletes all long-term memory records in the specified namespace.",
+    )
+    text = text.replace(
+        "This method retrieves all memory records in the specified namespace and performs\n"
+        "batch deletion operations using the Amazon Bedrock AgentCore API, processing in chunks of 100.",
+        "Retrieves all records and deletes them in batches.",
+    )
+    text = text.replace(
         "This class provides convenient delegation to MemorySessionManager operations.",
         "Use this class to delegate operations to MemorySessionManager.",
     )
