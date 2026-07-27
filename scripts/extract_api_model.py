@@ -25,6 +25,7 @@ import inspect
 import json
 import re
 import sys
+import textwrap
 
 PACKAGE = "bedrock_agentcore"
 
@@ -59,6 +60,11 @@ SUMMARY_OVERRIDES = {
     "ActorProfile": "Describes the simulated actor's identity and objective.",
     "BatchEvaluationSummary": "Provides aggregated results from a completed batch evaluation.",
     "ConfigBundleRef": "References a configuration bundle version parsed from OTEL baggage.",
+    "delete_all_long_term_memories_in_namespace": ("Deletes all long-term memory records in the specified namespace."),
+}
+
+DESCRIPTION_OVERRIDES = {
+    "delete_all_long_term_memories_in_namespace": "Retrieves all records and deletes them in batches.",
 }
 
 
@@ -138,7 +144,7 @@ def parse_google_docstring(doc):
                     {
                         "name": am.group(1),
                         "type": (am.group(2) or "").strip() or None,
-                        "required": "optional" not in (am.group(2) or "").lower(),
+                        "required": not am.group(1).startswith("*") and "optional" not in (am.group(2) or "").lower(),
                         "description": am.group(3).strip(),
                     }
                 )
@@ -165,7 +171,7 @@ def parse_google_docstring(doc):
     desc = extract_rest_fields(desc, result)
     result["description"] = "\n".join(desc).strip()
     for example_buf in example_bufs:
-        code = "\n".join(example_buf).strip()
+        code = textwrap.dedent("\n".join(example_buf)).strip()
         # strip a leading ```python fence if the docstring used one
         code = re.sub(r"^```\w*\n?|\n?```$", "", code).strip()
         if code:
@@ -194,6 +200,8 @@ def entry_from_object(name, obj):
     doc = parse_google_docstring(_own_docstring(obj))
     if name in SUMMARY_OVERRIDES:
         doc["summary"] = SUMMARY_OVERRIDES[name]
+    if name in DESCRIPTION_OVERRIDES:
+        doc["description"] = DESCRIPTION_OVERRIDES[name]
     if name == "__init__" and doc["summary"] == "Represents an actor within a session.":
         doc["summary"] = "Initializes an Actor instance for the specified session."
     try:
