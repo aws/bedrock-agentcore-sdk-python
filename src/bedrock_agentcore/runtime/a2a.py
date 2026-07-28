@@ -252,9 +252,10 @@ def build_a2a_app(
         executor: An ``AgentExecutor`` that implements the agent logic.
         agent_card: Optional ``a2a.types.AgentCard`` describing the agent.
             If ``None``, one is built automatically by introspecting the executor.
-        runtime_url: URL advertised by an automatically generated agent card.
-            Defaults to ``http://localhost:9000/``. ``AGENTCORE_RUNTIME_URL``
-            takes precedence when set.
+        runtime_url: URL advertised by the agent card. When an explicit card is
+            supplied, its JSON-RPC URL is updated when this argument is set.
+            Defaults to ``http://localhost:9000/`` for automatically generated
+            cards. ``AGENTCORE_RUNTIME_URL`` takes precedence when set.
         task_store: Optional ``TaskStore``; defaults to ``InMemoryTaskStore``.
         context_builder: Optional ``ServerCallContextBuilder``; defaults to
             ``BedrockCallContextBuilder``.
@@ -273,13 +274,14 @@ def build_a2a_app(
     from starlette.responses import JSONResponse
     from starlette.routing import Route
 
-    runtime_url = os.environ.get(AGENTCORE_RUNTIME_URL_ENV, runtime_url or "http://localhost:9000/")
+    runtime_url_override = os.environ.get(AGENTCORE_RUNTIME_URL_ENV) or runtime_url
+    advertised_url = runtime_url_override or "http://localhost:9000/"
     is_a2a_v1 = _is_a2a_v1()
 
     if agent_card is None:
-        agent_card = _build_agent_card(executor, runtime_url)
-    elif os.environ.get(AGENTCORE_RUNTIME_URL_ENV):
-        _set_jsonrpc_url(agent_card, runtime_url)
+        agent_card = _build_agent_card(executor, advertised_url)
+    elif runtime_url_override:
+        _set_jsonrpc_url(agent_card, advertised_url)
 
     if task_store is None:
         task_store = InMemoryTaskStore()
