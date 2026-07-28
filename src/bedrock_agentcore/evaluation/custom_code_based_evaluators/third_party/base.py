@@ -60,7 +60,7 @@ class BaseAdapter(abc.ABC):
     def _default_extract(self, evaluator_input: EvaluatorInput) -> SpanMapResult:
         """Extract fields using the built-in span mapper layer."""
         spans = self._filter_spans_by_target(evaluator_input)
-        return map_spans(spans, evaluator_input.reference_inputs)
+        return map_spans(spans, evaluator_input.reference_inputs, evaluator_input.target_trace_id)
 
     def _filter_spans_by_target(self, evaluator_input: EvaluatorInput) -> List[Dict]:
         """Filter session spans based on evaluationLevel and evaluationTarget.

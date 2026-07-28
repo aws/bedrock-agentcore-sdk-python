@@ -45,6 +45,7 @@ def _detect_mapper(session_spans: List[Dict[str, Any]]):
 def map_spans(
     session_spans: List[Dict[str, Any]],
     reference_inputs: Optional[List[Any]] = None,
+    target_trace_id: Optional[str] = None,
 ) -> SpanMapResult:
     """Map session spans to evaluation fields using strands-evals mappers.
 
@@ -94,7 +95,20 @@ def map_spans(
             )
 
     if reference_inputs:
-        ref = reference_inputs[0]
+        # Match reference input to the target trace being evaluated
+        ref = None
+        for r in reference_inputs:
+            ctx = getattr(r, "context", None)
+            if isinstance(ctx, dict):
+                span_ctx = ctx.get("spanContext", {})
+                ref_trace = span_ctx.get("traceId") if isinstance(span_ctx, dict) else None
+            else:
+                ref_trace = None
+            if not ref_trace or ref_trace == target_trace_id:
+                ref = r
+                break
+        if ref is None:
+            ref = reference_inputs[0]
         expected = getattr(ref, "expected_response_text", None)
         if expected:
             result.expected_output = expected
