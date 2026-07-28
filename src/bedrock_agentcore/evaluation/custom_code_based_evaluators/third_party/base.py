@@ -42,15 +42,18 @@ class BaseAdapter(abc.ABC):
             logger.error("Field extraction failed: %s", e)
             return EvaluatorOutput(
                 label="Error",
+                explanation=str(e),
                 errorCode="FIELD_EXTRACTION_ERROR",
                 errorMessage=str(e),
             )
         except Exception as e:
             logger.exception("Execution failed: %s", e)
+            msg = f"{type(self).__name__} failed: {e}"
             return EvaluatorOutput(
                 label="Error",
+                explanation=msg,
                 errorCode="METRIC_ERROR",
-                errorMessage=f"{type(self).__name__} failed: {e}",
+                errorMessage=msg,
             )
 
     @abc.abstractmethod

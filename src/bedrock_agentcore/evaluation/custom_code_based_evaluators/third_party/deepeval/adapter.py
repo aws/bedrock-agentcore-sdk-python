@@ -71,11 +71,15 @@ class DeepEvalAdapter(BaseAdapter):
                 if not result.actual_output:
                     missing.append("actual_output")
                 metric_name = type(self.metric).__name__
+                msg = (
+                    f"Field(s) {missing} required by {metric_name} but not found in evaluation event. "
+                    f"Provide a custom_mapper or ensure spans contain the necessary data."
+                )
                 return EvaluatorOutput(
                     label="Error",
+                    explanation=msg,
                     errorCode="MISSING_REQUIRED_FIELD",
-                    errorMessage=f"Field(s) {missing} required by {metric_name} but not found in evaluation event. "
-                    f"Provide a custom_mapper or ensure spans contain the necessary data.",
+                    errorMessage=msg,
                 )
             # context = assertions if provided, otherwise fall back to retrieval_context
             # (HallucinationMetric uses context as ground truth to check against)
@@ -93,11 +97,15 @@ class DeepEvalAdapter(BaseAdapter):
         try:
             self.metric.measure(test_case)
         except MissingTestCaseParamsError as e:
+            msg = (
+                f"{type(self.metric).__name__} requires fields not extracted from spans: {e}. "
+                f"Provide a custom_mapper to supply custom fields from your trace data."
+            )
             return EvaluatorOutput(
                 label="Error",
+                explanation=msg,
                 errorCode="MISSING_REQUIRED_FIELD",
-                errorMessage=f"{type(self.metric).__name__} requires fields not extracted from spans: {e}. "
-                f"Provide a custom_mapper to supply custom fields from your trace data.",
+                errorMessage=msg,
             )
         except Exception:
             raise
