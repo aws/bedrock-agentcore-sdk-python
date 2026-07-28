@@ -25,6 +25,7 @@ import inspect
 import json
 import re
 import sys
+import textwrap
 
 PACKAGE = "bedrock_agentcore"
 
@@ -43,14 +44,32 @@ GROUPS = [
     ("knowledge-base", "Knowledge Base", "bedrock_agentcore.knowledge_base"),
 ]
 
-_SECTION_RE = re.compile(r"^\s*(Args|Arguments|Returns|Raises|Example|Examples):\s*$")
-_ARG_RE = re.compile(r"^\s+(\w+)\s*(?:\(([^)]+)\))?:\s*(.*)$")
+_SECTION_RE = re.compile(r"^\s*(Args|Arguments|Returns|Raises|Example|Examples)(?:\s+\([^)]+\))?:\s*$")
+_ARG_RE = re.compile(r"^\s+(\*{0,2}\w+)\s*(?:\(([^)]+)\))?:\s*(.*)$")
 
 # The SDK mixes Google-style ("Args:") and reST-style (":param x:") docstrings,
 # so we also recognize the reST field forms and pull them out of the prose.
 _REST_PARAM_RE = re.compile(r"^\s*:param\s+(\w+):\s*(.*)$")
 _REST_RETURNS_RE = re.compile(r"^\s*:returns?:\s*(.*)$")
 _REST_RAISES_RE = re.compile(r"^\s*:raises?\s+([\w.]+):\s*(.*)$")
+
+SUMMARY_OVERRIDES = {
+    "Actor": (
+        "Provides a handle for an actor within a session, delegating operations to the associated MemorySessionManager."
+    ),
+    "ActorProfile": "Describes the simulated actor's identity and objective.",
+    "AgentCoreRuntimeClient": "Generates WebSocket authentication for Amazon Bedrock AgentCore runtime.",
+    "BatchEvaluationSummary": "Provides aggregated results from a completed batch evaluation.",
+    "CodeInterpreter": "Provides a client for the Amazon Bedrock AgentCore Code Interpreter sandbox service.",
+    "ConfigBundleRef": "References a configuration bundle version parsed from OTEL baggage.",
+    "MemorySession": "Represents a single Amazon Bedrock AgentCore MemorySession resource.",
+    "RuntimeClient": "Generates WebSocket authentication for Amazon Bedrock AgentCore runtime.",
+    "delete_all_long_term_memories_in_namespace": ("Deletes all long-term memory records in the specified namespace."),
+}
+
+DESCRIPTION_OVERRIDES = {
+    "delete_all_long_term_memories_in_namespace": "",
+}
 
 
 def extract_rest_fields(lines, result):
@@ -100,7 +119,8 @@ def parse_google_docstring(doc):
     result["summary"] = " ".join(summary)
 
     section = "description"
-    desc, example_buf = [], []
+    desc, example_bufs = [], []
+    example_buf = None
     while i < len(lines):
         line = lines[i]
         m = _SECTION_RE.match(line)
@@ -114,6 +134,9 @@ def parse_google_docstring(doc):
                 "example": "example",
                 "examples": "example",
             }[name]
+            if section == "example":
+                example_buf = []
+                example_bufs.append(example_buf)
             i += 1
             continue
         if section == "description":
@@ -125,7 +148,7 @@ def parse_google_docstring(doc):
                     {
                         "name": am.group(1),
                         "type": (am.group(2) or "").strip() or None,
-                        "required": "optional" not in (am.group(2) or "").lower(),
+                        "required": not am.group(1).startswith("*") and "optional" not in (am.group(2) or "").lower(),
                         "description": am.group(3).strip(),
                     }
                 )
@@ -141,6 +164,8 @@ def parse_google_docstring(doc):
             am = _ARG_RE.match(line)
             if am:
                 result["raises"].append({"type": am.group(1), "description": am.group(3).strip()})
+            elif result["raises"] and line.strip():
+                result["raises"][-1]["description"] += " " + line.strip()
         elif section == "example":
             example_buf.append(line)
         i += 1  # always advance — non-header branches above don't, else infinite loop
@@ -149,8 +174,8 @@ def parse_google_docstring(doc):
     # instead of, or mixed with, Google sections. Pull those out of the prose.
     desc = extract_rest_fields(desc, result)
     result["description"] = "\n".join(desc).strip()
-    if example_buf:
-        code = "\n".join(example_buf).strip()
+    for example_buf in example_bufs:
+        code = textwrap.dedent("\n".join(example_buf)).strip()
         # strip a leading ```python fence if the docstring used one
         code = re.sub(r"^```\w*\n?|\n?```$", "", code).strip()
         if code:
@@ -177,6 +202,12 @@ def _own_docstring(obj):
 def entry_from_object(name, obj):
     """Build a doc-model entry for a class or function."""
     doc = parse_google_docstring(_own_docstring(obj))
+    if name in SUMMARY_OVERRIDES:
+        doc["summary"] = SUMMARY_OVERRIDES[name]
+    if name in DESCRIPTION_OVERRIDES:
+        doc["description"] = DESCRIPTION_OVERRIDES[name]
+    if name == "__init__" and doc["summary"] == "Represents an actor within a session.":
+        doc["summary"] = "Initializes an Actor instance for the specified session."
     try:
         signature = inspect.signature(obj)
         # Drop the implicit `self`/`cls` receiver from method signatures.
