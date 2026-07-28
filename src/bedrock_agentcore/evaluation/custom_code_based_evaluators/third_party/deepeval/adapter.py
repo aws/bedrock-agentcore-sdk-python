@@ -127,7 +127,21 @@ class DeepEvalAdapter(BaseAdapter):
                 "Ensure the session contains multiple traces/invocations, or use a single-turn metric instead."
             )
         turns = [Turn(role=t["role"], content=t["content"]) for t in result.turns]
-        return ConversationalTestCase(turns=turns)
+
+        # Build optional fields for conversational metrics
+        chatbot_role = result.system_prompt or "A helpful AI assistant"
+        expected_outcome = None
+        if evaluator_input.reference_inputs:
+            ref = evaluator_input.reference_inputs[0]
+            expected = getattr(ref, "expected_response_text", None)
+            if expected:
+                expected_outcome = expected
+
+        return ConversationalTestCase(
+            turns=turns,
+            chatbot_role=chatbot_role,
+            expected_outcome=expected_outcome,
+        )
 
     @staticmethod
     def _build_tool_calls(tools_called: List[Dict[str, Any]]) -> List[ToolCall]:
