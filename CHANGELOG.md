@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.19.0] - 2026-07-28
+
+### Fixed
+- fix: preserve generated API reference content (#595) (4a7a8c4)
+- fix: convert RST admonition to ADOC (#594) (641000d)
+
+### Other Changes
+- fix(a2a): advertise resolved port on explicit cards (#605) (34e06f0)
+- fix(memory-integ): address capacity cap and update failures in tests (#604) (59cbff3)
+- ci: migrate workflows to shared reusable workflows (#597) (f1a7106)
+- fix(ci): pin Twine to 6.2.0 (#600) (c707388)
+- fix(a2a): honor PORT when serving locally (#593) (331f441)
+- feat(a2a): migrate runtime integration to a2a-sdk v1 (#591) (16f732f)
+- Add LLM issue auto-triage: type and high-severity labelers (#584) (3000d50)
+
 ## [1.18.1] - 2026-07-17
 
 ### Fixed
