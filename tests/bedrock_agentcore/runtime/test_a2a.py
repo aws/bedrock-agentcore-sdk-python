@@ -236,8 +236,15 @@ class TestBuildA2AApp:
             build_a2a_app(_EchoExecutor(), card)
         assert _card_url(card) == "https://deployed.example.com/"
 
+    def test_agent_card_url_uses_explicit_runtime_url(self):
+        """A supplied runtime_url overrides the URL on an explicit card."""
+        card = _make_agent_card()
+        with patch.dict("os.environ", {}, clear=True):
+            build_a2a_app(_EchoExecutor(), card, runtime_url="http://localhost:9002/")
+        assert _card_url(card) == "http://localhost:9002/"
+
     def test_agent_card_url_unchanged_without_env(self):
-        """When AGENTCORE_RUNTIME_URL is not set, the agent card URL stays as-is."""
+        """Without a runtime URL override, an explicit card URL stays as-is."""
         card = _make_agent_card()
         original_url = _card_url(card)
         with patch.dict("os.environ", {}, clear=False):
@@ -467,10 +474,40 @@ class TestServeA2A:
         assert _card_response_url(response.json()) == "http://localhost:9001/"
 
     @patch("uvicorn.run")
+    def test_port_from_environment_updates_explicit_card(self, mock_uvicorn_run):
+        with patch.dict("os.environ", {"PORT": "9002"}, clear=True):
+            serve_a2a(_EchoExecutor(), _make_agent_card())
+
+        app = mock_uvicorn_run.call_args.args[0]
+        response = TestClient(app).get("/.well-known/agent-card.json")
+        assert mock_uvicorn_run.call_args.kwargs["port"] == 9002
+        assert _card_response_url(response.json()) == "http://localhost:9002/"
+
+    @patch("uvicorn.run")
     def test_explicit_port_overrides_environment(self, mock_uvicorn_run):
         with patch.dict("os.environ", {"PORT": "9001"}):
             serve_a2a(_EchoExecutor(), _make_agent_card(), port=8888)
+        app = mock_uvicorn_run.call_args.args[0]
+        response = TestClient(app).get("/.well-known/agent-card.json")
         assert mock_uvicorn_run.call_args.kwargs["port"] == 8888
+        assert _card_response_url(response.json()) == "http://localhost:8888/"
+
+    @patch("uvicorn.run")
+    def test_runtime_url_environment_overrides_port_for_card(self, mock_uvicorn_run):
+        with patch.dict(
+            "os.environ",
+            {
+                "PORT": "9002",
+                "AGENTCORE_RUNTIME_URL": "https://deployed.example.com/",
+            },
+            clear=True,
+        ):
+            serve_a2a(_EchoExecutor(), _make_agent_card())
+
+        app = mock_uvicorn_run.call_args.args[0]
+        response = TestClient(app).get("/.well-known/agent-card.json")
+        assert mock_uvicorn_run.call_args.kwargs["port"] == 9002
+        assert _card_response_url(response.json()) == "https://deployed.example.com/"
 
     @patch("uvicorn.run")
     def test_docker_detection_dockerenv(self, mock_uvicorn_run):
