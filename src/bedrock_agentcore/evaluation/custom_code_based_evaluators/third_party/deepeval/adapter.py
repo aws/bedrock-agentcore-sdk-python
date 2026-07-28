@@ -151,9 +151,11 @@ class DeepEvalAdapter(BaseAdapter):
             name = tc.get("name", "")
             if not name:
                 continue
-            result.append(ToolCall(
-                name=name,
-                input_parameters=tc.get("input_parameters"),
-                output=tc.get("output"),
-            ))
+            result.append(
+                ToolCall(
+                    name=name,
+                    input_parameters=tc.get("input_parameters"),
+                    output=tc.get("output"),
+                )
+            )
         return result

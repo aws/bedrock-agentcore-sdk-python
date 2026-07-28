@@ -55,8 +55,8 @@ class TestDeepEvalAdapterIntegration:
 
     @pytest.fixture(autouse=True)
     def check_deepeval(self):
-        """Skip if deepeval is not installed."""
-        pytest.importorskip("deepeval")
+        """Verify deepeval is installed."""
+        import deepeval  # noqa: F401
 
     def test_bias_metric_passes(self):
         from deepeval.metrics import BiasMetric
@@ -116,8 +116,8 @@ class TestAutoEvalsAdapterIntegration:
 
     @pytest.fixture(autouse=True)
     def check_autoevals(self):
-        """Skip if autoevals is not installed."""
-        pytest.importorskip("autoevals")
+        """Verify autoevals is installed."""
+        import autoevals  # noqa: F401
 
     def test_factuality_scorer(self):
         from autoevals import Factuality

@@ -15,7 +15,6 @@ from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_
 logger = logging.getLogger(__name__)
 
 
-
 def _extract_session_id(session_spans: List[Dict[str, Any]]) -> str:
     """Extract session ID from span attributes."""
     for span in session_spans:
@@ -56,6 +55,7 @@ def map_spans(
     Args:
         session_spans: Raw ADOT span dicts from the evaluation service.
         reference_inputs: Optional ReferenceInput list for expected_output/tools/assertions.
+        target_trace_id: Optional trace ID to match reference_inputs by spanContext.
 
     Returns:
         SpanMapResult with extracted fields.
@@ -95,38 +95,32 @@ def map_spans(
             )
 
     if reference_inputs:
-        # Match reference input to the target trace being evaluated
-        ref = None
-        for r in reference_inputs:
-            ctx = getattr(r, "context", None)
+        # Combine all relevant reference_inputs (session-level + trace-level).
+        # A reference is relevant if it has no traceId (session-scoped) or its
+        # traceId matches the target trace.
+        for ref in reference_inputs:
+            ctx = getattr(ref, "context", None)
             if isinstance(ctx, dict):
                 span_ctx = ctx.get("spanContext", {})
                 ref_trace = span_ctx.get("traceId") if isinstance(span_ctx, dict) else None
             else:
                 ref_trace = None
-            if not ref_trace or ref_trace == target_trace_id:
-                ref = r
-                break
-        if ref is None:
-            ref = reference_inputs[0]
-        expected = getattr(ref, "expected_response_text", None)
-        if expected:
-            result.expected_output = expected
-        trajectory = getattr(ref, "expected_trajectory", None)
-        if isinstance(trajectory, dict):
-            tool_names = trajectory.get("toolNames")
-            if isinstance(tool_names, list) and tool_names:
-                result.expected_tools = [
-                    {"name": name} for name in tool_names if isinstance(name, str)
-                ]
-        assertions = getattr(ref, "assertions", None)
-        if isinstance(assertions, list) and assertions:
-            assertion_texts = [
-                a.get("text") for a in assertions
-                if isinstance(a, dict) and a.get("text")
-            ]
-            if assertion_texts:
-                result.assertions = assertion_texts
+            if ref_trace and target_trace_id and ref_trace != target_trace_id:
+                continue
+
+            expected = getattr(ref, "expected_response_text", None)
+            if expected and not result.expected_output:
+                result.expected_output = expected
+            trajectory = getattr(ref, "expected_trajectory", None)
+            if isinstance(trajectory, dict) and not result.expected_tools:
+                tool_names = trajectory.get("toolNames")
+                if isinstance(tool_names, list) and tool_names:
+                    result.expected_tools = [{"name": name} for name in tool_names if isinstance(name, str)]
+            assertions = getattr(ref, "assertions", None)
+            if isinstance(assertions, list) and assertions and not result.assertions:
+                assertion_texts = [a.get("text") for a in assertions if isinstance(a, dict) and a.get("text")]
+                if assertion_texts:
+                    result.assertions = assertion_texts
 
     return result
 
@@ -205,14 +199,10 @@ def _session_to_span_map_result(session: Session) -> SpanMapResult:
 
     if agent_span is None:
         raise FieldExtractionError(
-            "No AgentInvocationSpan found in session. "
-            "Provide a custom_mapper for custom or unsupported span formats."
+            "No AgentInvocationSpan found in session. Provide a custom_mapper for custom or unsupported span formats."
         )
 
-    retrieval_context = [
-        ts.tool_result.content for ts in tool_spans
-        if ts.tool_result and ts.tool_result.content
-    ]
+    retrieval_context = [ts.tool_result.content for ts in tool_spans if ts.tool_result and ts.tool_result.content]
     tools_called = [
         {
             "name": ts.tool_call.name,

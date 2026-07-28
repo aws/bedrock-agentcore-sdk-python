@@ -90,9 +90,8 @@ class AutoEvalsAdapter(BaseAdapter):
         eval_result = self.metric.eval(**kwargs)
 
         score = eval_result.score
-        label = None
-        if self.threshold is not None:
-            label = "Pass" if score is not None and score >= self.threshold else "Fail"
+        threshold = self.threshold if self.threshold is not None else 0.5
+        label = "Pass" if score is not None and score >= threshold else "Fail"
         metadata = getattr(eval_result, "metadata", None)
         explanation = metadata.get("rationale", "") if isinstance(metadata, dict) else ""
 

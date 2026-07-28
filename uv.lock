@@ -420,12 +420,14 @@ ag-ui = [
 ]
 autoevals = [
     { name = "autoevals" },
+    { name = "strands-agents-evals" },
 ]
 datasets = [
     { name = "requests" },
 ]
 deepeval = [
     { name = "deepeval" },
+    { name = "strands-agents-evals" },
 ]
 simulation = [
     { name = "jinja2" },
@@ -474,8 +476,10 @@ requires-dist = [
     { name = "requests", marker = "extra == 'datasets'", specifier = ">=2.31.0" },
     { name = "starlette", specifier = ">=0.46.2" },
     { name = "strands-agents", marker = "extra == 'strands-agents'", specifier = ">=1.20.0" },
-    { name = "strands-agents-evals", marker = "extra == 'simulation'", specifier = ">=0.1.0" },
-    { name = "strands-agents-evals", marker = "extra == 'strands-agents-evals'", specifier = ">=0.1.0" },
+    { name = "strands-agents-evals", marker = "extra == 'autoevals'", specifier = ">=1.0.3,<2.0.0" },
+    { name = "strands-agents-evals", marker = "extra == 'deepeval'", specifier = ">=1.0.3,<2.0.0" },
+    { name = "strands-agents-evals", marker = "extra == 'simulation'", specifier = ">=1.0.3,<2.0.0" },
+    { name = "strands-agents-evals", marker = "extra == 'strands-agents-evals'", specifier = ">=1.0.3,<2.0.0" },
     { name = "typing-extensions", specifier = ">=4.13.2,<5.0.0" },
     { name = "urllib3", specifier = ">=1.26.0" },
     { name = "uvicorn", specifier = ">=0.34.2" },
@@ -499,7 +503,7 @@ dev = [
     { name = "pytest-rerunfailures", specifier = ">=15.0" },
     { name = "ruff", specifier = ">=0.12.0" },
     { name = "strands-agents", specifier = ">=1.20.0" },
-    { name = "strands-agents-evals", specifier = ">=0.1.0" },
+    { name = "strands-agents-evals", specifier = ">=1.0.3,<2.0.0" },
     { name = "websockets", specifier = ">=14.1" },
     { name = "wheel", specifier = ">=0.45.1" },
 ]
@@ -3334,12 +3338,13 @@ wheels = [
 
 [[package]]
 name = "strands-agents"
-version = "1.38.0"
+version = "1.50.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "boto3" },
     { name = "botocore" },
     { name = "docstring-parser" },
+    { name = "httpx" },
     { name = "jsonschema" },
     { name = "mcp" },
     { name = "opentelemetry-api" },
@@ -3350,14 +3355,14 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "watchdog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/11/89/3e722f4b5bd913531bc32a23bf88aaa77a434774f294bba5bfa88690ec46/strands_agents-1.38.0.tar.gz", hash = "sha256:02a68ec321ad457f9137dfd6a99cf72cf0e86081fee35de85fbe29b9ac0af2b2", size = 858950, upload-time = "2026-04-30T16:57:43.244Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/7a/b5e20f5ee859c71e451e2e06de8767aab73d850018167c436e3a96446caf/strands_agents-1.50.2.tar.gz", hash = "sha256:7b45c41593e41f22383962a233b6616360b8c3686ae8b902059b6a6fab3deacf", size = 1224067, upload-time = "2026-07-27T20:38:48.238Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cc/06/de8d8ab14a2e92dcb0fa82db0a4cb102418a1eda139412bbe5b5725e28df/strands_agents-1.38.0-py3-none-any.whl", hash = "sha256:9dc3de17e25d70e367d37f9151f2a4c7b3ac8fc9f6237e9e1f34d00bfbfd001b", size = 422354, upload-time = "2026-04-30T16:57:41.094Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/d6/2fd27147f53c45e546c0c542c6ea4a24b93c1f3908dcbad164624e5ddfa6/strands_agents-1.50.2-py3-none-any.whl", hash = "sha256:39c6b755e579e0b631ea01af78a0a201019320670b87adcf0b5c8dd1e5a2cef8", size = 638411, upload-time = "2026-07-27T20:38:46.12Z" },
 ]
 
 [[package]]
 name = "strands-agents-evals"
-version = "0.1.0"
+version = "1.0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "boto3" },
@@ -3368,11 +3373,12 @@ dependencies = [
     { name = "rich" },
     { name = "strands-agents" },
     { name = "strands-agents-tools" },
+    { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/12/30/094087a522b253660ec5ca73cf981af968f714260d4326c8e1f0e77e770c/strands_agents_evals-0.1.0.tar.gz", hash = "sha256:a2948704d909ecc10967cc1a57bf3af7bda3108a3803fafb7f34809afe297213", size = 103152, upload-time = "2025-12-03T17:42:16.189Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/b8/935c2be22bb5d6270e31dc3bf1e6947e19b9ea865c7a86b8109f92140608/strands_agents_evals-1.0.3.tar.gz", hash = "sha256:0d3d6b717399d247be4a038131eec30d0087d67b6448fec36c2765ad5036619a", size = 477066, upload-time = "2026-07-23T21:04:05.007Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/68/78/8bdde902bb67bfe876db0731bb554c5d54cc40e9d2b9bd6cd64ea1b87af8/strands_agents_evals-0.1.0-py3-none-any.whl", hash = "sha256:26e0ef45655bc20691af293027c04cfc9a0963aaea70c3400defd3b007c4930c", size = 95455, upload-time = "2025-12-03T17:42:14.677Z" },
+    { url = "https://files.pythonhosted.org/packages/a2/9f/317c912da542af792c7eaad0b247d352bed001fc204518c6dbb5a1797e40/strands_agents_evals-1.0.3-py3-none-any.whl", hash = "sha256:10550f4cc7676b0d7df64cc7618dd2ee248d2289e1eae873548bf9057164a6d1", size = 355342, upload-time = "2026-07-23T21:04:02.915Z" },
 ]
 
 [[package]]

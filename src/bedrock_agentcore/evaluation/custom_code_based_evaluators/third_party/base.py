@@ -2,7 +2,7 @@
 
 import abc
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.models import EvaluatorInput, EvaluatorOutput
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers import (
@@ -46,7 +46,7 @@ class BaseAdapter(abc.ABC):
                 errorMessage=str(e),
             )
         except Exception as e:
-            logger.error("Execution failed: %s", e, exc_info=True)
+            logger.exception("Execution failed: %s", e)
             return EvaluatorOutput(
                 label="Error",
                 errorCode="METRIC_ERROR",
@@ -82,6 +82,14 @@ class BaseAdapter(abc.ABC):
         if evaluator_input.evaluation_level == "TRACE" and evaluator_input.target_trace_id:
             spans = [s for s in spans if s.get("traceId") == evaluator_input.target_trace_id]
         elif evaluator_input.evaluation_level == "TOOL_CALL" and evaluator_input.target_span_id:
-            spans = [s for s in spans if s.get("spanId") == evaluator_input.target_span_id]
+            # Include both the target tool span AND its parent agent span.
+            # ToolCorrectness needs input/actual_output from the agent span
+            # plus tools_called from the tool span.
+            target_span = next((s for s in spans if s.get("spanId") == evaluator_input.target_span_id), None)
+            if target_span:
+                parent_id = target_span.get("parentSpanId") or target_span.get("parent_span_id")
+                spans = [s for s in spans if s.get("spanId") in (evaluator_input.target_span_id, parent_id)]
+            else:
+                spans = [s for s in spans if s.get("spanId") == evaluator_input.target_span_id]
 
         return spans

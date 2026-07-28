@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.models import EvaluatorInput, EvaluatorOutput
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals.adapter import AutoEvalsAdapter
 
@@ -32,7 +30,9 @@ def _make_evaluator_input(spans=None):
                 "severityNumber": 9,
                 "body": {
                     "input": {"messages": [{"role": "user", "content": {"content": '[{"text": "What is AI?"}]'}}]},
-                    "output": {"messages": [{"role": "assistant", "content": {"message": "AI is artificial intelligence."}}]},
+                    "output": {
+                        "messages": [{"role": "assistant", "content": {"message": "AI is artificial intelligence."}}]
+                    },
                 },
             },
         ]
@@ -99,14 +99,14 @@ class TestAutoEvalsAdapterSuccess:
 
         assert adapter.threshold is None
 
-    def test_no_threshold_returns_none_label(self):
+    def test_no_threshold_defaults_to_half(self):
         scorer = _mock_scorer(score=0.85)
         adapter = AutoEvalsAdapter(metric=scorer)
 
         result = adapter(_make_evaluator_input())
 
         assert result.value == 0.85
-        assert result.label is None
+        assert result.label == "Pass"  # defaults to threshold=0.5
 
     def test_scorer_eval_called_with_input_and_output(self):
         scorer = _mock_scorer()
@@ -129,7 +129,7 @@ class TestAutoEvalsAdapterSuccess:
             },
         )
 
-        result = adapter(_make_evaluator_input())
+        adapter(_make_evaluator_input())  # result unused; we check call_args
 
         call_kwargs = scorer.eval.call_args[1]
         assert call_kwargs["input"] == "custom input"
@@ -199,13 +199,13 @@ class TestAutoEvalsAdapterErrors:
 
 
 class TestAutoEvalsAdapterEdgeCases:
-    def test_score_none_without_threshold_returns_error(self):
+    def test_score_none_without_threshold_returns_fail(self):
         scorer = _mock_scorer(score=None)
         adapter = AutoEvalsAdapter(metric=scorer)
 
         result = adapter(_make_evaluator_input())
 
-        assert result.errorCode is not None
+        assert result.label == "Fail"  # defaults to threshold=0.5, None < 0.5
 
     def test_score_none_with_threshold_returns_fail(self):
         scorer = _mock_scorer(score=None)

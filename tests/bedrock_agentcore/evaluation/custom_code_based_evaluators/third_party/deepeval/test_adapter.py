@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.models import EvaluatorInput, EvaluatorOutput
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.deepeval.adapter import DeepEvalAdapter
 
@@ -32,7 +30,9 @@ def _make_evaluator_input(spans=None):
                 "severityNumber": 9,
                 "body": {
                     "input": {"messages": [{"role": "user", "content": {"content": '[{"text": "What is AI?"}]'}}]},
-                    "output": {"messages": [{"role": "assistant", "content": {"message": "AI is artificial intelligence."}}]},
+                    "output": {
+                        "messages": [{"role": "assistant", "content": {"message": "AI is artificial intelligence."}}]
+                    },
                 },
             },
         ]
@@ -146,15 +146,19 @@ class TestDeepEvalAdapterSuccess:
                     "severityNumber": 9,
                     "body": {
                         "input": {"messages": [{"role": "user", "content": {"content": '[{"text": "What is AI?"}]'}}]},
-                        "output": {"messages": [{"role": "assistant", "content": {"message": "AI is artificial intelligence."}}]},
+                        "output": {
+                            "messages": [
+                                {"role": "assistant", "content": {"message": "AI is artificial intelligence."}}
+                            ]
+                        },
                     },
-                }
+                },
             ],
             target_trace_id="t1",
             reference_inputs=[{"expectedResponse": {"text": "AI stands for artificial intelligence."}}],
         )
 
-        result = adapter(evaluator_input)
+        adapter(evaluator_input)  # result unused; we check test_case
 
         test_case = metric.measure.call_args[0][0]
         assert test_case.expected_output == "AI stands for artificial intelligence."
@@ -239,9 +243,7 @@ class TestDeepEvalAdapterErrors:
         from deepeval.errors import MissingTestCaseParamsError
 
         metric = _mock_metric()
-        metric.measure = MagicMock(
-            side_effect=MissingTestCaseParamsError("retrieval_context is required")
-        )
+        metric.measure = MagicMock(side_effect=MissingTestCaseParamsError("retrieval_context is required"))
         adapter = DeepEvalAdapter(metric=metric)
 
         result = adapter(_make_evaluator_input())
@@ -363,7 +365,9 @@ class TestDeepEvalAdapterConversational:
                 "severityNumber": 9,
                 "body": {
                     "input": {"messages": [{"role": "user", "content": {"content": '[{"text": "What is AI?"}]'}}]},
-                    "output": {"messages": [{"role": "assistant", "content": {"message": "AI is artificial intelligence."}}]},
+                    "output": {
+                        "messages": [{"role": "assistant", "content": {"message": "AI is artificial intelligence."}}]
+                    },
                 },
             },
         ]
