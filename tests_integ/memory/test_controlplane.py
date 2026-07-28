@@ -18,6 +18,32 @@ class TestMemoryControlPlaneClient:
         cls.client = MemoryControlPlaneClient(region_name=cls.region)
         cls.test_prefix = f"test_cp_{int(time.time())}"
         cls.memory_ids = []
+        cls._cleanup_stale_memories()
+
+    @classmethod
+    def _cleanup_stale_memories(cls):
+        """Delete test memories older than 3 hours. Best-effort; failures won't block tests."""
+        try:
+            from datetime import datetime, timedelta, timezone
+
+            memories = cls.client.list_memories()
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
+            stale = [
+                m
+                for m in memories
+                if m.get("id", "").startswith("test_cp_") and m.get("createdAt") and m["createdAt"] < cutoff
+            ]
+            print(f"[cleanup] Found {len(memories)} total memories, {len(stale)} stale test_cp_ memories (>3h old)")
+            deleted = 0
+            for m in stale:
+                try:
+                    cls.client.delete_memory(memory_id=m["id"])
+                    deleted += 1
+                except Exception as e:
+                    print(f"[cleanup] Failed to delete {m['id']}: {e}")
+            print(f"[cleanup] Deleted {deleted}/{len(stale)} stale memories")
+        except Exception as e:
+            print(f"[cleanup] Could not list memories for cleanup: {e}")
 
     @classmethod
     def teardown_class(cls):
