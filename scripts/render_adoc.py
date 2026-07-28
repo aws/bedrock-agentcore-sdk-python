@@ -55,12 +55,108 @@ import textwrap
 SCHEMA_VERSION = 1
 
 
+def normalize_style(text):
+    """Apply style-safe substitutions to generated prose."""
+    if not text:
+        return ""
+    text = re.sub(r"\be\.g\.(?:,)?", "for example,", text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"\bAWS (?:Bedrock(?: AgentCore)? )?Code\s*Interpreter\b",
+        "Amazon Bedrock AgentCore Code Interpreter",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = text.replace(
+        "Bedrock AgentCore Policy Engine client.",
+        "Policy Engine client for Amazon Bedrock AgentCore.",
+    )
+    text = text.replace(
+        "Client for Bedrock AgentCore Policy Engine operations.",
+        "Provides a client for Policy in AgentCore.",
+    )
+    text = re.sub(r"\bAWS Bedrock AgentCore\b", "Amazon Bedrock AgentCore", text)
+    text = re.sub(r"\bAWS Bedrock\b", "Amazon Bedrock", text)
+    text = re.sub(
+        r"(?<!Amazon )(?<!AWS )\bBedrock AgentCore\b",
+        "Amazon Bedrock AgentCore",
+        text,
+    )
+    text = re.sub(
+        r"(?<!Amazon Bedrock )\bAgentCore Code Interpreter\b",
+        "Amazon Bedrock AgentCore Code Interpreter",
+        text,
+    )
+    text = re.sub(
+        r"(?<!Amazon Bedrock )\bAgentCore runtime\b",
+        "Amazon Bedrock AgentCore runtime",
+        text,
+    )
+    text = re.sub(
+        r"(?<!Amazon Bedrock )\bAgentCore Identity\b",
+        "Amazon Bedrock AgentCore Identity",
+        text,
+    )
+    text = text.replace(", allowing applications to", " so applications can")
+    text = re.sub(r"\bAWS region\b", "AWS Region", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bAgentCore Memory\b", "AgentCore memory", text)
+    text = re.sub(r"\bAgentCore Runtime\b", "AgentCore runtime", text)
+    text = text.replace(
+        "BedrockAgentCore Runtime Package.",
+        "Amazon Bedrock AgentCore runtime package.",
+    )
+    text = re.sub(r"\bAgentCore SDK\b", "AgentCore Python SDK", text)
+    text = text.replace(
+        "This feature is in preview and may change in future releases.",
+        "This feature is in preview and might change in future releases.",
+    )
+    text = text.replace("validation will ensure", "validation ensures")
+    text = text.replace(
+        "Delete all long-term memory records within a specific namespace.",
+        "Deletes all long-term memory records in the specified namespace.",
+    )
+    text = text.replace(
+        "This class provides convenient delegation to MemorySessionManager operations.",
+        "Use this class to delegate operations to MemorySessionManager.",
+    )
+    return re.sub(r"\bAWS\b", "{aws}", text)
+
+
+def normalize_param_description(text):
+    """Normalize recurring parameter-description style issues."""
+    text = normalize_style(clean_rst(text)).strip()
+    optional_replacement = "Optional" if _starts_with_plural_noun(text) else "An optional"
+    substitutions = (
+        (r"^Optional\b", optional_replacement),
+        (r"^(?:\{aws\}|AWS)\s+region\b", "The {aws} Region"),
+        (r"^id of\b", "The ID of"),
+        (r"^Behaviour\b", "The behavior"),
+        (r"^Behavior\b", "The behavior"),
+        (r"^Memory resource ID\b", "The memory resource ID"),
+        (r"^Strategy name\b", "The name of the memory strategy"),
+        (r"^Strategy ID\b", "The ID of the memory strategy"),
+    )
+    for pattern, replacement in substitutions:
+        text = re.sub(pattern, replacement, text, count=1, flags=re.IGNORECASE)
+    return text
+
+
+def _starts_with_plural_noun(text):
+    """Return whether an Optional description starts with a likely plural noun."""
+    match = re.match(r"^Optional\s+([A-Za-z]+)\b", text, flags=re.IGNORECASE)
+    if not match:
+        return False
+    noun = match.group(1)
+    return noun.islower() and noun.endswith("s") and not noun.endswith(("is", "ss", "us"))
+
+
 def esc(text):
     """Escape AsciiDoc-significant characters in inline text."""
     if not text:
         return ""
     # Guard the couple of chars that start AsciiDoc markup in running prose.
-    return text.replace("|", "\\|").replace("{", "\\{")
+    marker = "\0AWS_ENTITY\0"
+    text = normalize_style(text).replace("{aws}", marker)
+    return text.replace("|", "\\|").replace("{", "\\{").replace(marker, "{aws}")
 
 
 # Match markdown code fences that may be indented (reST/Google docstrings often
@@ -94,7 +190,7 @@ def clean_rst(text):
     # Convert roles: :class:`Foo` -> `Foo`
     text = _RST_ROLE_RE.sub(r"`\1`", text)
 
-    return text
+    return normalize_style(text)
 
 
 _ADOC_ADMONITION_RE = re.compile(
@@ -171,7 +267,7 @@ def render_params(params, out):
         req = "" if p.get("required") else " _(optional)_"
         typ = f"`{p['type']}`" if p.get("type") else ""
         out.append(f"`{p['name']}`{req} {typ}::")
-        out.append(esc(clean_rst(p.get("description", ""))) or "_No description._")
+        out.append(esc(normalize_param_description(p.get("description", ""))) or "_No description._")
     out.append("")
 
 
