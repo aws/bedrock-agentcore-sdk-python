@@ -379,9 +379,13 @@ class MemoryControlPlaneClient:
                     break
 
             if strategy_id:
-                return self._wait_for_strategy_active(memory_id, strategy_id, max_wait, poll_interval)
+                memory = self._wait_for_strategy_active(memory_id, strategy_id, max_wait, poll_interval)
             else:
                 logger.warning("Could not identify newly added strategy %s to wait for activation", strategy_name)
+
+            # Also ensure the memory itself has returned to ACTIVE
+            if memory.get("status") != MemoryStatus.ACTIVE.value:
+                memory = self._wait_for_memory_active(memory_id, max_wait, poll_interval)
 
         return memory
 
