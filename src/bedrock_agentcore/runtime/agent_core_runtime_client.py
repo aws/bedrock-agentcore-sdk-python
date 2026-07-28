@@ -25,6 +25,7 @@ from botocore.exceptions import ClientError
 
 from .._utils.config import WaitConfig
 from .._utils.endpoints import get_data_plane_endpoint, validate_region
+from .._utils.identity_propagation import register_identity_wat_propagation
 from .._utils.polling import wait_until, wait_until_deleted
 from .._utils.snake_case import accept_snake_case_kwargs, convert_kwargs
 from .._utils.user_agent import build_user_agent_suffix
@@ -102,6 +103,10 @@ class AgentCoreRuntimeClient:
             region_name=self.region,
             config=client_config,
         )
+
+        # Register Identity WAT header propagation on outbound data plane calls
+        register_identity_wat_propagation(self.dp_client)
+
         self.logger.info(
             "Initialized AgentCoreRuntimeClient for region: %s",
             self.region,

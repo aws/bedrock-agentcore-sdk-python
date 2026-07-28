@@ -37,6 +37,7 @@ from .models import (
     AUTHORIZATION_HEADER,
     BAGGAGE_KEY_EXPERIMENT_ARN,
     BAGGAGE_KEY_EXPERIMENT_VARIANT,
+    IDENTITY_WAT_HEADER,
     OAUTH2_CALLBACK_URL_HEADER,
     REQUEST_ID_HEADER,
     SESSION_HEADER,
@@ -409,7 +410,7 @@ class BedrockAgentCoreApp(Starlette):
             session_id = headers.get(SESSION_HEADER)
             BedrockAgentCoreContext.set_request_context(request_id, session_id)
 
-            agent_identity_token = headers.get(ACCESS_TOKEN_HEADER)
+            agent_identity_token = headers.get(IDENTITY_WAT_HEADER) or headers.get(ACCESS_TOKEN_HEADER)
             if agent_identity_token:
                 BedrockAgentCoreContext.set_workload_access_token(agent_identity_token)
 
