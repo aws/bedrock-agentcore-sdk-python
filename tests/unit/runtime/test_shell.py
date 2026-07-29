@@ -1,6 +1,5 @@
 """Tests for ShellSession and ReconnectConfig."""
 
-import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -97,98 +96,36 @@ def _close_frame() -> bytes:
 
 class TestShellSessionConnect:
     @pytest.mark.asyncio
-    async def test_connect_reads_metadata_frame(self):
+    async def test_connect_sets_shell_id_from_101_header(self):
         client = _make_client()
-        ws = _make_ws(_metadata_frame("my-shell", reconnected=False))
+        ws = _make_ws()
+        ws.response.headers = {SHELL_ID_HEADER: "server-shell"}
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             session = ShellSession(client, FAKE_ARN, shell_id="my-shell")
             await session._connect()
 
-        assert session.shell_id == "my-shell"
-        assert session.reconnected is False
+        assert session.shell_id == "server-shell"
 
     @pytest.mark.asyncio
-    async def test_connect_sets_reconnected_true(self):
+    async def test_connect_ready_immediately_after_websocket_open(self):
+        """Connection is ready immediately after WebSocket opens — no blocking on STATUS frame."""
         client = _make_client()
-        ws = _make_ws(_metadata_frame("my-shell", reconnected=True))
+        ws = _make_ws()
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             session = ShellSession(client, FAKE_ARN, shell_id="my-shell")
             await session._connect()
 
-        assert session.reconnected is True
-
-    @pytest.mark.asyncio
-    async def test_connect_tolerates_missing_metadata_frame(self):
-        client = _make_client()
-        ws = AsyncMock()
-        ws.recv = AsyncMock(side_effect=asyncio.TimeoutError)
-        ws.send = AsyncMock()
-        ws.close = AsyncMock()
-
-        with patch("websockets.connect", new=AsyncMock(return_value=ws)):
-            session = ShellSession(client, FAKE_ARN)
-            await session._connect()  # must not raise
-
-        assert session.shell_id is not None
-
-    @pytest.mark.asyncio
-    async def test_connect_ignores_non_status_first_frame(self):
-        """STDOUT frames arriving before STATUS are stashed; STATUS is still found."""
-        client = _make_client()
-        ws = _make_ws(_stdout_frame("some output"), _metadata_frame("x"))
-
-        with patch("websockets.connect", new=AsyncMock(return_value=ws)):
-            session = ShellSession(client, FAKE_ARN, shell_id="x")
-            await session._connect()
-
-        assert session.reconnected is False
-        assert session.shell_id == "x"
-        assert len(session._pending_frames) == 1  # stdout frame was stashed
-
-    @pytest.mark.asyncio
-    async def test_connect_raises_on_connection_closed_error_before_status(self):
-        """ConnectionClosedError before STATUS arrives propagates out of __aenter__."""
-        import websockets.exceptions
-
-        client = _make_client()
-        ws = AsyncMock()
-        ws.recv = AsyncMock(side_effect=websockets.exceptions.ConnectionClosedError(None, None))
-        ws.send = AsyncMock()
-        ws.close = AsyncMock()
-
-        with patch("websockets.connect", new=AsyncMock(return_value=ws)):
-            session = ShellSession(client, FAKE_ARN)
-            with pytest.raises(websockets.exceptions.ConnectionClosedError):
-                await session._connect()
-
-        assert session._ws is None
-
-    @pytest.mark.asyncio
-    async def test_connect_raises_on_connection_closed_ok_before_status(self):
-        """ConnectionClosedOK before STATUS arrives propagates out of __aenter__."""
-        import websockets.exceptions
-
-        client = _make_client()
-        ws = AsyncMock()
-        ws.recv = AsyncMock(side_effect=websockets.exceptions.ConnectionClosedOK(None, None))
-        ws.send = AsyncMock()
-        ws.close = AsyncMock()
-
-        with patch("websockets.connect", new=AsyncMock(return_value=ws)):
-            session = ShellSession(client, FAKE_ARN)
-            with pytest.raises(websockets.exceptions.ConnectionClosedOK):
-                await session._connect()
-
-        assert session._ws is None
+        assert session._closed is False
+        assert session._ws is ws
 
     @pytest.mark.asyncio
     async def test_session_id_stable_across_two_connect_calls(self):
         """session_id must not change between _connect() calls — same value routes to same VM."""
         client = _make_client()
-        ws1 = _make_ws(_metadata_frame("my-shell"))
-        ws2 = _make_ws(_metadata_frame("my-shell"))
+        ws1 = _make_ws()
+        ws2 = _make_ws()
 
         with patch("websockets.connect", new=AsyncMock(side_effect=[ws1, ws2])):
             session = ShellSession(client, FAKE_ARN, shell_id="my-shell")
@@ -204,7 +141,7 @@ class TestShellSessionConnect:
     async def test_connect_reads_session_id_from_101_header(self):
         """X-Amzn-Bedrock-AgentCore-Runtime-Session-Id in 101 response updates session_id."""
         client = _make_client()
-        ws = _make_ws(_metadata_frame("my-shell"))
+        ws = _make_ws()
         ws.response.headers = {
             SHELL_ID_HEADER: "my-shell",
             SESSION_HEADER: "server-session-99",
@@ -215,27 +152,6 @@ class TestShellSessionConnect:
             await session._connect()
 
         assert session.session_id == "server-session-99"
-
-    @pytest.mark.asyncio
-    async def test_connect_timeout_proceeds_with_warning(self, caplog):
-        """TimeoutError waiting for STATUS logs a warning but session stays usable."""
-        import logging
-
-        client = _make_client()
-        ws = AsyncMock()
-        ws.recv = AsyncMock(side_effect=asyncio.TimeoutError)
-        ws.send = AsyncMock()
-        ws.close = AsyncMock()
-        ws.response = MagicMock()
-        ws.response.headers = {}
-
-        with patch("websockets.connect", new=AsyncMock(return_value=ws)):
-            with caplog.at_level(logging.WARNING, logger="bedrock_agentcore.runtime.shell"):
-                session = ShellSession(client, FAKE_ARN)
-                await session._connect()  # must not raise
-
-        assert session._ws is ws  # connection still alive
-        assert "server did not respond" in caplog.text
 
 
 class TestShellSessionInit:
@@ -337,7 +253,7 @@ class TestShellSessionContextManager:
     @pytest.mark.asyncio
     async def test_context_manager_closes_on_exit(self):
         client = _make_client()
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN) as shell:
@@ -346,17 +262,17 @@ class TestShellSessionContextManager:
             ws.close.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_close_sends_close_frame(self):
-        framer = ShellFramer()
+    async def test_close_does_not_send_close_frame(self):
+        """close() no longer sends 0xFF — shell detaches and stays alive for reconnect window."""
         client = _make_client()
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN) as _:
                 pass
 
-        sent_frames = [call.args[0] for call in ws.send.call_args_list]
-        assert framer.encode_close() in sent_frames
+        # No frames should have been sent (no encode_close)
+        ws.send.assert_not_called()
 
 
 class TestShellSessionSend:
@@ -364,7 +280,7 @@ class TestShellSessionSend:
     async def test_send_encodes_stdin_frame(self):
         framer = ShellFramer()
         client = _make_client()
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN) as shell:
@@ -377,7 +293,7 @@ class TestShellSessionSend:
     async def test_send_bytes(self):
         framer = ShellFramer()
         client = _make_client()
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN) as shell:
@@ -390,7 +306,7 @@ class TestShellSessionSend:
     async def test_resize(self):
         framer = ShellFramer()
         client = _make_client()
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN) as shell:
@@ -404,7 +320,7 @@ class TestShellSessionSendAfterClose:
     @pytest.mark.asyncio
     async def test_send_raises_after_close(self):
         client = _make_client()
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN) as shell:
                 pass
@@ -414,7 +330,7 @@ class TestShellSessionSendAfterClose:
     @pytest.mark.asyncio
     async def test_send_bytes_raises_after_close(self):
         client = _make_client()
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN) as shell:
                 pass
@@ -424,7 +340,7 @@ class TestShellSessionSendAfterClose:
     @pytest.mark.asyncio
     async def test_resize_raises_after_close(self):
         client = _make_client()
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN) as shell:
                 pass
@@ -437,7 +353,6 @@ class TestShellSessionIterate:
     async def test_iterates_stdout_frames(self):
         client = _make_client()
         ws = _make_ws(
-            _metadata_frame(),
             _stdout_frame("hello"),
             _stdout_frame(" world"),
             _close_frame(),
@@ -453,10 +368,29 @@ class TestShellSessionIterate:
         assert output == ["hello", " world"]
 
     @pytest.mark.asyncio
+    async def test_confirmation_frame_swallowed_during_iteration(self):
+        """Confirmation STATUS frames (metadata.shellId present) are silently swallowed."""
+        client = _make_client()
+        ws = _make_ws(
+            _metadata_frame("s"),
+            _stdout_frame("output"),
+            _close_frame(),
+        )
+
+        frames = []
+        with patch("websockets.connect", new=AsyncMock(return_value=ws)):
+            async with ShellSession(client, FAKE_ARN) as shell:
+                async for frame in shell:
+                    frames.append(frame)
+
+        # Only STDOUT frame yielded — confirmation frame was swallowed
+        assert len(frames) == 1
+        assert frames[0].channel == ShellChannel.STDOUT
+
+    @pytest.mark.asyncio
     async def test_stops_on_exit_status_frame(self):
         client = _make_client()
         ws = _make_ws(
-            _metadata_frame(),
             _stdout_frame("output"),
             _exit_frame(0),
         )
@@ -478,7 +412,7 @@ class TestShellSessionIterate:
     @pytest.mark.asyncio
     async def test_stops_on_close_frame(self):
         client = _make_client()
-        ws = _make_ws(_metadata_frame(), _close_frame())
+        ws = _make_ws(_close_frame())
 
         frames = []
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
@@ -491,7 +425,7 @@ class TestShellSessionIterate:
     @pytest.mark.asyncio
     async def test_stops_on_connection_closed_without_reconnect(self):
         client = _make_client()
-        ws = _make_ws(_metadata_frame())  # ConnectionClosed raised on next recv
+        ws = _make_ws()  # ConnectionClosed raised on next recv
 
         frames = []
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
@@ -511,19 +445,16 @@ class TestShellSessionCleanClose:
         client = _make_client()
         reconnect_calls = []
 
-        async def on_reconnect(reconnected: bool) -> None:
-            reconnect_calls.append(reconnected)
+        async def on_reconnect() -> None:
+            reconnect_calls.append(True)
 
         ws = AsyncMock()
         ws.send = AsyncMock()
         ws.close = AsyncMock()
-        call_count = 0
+        ws.response = MagicMock()
+        ws.response.headers = {}
 
         async def recv():
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return _metadata_frame()
             raise websockets.exceptions.ConnectionClosedOK(None, None)
 
         ws.recv = recv
@@ -546,20 +477,20 @@ class TestShellSessionCleanClose:
         client = _make_client()
         reconnect_calls = []
 
-        async def on_reconnect(reconnected: bool) -> None:
-            reconnect_calls.append(reconnected)
+        async def on_reconnect() -> None:
+            reconnect_calls.append(True)
 
         ws = AsyncMock()
         ws.send = AsyncMock()
         ws.close = AsyncMock()
+        ws.response = MagicMock()
+        ws.response.headers = {}
         call_count = 0
 
         async def recv():
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                return _metadata_frame()
-            if call_count == 2:
                 return _exit_frame(0)
             # If _closed wasn't set, __anext__ would hit this and try to reconnect
             raise websockets.exceptions.ConnectionClosedOK(None, None)
@@ -588,21 +519,18 @@ class TestShellSessionCleanClose:
         client = _make_client()
         reconnect_calls = []
 
-        async def on_reconnect(reconnected: bool) -> None:
-            reconnect_calls.append(reconnected)
+        async def on_reconnect() -> None:
+            reconnect_calls.append(True)
 
-        # First WebSocket: metadata then close 1001.
-        # Second WebSocket: metadata then clean close 1000.
+        # First WebSocket: close 1001 immediately.
+        # Second WebSocket: stdout then clean close.
         ws1 = AsyncMock()
         ws1.send = AsyncMock()
         ws1.close = AsyncMock()
-        ws1_count = 0
+        ws1.response = MagicMock()
+        ws1.response.headers = {}
 
         async def recv1():
-            nonlocal ws1_count
-            ws1_count += 1
-            if ws1_count == 1:
-                return _metadata_frame("session-1")
             raise websockets.exceptions.ConnectionClosedOK(Close(1001, "Going Away"), None)
 
         ws1.recv = recv1
@@ -610,14 +538,14 @@ class TestShellSessionCleanClose:
         ws2 = AsyncMock()
         ws2.send = AsyncMock()
         ws2.close = AsyncMock()
+        ws2.response = MagicMock()
+        ws2.response.headers = {}
         ws2_count = 0
 
         async def recv2():
             nonlocal ws2_count
             ws2_count += 1
             if ws2_count == 1:
-                return _metadata_frame("session-1", reconnected=True)
-            if ws2_count == 2:
                 return _stdout_frame("hello")
             raise websockets.exceptions.ConnectionClosedOK(None, None)
 
@@ -648,13 +576,10 @@ class TestShellSessionKicked:
         ws = AsyncMock()
         ws.send = AsyncMock()
         ws.close = AsyncMock()
-        call_count = 0
+        ws.response = MagicMock()
+        ws.response.headers = {}
 
         async def recv():
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return _metadata_frame()
             # Simulate kicked close code 4000
             close_obj = Close(code=4000, reason="replaced by new connection")
             raise websockets.exceptions.ConnectionClosedError(close_obj, None)
@@ -681,13 +606,10 @@ class TestShellSessionKicked:
         ws = AsyncMock()
         ws.send = AsyncMock()
         ws.close = AsyncMock()
-        call_count = 0
+        ws.response = MagicMock()
+        ws.response.headers = {}
 
         async def recv():
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return _metadata_frame()
             close_obj = Close(code=4000, reason="replaced by new connection")
             raise websockets.exceptions.ConnectionClosedError(close_obj, None)
 
@@ -704,7 +626,7 @@ class TestShellSessionKicked:
     async def test_clean_close_does_not_set_kicked(self):
         """shell.kicked remains False when the session ends normally."""
         client = _make_client()
-        ws = _make_ws(_metadata_frame())  # metadata frame then ConnectionClosedOK
+        ws = _make_ws()  # ConnectionClosedOK raised on next recv
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN) as shell:
                 async for _ in shell:
@@ -721,11 +643,10 @@ class TestShellSessionAutoReconnect:
         client = _make_client()
 
         ws1 = _make_ws(
-            _metadata_frame("s", reconnected=False),
             _stdout_frame("before"),
             end_with=websockets.exceptions.ConnectionClosedError(None, None),
         )
-        ws2 = _make_ws(_metadata_frame("s", reconnected=True), _stdout_frame("after"), _close_frame())
+        ws2 = _make_ws(_stdout_frame("after"), _close_frame())
 
         connect_calls = [ws1, ws2]
 
@@ -734,8 +655,8 @@ class TestShellSessionAutoReconnect:
 
         on_reconnect_calls = []
 
-        async def on_reconnect(reconnected: bool) -> None:
-            on_reconnect_calls.append(reconnected)
+        async def on_reconnect() -> None:
+            on_reconnect_calls.append(True)
 
         config = ReconnectConfig(max_retries=3, on_reconnect=on_reconnect)
         output = []
@@ -752,13 +673,7 @@ class TestShellSessionAutoReconnect:
     @pytest.mark.asyncio
     async def test_exhausts_retries_and_stops(self):
         client = _make_client()
-        ws = _make_ws(_metadata_frame())  # drops immediately after metadata
-
-        async def fail_connect(url, extra_headers=None):
-            raise ConnectionRefusedError("server down")
-
-        async def first_connect(url, extra_headers=None):
-            return ws
+        ws = _make_ws()  # drops immediately
 
         call_count = 0
 
@@ -781,48 +696,13 @@ class TestShellSessionAutoReconnect:
         assert frames == []
 
     @pytest.mark.asyncio
-    async def test_pending_frames_cleared_on_reconnect(self):
-        """_pending_frames must be cleared at the start of _connect() so frames
-        buffered during a previous metadata handshake cannot bleed into a new session.
-
-        Directly verifies the invariant: after __aenter__ plants a stale frame in
-        _pending_frames, calling _connect() again must empty it.
-        """
-        client = _make_client()
-
-        from bedrock_agentcore.runtime.shell.protocol import ShellFrame
-
-        ws1 = _make_ws(_metadata_frame("s"))
-        ws2 = _make_ws(_metadata_frame("s", reconnected=True), _stdout_frame("fresh"), _close_frame())
-        connect_seq = [ws1, ws2]
-
-        async def fake_connect(url, extra_headers=None, additional_headers=None, **_kw):
-            return connect_seq.pop(0)
-
-        with patch("websockets.connect", side_effect=fake_connect):
-            session = ShellSession(client, FAKE_ARN, shell_id="s")
-            await session.__aenter__()
-
-            # Plant a stale frame as if left over from a prior metadata handshake.
-            session._pending_frames.append(
-                ShellFrame(channel=ShellChannel.STDOUT, raw_channel_byte=ShellChannel.STDOUT, payload=b"stale")
-            )
-            assert len(session._pending_frames) == 1
-
-            # _connect() must clear it.
-            await session._connect()
-            assert len(session._pending_frames) == 0
-
-            await session.__aexit__(None, None, None)
-
-    @pytest.mark.asyncio
     async def test_sync_on_reconnect_callback_accepted(self):
         """A synchronous on_reconnect callback must also be accepted."""
         import websockets.exceptions
 
         client = _make_client()
-        ws1 = _make_ws(_metadata_frame("s"), end_with=websockets.exceptions.ConnectionClosedError(None, None))
-        ws2 = _make_ws(_metadata_frame("s", reconnected=True), _close_frame())
+        ws1 = _make_ws(end_with=websockets.exceptions.ConnectionClosedError(None, None))
+        ws2 = _make_ws(_close_frame())
         connect_calls = [ws1, ws2]
 
         async def fake_connect(url, extra_headers=None, additional_headers=None, **_kw):
@@ -830,8 +710,8 @@ class TestShellSessionAutoReconnect:
 
         sync_calls = []
 
-        def sync_callback(reconnected: bool) -> None:
-            sync_calls.append(reconnected)
+        def sync_callback() -> None:
+            sync_calls.append(True)
 
         config = ReconnectConfig(max_retries=1, base_delay=0.0, on_reconnect=sync_callback)
 
@@ -848,8 +728,8 @@ class TestShellSessionAutoReconnect:
         import websockets.exceptions
 
         client = _make_client()
-        ws1 = _make_ws(_metadata_frame("s"), end_with=websockets.exceptions.ConnectionClosedError(None, None))
-        ws2 = _make_ws(_metadata_frame("s", reconnected=True), _close_frame())
+        ws1 = _make_ws(end_with=websockets.exceptions.ConnectionClosedError(None, None))
+        ws2 = _make_ws(_close_frame())
 
         call_count = 0
 
@@ -884,7 +764,7 @@ class TestShellSessionAutoReconnect:
     async def test_reconnect_window_zero_skips_inner_loop(self):
         """reconnect_window=0.0 must give up immediately — no inner retry attempts at all."""
         client = _make_client()
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
         connect_count = 0
 
         async def fake_connect(url, extra_headers=None, additional_headers=None, **_kw):
@@ -907,7 +787,7 @@ class TestShellSessionAutoReconnect:
         """When reconnect_window=0.0 the outer loop gives up immediately after inner exhaustion."""
 
         client = _make_client()
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
 
         call_count = 0
 
@@ -938,7 +818,7 @@ class TestShellSessionExitCode:
     async def test_exit_code_zero_on_clean_exit(self):
         """exit_code is 0 after a clean shell exit (status=Success)."""
         client = _make_client()
-        ws = _make_ws(_metadata_frame(), _exit_frame(0))
+        ws = _make_ws(_exit_frame(0))
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN) as shell:
@@ -951,7 +831,7 @@ class TestShellSessionExitCode:
     async def test_exit_code_nonzero(self):
         """exit_code reflects non-zero exit status from ExitCode cause."""
         client = _make_client()
-        ws = _make_ws(_metadata_frame(), _exit_frame(42))
+        ws = _make_ws(_exit_frame(42))
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN) as shell:
@@ -964,7 +844,7 @@ class TestShellSessionExitCode:
     async def test_exit_code_none_before_exit(self):
         """exit_code is None until the termination STATUS frame is processed."""
         client = _make_client()
-        ws = _make_ws(_metadata_frame(), _stdout_frame("hi"), _exit_frame(1))
+        ws = _make_ws(_stdout_frame("hi"), _exit_frame(1))
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN) as shell:
@@ -975,41 +855,6 @@ class TestShellSessionExitCode:
 
         assert exit_code_mid_loop is None  # not set yet during STDOUT frame
         assert shell.exit_code == 1
-
-    @pytest.mark.asyncio
-    async def test_exit_code_set_via_pending_frames_path(self):
-        """exit_code is set when the termination STATUS is drained from _pending_frames."""
-        import websockets.exceptions
-
-        client = _make_client()
-        ws = AsyncMock()
-        ws.send = AsyncMock()
-        ws.close = AsyncMock()
-        call_count = 0
-
-        async def recv():
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                # First recv during _connect() returns a STDOUT frame — stashed as pending
-                return _stdout_frame("stashed")
-            if call_count == 2:
-                # Second recv during _connect() returns the metadata confirmation
-                return _metadata_frame()
-            if call_count == 3:
-                return _exit_frame(5)
-            raise websockets.exceptions.ConnectionClosedOK(None, None)
-
-        ws.recv = recv
-
-        with patch("websockets.connect", new=AsyncMock(return_value=ws)):
-            async with ShellSession(client, FAKE_ARN) as shell:
-                frames = [frame async for frame in shell]
-
-        # stashed STDOUT frame drained first, then the exit STATUS frame
-        assert frames[0].channel == ShellChannel.STDOUT
-        assert frames[1].channel == ShellChannel.STATUS
-        assert shell.exit_code == 5
 
     @pytest.mark.asyncio
     async def test_exit_code_platform_error_without_exit_code_cause(self):
@@ -1028,7 +873,7 @@ class TestShellSessionExitCode:
             }
         ).encode()
         client = _make_client()
-        ws = _make_ws(_metadata_frame(), bytes([ShellChannel.STATUS]) + platform_error)
+        ws = _make_ws(bytes([ShellChannel.STATUS]) + platform_error)
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN) as shell:
@@ -1038,85 +883,13 @@ class TestShellSessionExitCode:
         assert shell.exit_code is None
 
 
-class TestShellSessionBytesDropped:
-    def _second_confirmation_frame(self, shell_id: str = "test-session", bytes_dropped: int = 1024) -> bytes:
-        payload = json.dumps(
-            {
-                "kind": "Status",
-                "apiVersion": "v1",
-                "metadata": {"shellId": shell_id, "reconnected": True, "bytesDropped": bytes_dropped},
-                "status": "Success",
-            }
-        ).encode()
-        return bytes([0x03]) + payload
-
-    @pytest.mark.asyncio
-    async def test_bytes_dropped_set_on_second_confirmation(self):
-        """Second confirmation frame with bytesDropped sets shell.bytes_dropped."""
-        client = _make_client()
-        ws = _make_ws(
-            _metadata_frame("s"),
-            _stdout_frame("output"),
-            self._second_confirmation_frame("s", bytes_dropped=512),
-            _close_frame(),
-        )
-
-        with patch("websockets.connect", new=AsyncMock(return_value=ws)):
-            async with ShellSession(client, FAKE_ARN, shell_id="s") as shell:
-                frames = [frame async for frame in shell]
-
-        assert shell.bytes_dropped == 512
-        # Second confirmation must be swallowed — only stdout frame yielded
-        assert len(frames) == 1
-        assert frames[0].channel == ShellChannel.STDOUT
-
-    @pytest.mark.asyncio
-    async def test_bytes_dropped_zero_when_no_overflow(self):
-        """bytes_dropped stays 0 when no second confirmation arrives."""
-        client = _make_client()
-        ws = _make_ws(_metadata_frame(), _close_frame())
-
-        with patch("websockets.connect", new=AsyncMock(return_value=ws)):
-            async with ShellSession(client, FAKE_ARN) as shell:
-                async for _ in shell:
-                    pass
-
-        assert shell.bytes_dropped == 0
-
-    @pytest.mark.asyncio
-    async def test_second_confirmation_without_bytes_dropped_swallowed(self):
-        """Second confirmation with no bytesDropped field is still swallowed."""
-        client = _make_client()
-        # Second confirmation without bytesDropped (single overflow frame edge case)
-        second_conf = json.dumps(
-            {
-                "kind": "Status",
-                "apiVersion": "v1",
-                "metadata": {"shellId": "s", "reconnected": True},
-                "status": "Success",
-            }
-        ).encode()
-        ws = _make_ws(
-            _metadata_frame("s"),
-            bytes([0x03]) + second_conf,
-            _close_frame(),
-        )
-
-        with patch("websockets.connect", new=AsyncMock(return_value=ws)):
-            async with ShellSession(client, FAKE_ARN, shell_id="s") as shell:
-                frames = [frame async for frame in shell]
-
-        assert shell.bytes_dropped == 0
-        assert frames == []  # second confirmation swallowed, close frame stops iteration
-
-
 class TestShellSessionAuthModes:
     """open_shell routes to the correct auth helper based on the auth= argument."""
 
     @pytest.mark.asyncio
     async def test_sigv4_default_uses_connect_shell(self):
         client = _make_client()
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)) as mock_connect:
             async with ShellSession(client, FAKE_ARN, auth="sigv4") as _:
@@ -1134,7 +907,7 @@ class TestShellSessionAuthModes:
         presigned_url = "wss://bedrock-agentcore.us-west-2.amazonaws.com/runtimes/X/ws/shells?X-Amz-Signature=abc"
         client = MagicMock()
         client.connect_shell_presigned.return_value = presigned_url
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)) as mock_connect:
             async with ShellSession(client, FAKE_ARN, auth=PresignedAuth(expires=120)) as _:
@@ -1153,7 +926,7 @@ class TestShellSessionAuthModes:
     async def test_presigned_forwards_expires(self):
         client = MagicMock()
         client.connect_shell_presigned.return_value = FAKE_URL
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN, auth=PresignedAuth(expires=60)) as _:
@@ -1170,7 +943,7 @@ class TestShellSessionAuthModes:
         encoded = base64.urlsafe_b64encode(b"tok").decode().rstrip("=")
         expected_protos = [f"base64UrlBearerAuthorization.{encoded}", "base64UrlBearerAuthorization"]
         client.connect_shell_oauth.return_value = (FAKE_URL, expected_protos)
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)) as mock_connect:
             async with ShellSession(client, FAKE_ARN, auth=OAuthAuth(bearer_token="tok")) as _:
@@ -1191,7 +964,7 @@ class TestShellSessionAuthModes:
         encoded = base64.urlsafe_b64encode(b"my-token").decode().rstrip("=")
         protos = [f"base64UrlBearerAuthorization.{encoded}", "base64UrlBearerAuthorization"]
         client.connect_shell_oauth.return_value = (FAKE_URL, protos)
-        ws = _make_ws(_metadata_frame())
+        ws = _make_ws()
 
         with patch("websockets.connect", new=AsyncMock(return_value=ws)):
             async with ShellSession(client, FAKE_ARN, auth=OAuthAuth(bearer_token="my-token")) as _:

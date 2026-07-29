@@ -6,7 +6,6 @@ from typing import Awaitable, Callable, Optional, Union
 _DEFAULT_MAX_RETRIES = 5
 _DEFAULT_BASE_DELAY = 1.0
 _DEFAULT_MAX_DELAY = 15.0
-_DEFAULT_METADATA_TIMEOUT = 10.0
 _DEFAULT_RECONNECT_WINDOW = 900.0  # ~15 min — matches server-side KARP idle timeout
 _DEFAULT_OUTER_LOOP_DELAY = 30.0  # wait between inner loop exhaustion and next outer attempt
 
@@ -36,16 +35,11 @@ class ReconnectConfig:
         outer_loop_delay: Seconds to wait between inner loop exhaustion and the
             next outer retry cycle.
         on_reconnect: Optional async or sync callback invoked after each
-            successful reconnect.  Receives ``reconnected: bool`` — ``True``
-            means the existing PTY was reattached (buffered output will follow
-            as STDOUT frames); ``False`` means a fresh shell was started.
+            successful reconnect.  Takes no arguments.
 
-    Example — log reconnects and flush buffered output to a file:
-        async def on_reconnect(reconnected: bool) -> None:
-            if reconnected:
-                print("Reattached to existing PTY — replaying buffered output")
-            else:
-                print("New shell started")
+    Example — log reconnects:
+        async def on_reconnect() -> None:
+            print("Reconnected to shell")
 
         config = ReconnectConfig(reconnect_window=None, on_reconnect=on_reconnect)  # None = unlimited
         async with client.open_shell(arn, reconnect_config=config) as shell:
@@ -58,4 +52,4 @@ class ReconnectConfig:
     max_delay: float = _DEFAULT_MAX_DELAY
     reconnect_window: Optional[float] = _DEFAULT_RECONNECT_WINDOW
     outer_loop_delay: float = _DEFAULT_OUTER_LOOP_DELAY
-    on_reconnect: Optional[Callable[[bool], Union[Awaitable[None], None]]] = field(default=None, repr=False)
+    on_reconnect: Optional[Callable[[], Union[Awaitable[None], None]]] = field(default=None, repr=False)
