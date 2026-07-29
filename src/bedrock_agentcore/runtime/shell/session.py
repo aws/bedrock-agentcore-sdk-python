@@ -5,8 +5,7 @@ import json
 import logging
 import random
 import uuid
-from collections import deque
-from typing import TYPE_CHECKING, AsyncIterator, Deque, Optional
+from typing import TYPE_CHECKING, AsyncIterator, Optional
 
 import websockets
 import websockets.exceptions
@@ -14,7 +13,7 @@ import websockets.exceptions
 from ..models import SESSION_HEADER, SHELL_ID_HEADER
 from ._validation import parse_runtime_arn, validate_shell_id
 from .auth import AuthMode, OAuthAuth, PresignedAuth
-from .config import _DEFAULT_METADATA_TIMEOUT, ReconnectConfig
+from .config import ReconnectConfig
 from .protocol import ShellChannel, ShellFrame, ShellFramer
 
 if TYPE_CHECKING:
@@ -26,8 +25,7 @@ logger = logging.getLogger(__name__)
 class ShellSession:
     r"""Async context manager wrapping a live interactive shell WebSocket session.
 
-    Connects on ``__aenter__``, reads the mandatory metadata frame that carries
-    ``shellId`` and ``reconnected``, and exposes typed send/resize/iterate/close.
+    Connects on ``__aenter__`` and exposes typed send/resize/iterate/close.
     When ``reconnect_config`` is provided, transparently reconnects on unexpected
     disconnects using the same ``shell_id`` and ``session_id`` so the shell's
     working directory, environment, background jobs, and up to 256 KB of buffered
@@ -86,9 +84,8 @@ class ShellSession:
         async with client.open_shell(
             runtime_arn, shell_id=shell_id, session_id=session_id
         ) as shell:
-            assert shell.reconnected       # True → up to 256 KB buffered output follows
             async for frame in shell:
-                ...
+                ...   # resumes from the same PTY
 
     Attributes:
         shell_id: Confirmed shell identifier echoed by the server in
@@ -100,18 +97,10 @@ class ShellSession:
             when reconnecting across process restarts — passing a different (or
             omitted) session ID may cause the platform to provision a fresh VM
             where the PTY no longer exists.
-        reconnected: ``True`` when the session resumed an existing PTY (buffered
-            output will arrive as STDOUT frames immediately after connect);
-            ``False`` for a fresh shell.
         kicked: ``True`` when iteration stopped because another client connected
             with the same ``shell_id`` (close code 4000).  The PTY is
             still alive — a new ``open_shell`` call with the same ID will
             reconnect to it.
-        bytes_dropped: Number of bytes lost from the PTY ring buffer during the
-            most recent disconnect.  Non-zero only when the 256 KB ring buffer
-            overflowed before reconnection completed.  Set after the post-drain
-            STATUS confirmation frame arrives (which follows the buffered STDOUT
-            burst).  Zero if no overflow occurred or on a fresh connection.
         exit_code: Exit code of the shell process.  ``None`` until the shell
             exits or if the platform terminated the session without providing an
             exit code (e.g. an InternalError).  ``0`` for a clean exit;
@@ -157,24 +146,19 @@ class ShellSession:
         self._framer = ShellFramer()
         self._ws: Optional[object] = None
         self._closed = False
-        # Frames received during _read_metadata_frame that arrived before the
-        # 0x03 confirmation (e.g. first shell prompt on 0x01).
-        self._pending_frames: Deque[ShellFrame] = deque()
 
         if shell_id is not None:
             validate_shell_id(shell_id)
         # Auto-generate stable reconnect handles when the caller omits them.
         # Without a fixed session_id, each _connect() would route to a different
-        # VM and shell_id would never be found → reconnected=False always.
+        # VM and shell_id would never be found → reconnect would always fail.
         self.shell_id: str = shell_id or str(uuid.uuid4())
         self.session_id: str = session_id or str(uuid.uuid4())
-        self.reconnected: bool = False
         self.kicked: bool = False
-        self.bytes_dropped: int = 0
         self.exit_code: Optional[int] = None
 
     async def __aenter__(self) -> "ShellSession":
-        """Connect and read the initial metadata frame."""
+        """Connect to the shell WebSocket."""
         try:
             await self._connect()
         except Exception as exc:
@@ -191,9 +175,7 @@ class ShellSession:
     # ── Connection management ─────────────────────────────────────────────────
 
     async def _connect(self) -> None:
-        """Open the WebSocket and consume the initial STATUS metadata frame."""
-        self._pending_frames.clear()
-        self.reconnected = False
+        """Open the WebSocket and extract shellId from 101 response headers."""
         self.kicked = False
 
         auth = self._auth
@@ -249,75 +231,7 @@ class ShellSession:
             self.session_id = header_sid
             logger.debug("sessionId from 101 header: %r", header_sid)
 
-        await self._read_metadata_frame()
-        if self._ws is not None:
-            self._closed = False
-
-    async def _read_metadata_frame(self) -> None:
-        """Consume the first STATUS frame carrying connection confirmation.
-
-        Both the 0x03 confirmation and the first 0x01 stdout
-        frame are sent after upgrade but their order is non-deterministic.  We
-        wait for a 0x03 frame with metadata.shellId.  Any 0x01 frames
-        that arrive first are stashed in self._pending_frames so __anext__ can
-        yield them in order.
-        """
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + _DEFAULT_METADATA_TIMEOUT
-        while True:
-            remaining = deadline - loop.time()
-            if remaining <= 0:
-                logger.warning(
-                    "STATUS confirmation not received within %.1fs (deadline exceeded "
-                    "processing earlier frames). Proceeding with client-generated "
-                    "shell_id=%r — reconnected flag may be incorrect.",
-                    _DEFAULT_METADATA_TIMEOUT,
-                    self.shell_id,
-                )
-                return
-            try:
-                raw = await asyncio.wait_for(self._ws.recv(), timeout=remaining)
-            except asyncio.TimeoutError:
-                logger.warning(
-                    "Timed out waiting for STATUS confirmation after %.1fs "
-                    "(server did not respond). Proceeding with client-generated "
-                    "shell_id=%r — reconnected flag may be incorrect.",
-                    _DEFAULT_METADATA_TIMEOUT,
-                    self.shell_id,
-                )
-                return
-            except (websockets.exceptions.ConnectionClosedOK, websockets.exceptions.ConnectionClosedError) as exc:
-                # Server closed before sending STATUS confirmation — session never became usable.
-                logger.warning("WebSocket closed before STATUS confirmation (shell_id=%r): %s", self.shell_id, exc)
-                self._ws = None
-                self._closed = True
-                raise
-            except Exception as exc:
-                logger.error("Unexpected error waiting for STATUS frame (shell_id=%r): %s", self.shell_id, exc)
-                self._ws = None
-                self._closed = True
-                raise
-            if not isinstance(raw, bytes):
-                continue
-            frame = self._framer.decode(raw)
-            if frame.channel == ShellChannel.STATUS:
-                try:
-                    status = frame.json()
-                    meta = status.get("metadata", {})
-                    if meta.get("shellId"):
-                        # This is the connection confirmation frame.
-                        self.shell_id = meta["shellId"]
-                        self.reconnected = bool(meta.get("reconnected", False))
-                        return
-                    else:
-                        # Termination status — stash for __anext__.
-                        self._pending_frames.append(frame)
-                        return
-                except (json.JSONDecodeError, KeyError):
-                    logger.warning("Received malformed STATUS frame during connect; skipping: %r", raw)
-            else:
-                # Non-STATUS frame (e.g. first stdout prompt) — stash for __anext__.
-                self._pending_frames.append(frame)
+        self._closed = False
 
     async def _run_inner_retry_loop(self, cfg: ReconnectConfig) -> bool:
         """Run one inner retry loop (up to max_retries attempts with exponential backoff).
@@ -332,9 +246,9 @@ class ShellSession:
             logger.info("Reconnect attempt %d (shell_id=%s)", attempt, self.shell_id)
             try:
                 await self._connect()
-                logger.info("Reconnected (reconnected=%s)", self.reconnected)
+                logger.info("Reconnected (shell_id=%s)", self.shell_id)
                 if cfg.on_reconnect is not None:
-                    result = cfg.on_reconnect(self.reconnected)
+                    result = cfg.on_reconnect()
                     if asyncio.iscoroutine(result):
                         await result
                 return True
@@ -464,14 +378,9 @@ class ShellSession:
             raise
 
     async def close(self) -> None:
-        """Send a graceful CLOSE frame and close the underlying WebSocket."""
+        """Close the underlying WebSocket (shell detaches, stays alive for reconnect window)."""
         self._closed = True
         if self._ws is not None:
-            try:
-                await self._ws.send(self._framer.encode_close())
-            except Exception as exc:
-                # Best-effort — the connection may already be gone.
-                logger.debug("Failed to send CLOSE frame during close() (shell_id=%r): %s", self.shell_id, exc)
             try:
                 await self._ws.close()
             except Exception as exc:
@@ -531,8 +440,7 @@ class ShellSession:
         automatic reconnect attempt using the same ``shell_id``.  The
         iterator resumes transparently — callers do not need to re-enter the
         context manager.  The ``on_reconnect`` callback fires after each
-        successful reconnect so callers can react to the ``reconnected`` flag
-        and the incoming buffered-output burst.
+        successful reconnect.
 
         close code 4000 ("kicked by new connection") MUST NOT trigger auto-reconnect.
         The iterator stops and sets ``self.kicked = True`` so callers can distinguish this case.
@@ -543,29 +451,6 @@ class ShellSession:
                 called, or when reconnect attempts are exhausted.
         """
         while True:
-            # Drain any frames buffered during the metadata handshake first.
-            if self._pending_frames:
-                frame = self._pending_frames.popleft()
-                if frame.channel == ShellChannel.CLOSE:
-                    logger.debug(
-                        "CLOSE frame received from pending queue (shell_id=%r)",
-                        self.shell_id,
-                    )
-                    raise StopAsyncIteration from None
-                if frame.channel == ShellChannel.STATUS:
-                    try:
-                        status = frame.json()
-                        if self._is_termination_status(status):
-                            self.exit_code = self._parse_exit_code(status)
-                            self._closed = True
-                            return frame
-                    except (json.JSONDecodeError, KeyError):
-                        logger.warning(
-                            "Received malformed STATUS frame in pending queue; skipping termination check: %r",
-                            frame,
-                        )
-                return frame
-
             if self._closed or self._ws is None:
                 logger.debug("Session already closed or disconnected (shell_id=%r)", self.shell_id)
                 raise StopAsyncIteration from None
@@ -651,17 +536,7 @@ class ShellSession:
                 try:
                     status = frame.json()
                     if self._is_confirmation_status(status):
-                        # Second confirmation frame (post-drain) — carries
-                        # bytesDropped when the 256 KB ring buffer overflowed.
-                        # Swallow it; surface bytesDropped via attribute + warning.
-                        dropped = status.get("metadata", {}).get("bytesDropped", 0)
-                        if dropped:
-                            self.bytes_dropped = dropped
-                            logger.warning(
-                                "%d bytes of PTY output lost during disconnect (ring buffer overflow) (shell_id=%r)",
-                                dropped,
-                                self.shell_id,
-                            )
+                        # Confirmation frame — silently swallow.
                         continue
                     if self._is_termination_status(status):
                         # Shell exited — mark closed so the next __anext__ call

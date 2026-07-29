@@ -109,7 +109,6 @@ class ShellFramer:
         # Encode outbound frames
         ws.send(framer.encode_stdin("ls /workspace\\n"))
         ws.send(framer.encode_resize(220, 50))
-        ws.send(framer.encode_close())
     """
 
     MAX_FRAME_SIZE = 64 * 1024  # matches DP WebSocketFlowController limit
@@ -204,11 +203,3 @@ class ShellFramer:
             Binary WebSocket frame ready to send.
         """
         return bytes([ShellChannel.HEARTBEAT])
-
-    def encode_close(self) -> bytes:
-        """Encode a graceful-shutdown CLOSE frame (empty payload).
-
-        Returns:
-            Binary WebSocket frame ready to send.
-        """
-        return bytes([ShellChannel.CLOSE])
