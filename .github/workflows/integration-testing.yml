@@ -69,37 +69,26 @@ jobs:
             console.log('✓ Safety check passed - no sensitive files modified');
             return 'true';
 
-      - name: Collaborator Check
+      - name: Check authorization
+        id: authz
+        uses: aws/agentcore-devx-devtools/.github/actions/check-collaborator@31aa3b031a86664e29861d68956e44b07cf21a74
+        with:
+          subject: ${{ github.event.pull_request.user.login || github.actor }}
+          required-permission: write
+
+      - name: Map authorization to approval environment
         uses: actions/github-script@v8
         id: collab-check
+        env:
+          IS_AUTHORIZED: ${{ steps.authz.outputs.is-authorized }}
         with:
           result-encoding: string
           script: |
-            let username;
-            try {
-              if (context.payload.pull_request) {
-                username = context.payload.pull_request.user.login;
-              } else {
-                username = context.actor;
-                console.log(`No pull request context found, checking permissions for actor: ${username}`);
-              }
-
-              const permissionResponse = await github.rest.repos.getCollaboratorPermissionLevel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                username: username,
-              });
-              const permission = permissionResponse.data.permission;
-              const hasWriteAccess = ['write', 'admin'].includes(permission);
-              if (!hasWriteAccess) {
-                console.log(`User ${username} does not have write access to the repository (permission: ${permission})`);
-                return "manual-approval"
-              } else {
-                console.log(`Verified ${username} has write access. Auto Approving PR Checks.`)
-                return "auto-approve"
-              }
-            } catch (error) {
-              console.log(`Permission check failed for ${username}. Requiring Manual Approval to run PR Checks. Error: ${error.message}`);
+            if (process.env.IS_AUTHORIZED === 'true') {
+              console.log('User has write access. Auto Approving PR Checks.');
+              return "auto-approve"
+            } else {
+              console.log('User does not have write access. Requiring Manual Approval to run PR Checks.');
               return "manual-approval"
             }
 
@@ -165,12 +154,20 @@ jobs:
             extra-deps: ""
             ignore: "--ignore=tests_integ/tools/test_browser_proxy.py"
     steps:
+      - name: Fetch secrets from Secrets Manager
+        uses: aws/agentcore-devx-devtools/.github/actions/fetch-secrets@31aa3b031a86664e29861d68956e44b07cf21a74
+        with:
+          role-arn: ${{ secrets.WORKFLOW_SECRETS_READER_ROLE_ARN }}
+          shared: AGENTCORE_INTEG_TEST_ROLE
+          repo: MEMORY_KINESIS_ARN MEMORY_ROLE_ARN MEMORY_PREPOPULATED_ID RESOURCE_POLICY_TEST_ARN RESOURCE_POLICY_TEST_PRINCIPAL GATEWAY_ROLE_ARN GATEWAY_LAMBDA_ARN KB_ROLE_ARN EVAL_ROLE_ARN EVAL_LOG_GROUP RUNTIME_ROLE_ARN RUNTIME_S3_CODE_URI COGNITO_POOL_ID COGNITO_CLIENT_ID COGNITO_CLIENT_SECRET
+
       - name: Configure Credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
-         role-to-assume: ${{ secrets.AGENTCORE_INTEG_TEST_ROLE }}
+         role-to-assume: ${{ env.AGENTCORE_INTEG_TEST_ROLE }}
          aws-region: us-west-2
          mask-aws-account-id: true
+         unset-current-credentials: true
 
       - name: Checkout PR head commit
         uses: actions/checkout@v6
@@ -195,21 +192,21 @@ jobs:
         env:
           AWS_REGION: us-west-2
           PYTHONUNBUFFERED: 1
-          MEMORY_KINESIS_ARN: ${{ secrets.MEMORY_KINESIS_ARN }}
-          MEMORY_ROLE_ARN: ${{ secrets.MEMORY_ROLE_ARN }}
-          MEMORY_PREPOPULATED_ID: ${{ secrets.MEMORY_PREPOPULATED_ID }}
-          RESOURCE_POLICY_TEST_ARN: ${{ secrets.RESOURCE_POLICY_TEST_ARN }}
-          RESOURCE_POLICY_TEST_PRINCIPAL: ${{ secrets.RESOURCE_POLICY_TEST_PRINCIPAL }}
-          GATEWAY_ROLE_ARN: ${{ secrets.GATEWAY_ROLE_ARN }}
-          GATEWAY_LAMBDA_ARN: ${{ secrets.GATEWAY_LAMBDA_ARN }}
-          KB_ROLE_ARN: ${{ secrets.KB_ROLE_ARN }}
-          EVAL_ROLE_ARN: ${{ secrets.EVAL_ROLE_ARN }}
-          EVAL_LOG_GROUP: ${{ secrets.EVAL_LOG_GROUP }}
-          RUNTIME_ROLE_ARN: ${{ secrets.RUNTIME_ROLE_ARN }}
-          RUNTIME_S3_CODE_URI: ${{ secrets.RUNTIME_S3_CODE_URI }}
-          COGNITO_POOL_ID: ${{ secrets.COGNITO_POOL_ID }}
-          COGNITO_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID }}
-          COGNITO_CLIENT_SECRET: ${{ secrets.COGNITO_CLIENT_SECRET }}
+          MEMORY_KINESIS_ARN: ${{ env.MEMORY_KINESIS_ARN }}
+          MEMORY_ROLE_ARN: ${{ env.MEMORY_ROLE_ARN }}
+          MEMORY_PREPOPULATED_ID: ${{ env.MEMORY_PREPOPULATED_ID }}
+          RESOURCE_POLICY_TEST_ARN: ${{ env.RESOURCE_POLICY_TEST_ARN }}
+          RESOURCE_POLICY_TEST_PRINCIPAL: ${{ env.RESOURCE_POLICY_TEST_PRINCIPAL }}
+          GATEWAY_ROLE_ARN: ${{ env.GATEWAY_ROLE_ARN }}
+          GATEWAY_LAMBDA_ARN: ${{ env.GATEWAY_LAMBDA_ARN }}
+          KB_ROLE_ARN: ${{ env.KB_ROLE_ARN }}
+          EVAL_ROLE_ARN: ${{ env.EVAL_ROLE_ARN }}
+          EVAL_LOG_GROUP: ${{ env.EVAL_LOG_GROUP }}
+          RUNTIME_ROLE_ARN: ${{ env.RUNTIME_ROLE_ARN }}
+          RUNTIME_S3_CODE_URI: ${{ env.RUNTIME_S3_CODE_URI }}
+          COGNITO_POOL_ID: ${{ env.COGNITO_POOL_ID }}
+          COGNITO_CLIENT_ID: ${{ env.COGNITO_CLIENT_ID }}
+          COGNITO_CLIENT_SECRET: ${{ env.COGNITO_CLIENT_SECRET }}
           PYTEST_PATH: ${{ matrix.path }}
           PYTEST_IGNORE: ${{ matrix.ignore }}
         id: tests

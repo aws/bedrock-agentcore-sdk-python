@@ -159,12 +159,20 @@ jobs:
             extra-deps: ""
 
     steps:
+      - name: Fetch secrets from Secrets Manager
+        uses: aws/agentcore-devx-devtools/.github/actions/fetch-secrets@31aa3b031a86664e29861d68956e44b07cf21a74
+        with:
+          role-arn: ${{ secrets.WORKFLOW_SECRETS_READER_ROLE_ARN }}
+          shared: AGENTCORE_INTEG_TEST_ROLE
+          repo: MEMORY_KINESIS_ARN MEMORY_ROLE_ARN MEMORY_PREPOPULATED_ID RESOURCE_POLICY_TEST_ARN RESOURCE_POLICY_TEST_PRINCIPAL
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.AGENTCORE_INTEG_TEST_ROLE }}
+          role-to-assume: ${{ env.AGENTCORE_INTEG_TEST_ROLE }}
           aws-region: us-west-2
           mask-aws-account-id: true
+          unset-current-credentials: true
 
       # Check out the PR branch — we need the full source to build the library.
       - name: Checkout PR branch (library source)
@@ -231,11 +239,11 @@ jobs:
         env:
           AWS_REGION: us-west-2
           PYTHONUNBUFFERED: "1"
-          MEMORY_KINESIS_ARN: ${{ secrets.MEMORY_KINESIS_ARN }}
-          MEMORY_ROLE_ARN: ${{ secrets.MEMORY_ROLE_ARN }}
-          MEMORY_PREPOPULATED_ID: ${{ secrets.MEMORY_PREPOPULATED_ID }}
-          RESOURCE_POLICY_TEST_ARN: ${{ secrets.RESOURCE_POLICY_TEST_ARN }}
-          RESOURCE_POLICY_TEST_PRINCIPAL: ${{ secrets.RESOURCE_POLICY_TEST_PRINCIPAL }}
+          MEMORY_KINESIS_ARN: ${{ env.MEMORY_KINESIS_ARN }}
+          MEMORY_ROLE_ARN: ${{ env.MEMORY_ROLE_ARN }}
+          MEMORY_PREPOPULATED_ID: ${{ env.MEMORY_PREPOPULATED_ID }}
+          RESOURCE_POLICY_TEST_ARN: ${{ env.RESOURCE_POLICY_TEST_ARN }}
+          RESOURCE_POLICY_TEST_PRINCIPAL: ${{ env.RESOURCE_POLICY_TEST_PRINCIPAL }}
           BASELINE_TAG: ${{ needs.resolve-tag.outputs.tag }}
           TEST_GROUP: ${{ matrix.group }}
           PYTEST_PATH: ${{ matrix.path }}

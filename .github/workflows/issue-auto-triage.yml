@@ -1,0 +1,55 @@
+name: Issue Auto Triage
+
+# Classifies new issues with an LLM (Bedrock via strands-agents/devtools
+# issue-labeler) and applies labels from a hardcoded allowlist. The model has
+# no tools, no shell, and no GitHub access — it returns a structured object
+# whose label field is an enum built from the config allowlist, so the worst
+# a prompt injection in an issue body can achieve is a mislabel.
+#
+# Labeler configs live in .github/labelers/. Each job is an independent
+# classification concern and they run in parallel.
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+  id-token: write
+  contents: read
+
+jobs:
+  label-type:
+    name: "Label: Type"
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/labelers
+          sparse-checkout-cone-mode: false
+      # strands-agents/devtools/issue-labeler pinned to a reviewed commit
+      # (main as of 2026-07-17). Bump deliberately, not automatically.
+      - uses: strands-agents/devtools/issue-labeler@5e50593798905abfbb31cc709f5ac58a2992b03a
+        with:
+          aws_role_arn: ${{ secrets.BEDROCK_SECURITY_REVIEW_ROLE_ARN }}
+          config_path: '.github/labelers/type.yml'
+          max_labels: '1'
+
+  label-severity:
+    name: "Label: Severity"
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/labelers
+          sparse-checkout-cone-mode: false
+      - uses: strands-agents/devtools/issue-labeler@5e50593798905abfbb31cc709f5ac58a2992b03a
+        with:
+          aws_role_arn: ${{ secrets.BEDROCK_SECURITY_REVIEW_ROLE_ARN }}
+          config_path: '.github/labelers/severity.yml'
+          max_labels: '1'
+          # Severity calls for concrete evidence (stack traces, repro steps),
+          # which the default 1000-char truncation would often cut off.
+          max_body_length: '4000'

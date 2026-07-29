@@ -98,13 +98,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     - Consistent with existing Strands Session managers (such as: FileSessionManager, S3SessionManager)
     """
 
-    # Class-level timestamp tracking for monotonic ordering
-    _timestamp_lock = threading.Lock()
-    _last_timestamp: Optional[datetime] = None
+    def _get_monotonic_timestamp(self, desired_timestamp: Optional[datetime] = None) -> datetime:
+        """Get a monotonically increasing timestamp for this session.
 
-    @classmethod
-    def _get_monotonic_timestamp(cls, desired_timestamp: Optional[datetime] = None) -> datetime:
-        """Get a monotonically increasing timestamp.
+        Ties are broken at millisecond granularity, which is the resolution
+        AgentCore Memory stores and orders ``eventTimestamp`` at.
 
         Args:
             desired_timestamp (Optional[datetime]): The desired timestamp. If None, uses current time.
@@ -115,20 +113,18 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if desired_timestamp is None:
             desired_timestamp = datetime.now(timezone.utc)
 
-        with cls._timestamp_lock:
-            if cls._last_timestamp is None:
-                cls._last_timestamp = desired_timestamp
-                return desired_timestamp
+        # Floor to milliseconds — the resolution AgentCore Memory actually stores
+        # and orders eventTimestamp at. Comparing at microsecond precision would
+        # miss two events that fall in the same millisecond but different
+        # microseconds: they pass the tie check here yet collide once stored.
+        desired_timestamp = desired_timestamp.replace(microsecond=(desired_timestamp.microsecond // 1000) * 1000)
 
-            # Why the 1 second check? Because Boto3 does NOT support sub 1 second resolution.
-            if desired_timestamp <= cls._last_timestamp + timedelta(seconds=1):
-                # Increment by 1 second to ensure ordering
-                new_timestamp = cls._last_timestamp + timedelta(seconds=1)
-            else:
-                new_timestamp = desired_timestamp
-
-            cls._last_timestamp = new_timestamp
-            return new_timestamp
+        with self._timestamp_lock:
+            if self._last_timestamp is not None and desired_timestamp <= self._last_timestamp:
+                # Break the tie at millisecond granularity (the service's resolution).
+                desired_timestamp = self._last_timestamp + timedelta(milliseconds=1)
+            self._last_timestamp = desired_timestamp
+            return desired_timestamp
 
     def __init__(
         self,
@@ -158,6 +154,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
         self.has_existing_agent = False
+
+        # Instance-scoped monotonic-timestamp state. Per-instance so concurrent
+        # managers for different sessions in one process do not perturb each
+        # other's ordering.
+        self._timestamp_lock = threading.Lock()
+        self._last_timestamp: Optional[datetime] = None
 
         # Batching support - stores pre-processed messages
         self._message_buffer: list[BufferedMessage] = []

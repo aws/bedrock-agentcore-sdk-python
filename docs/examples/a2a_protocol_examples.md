@@ -4,11 +4,20 @@ This document explains how to serve your agent using the [A2A (Agent-to-Agent) p
 
 ## Installation
 
-A2A support requires the optional `a2a` extra:
+Use the `a2a` extra for a2a-sdk 0.3, including the current Strands A2A integration:
 
 ```bash
 pip install "bedrock-agentcore[a2a]"
 ```
+
+Use the mutually exclusive `a2a-v1` extra to opt in to A2A protocol v1:
+
+```bash
+pip install "bedrock-agentcore[a2a-v1]"
+```
+
+The runtime adapter detects the installed SDK major version. Do not install both
+extras in the same environment.
 
 ## Quick Start
 
@@ -120,7 +129,7 @@ if __name__ == "__main__":
 
 ## API Reference
 
-### `serve_a2a(executor, agent_card=None, *, port=9000, host=None, ...)`
+### `serve_a2a(executor, agent_card=None, *, port=None, host=None, ...)`
 
 Starts a Bedrock-compatible A2A server with `uvicorn`.
 
@@ -128,7 +137,7 @@ Starts a Bedrock-compatible A2A server with `uvicorn`.
 |-----------|------|---------|-------------|
 | `executor` | `AgentExecutor` | required | An a2a-sdk `AgentExecutor` that implements the agent logic |
 | `agent_card` | `AgentCard` | `None` | Agent metadata. Auto-built from executor if omitted (works best with Strands) |
-| `port` | `int` | `9000` | Port to serve on |
+| `port` | `int \| None` | `None` | Port to serve on. Uses `PORT`, then `9000`, when omitted |
 | `host` | `str` | `None` | Host to bind to. Auto-detected: `0.0.0.0` in Docker, `127.0.0.1` otherwise |
 | `task_store` | `TaskStore` | `None` | Custom task store; defaults to `InMemoryTaskStore` |
 | `context_builder` | `CallContextBuilder` | `None` | Custom context builder; defaults to `BedrockCallContextBuilder` |

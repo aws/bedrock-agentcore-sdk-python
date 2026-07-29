@@ -1,0 +1,13 @@
+instructions: |
+  Classify the issue by what the author is asking for, not by tone.
+  - "bug" requires a claim that existing SDK behavior is broken or incorrect.
+  - "enhancement" covers new features, API additions, and improvements to
+    existing behavior that is working as documented.
+  - "question" covers usage help, clarification requests, and "how do I"
+    issues, even when phrased as a problem report.
+  If the issue is a bug report that also proposes a fix, label it "bug".
+
+labels:
+  bug: "Existing SDK behavior is broken, incorrect, or crashes."
+  enhancement: "Request for a new feature, API addition, or improvement to working behavior."
+  question: "Usage question, clarification request, or how-do-I issue."

@@ -4,6 +4,7 @@ Provides a Starlette-based web server that wraps user functions as HTTP endpoint
 """
 
 import asyncio
+import contextlib
 import contextvars
 import functools
 import inspect
@@ -725,29 +726,80 @@ class BedrockAgentCoreApp(Starlette):
         a thread-safe queue and yielded synchronously. Starlette's StreamingResponse
         iterates this sync generator via iterate_in_threadpool, so the main event
         loop is never blocked.
+
+        The producer must never block the shared worker loop, or a full queue
+        would freeze it and starve every other session. When the consumer stops
+        (SSE client disconnect), the producer task is cancelled so it is torn
+        down even while parked awaiting a slow downstream, and a stop event
+        keeps a queue-full producer from spinning before the cancel lands.
         """
         worker_loop = self._ensure_worker_loop()
         q: queue.Queue = queue.Queue(maxsize=100)
         _DONE = object()
+        stop = threading.Event()
+        task_cell: dict[str, asyncio.Task] = {}
 
         async def _produce() -> None:
             _restore_context(ctx)
             try:
                 async for chunk in async_gen:
-                    q.put((True, chunk))
-                q.put((True, _DONE))
+                    await _offer((True, chunk))
+                    if stop.is_set():
+                        return
+                await _offer((True, _DONE))
+            except asyncio.CancelledError:
+                # Consumer disconnected; nothing reads the queue anymore. Let the
+                # cancellation unwind so the finally below still closes the source.
+                raise
             except BaseException as e:
-                q.put((False, e))
+                await _offer((False, e))
+            finally:
+                # Ensure the source generator releases its resources if the
+                # consumer disconnected mid-stream.
+                aclose = getattr(async_gen, "aclose", None)
+                if aclose is not None:
+                    with contextlib.suppress(Exception):
+                        await aclose()
 
-        worker_loop.call_soon_threadsafe(lambda: worker_loop.create_task(_produce()))
+        async def _offer(item: Any) -> None:
+            """Put an item without ever blocking the worker loop.
 
-        while True:
-            ok, value = q.get()
-            if not ok:
-                raise value
-            if value is _DONE:
-                break
-            yield value
+            Retries with a short async sleep while the queue is full so the loop
+            stays free to run other coroutines. Bails out if the consumer stopped.
+            """
+            while not stop.is_set():
+                try:
+                    q.put_nowait(item)
+                    return
+                except queue.Full:
+                    await asyncio.sleep(0.01)
+
+        def _start() -> None:
+            task_cell["task"] = worker_loop.create_task(_produce())
+
+        worker_loop.call_soon_threadsafe(_start)
+
+        try:
+            while True:
+                ok, value = q.get()
+                if not ok:
+                    raise value
+                if value is _DONE:
+                    break
+                yield value
+        finally:
+            # Consumer is done or the client disconnected (GeneratorExit). Set the
+            # stop flag (unblocks a queue-full producer that hasn't started its
+            # await yet) and cancel the task so a producer parked in a mid-chunk
+            # await is torn down immediately instead of leaking until it returns.
+            stop.set()
+
+            def _cancel() -> None:
+                task = task_cell.get("task")
+                if task is not None and not task.done():
+                    task.cancel()
+
+            worker_loop.call_soon_threadsafe(_cancel)
 
     async def _invoke_handler(self, handler: Callable, request_context: Any, takes_context: bool, payload: Any) -> Any:
         """Dispatch handler execution based on handler type.

@@ -6,6 +6,7 @@ applications to start, stop, and invoke code execution in a managed sandbox envi
 
 import logging
 import re
+import shlex
 import uuid
 from contextlib import contextmanager
 from typing import Any, Dict, Generator, List, Optional, Union
@@ -20,8 +21,11 @@ from .config import Certificate
 
 DEFAULT_IDENTIFIER = "aws.codeinterpreter.v1"
 
+# Allowlist for pip package specifiers. The extras group is restricted to valid
+# extra names (comma-separated identifiers) rather than allowing arbitrary
+# characters, so only well-formed package specifiers are accepted.
 VALID_PACKAGE_NAME = re.compile(
-    r"^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?(\[.*\])?(==|>=|<=|!=|~=|>|<)?[a-zA-Z0-9.*]*$"
+    r"^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?(\[[a-zA-Z0-9._,\-]*\])?(==|>=|<=|!=|~=|>|<)?[a-zA-Z0-9.*]*$"
 )
 DEFAULT_TIMEOUT = 900
 
@@ -606,7 +610,8 @@ class CodeInterpreter:
             if not VALID_PACKAGE_NAME.match(pkg):
                 raise ValueError(f"Invalid package name: {pkg}")
 
-        packages_str = " ".join(packages)
+        # Quote each argument so it is passed to the command as a single literal token.
+        packages_str = " ".join(shlex.quote(pkg) for pkg in packages)
         upgrade_flag = "--upgrade " if upgrade else ""
         command = f"pip install {upgrade_flag}{packages_str}"
 
