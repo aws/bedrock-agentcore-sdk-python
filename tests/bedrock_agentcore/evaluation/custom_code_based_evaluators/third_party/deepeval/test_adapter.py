@@ -201,7 +201,7 @@ class TestDeepEvalAdapterErrors:
 
         assert isinstance(result, EvaluatorOutput)
         assert result.errorCode == "FIELD_EXTRACTION_ERROR"
-        assert result.label == "Error"
+        assert result.label is None
 
     def test_missing_input_returns_error(self):
         spans = [

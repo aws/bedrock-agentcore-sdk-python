@@ -70,15 +70,10 @@ class AutoEvalsAdapter(BaseAdapter):
                 if not result.actual_output:
                     missing.append("actual_output")
                 metric_name = type(self.metric).__name__
-                msg = (
-                    f"Field(s) {missing} required by {metric_name} but not found in evaluation event. "
-                    f"Provide a custom_mapper or ensure spans contain the necessary data."
-                )
                 return EvaluatorOutput(
-                    label="Error",
-                    explanation=msg,
                     errorCode="MISSING_REQUIRED_FIELD",
-                    errorMessage=msg,
+                    errorMessage=f"Field(s) {missing} required by {metric_name} but not found in evaluation event. "
+                    f"Provide a custom_mapper or ensure spans contain the necessary data.",
                 )
             kwargs: Dict[str, Any] = {
                 "input": result.input,
