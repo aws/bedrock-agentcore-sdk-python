@@ -83,8 +83,7 @@ evaluator = create_strands_evaluator("Builtin.Helpfulness")
 
 # Run evaluations
 experiment = Experiment(cases=cases, evaluators=[evaluator])
-reports = experiment.run_evaluations(task_fn)
-report = reports[0]
+report = experiment.run_evaluations(task_fn)
 
 # View results
 print(f"Overall score: {report.overall_score:.2f}")
@@ -175,8 +174,7 @@ def task_fn(case):
 
 evaluator = create_strands_evaluator("Builtin.Helpfulness")
 experiment = Experiment(cases=cases, evaluators=[evaluator])
-reports = experiment.run_evaluations(task_fn)
-report = reports[0]
+report = experiment.run_evaluations(task_fn)
 
 print(f"Overall score: {report.overall_score:.2f}")
 ```
