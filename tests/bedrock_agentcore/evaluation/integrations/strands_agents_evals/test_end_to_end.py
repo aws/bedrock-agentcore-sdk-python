@@ -65,8 +65,7 @@ class TestEndToEndIntegration:
         with patch("boto3.client", return_value=mock_boto_client):
             evaluator = create_strands_evaluator("Builtin.Helpfulness")
             experiment = Experiment(cases=cases, evaluators=[evaluator])
-            reports = experiment.run_evaluations(task_fn)
-            report = reports[0]
+            report = experiment.run_evaluations(task_fn)
 
             # Should return 0 score for empty trajectory
             assert report.overall_score == 0.0
