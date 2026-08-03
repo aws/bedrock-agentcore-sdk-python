@@ -153,7 +153,7 @@ dev = [
     "strands-agents-evals>=1.0.3,<2.0.0",
     "deepeval>=3.5.0,<5.0.0",
     "autoevals>=0.3.0,<1.0.0",
-    "ragas>=0.2.0,<1.0.0",
+    "ragas>=0.4.3,<1.0.0",
     "langchain>=1.0.0",
     "langgraph>=1.0.0",
     "langchain-mcp-adapters>=0.1.0",
@@ -195,7 +195,7 @@ autoevals = [
     "strands-agents-evals>=1.0.3,<2.0.0",
 ]
 ragas = [
-    "ragas>=0.2.0,<1.0.0",
+    "ragas>=0.4.3,<1.0.0",
     "strands-agents-evals>=1.0.3,<2.0.0",
 ]
 

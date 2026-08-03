@@ -120,7 +120,7 @@ jobs:
           - group: evaluation
             path: tests_integ/evaluation
             timeout: 15
-            extra-deps: "strands-agents-evals deepeval autoevals"
+            extra-deps: "strands-agents-evals deepeval autoevals ragas"
             ignore: ""
           - group: services
             path: tests_integ/services

@@ -17,8 +17,9 @@ from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.base 
 
 logger = logging.getLogger(__name__)
 
-# Separators used to embed reference/context in user messages when the trace
-# format has no dedicated fields for them (e.g. build_adot_docs() recipes).
+# Separators for ground truth and retrieval context embedded in the user
+# message. ADOT trace formats have no dedicated fields for these, so dataset
+# preparation commonly appends them to the user input with known markers.
 _REFERENCE_SEPARATOR = "\n\nReference Answer:\n"
 _CONTEXT_SEPARATOR = "\n\nContext:\n"
 
