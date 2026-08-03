@@ -1,10 +1,15 @@
-"""RAGAS adapter for AgentCore code-based evaluators."""
+"""RAGAS adapter for AgentCore code-based evaluators.
+
+Scores metrics through RAGAS's per-sample APIs (``metric.single_turn_score()``
+for legacy metrics, ``metric.score(**kwargs)`` for ``ragas.metrics.collections``
+metrics) rather than the batch ``ragas.evaluate()`` pipeline. This keeps the
+adapter free of the heavyweight ``datasets``/``pyarrow``/``pandas`` stack, so
+it can run in zip-based Lambda deployments with a slim ragas install.
+"""
 
 import logging
+import math
 from typing import Any, Callable, Dict, List, Optional
-
-from datasets import Dataset
-from ragas import evaluate
 
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.models import EvaluatorInput, EvaluatorOutput
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.base import BaseAdapter
@@ -17,23 +22,38 @@ _REFERENCE_SEPARATOR = "\n\nReference Answer:\n"
 _CONTEXT_SEPARATOR = "\n\nContext:\n"
 
 
-class RagasAdapter(BaseAdapter):
+class RAGASAdapter(BaseAdapter):
     """Adapter that runs a RAGAS metric against AgentCore evaluation events.
+
+    Supports both RAGAS metric generations:
+
+    - Legacy metrics (``ragas.metrics``): scored via
+      ``metric.single_turn_score(SingleTurnSample(...))``
+    - Collections metrics (``ragas.metrics.collections``) and decorator-based
+      custom metrics (``@discrete_metric`` / ``@numeric_metric``): scored via
+      ``metric.score(**fields)``
+
+    Numeric results produce value + Pass/Fail label; discrete (string-valued)
+    metrics produce a categorical label. When the metric provides reasoning
+    (``MetricResult.reason``), it is surfaced as the explanation.
+
+    The adapter evaluates one event at a time by design; it does not use the
+    batch ``ragas.evaluate()`` API. Multi-turn metrics are not supported.
 
     Example (default span mapping)::
 
         from ragas.metrics import Faithfulness
         from langchain_aws import ChatBedrockConverse
         from ragas.llms import LangchainLLMWrapper
-        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.ragas import RagasAdapter
+        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.ragas import RAGASAdapter
 
         eval_llm = LangchainLLMWrapper(ChatBedrockConverse(
             model_id="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
             region_name="us-east-1",
         ))
-        adapter = RagasAdapter(metric=Faithfulness(), llm=eval_llm)
+        adapter = RAGASAdapter(metric=Faithfulness(), llm=eval_llm)
 
-    Example (custom mapper returning RAGAS dataset dict)::
+    Example (custom mapper returning RAGAS field dict)::
 
         from typing import Dict, Any
 
@@ -44,7 +64,7 @@ class RagasAdapter(BaseAdapter):
                 "retrieved_contexts": ["some context"],
             }
 
-        adapter = RagasAdapter(
+        adapter = RAGASAdapter(
             metric=Faithfulness(),
             llm=eval_llm,
             custom_mapper=my_mapper,
@@ -62,9 +82,10 @@ class RagasAdapter(BaseAdapter):
 
         Args:
             metric: A RAGAS metric instance (e.g., Faithfulness(), ContextRecall()).
-                Must have a .name attribute and support ragas.evaluate().
+                Legacy (``ragas.metrics``) and collections
+                (``ragas.metrics.collections``) metrics are both supported.
             custom_mapper: Optional callable that receives the EvaluatorInput and
-                returns a dict with RAGAS-compatible dataset column keys
+                returns a dict with RAGAS-native field keys
                 (user_input, response, reference, retrieved_contexts, reference_contexts).
                 Bypasses default span mapping when provided.
             llm: Optional LLM wrapper to set on the metric (e.g., LangchainLLMWrapper).
@@ -83,9 +104,7 @@ class RagasAdapter(BaseAdapter):
     def _run(self, evaluator_input: EvaluatorInput) -> EvaluatorOutput:
         """Run the RAGAS metric pipeline."""
         if self.custom_mapper is not None:
-            dataset_dict = self.custom_mapper(evaluator_input)
-            # Wrap scalar values in lists for Dataset.from_dict
-            dataset_dict = {k: [v] for k, v in dataset_dict.items()}
+            fields = self.custom_mapper(evaluator_input)
         else:
             result = self._default_extract(evaluator_input)
             if not result.input or not result.actual_output:
@@ -100,81 +119,203 @@ class RagasAdapter(BaseAdapter):
                     errorMessage=f"Field(s) {missing} required by {metric_name} but not found in evaluation event. "
                     f"Provide a custom_mapper or ensure spans contain the necessary data.",
                 )
+            fields = self._build_fields(result)
 
-            # Parse embedded reference and context from the user_input field.
-            # Dataset recipes may embed these as:
-            #   "{user_input}\n\nContext:\n{context}\n\nReference Answer:\n{reference}"
-            # since ADOT trace formats have no dedicated reference/context fields.
-            user_input = result.input
-            embedded_reference: Optional[str] = None
-            embedded_context: Optional[str] = None
-
-            if _REFERENCE_SEPARATOR in user_input:
-                user_input, embedded_reference = user_input.split(_REFERENCE_SEPARATOR, 1)
-
-            if _CONTEXT_SEPARATOR in user_input:
-                user_input, embedded_context = user_input.split(_CONTEXT_SEPARATOR, 1)
-
-            # Map SpanMapResult fields to RAGAS dataset columns
-            dataset_dict: Dict[str, list] = {
-                "user_input": [user_input],
-                "response": [result.actual_output],
-            }
-
-            # Reference priority: reference_inputs > embedded > assertions
-            if result.expected_output:
-                dataset_dict["reference"] = [result.expected_output]
-            elif embedded_reference:
-                dataset_dict["reference"] = [embedded_reference]
-            elif result.assertions:
-                dataset_dict["reference"] = ["\n".join(result.assertions)]
-
-            # Retrieval context priority: span tool results > embedded
-            if result.retrieval_context:
-                dataset_dict["retrieved_contexts"] = [result.retrieval_context]
-                dataset_dict["reference_contexts"] = [result.retrieval_context]
-            elif embedded_context:
-                dataset_dict["retrieved_contexts"] = [[embedded_context]]
-                dataset_dict["reference_contexts"] = [[embedded_context]]
-
-        dataset = Dataset.from_dict(dataset_dict)
-
-        # Run RAGAS evaluation
-        eval_result = evaluate(dataset=dataset, metrics=[self.metric])
-        df = eval_result.to_pandas()
-
-        # Find the score column — RAGAS uses metric.name as column prefix,
-        # sometimes with a suffix like "(mode=f1)"
-        score_col = None
-        for col in df.columns:
-            if col.startswith(self.metric.name):
-                score_col = col
-                break
-
-        if score_col is None:
-            # Fallback: find any numeric column that's not an input field
-            input_cols = {"user_input", "response", "reference", "retrieved_contexts", "reference_contexts"}
-            for col in df.columns:
-                if col not in input_cols and df[col].dtype in ("float64", "int64", "float32"):
-                    score_col = col
-                    break
-
-        if score_col is None:
+        # Dispatch on metric generation. Legacy single-turn metrics expose
+        # single_turn_score(); collections metrics expose score(**kwargs).
+        if hasattr(self.metric, "single_turn_score"):
+            outcome = self._score_legacy(fields)
+        elif self._is_legacy_multi_turn():
             return EvaluatorOutput(
-                errorCode="NO_SCORE_FOUND",
-                errorMessage=(
-                    f"RAGAS evaluate() produced no score column for metric "
-                    f"'{self.metric.name}'. Columns: {list(df.columns)}"
-                ),
+                errorCode="UNSUPPORTED_METRIC",
+                errorMessage=f"{type(self.metric).__name__} is a multi-turn RAGAS metric, which is not "
+                f"supported by RAGASAdapter. Use a single-turn metric.",
+            )
+        elif hasattr(self.metric, "ascore") and hasattr(self.metric, "score"):
+            outcome = self._score_collections(fields)
+        else:
+            return EvaluatorOutput(
+                errorCode="UNSUPPORTED_METRIC",
+                errorMessage=f"{type(self.metric).__name__} does not expose a supported RAGAS scoring "
+                f"API (single_turn_score or score). Pass a ragas.metrics or "
+                f"ragas.metrics.collections metric instance.",
             )
 
-        score = float(df[score_col].iloc[0])
+        if isinstance(outcome, EvaluatorOutput):
+            return outcome
+        score, metric_reason = outcome
+
+        if math.isnan(score):
+            return EvaluatorOutput(
+                errorCode="INVALID_SCORE",
+                errorMessage=f"RAGAS metric '{self._metric_name()}' returned NaN. This usually means "
+                f"required fields were empty or the metric could not be computed.",
+            )
 
         # Some metrics (e.g. SemanticSimilarity) set threshold=None explicitly;
         # getattr's default only applies when the attribute is missing entirely.
         threshold = getattr(self.metric, "threshold", None)
         threshold = threshold if threshold is not None else 0.5
         label = "Pass" if score >= threshold else "Fail"
-        reason = f"RAGAS {self.metric.name}: {score:.4f} (threshold={threshold})"
+        explanation = metric_reason or f"RAGAS {self._metric_name()}: {score:.4f} (threshold={threshold})"
 
-        return EvaluatorOutput(value=score, label=label, explanation=reason)
+        return EvaluatorOutput(value=score, label=label, explanation=explanation)
+
+    def _build_fields(self, result: Any) -> Dict[str, Any]:
+        r"""Map a SpanMapResult to RAGAS-native field names.
+
+        Also parses reference and context embedded in the user input field.
+        Dataset recipes may embed these as
+        ``"{user_input}\n\nContext:\n{context}\n\nReference Answer:\n{reference}"``
+        since ADOT trace formats have no dedicated reference/context fields.
+        """
+        user_input = result.input
+        embedded_reference: Optional[str] = None
+        embedded_context: Optional[str] = None
+
+        if _REFERENCE_SEPARATOR in user_input:
+            user_input, embedded_reference = user_input.split(_REFERENCE_SEPARATOR, 1)
+
+        if _CONTEXT_SEPARATOR in user_input:
+            user_input, embedded_context = user_input.split(_CONTEXT_SEPARATOR, 1)
+
+        fields: Dict[str, Any] = {
+            "user_input": user_input,
+            "response": result.actual_output,
+        }
+
+        # Reference priority: reference_inputs > embedded > assertions
+        if result.expected_output:
+            fields["reference"] = result.expected_output
+        elif embedded_reference:
+            fields["reference"] = embedded_reference
+        elif result.assertions:
+            fields["reference"] = "\n".join(result.assertions)
+
+        # Retrieval context priority: span tool results > embedded
+        if result.retrieval_context:
+            fields["retrieved_contexts"] = result.retrieval_context
+            fields["reference_contexts"] = result.retrieval_context
+        elif embedded_context:
+            fields["retrieved_contexts"] = [embedded_context]
+            fields["reference_contexts"] = [embedded_context]
+
+        return fields
+
+    def _score_legacy(self, fields: Dict[str, Any]) -> Any:
+        """Score with a legacy (``ragas.metrics``) single-turn metric.
+
+        Returns a ``(score, reason)`` tuple, or an EvaluatorOutput error.
+        """
+        from ragas.dataset_schema import SingleTurnSample
+
+        required = getattr(self.metric, "required_columns", {}).get("SINGLE_TURN", set())
+        missing = sorted(c for c in required if not fields.get(c))
+        if missing:
+            return self._missing_fields_error(missing)
+
+        sample_fields = {k: v for k, v in fields.items() if k in SingleTurnSample.model_fields}
+        sample = SingleTurnSample(**sample_fields)
+
+        try:
+            return float(self.metric.single_turn_score(sample)), None
+        except ImportError as e:
+            return self._missing_dependency_error(e)
+        except Exception as e:
+            hint = self._dependency_hint(e)
+            if hint:
+                return hint
+            raise
+
+    def _score_collections(self, fields: Dict[str, Any]) -> Any:
+        """Score with a collections (``ragas.metrics.collections``) metric.
+
+        Collections metrics declare their inputs as typed ``ascore()``
+        parameters, so filter the extracted fields to that signature.
+        Decorator-based metrics (``@discrete_metric`` / ``@numeric_metric``)
+        expose ``ascore(*args, **kwargs)`` instead; for those, all fields are
+        passed through and the metric validates its own inputs (pair them with
+        a custom_mapper whose keys match the wrapped function's parameters).
+
+        Returns a ``(score, reason)`` tuple, an EvaluatorOutput error, or a
+        categorical EvaluatorOutput for discrete (string-valued) metrics.
+        """
+        import inspect
+
+        params = inspect.signature(self.metric.ascore).parameters
+        if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+            kwargs = dict(fields)
+        else:
+            accepted = {name for name in params if name != "self"}
+            required = sorted(
+                name
+                for name, p in params.items()
+                if name != "self" and p.default is inspect.Parameter.empty and not fields.get(name)
+            )
+            if required:
+                return self._missing_fields_error(required)
+            kwargs = {k: v for k, v in fields.items() if k in accepted}
+
+        try:
+            result = self.metric.score(**kwargs)
+        except ImportError as e:
+            return self._missing_dependency_error(e)
+        except Exception as e:
+            hint = self._dependency_hint(e)
+            if hint:
+                return hint
+            raise
+
+        value = result.value
+        reason = getattr(result, "reason", None)
+        if isinstance(value, str):
+            # Discrete metrics return categorical labels with user-defined
+            # allowed_values; surface them as-is rather than guessing a number.
+            return EvaluatorOutput(label=value, explanation=reason)
+        return float(value), reason
+
+    def _is_legacy_multi_turn(self) -> bool:
+        """Check whether the metric is a legacy multi-turn-only metric."""
+        try:
+            from ragas.metrics.base import MultiTurnMetric
+        except ImportError:
+            return False
+        return isinstance(self.metric, MultiTurnMetric)
+
+    def _missing_fields_error(self, missing: List[str]) -> EvaluatorOutput:
+        """Build a MISSING_REQUIRED_FIELD error for the metric's declared inputs."""
+        return EvaluatorOutput(
+            errorCode="MISSING_REQUIRED_FIELD",
+            errorMessage=f"RAGAS metric '{self._metric_name()}' requires field(s) {missing} which were not "
+            f"found in the evaluation event. Provide ground truth via evaluationReferenceInputs, "
+            f"embed it in the user message, or supply a custom_mapper.",
+        )
+
+    def _missing_dependency_error(self, e: ImportError) -> EvaluatorOutput:
+        """Build a MISSING_DEPENDENCY error for packages absent from the environment."""
+        return EvaluatorOutput(
+            errorCode="MISSING_DEPENDENCY",
+            errorMessage=f"RAGAS metric '{self._metric_name()}' requires a package that is not "
+            f"installed in this environment: {e}. Install the missing dependency or use a "
+            f"metric with a lighter footprint.",
+        )
+
+    def _dependency_hint(self, e: Exception) -> Optional[EvaluatorOutput]:
+        """Return a targeted error when the metric is missing its LLM/embeddings."""
+        msg = str(e).lower()
+        if "not set" in msg and ("llm" in msg or "embedding" in msg):
+            return EvaluatorOutput(
+                errorCode="METRIC_ERROR",
+                errorMessage=f"RAGAS metric '{self._metric_name()}' failed: {e}. Pass an LLM or embeddings "
+                f"wrapper to the adapter, e.g. RAGASAdapter(metric=..., "
+                f"llm=LangchainLLMWrapper(ChatBedrockConverse(...))).",
+            )
+        return None
+
+    def _metric_name(self) -> str:
+        """The metric's declared name, falling back to the class name."""
+        return getattr(self.metric, "name", None) or type(self.metric).__name__
+
+
+# Alias following the repo's brand-casing convention (DeepEvalAdapter, AutoEvalsAdapter).
+RagasAdapter = RAGASAdapter

@@ -208,8 +208,8 @@ def _make_ragas_evaluator_input(user_prompt, agent_response):
     )
 
 
-class TestRagasAdapterIntegration:
-    """Integration tests for RagasAdapter with real RAGAS metrics.
+class TestRAGASAdapterIntegration:
+    """Integration tests for RAGASAdapter with real RAGAS metrics.
 
     Uses deterministic (non-LLM) metrics so no model access is required.
     """
@@ -222,9 +222,9 @@ class TestRagasAdapterIntegration:
     def test_exact_match_with_embedded_reference(self):
         from ragas.metrics import ExactMatch
 
-        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.ragas import RagasAdapter
+        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.ragas import RAGASAdapter
 
-        adapter = RagasAdapter(metric=ExactMatch())
+        adapter = RAGASAdapter(metric=ExactMatch())
 
         result = adapter(
             _make_ragas_evaluator_input(
@@ -240,9 +240,9 @@ class TestRagasAdapterIntegration:
     def test_exact_match_fails_on_mismatch(self):
         from ragas.metrics import ExactMatch
 
-        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.ragas import RagasAdapter
+        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.ragas import RAGASAdapter
 
-        adapter = RagasAdapter(metric=ExactMatch())
+        adapter = RAGASAdapter(metric=ExactMatch())
 
         result = adapter(
             _make_ragas_evaluator_input(
@@ -258,9 +258,9 @@ class TestRagasAdapterIntegration:
     def test_missing_reference_returns_error(self):
         from ragas.metrics import ExactMatch
 
-        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.ragas import RagasAdapter
+        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.ragas import RAGASAdapter
 
-        adapter = RagasAdapter(metric=ExactMatch())
+        adapter = RAGASAdapter(metric=ExactMatch())
 
         result = adapter(
             _make_ragas_evaluator_input(
@@ -276,9 +276,9 @@ class TestRagasAdapterIntegration:
     def test_with_custom_mapper(self):
         from ragas.metrics import ExactMatch
 
-        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.ragas import RagasAdapter
+        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.ragas import RAGASAdapter
 
-        adapter = RagasAdapter(
+        adapter = RAGASAdapter(
             metric=ExactMatch(),
             custom_mapper=lambda ev: {
                 "user_input": "What is 2+2?",
@@ -292,3 +292,57 @@ class TestRagasAdapterIntegration:
         assert isinstance(result, EvaluatorOutput)
         assert result.value == 1.0
         assert result.label == "Pass"
+
+    def test_collections_metric_exact_match(self):
+        """New-generation ragas.metrics.collections metrics score via metric.score(**kwargs)."""
+        from ragas.metrics.collections import ExactMatch as CollectionsExactMatch
+
+        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.ragas import RAGASAdapter
+
+        adapter = RAGASAdapter(metric=CollectionsExactMatch())
+
+        result = adapter(
+            _make_ragas_evaluator_input(
+                user_prompt="What is the capital of France?\n\nReference Answer:\nThe capital of France is Paris.",
+                agent_response="The capital of France is Paris.",
+            )
+        )
+
+        assert isinstance(result, EvaluatorOutput)
+        assert result.value == 1.0
+        assert result.label == "Pass"
+
+    def test_decorator_discrete_metric(self):
+        """Decorator-based custom metrics return categorical labels."""
+        from ragas.metrics import discrete_metric
+
+        from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.ragas import RAGASAdapter
+
+        @discrete_metric(name="mentions_paris", allowed_values=["yes", "no"])
+        def mentions_paris(response: str) -> str:
+            return "yes" if "Paris" in response else "no"
+
+        adapter = RAGASAdapter(
+            metric=mentions_paris,
+            custom_mapper=lambda ev: {"response": "The capital of France is Paris."},
+        )
+
+        result = adapter(_make_agent_evaluator_input())
+
+        assert isinstance(result, EvaluatorOutput)
+        assert result.label == "yes"
+
+    def test_adapter_imports_without_datasets(self):
+        """The adapter module must not require the HF datasets library at import time."""
+        import subprocess
+        import sys
+
+        code = (
+            "import sys\n"
+            "sys.modules['datasets'] = None  # poison the import\n"
+            "from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.ragas import RAGASAdapter\n"
+            "print('OK')\n"
+        )
+        proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        assert proc.returncode == 0, proc.stderr
+        assert "OK" in proc.stdout
