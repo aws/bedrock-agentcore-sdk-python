@@ -1,10 +1,11 @@
 """RAGAS adapter for AgentCore code-based evaluators.
 
 Scores metrics through RAGAS's per-sample APIs (``metric.single_turn_score()``
-for legacy metrics, ``metric.score(**kwargs)`` for ``ragas.metrics.collections``
-metrics) rather than the batch ``ragas.evaluate()`` pipeline. This keeps the
-adapter free of the heavyweight ``datasets``/``pyarrow``/``pandas`` stack, so
-it can run in zip-based Lambda deployments with a slim ragas install.
+/ ``metric.multi_turn_score()`` for legacy metrics, ``metric.score(**kwargs)``
+for ``ragas.metrics.collections`` metrics) rather than the batch
+``ragas.evaluate()`` pipeline. This keeps the adapter free of the heavyweight
+``datasets``/``pyarrow``/``pandas`` stack, so it can run in zip-based Lambda
+deployments with a slim ragas install.
 """
 
 import logging
@@ -27,8 +28,11 @@ class RAGASAdapter(BaseAdapter):
 
     Supports both RAGAS metric generations:
 
-    - Legacy metrics (``ragas.metrics``): scored via
+    - Legacy single-turn metrics (``ragas.metrics``): scored via
       ``metric.single_turn_score(SingleTurnSample(...))``
+    - Legacy multi-turn metrics (e.g. ToolCallAccuracy): scored via
+      ``metric.multi_turn_score(MultiTurnSample(...))``, with conversation
+      messages built from extracted turns and tool calls
     - Collections metrics (``ragas.metrics.collections``) and decorator-based
       custom metrics (``@discrete_metric`` / ``@numeric_metric``): scored via
       ``metric.score(**fields)``
@@ -38,7 +42,14 @@ class RAGASAdapter(BaseAdapter):
     (``MetricResult.reason``), it is surfaced as the explanation.
 
     The adapter evaluates one event at a time by design; it does not use the
-    batch ``ragas.evaluate()`` API. Multi-turn metrics are not supported.
+    batch ``ragas.evaluate()`` API.
+
+    Multi-turn notes: predicted tool calls are attached to the final AI
+    message, and ``reference_tool_calls`` built from
+    ``expected_trajectory.toolNames`` carry names without arguments — metrics
+    that compare tool arguments need a custom_mapper supplying full
+    ``ragas.messages.ToolCall`` objects. Fields with no span source (e.g.
+    ``reference_topics`` for TopicAdherenceScore) also require a custom_mapper.
 
     Example (default span mapping)::
 
@@ -103,15 +114,16 @@ class RAGASAdapter(BaseAdapter):
 
     def _run(self, evaluator_input: EvaluatorInput) -> EvaluatorOutput:
         """Run the RAGAS metric pipeline."""
+        span_result = None
         if self.custom_mapper is not None:
             fields = self.custom_mapper(evaluator_input)
         else:
-            result = self._default_extract(evaluator_input)
-            if not result.input or not result.actual_output:
+            span_result = self._default_extract(evaluator_input)
+            if not span_result.input or not span_result.actual_output:
                 missing: List[str] = []
-                if not result.input:
+                if not span_result.input:
                     missing.append("input")
-                if not result.actual_output:
+                if not span_result.actual_output:
                     missing.append("actual_output")
                 metric_name = type(self.metric).__name__
                 return EvaluatorOutput(
@@ -119,26 +131,23 @@ class RAGASAdapter(BaseAdapter):
                     errorMessage=f"Field(s) {missing} required by {metric_name} but not found in evaluation event. "
                     f"Provide a custom_mapper or ensure spans contain the necessary data.",
                 )
-            fields = self._build_fields(result)
+            fields = self._build_fields(span_result)
 
         # Dispatch on metric generation. Legacy single-turn metrics expose
-        # single_turn_score(); collections metrics expose score(**kwargs).
+        # single_turn_score(), legacy multi-turn metrics expose
+        # multi_turn_score(), and collections metrics expose score(**kwargs).
         if hasattr(self.metric, "single_turn_score"):
             outcome = self._score_legacy(fields)
-        elif self._is_legacy_multi_turn():
-            return EvaluatorOutput(
-                errorCode="UNSUPPORTED_METRIC",
-                errorMessage=f"{type(self.metric).__name__} is a multi-turn RAGAS metric, which is not "
-                f"supported by RAGASAdapter. Use a single-turn metric.",
-            )
+        elif hasattr(self.metric, "multi_turn_score"):
+            outcome = self._score_multi_turn(fields, span_result)
         elif hasattr(self.metric, "ascore") and hasattr(self.metric, "score"):
             outcome = self._score_collections(fields)
         else:
             return EvaluatorOutput(
                 errorCode="UNSUPPORTED_METRIC",
                 errorMessage=f"{type(self.metric).__name__} does not expose a supported RAGAS scoring "
-                f"API (single_turn_score or score). Pass a ragas.metrics or "
-                f"ragas.metrics.collections metric instance.",
+                f"API (single_turn_score, multi_turn_score, or score). Pass a ragas.metrics "
+                f"or ragas.metrics.collections metric instance.",
             )
 
         if isinstance(outcome, EvaluatorOutput):
@@ -274,13 +283,92 @@ class RAGASAdapter(BaseAdapter):
             return EvaluatorOutput(label=value, explanation=reason)
         return float(value), reason
 
-    def _is_legacy_multi_turn(self) -> bool:
-        """Check whether the metric is a legacy multi-turn-only metric."""
+    def _score_multi_turn(self, fields: Dict[str, Any], span_result: Any) -> Any:
+        """Score with a legacy multi-turn metric (e.g. ToolCallAccuracy).
+
+        Builds a MultiTurnSample from extracted turns and tool calls when
+        using default span mapping. With a custom_mapper, the fields dict
+        supplies MultiTurnSample fields directly (``user_input`` as a list of
+        ``ragas.messages`` objects, ``reference_tool_calls``, etc.).
+
+        Returns a ``(score, reason)`` tuple, or an EvaluatorOutput error.
+        """
+        from ragas.dataset_schema import MultiTurnSample
+
+        mt_fields = dict(fields)
+        if span_result is not None:
+            mt_fields["user_input"] = self._build_messages(span_result)
+            if span_result.expected_tools:
+                mt_fields["reference_tool_calls"] = self._build_ragas_tool_calls(span_result.expected_tools)
+
+        required = getattr(self.metric, "required_columns", {}).get("MULTI_TURN", set())
+        missing = sorted(c for c in required if not mt_fields.get(c))
+        if missing:
+            return self._missing_fields_error(missing)
+
+        sample_fields = {k: v for k, v in mt_fields.items() if k in MultiTurnSample.model_fields}
+        sample = MultiTurnSample(**sample_fields)
+
         try:
-            from ragas.metrics.base import MultiTurnMetric
-        except ImportError:
-            return False
-        return isinstance(self.metric, MultiTurnMetric)
+            return float(self.metric.multi_turn_score(sample)), None
+        except ImportError as e:
+            return self._missing_dependency_error(e)
+        except Exception as e:
+            hint = self._dependency_hint(e)
+            if hint:
+                return hint
+            raise
+
+    def _build_messages(self, span_result: Any) -> List[Any]:
+        """Build a ragas message list from extracted turns and tool calls.
+
+        Uses SpanMapResult.turns when the session has multiple invocations,
+        falling back to a single user/assistant pair. Predicted tool calls
+        are attached to the final AI message.
+        """
+        from ragas.messages import AIMessage, HumanMessage
+
+        messages: List[Any] = []
+        if span_result.turns:
+            for turn in span_result.turns:
+                role = turn.get("role")
+                content = turn.get("content", "")
+                if role == "user":
+                    messages.append(HumanMessage(content=content))
+                elif role == "assistant":
+                    messages.append(AIMessage(content=content))
+        else:
+            messages = [
+                HumanMessage(content=span_result.input or ""),
+                AIMessage(content=span_result.actual_output or ""),
+            ]
+
+        if span_result.tools_called:
+            tool_calls = self._build_ragas_tool_calls(span_result.tools_called)
+            for i in range(len(messages) - 1, -1, -1):
+                if isinstance(messages[i], AIMessage):
+                    messages[i] = AIMessage(content=messages[i].content, tool_calls=tool_calls)
+                    break
+
+        return messages
+
+    @staticmethod
+    def _build_ragas_tool_calls(tool_dicts: List[Dict[str, Any]]) -> List[Any]:
+        """Convert extracted tool call dicts to ragas ToolCall objects.
+
+        Reference tool calls from expected_trajectory carry names only, so
+        args default to an empty dict.
+        """
+        from ragas.messages import ToolCall
+
+        result: List[Any] = []
+        for tc in tool_dicts:
+            name = tc.get("name", "")
+            if not name:
+                continue
+            args = tc.get("input_parameters")
+            result.append(ToolCall(name=name, args=args if isinstance(args, dict) else {}))
+        return result
 
     def _missing_fields_error(self, missing: List[str]) -> EvaluatorOutput:
         """Build a MISSING_REQUIRED_FIELD error for the metric's declared inputs."""

@@ -294,21 +294,6 @@ class TestRAGASAdapterValidation:
         assert "retrieved_contexts" in result.errorMessage
         metric.single_turn_score.assert_not_called()
 
-    def test_multi_turn_metric_returns_unsupported(self):
-        try:
-            from ragas.metrics import AgentGoalAccuracyWithoutReference
-        except ImportError:
-            import pytest
-
-            pytest.skip("multi-turn metric not available in this ragas version")
-
-        adapter = RAGASAdapter(metric=AgentGoalAccuracyWithoutReference())
-
-        result = adapter(_make_evaluator_input())
-
-        assert result.errorCode == "UNSUPPORTED_METRIC"
-        assert "multi-turn" in result.errorMessage.lower()
-
     def test_unsupported_metric_type_returns_error(self):
         class NotAMetric:
             name = "mystery"
@@ -318,6 +303,100 @@ class TestRAGASAdapterValidation:
         result = adapter(_make_evaluator_input())
 
         assert result.errorCode == "UNSUPPORTED_METRIC"
+
+
+def _mock_multi_turn_metric(name="agent_goal_accuracy", score=0.8, required=None):
+    """Create a mock legacy multi-turn RAGAS metric (no single_turn_score)."""
+    metric = MagicMock()
+    metric.name = name
+    metric.threshold = 0.5
+    metric.required_columns = {"MULTI_TURN": required if required is not None else {"user_input"}}
+    del metric.single_turn_score
+    metric.multi_turn_score = MagicMock(return_value=score)
+    return metric
+
+
+class TestRAGASAdapterMultiTurn:
+    def test_multi_turn_metric_scores_from_extracted_turns(self):
+        metric = _mock_multi_turn_metric(score=0.8)
+        adapter = RAGASAdapter(metric=metric)
+
+        result = adapter(_make_evaluator_input())
+
+        assert result.value == 0.8
+        assert result.label == "Pass"
+        sample = metric.multi_turn_score.call_args[0][0]
+        # Single invocation falls back to a user/assistant message pair
+        assert len(sample.user_input) == 2
+        assert sample.user_input[0].content == "What is AI?"
+        assert sample.user_input[1].content == "AI is artificial intelligence."
+
+    def test_expected_trajectory_builds_reference_tool_calls(self):
+        metric = _mock_multi_turn_metric(required={"user_input", "reference_tool_calls"})
+        adapter = RAGASAdapter(metric=metric)
+
+        evaluator_input = _make_evaluator_input(
+            reference_inputs=[{"expectedTrajectory": {"toolNames": ["search", "calculate"]}}],
+        )
+
+        result = adapter(evaluator_input)
+
+        assert result.value == 0.8
+        sample = metric.multi_turn_score.call_args[0][0]
+        assert [tc.name for tc in sample.reference_tool_calls] == ["search", "calculate"]
+        assert sample.reference_tool_calls[0].args == {}
+
+    def test_missing_multi_turn_required_field_returns_error(self):
+        metric = _mock_multi_turn_metric(required={"user_input", "reference_tool_calls"})
+        adapter = RAGASAdapter(metric=metric)
+
+        # No expectedTrajectory provided → reference_tool_calls unavailable
+        result = adapter(_make_evaluator_input())
+
+        assert result.errorCode == "MISSING_REQUIRED_FIELD"
+        assert "reference_tool_calls" in result.errorMessage
+        metric.multi_turn_score.assert_not_called()
+
+    def test_real_tool_call_accuracy_with_custom_mapper(self):
+        """ToolCallAccuracy is deterministic — validate end-to-end with the real metric."""
+        from ragas.messages import AIMessage, HumanMessage, ToolCall
+        from ragas.metrics import ToolCallAccuracy
+
+        adapter = RAGASAdapter(
+            metric=ToolCallAccuracy(),
+            custom_mapper=lambda ev: {
+                "user_input": [
+                    HumanMessage(content="Book a flight to NYC"),
+                    AIMessage(content="Booking", tool_calls=[ToolCall(name="book_flight", args={"to": "NYC"})]),
+                ],
+                "reference_tool_calls": [ToolCall(name="book_flight", args={"to": "NYC"})],
+            },
+        )
+
+        result = adapter(_make_evaluator_input())
+
+        assert result.value == 1.0
+        assert result.label == "Pass"
+
+    def test_real_tool_call_accuracy_mismatch_fails(self):
+        from ragas.messages import AIMessage, HumanMessage, ToolCall
+        from ragas.metrics import ToolCallAccuracy
+
+        adapter = RAGASAdapter(
+            metric=ToolCallAccuracy(),
+            custom_mapper=lambda ev: {
+                "user_input": [
+                    HumanMessage(content="Book a flight to NYC"),
+                    AIMessage(content="Booking", tool_calls=[ToolCall(name="wrong_tool", args={})]),
+                ],
+                "reference_tool_calls": [ToolCall(name="book_flight", args={"to": "NYC"})],
+            },
+        )
+
+        result = adapter(_make_evaluator_input())
+
+        assert result.value == 0.0
+        assert result.label == "Fail"
 
 
 class TestRAGASAdapterErrors:
