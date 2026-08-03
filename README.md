@@ -46,6 +46,8 @@ from strands import Agent # or bring your agent.
 @app.entrypoint
 async def handler(request):
     prompt = request.get("prompt")
+    if not isinstance(prompt, str):
+        raise ValueError("prompt must be a string")
 
     agent = Agent()
 
@@ -54,6 +56,9 @@ async def handler(request):
 
 app.run()
 ```
+
+Validate agent input before forwarding it to an agent framework. Keep prompts typed as strings and pass only prompt
+text to the agent.
 
 **What you get with Bedrock AgentCore:**
 - ✅ **Keep your agent logic** - Works with Strands, LangGraph, CrewAI, Autogen, or custom frameworks

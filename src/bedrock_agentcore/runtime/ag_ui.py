@@ -96,6 +96,9 @@ class AGUIApp(Starlette):
         - An object with a ``.run()`` method (framework agents)
         - A callable / async generator function (custom agents, decorator form)
 
+        Adapters should validate message content after protocol parsing before forwarding it to another agent
+        framework.
+
         The registered handler is served on both ``POST /invocations`` (SSE)
         and ``/ws`` (WebSocket).
 

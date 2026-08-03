@@ -517,6 +517,8 @@ def agent_invocation(payload):
         "Hello! I can start long-running data processing tasks. Try: "
         "'Start processing a large dataset for ML training' or 'What are my options?'",
     )
+    if not isinstance(user_message, str):
+        raise ValueError("prompt must be a string")
 
     result = agent(user_message)
 
