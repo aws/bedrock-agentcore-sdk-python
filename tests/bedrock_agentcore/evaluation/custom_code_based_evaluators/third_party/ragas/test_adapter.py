@@ -562,6 +562,37 @@ class TestRAGASAdapterEmbeddedParsing:
         assert sample.retrieved_contexts == ["AI is a branch of computer science."]
         assert sample.reference_contexts == ["AI is a branch of computer science."]
 
+    def test_json_list_context_recovers_ranked_chunks(self):
+        """Contexts embedded as json.dumps([...]) recover chunk boundaries and rank order."""
+        import json
+
+        metric = _mock_legacy_metric(name="llm_context_precision", score=0.67)
+        adapter = RAGASAdapter(metric=metric)
+
+        inner = "What is AI?\n\nContext:\n" + json.dumps(["chunk1", "chunk2", "chunk3"])
+        spans = _make_spans(user_content=json.dumps([{"text": inner}]))
+        result = adapter(_make_evaluator_input(spans=spans))
+
+        assert result.value == 0.67
+        sample = metric.single_turn_score.call_args[0][0]
+        assert sample.retrieved_contexts == ["chunk1", "chunk2", "chunk3"]
+        assert sample.reference_contexts == ["chunk1", "chunk2", "chunk3"]
+
+    def test_json_non_list_context_treated_as_single_chunk(self):
+        """JSON that isn't a list of strings stays a single chunk."""
+        import json
+
+        metric = _mock_legacy_metric(score=0.9)
+        adapter = RAGASAdapter(metric=metric)
+
+        inner = 'What is AI?\n\nContext:\n{"not": "a list"}'
+        spans = _make_spans(user_content=json.dumps([{"text": inner}]))
+        result = adapter(_make_evaluator_input(spans=spans))
+
+        assert result.value == 0.9
+        sample = metric.single_turn_score.call_args[0][0]
+        assert sample.retrieved_contexts == ['{"not": "a list"}']
+
     def test_parses_combined_context_and_reference(self):
         metric = _mock_legacy_metric(name="context_precision", score=0.75)
         adapter = RAGASAdapter(metric=metric)

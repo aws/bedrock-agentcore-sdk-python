@@ -8,6 +8,7 @@ for ``ragas.metrics.collections`` metrics) rather than the batch
 deployments with a slim ragas install.
 """
 
+import json
 import logging
 import math
 from typing import Any, Callable, Dict, List, Optional
@@ -207,10 +208,32 @@ class RAGASAdapter(BaseAdapter):
             fields["retrieved_contexts"] = result.retrieval_context
             fields["reference_contexts"] = result.retrieval_context
         elif embedded_context:
-            fields["retrieved_contexts"] = [embedded_context]
-            fields["reference_contexts"] = [embedded_context]
+            contexts = self._interpret_embedded_context(embedded_context)
+            fields["retrieved_contexts"] = contexts
+            fields["reference_contexts"] = contexts
 
         return fields
+
+    @staticmethod
+    def _interpret_embedded_context(embedded_context: str) -> List[str]:
+        """Recover a ranked chunk list from embedded context text.
+
+        Multi-chunk retrieval contexts are embedded as a JSON-serialized list
+        of strings so chunk boundaries and rank order survive the round trip.
+        This matters for rank-aware metrics (LLMContextPrecision and friends):
+        joining N ranked chunks into one string collapses precision@k to a
+        binary judgment on a single blob.
+
+        If the text is not a JSON list of strings, it is treated as a single
+        chunk (backward compatible with plain-text contexts).
+        """
+        try:
+            parsed = json.loads(embedded_context)
+        except (json.JSONDecodeError, ValueError):
+            return [embedded_context]
+        if isinstance(parsed, list) and parsed and all(isinstance(item, str) for item in parsed):
+            return parsed
+        return [embedded_context]
 
     def _score_legacy(self, fields: Dict[str, Any]) -> Any:
         """Score with a legacy (``ragas.metrics``) single-turn metric.
