@@ -137,7 +137,7 @@ Starts a Bedrock-compatible A2A server with `uvicorn`.
 |-----------|------|---------|-------------|
 | `executor` | `AgentExecutor` | required | An a2a-sdk `AgentExecutor` that implements the agent logic |
 | `agent_card` | `AgentCard` | `None` | Agent metadata. Auto-built from executor if omitted (works best with Strands) |
-| `port` | `int \| None` | `None` | Port to serve on. Uses `PORT`, then `9000`, when omitted |
+| `port` | `int \| None` | `None` | Port to serve on. Uses `A2A_PORT`, then `9000`, when omitted. The generic `PORT` is ignored — see [Ports](#ports) |
 | `host` | `str` | `None` | Host to bind to. Auto-detected: `0.0.0.0` in Docker, `127.0.0.1` otherwise |
 | `task_store` | `TaskStore` | `None` | Custom task store; defaults to `InMemoryTaskStore` |
 | `context_builder` | `CallContextBuilder` | `None` | Custom context builder; defaults to `BedrockCallContextBuilder` |
@@ -177,6 +177,29 @@ Headers extracted:
 - `X-Amzn-Bedrock-AgentCore-Runtime-Custom-*` — custom headers
 
 ## Behavior Details
+
+### Ports
+
+The AgentCore Runtime service contract fixes the A2A container port at **9000** (HTTP uses 8080, MCP uses 8000). The
+runtime proxies invocations to 9000 only, so an A2A server bound elsewhere is unreachable and every invocation fails
+with **HTTP 424** (`RuntimeClientError`).
+
+`serve_a2a` therefore defaults to 9000 and **ignores the generic `PORT` environment variable**. `PORT` is a widespread
+convention (Heroku, Cloud Run, App Runner) and is commonly already set to another protocol's port — notably in images
+shared across an HTTP and an A2A runtime, where `PORT=8080` is correct for HTTP and fatal for A2A.
+
+To override the port for local development, use the protocol-scoped `A2A_PORT`, or pass `port=` explicitly:
+
+```bash
+A2A_PORT=9001 python main.py
+```
+
+```python
+serve_a2a(executor, port=9001)
+```
+
+Precedence is `port=` argument, then `A2A_PORT`, then 9000. When the resolved port is not 9000, `serve_a2a` logs a
+warning, since that configuration cannot work in a deployed runtime.
 
 ### Agent Card Auto-Population
 

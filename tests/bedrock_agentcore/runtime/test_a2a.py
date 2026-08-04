@@ -1,4 +1,5 @@
 import contextvars
+import logging
 import uuid
 from unittest.mock import patch
 
@@ -456,7 +457,7 @@ class TestServeA2A:
         with patch.dict("os.environ", {}, clear=False):
             import os
 
-            os.environ.pop("PORT", None)
+            os.environ.pop("A2A_PORT", None)
             with patch("os.path.exists", return_value=False):
                 serve_a2a(_EchoExecutor(), _make_agent_card())
         kw = mock_uvicorn_run.call_args[1]
@@ -465,7 +466,7 @@ class TestServeA2A:
 
     @patch("uvicorn.run")
     def test_port_from_environment(self, mock_uvicorn_run):
-        with patch.dict("os.environ", {"PORT": "9001"}, clear=True):
+        with patch.dict("os.environ", {"A2A_PORT": "9001"}, clear=True):
             serve_a2a(_EchoExecutor())
 
         app = mock_uvicorn_run.call_args.args[0]
@@ -475,7 +476,7 @@ class TestServeA2A:
 
     @patch("uvicorn.run")
     def test_port_from_environment_updates_explicit_card(self, mock_uvicorn_run):
-        with patch.dict("os.environ", {"PORT": "9002"}, clear=True):
+        with patch.dict("os.environ", {"A2A_PORT": "9002"}, clear=True):
             serve_a2a(_EchoExecutor(), _make_agent_card())
 
         app = mock_uvicorn_run.call_args.args[0]
@@ -485,7 +486,7 @@ class TestServeA2A:
 
     @patch("uvicorn.run")
     def test_explicit_port_overrides_environment(self, mock_uvicorn_run):
-        with patch.dict("os.environ", {"PORT": "9001"}):
+        with patch.dict("os.environ", {"A2A_PORT": "9001"}):
             serve_a2a(_EchoExecutor(), _make_agent_card(), port=8888)
         app = mock_uvicorn_run.call_args.args[0]
         response = TestClient(app).get("/.well-known/agent-card.json")
@@ -497,7 +498,7 @@ class TestServeA2A:
         with patch.dict(
             "os.environ",
             {
-                "PORT": "9002",
+                "A2A_PORT": "9002",
                 "AGENTCORE_RUNTIME_URL": "https://deployed.example.com/",
             },
             clear=True,
@@ -508,6 +509,41 @@ class TestServeA2A:
         response = TestClient(app).get("/.well-known/agent-card.json")
         assert mock_uvicorn_run.call_args.kwargs["port"] == 9002
         assert _card_response_url(response.json()) == "https://deployed.example.com/"
+
+    @patch("uvicorn.run")
+    def test_generic_port_env_var_is_ignored(self, mock_uvicorn_run):
+        """PORT must not affect the A2A port: shared images set it to 8080 for HTTP."""
+        with patch.dict("os.environ", {"PORT": "8080"}, clear=True):
+            serve_a2a(_EchoExecutor(), _make_agent_card())
+
+        app = mock_uvicorn_run.call_args.args[0]
+        response = TestClient(app).get("/.well-known/agent-card.json")
+        assert mock_uvicorn_run.call_args.kwargs["port"] == 9000
+        assert _card_response_url(response.json()) == "http://localhost:9000/"
+
+    @patch("uvicorn.run")
+    def test_a2a_port_takes_precedence_over_generic_port(self, mock_uvicorn_run):
+        with patch.dict("os.environ", {"PORT": "8080", "A2A_PORT": "9003"}, clear=True):
+            serve_a2a(_EchoExecutor(), _make_agent_card())
+
+        assert mock_uvicorn_run.call_args.kwargs["port"] == 9003
+
+    @patch("uvicorn.run")
+    def test_warns_when_binding_non_contract_port(self, mock_uvicorn_run, caplog):
+        with patch.dict("os.environ", {}, clear=True):
+            with caplog.at_level(logging.WARNING, logger="bedrock_agentcore.runtime.a2a"):
+                serve_a2a(_EchoExecutor(), _make_agent_card(), port=8888)
+
+        assert "requires 9000" in caplog.text
+        assert "424" in caplog.text
+
+    @patch("uvicorn.run")
+    def test_no_warning_on_contract_port(self, mock_uvicorn_run, caplog):
+        with patch.dict("os.environ", {}, clear=True):
+            with caplog.at_level(logging.WARNING, logger="bedrock_agentcore.runtime.a2a"):
+                serve_a2a(_EchoExecutor(), _make_agent_card())
+
+        assert caplog.text == ""
 
     @patch("uvicorn.run")
     def test_docker_detection_dockerenv(self, mock_uvicorn_run):
