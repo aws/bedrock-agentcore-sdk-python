@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.20.0] - 2026-08-04
+
+### Added
+- feat: third-party eval metrics adapter (DeepEval + Autoevals) with strands-evals mappers (#568) (9b7d38e)
+
+### Fixed
+- fix: validate sample agent inputs (#612) (528471e)
+
+### Other Changes
+- fix(test): pin autoevals judge to the OpenAI API (#617) (703ccfd)
+- fix(a2a): bind the A2A contract port, ignore generic PORT (#615) (207adb7)
+- fix(test): repair eval adapter integ fixture and wire LLM judge key (#614) (9d8cc26)
+- fix(test): repair four unit tests drifting behind source and upstream APIs (#610) (53b0b48)
+- ci: install deepeval and autoevals for evaluation integ tests (#608) (5d23292)
+- fix(ci): add pinned deepeval and autoevals to dev group (#609) (70165d9)
+- ci: wire shared composite actions (#601) (a3382a4)
+
 ## [1.19.0] - 2026-07-28
 
 ### Fixed
