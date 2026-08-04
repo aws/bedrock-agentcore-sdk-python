@@ -20,7 +20,10 @@ class TestSDKSimpleAgent(BaseSDKRuntimeTest):
 
                 @app.entrypoint
                 async def agent_invocation(payload):
-                    return agent(payload.get("message"))
+                    message = payload.get("message")
+                    if not isinstance(message, str):
+                        raise ValueError("message must be a string")
+                    return agent(message)
 
                 app.run()
             """).strip()
