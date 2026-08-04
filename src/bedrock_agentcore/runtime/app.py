@@ -215,6 +215,9 @@ class BedrockAgentCoreApp(Starlette):
     def entrypoint(self, func: Callable) -> Callable:
         """Decorator to register a function as the main entrypoint.
 
+        Invocation payloads are passed to the registered function unchanged. Applications should validate input
+        before forwarding it to an agent framework.
+
         Args:
             func: The function to register as entrypoint
 
