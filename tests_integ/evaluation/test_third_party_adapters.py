@@ -4,16 +4,33 @@ These tests require `deepeval` and `autoevals` packages to be installed.
 They verify the full adapter flow from EvaluatorInput through span parsing
 to metric execution, using real library metrics (not mocks).
 
+Both libraries judge with an LLM, so every test here requires OPENAI_API_KEY.
+In CI the key is fetched from the central DevX Secrets Manager account as a
+repo-specific workflow secret.
+
 SETUP:
     pip install deepeval autoevals
+    export OPENAI_API_KEY=...
 
 RUN:
     pytest tests_integ/evaluation/test_third_party_adapters.py -v
 """
 
+import json
+
 import pytest
 
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.models import EvaluatorInput, EvaluatorOutput
+
+
+def _text_content(text):
+    """Wrap text in the nested, double-encoded shape the CloudWatch mapper expects.
+
+    strands-evals reads message content via `content.content` / `content.message`,
+    where the inner value is a JSON-encoded list of content blocks. Passing a bare
+    string yields no AgentInvocationSpan and the adapters fail extraction.
+    """
+    return {"content": json.dumps([{"text": text}])}
 
 
 def _make_agent_evaluator_input(
@@ -25,18 +42,20 @@ def _make_agent_evaluator_input(
     output_messages = []
     if tool_messages:
         for msg in tool_messages:
-            output_messages.append({"role": "tool", "content": msg})
-    output_messages.append({"role": "assistant", "content": agent_response})
+            output_messages.append({"role": "tool", "content": _text_content(msg)})
+    output_messages.append({"role": "assistant", "content": _text_content(agent_response)})
 
     spans = [
         {
             "traceId": "integ-trace-1",
             "spanId": "integ-span-1",
+            # The mapper keys off scope.name to pick the CloudWatch span format.
+            "scope": {"name": "strands.telemetry.tracer"},
             "attributes": {"gen_ai.operation.name": "invoke_agent"},
             "span_events": [
                 {
                     "body": {
-                        "input": {"messages": [{"role": "user", "content": user_prompt}]},
+                        "input": {"messages": [{"role": "user", "content": _text_content(user_prompt)}]},
                         "output": {"messages": output_messages},
                     }
                 }
@@ -127,10 +146,9 @@ class TestAutoEvalsAdapterIntegration:
         scorer = Factuality()
         adapter = AutoEvalsAdapter(metric=scorer)
 
-        evaluator_input = _make_agent_evaluator_input()
-        evaluator_input.session_spans[0]["span_events"][0]["body"]["output"]["messages"] = [
-            {"role": "assistant", "content": "The capital of France is Paris."}
-        ]
+        # Assistant-only output (no tool messages), which is what the helper
+        # already builds; keep it explicit here to document the intent.
+        evaluator_input = _make_agent_evaluator_input(agent_response="The capital of France is Paris.")
 
         result = adapter(evaluator_input)
 
