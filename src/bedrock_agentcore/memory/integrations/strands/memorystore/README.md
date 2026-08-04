@@ -132,7 +132,8 @@ have at most one writer.
 - Sender failures remain buffered for retry and are logged by Strands rather than propagated by
   `flush()`.
 
-The integration calls the boto3 `bedrock-agentcore` data-plane client directly. Pass `client=` to
-reuse an existing connection: either a boto3 `bedrock-agentcore` client or this SDK's `MemoryClient`,
-whose vended data-plane client is used automatically. AWS credentials use boto3's normal credential
-chain; no credentials are stored by the integration.
+By default the integration builds its connection through this SDK's `MemoryClient` and calls the
+`bedrock-agentcore` data-plane operations on it. Pass `client=` to reuse an existing connection —
+either your own `MemoryClient` (its vended data-plane client is used) or a boto3 `bedrock-agentcore`
+client. AWS credentials use boto3's normal credential chain; no credentials are stored by the
+integration.

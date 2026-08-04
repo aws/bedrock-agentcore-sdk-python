@@ -10,11 +10,10 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import boto3
-from botocore.config import Config as BotocoreConfig
 from strands.memory import AddMessagesContext, ExtractionConfig, MemoryEntry, MemoryStore, SearchOptions
 from strands.types.content import Message
 
-from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
+from bedrock_agentcore.memory.client import MemoryClient
 
 from .sender import AgentCoreEventSender
 from .types import (
@@ -49,10 +48,25 @@ logger = logging.getLogger(__name__)
 def _create_data_plane_client(
     *, region_name: str | None = None, boto3_session: boto3.Session | None = None
 ) -> AgentCoreDataPlaneClient:
+    """Build the default data-plane client through this SDK's ``MemoryClient``.
+
+    Going through ``MemoryClient`` keeps AgentCore client construction and the
+    integration user agent in one place instead of hand-rolling a second boto3 client.
+    ``MemoryClient`` re-checks the session by truthiness, so a deliberately falsey
+    session-like object would be replaced by a default session there.
+
+    Args:
+        region_name: Explicit region, preferred over the session and environment.
+        boto3_session: Session used to construct the client.
+
+    Returns:
+        The AgentCore data-plane client the store calls.
+    """
     session = boto3_session if boto3_session is not None else boto3.Session()
     region = region_name or session.region_name or os.environ.get("AWS_REGION") or DEFAULT_REGION
-    config = BotocoreConfig(user_agent_extra=build_user_agent_suffix("strands"))
-    return session.client("bedrock-agentcore", region_name=region, config=config)  # type: ignore[no-any-return]
+    return resolve_data_plane_client(
+        MemoryClient(region_name=region, boto3_session=session, integration_source="strands")
+    )
 
 
 class AgentCoreMemoryStore(_MemoryStoreBase):

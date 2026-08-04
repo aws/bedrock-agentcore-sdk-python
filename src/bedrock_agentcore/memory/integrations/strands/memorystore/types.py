@@ -29,10 +29,13 @@ RESERVED_METADATA_PREFIX = "_"
 class AgentCoreDataPlaneClient(Protocol):
     """Structural type for the boto3 AgentCore data-plane client.
 
-    The store calls only these two data-plane operations. A structural type keeps the
-    caller free to pass a boto3 client, this SDK's :class:`~bedrock_agentcore.memory.MemoryClient`
-    (its vended ``gmdp_client`` is unwrapped automatically), or a test double, without the
-    store depending on the wider control-plane/strategy surface.
+    The default client is built through this SDK's
+    :class:`~bedrock_agentcore.memory.MemoryClient`, and callers may pass either their own
+    ``MemoryClient`` (its vended ``gmdp_client`` is unwrapped) or a boto3
+    ``bedrock-agentcore`` client. This structural type is what the store actually calls:
+    the two data-plane operations, rather than ``MemoryClient``'s higher-level convenience
+    methods, which omit the ``clientToken`` this integration needs for idempotent retries
+    and swallow retrieval errors that ``MemoryManager`` expects to see.
     """
 
     def create_event(self, **kwargs: Any) -> dict[str, Any]:

@@ -490,10 +490,14 @@ def test_client_region_prefers_explicit_session_without_loading_invalid_ambient_
     monkeypatch.setenv("AWS_PROFILE", "profile-that-does-not-exist")
     monkeypatch.setenv("AWS_REGION", "environment-region")
 
-    store_module._create_data_plane_client(boto3_session=supplied_session)
+    client = store_module._create_data_plane_client(boto3_session=supplied_session)
 
-    create_client.assert_called_once()
-    assert create_client.call_args.kwargs["region_name"] == "session-region"
+    # MemoryClient builds a control-plane and a data-plane client from the supplied session;
+    # the store uses the data-plane one.
+    data_plane_calls = [call for call in create_client.call_args_list if call.args[0] == "bedrock-agentcore"]
+    assert len(data_plane_calls) == 1
+    assert data_plane_calls[0].kwargs["region_name"] == "session-region"
+    assert client is create_client.return_value
 
 
 def test_explicit_region_overrides_explicit_session_region(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -505,6 +509,10 @@ def test_explicit_region_overrides_explicit_session_region(monkeypatch: pytest.M
     monkeypatch.setenv("AWS_REGION", "environment-region")
     store_module._create_data_plane_client(region_name="explicit-region", boto3_session=supplied_session)
     assert supplied_session.client.call_args.kwargs["region_name"] == "explicit-region"
+    assert {call.args[0] for call in supplied_session.client.call_args_list} == {
+        "bedrock-agentcore",
+        "bedrock-agentcore-control",
+    }
 
 
 def test_client_region_falls_back_through_environment_default_and_us_west(
@@ -530,6 +538,29 @@ def test_client_region_falls_back_through_environment_default_and_us_west(
     monkeypatch.delenv("AWS_REGION")
     store_module._create_data_plane_client()
     assert default_session.client.call_args.kwargs["region_name"] == "us-west-2"
+
+
+def test_default_client_is_built_through_the_sdk_memory_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reuse the vended ``MemoryClient`` instead of hand-rolling a second boto3 client."""
+    from bedrock_agentcore.memory.integrations.strands.memorystore import store as store_module
+
+    session = Mock(region_name="session-region")
+    monkeypatch.setattr(store_module.boto3, "Session", Mock(return_value=session))
+    # spec= keeps isinstance() true so the vended data-plane client is unwrapped.
+    memory_client = Mock(spec=store_module.MemoryClient)
+    vended = Mock()
+    memory_client.gmdp_client = vended
+    memory_client_class = Mock(return_value=memory_client)
+    monkeypatch.setattr(store_module, "MemoryClient", memory_client_class)
+
+    client = store_module._create_data_plane_client()
+
+    assert client is vended
+    assert memory_client_class.call_args.kwargs == {
+        "region_name": "session-region",
+        "boto3_session": session,
+        "integration_source": "strands",
+    }
 
 
 class _FalseyClient:
