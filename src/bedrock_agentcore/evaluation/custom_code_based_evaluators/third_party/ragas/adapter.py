@@ -3,9 +3,12 @@
 Scores metrics through RAGAS's per-sample APIs (``metric.single_turn_score()``
 / ``metric.multi_turn_score()`` for legacy metrics, ``metric.score(**kwargs)``
 for ``ragas.metrics.collections`` metrics) rather than the batch
-``ragas.evaluate()`` pipeline. This keeps the adapter free of the heavyweight
-``datasets``/``pyarrow``/``pandas`` stack, so it can run in zip-based Lambda
-deployments with a slim ragas install.
+``ragas.evaluate()`` pipeline. The adapter itself therefore adds no dependency
+on the heavyweight ``datasets``/``pyarrow``/``pandas`` stack. Note that ragas
+<1.0 still imports ``datasets`` when the ragas package itself is imported, so
+size-constrained deployments (e.g. zip-based Lambda) additionally need a ragas
+build with that import chain trimmed; this adapter is compatible with such
+builds because it never calls the ``datasets``-backed APIs.
 """
 
 import json
@@ -51,7 +54,11 @@ class RAGASAdapter(BaseAdapter):
     ``expected_trajectory.toolNames`` carry names without arguments — metrics
     that compare tool arguments need a custom_mapper supplying full
     ``ragas.messages.ToolCall`` objects. Fields with no span source (e.g.
-    ``reference_topics`` for TopicAdherenceScore) also require a custom_mapper.
+    ``reference_topics`` for TopicAdherenceScore, ``reference_contexts`` for
+    non-LLM context comparison metrics) also require a custom_mapper.
+
+    Metrics supporting both modes (e.g. AspectCritic) are always scored
+    single-turn; wrap the metric or use a custom evaluator for multi-turn use.
 
     Example (default span mapping)::
 
@@ -90,6 +97,7 @@ class RAGASAdapter(BaseAdapter):
         custom_mapper: Optional[Callable[[EvaluatorInput], Dict[str, Any]]] = None,
         llm: Optional[Any] = None,
         embeddings: Optional[Any] = None,
+        threshold: Optional[float] = None,
     ):
         """Initialize the adapter.
 
@@ -105,9 +113,13 @@ class RAGASAdapter(BaseAdapter):
                 Required for most RAGAS metrics when not using OpenAI.
             embeddings: Optional embeddings wrapper to set on the metric.
                 Required for embedding-based metrics (AnswerSimilarity, AnswerCorrectness).
+            threshold: Optional Pass/Fail threshold override. When None, the
+                metric's own threshold is used, defaulting to 0.5 (useful for
+                collections metrics, which carry no threshold of their own).
         """
         self.metric = metric
         self.custom_mapper = custom_mapper
+        self.threshold = threshold
 
         if llm is not None:
             self.metric.llm = llm
@@ -163,9 +175,12 @@ class RAGASAdapter(BaseAdapter):
                 f"required fields were empty or the metric could not be computed.",
             )
 
-        # Some metrics (e.g. SemanticSimilarity) set threshold=None explicitly;
-        # getattr's default only applies when the attribute is missing entirely.
-        threshold = getattr(self.metric, "threshold", None)
+        # Adapter override > metric threshold > 0.5 default. Some metrics
+        # (e.g. SemanticSimilarity) set threshold=None explicitly; getattr's
+        # default only applies when the attribute is missing entirely.
+        threshold = self.threshold
+        if threshold is None:
+            threshold = getattr(self.metric, "threshold", None)
         threshold = threshold if threshold is not None else 0.5
         label = "Pass" if score >= threshold else "Fail"
         explanation = metric_reason or f"RAGAS {self._metric_name()}: {score:.4f} (threshold={threshold})"
@@ -180,15 +195,7 @@ class RAGASAdapter(BaseAdapter):
         ``"{user_input}\n\nContext:\n{context}\n\nReference Answer:\n{reference}"``
         since ADOT trace formats have no dedicated reference/context fields.
         """
-        user_input = result.input
-        embedded_reference: Optional[str] = None
-        embedded_context: Optional[str] = None
-
-        if _REFERENCE_SEPARATOR in user_input:
-            user_input, embedded_reference = user_input.split(_REFERENCE_SEPARATOR, 1)
-
-        if _CONTEXT_SEPARATOR in user_input:
-            user_input, embedded_context = user_input.split(_CONTEXT_SEPARATOR, 1)
+        user_input, embedded_reference, embedded_context = self._split_embedded(result.input)
 
         fields: Dict[str, Any] = {
             "user_input": user_input,
@@ -203,16 +210,32 @@ class RAGASAdapter(BaseAdapter):
         elif result.assertions:
             fields["reference"] = "\n".join(result.assertions)
 
-        # Retrieval context priority: span tool results > embedded
+        # Retrieval context priority: span tool results > embedded.
+        # reference_contexts (ground-truth contexts) is deliberately NOT
+        # defaulted from retrieved contexts: doing so would make reference-
+        # comparison metrics score retrieval output against itself. Supply it
+        # via a custom_mapper when a genuine ground-truth source exists.
         if result.retrieval_context:
             fields["retrieved_contexts"] = result.retrieval_context
-            fields["reference_contexts"] = result.retrieval_context
         elif embedded_context:
-            contexts = self._interpret_embedded_context(embedded_context)
-            fields["retrieved_contexts"] = contexts
-            fields["reference_contexts"] = contexts
+            fields["retrieved_contexts"] = self._interpret_embedded_context(embedded_context)
 
         return fields
+
+    @staticmethod
+    def _split_embedded(text: str) -> tuple:
+        """Split embedded reference/context sections out of a user message.
+
+        Returns ``(clean_text, reference, context)`` where reference/context
+        are None when the corresponding marker is absent.
+        """
+        reference: Optional[str] = None
+        context: Optional[str] = None
+        if _REFERENCE_SEPARATOR in text:
+            text, reference = text.split(_REFERENCE_SEPARATOR, 1)
+        if _CONTEXT_SEPARATOR in text:
+            text, context = text.split(_CONTEXT_SEPARATOR, 1)
+        return text, reference, context
 
     @staticmethod
     def _interpret_embedded_context(embedded_context: str) -> List[str]:
@@ -358,12 +381,16 @@ class RAGASAdapter(BaseAdapter):
                 role = turn.get("role")
                 content = turn.get("content", "")
                 if role == "user":
-                    messages.append(HumanMessage(content=content))
+                    # Strip embedded reference/context so ground truth does not
+                    # leak into the conversation the metric judges.
+                    clean, _, _ = self._split_embedded(content)
+                    messages.append(HumanMessage(content=clean))
                 elif role == "assistant":
                     messages.append(AIMessage(content=content))
         else:
+            clean, _, _ = self._split_embedded(span_result.input or "")
             messages = [
-                HumanMessage(content=span_result.input or ""),
+                HumanMessage(content=clean),
                 AIMessage(content=span_result.actual_output or ""),
             ]
 

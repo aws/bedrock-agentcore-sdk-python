@@ -270,8 +270,10 @@ class TestRAGASAdapterIntegration:
         )
 
         assert isinstance(result, EvaluatorOutput)
-        # No reference available; RAGAS raises or produces NaN depending on version
-        assert result.errorCode is not None or result.value is not None
+        # ExactMatch declares reference as required; the adapter validates
+        # before scoring rather than letting ragas return a silent 0.0
+        assert result.errorCode == "MISSING_REQUIRED_FIELD"
+        assert "reference" in result.errorMessage
 
     def test_with_custom_mapper(self):
         from ragas.metrics import ExactMatch
@@ -333,7 +335,13 @@ class TestRAGASAdapterIntegration:
         assert result.label == "yes"
 
     def test_adapter_imports_without_datasets(self):
-        """The adapter module must not require the HF datasets library at import time."""
+        """The adapter module itself must not require the HF datasets library at import time.
+
+        Scope: this verifies the adapter adds no datasets dependency of its
+        own. ragas <1.0 still imports datasets when the ragas package is
+        imported; slim deployments handle that separately with a trimmed
+        ragas build.
+        """
         import subprocess
         import sys
 

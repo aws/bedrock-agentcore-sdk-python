@@ -357,6 +357,64 @@ class TestRAGASAdapterMultiTurn:
         assert "reference_tool_calls" in result.errorMessage
         metric.multi_turn_score.assert_not_called()
 
+    def test_embedded_reference_stripped_from_multi_turn_messages(self):
+        """Ground truth embedded in the user message must not leak into the conversation."""
+        metric = _mock_multi_turn_metric(score=0.8)
+        adapter = RAGASAdapter(metric=metric)
+
+        spans = _make_spans(user_content='[{"text": "What is 2+2?\\n\\nReference Answer:\\n4"}]')
+        result = adapter(_make_evaluator_input(spans=spans))
+
+        assert result.value == 0.8
+        sample = metric.multi_turn_score.call_args[0][0]
+        assert sample.user_input[0].content == "What is 2+2?"
+        assert "Reference Answer" not in sample.user_input[0].content
+
+    def test_build_messages_from_turns(self):
+        """Multi-invocation sessions build interleaved messages from turns."""
+        from ragas.messages import AIMessage, HumanMessage
+
+        adapter = RAGASAdapter(metric=_mock_multi_turn_metric())
+        span_result = SimpleNamespace(
+            turns=[
+                {"role": "user", "content": "first question\n\nContext:\nsome ctx"},
+                {"role": "assistant", "content": "first answer"},
+                {"role": "user", "content": "second question"},
+                {"role": "assistant", "content": "second answer"},
+            ],
+            input="first question",
+            actual_output="second answer",
+            tools_called=None,
+        )
+
+        messages = adapter._build_messages(span_result)
+
+        assert len(messages) == 4
+        assert isinstance(messages[0], HumanMessage)
+        assert messages[0].content == "first question"  # embedded context stripped
+        assert isinstance(messages[3], AIMessage)
+        assert messages[3].content == "second answer"
+
+    def test_tools_called_attached_to_last_ai_message(self):
+        adapter = RAGASAdapter(metric=_mock_multi_turn_metric())
+        span_result = SimpleNamespace(
+            turns=[
+                {"role": "user", "content": "q1"},
+                {"role": "assistant", "content": "a1"},
+                {"role": "user", "content": "q2"},
+                {"role": "assistant", "content": "a2"},
+            ],
+            input="q1",
+            actual_output="a2",
+            tools_called=[{"name": "search", "input_parameters": {"q": "x"}, "output": "r"}],
+        )
+
+        messages = adapter._build_messages(span_result)
+
+        assert messages[1].tool_calls is None or messages[1].tool_calls == []
+        assert [tc.name for tc in messages[3].tool_calls] == ["search"]
+        assert messages[3].tool_calls[0].args == {"q": "x"}
+
     def test_real_tool_call_accuracy_with_custom_mapper(self):
         """ToolCallAccuracy is deterministic — validate end-to-end with the real metric."""
         from ragas.messages import AIMessage, HumanMessage, ToolCall
@@ -560,7 +618,9 @@ class TestRAGASAdapterEmbeddedParsing:
         sample = metric.single_turn_score.call_args[0][0]
         assert sample.user_input == "What is AI?"
         assert sample.retrieved_contexts == ["AI is a branch of computer science."]
-        assert sample.reference_contexts == ["AI is a branch of computer science."]
+        # reference_contexts must NOT be defaulted from retrieved contexts:
+        # reference-comparison metrics would score retrieval against itself
+        assert sample.reference_contexts is None
 
     def test_json_list_context_recovers_ranked_chunks(self):
         """Contexts embedded as json.dumps([...]) recover chunk boundaries and rank order."""
@@ -576,7 +636,7 @@ class TestRAGASAdapterEmbeddedParsing:
         assert result.value == 0.67
         sample = metric.single_turn_score.call_args[0][0]
         assert sample.retrieved_contexts == ["chunk1", "chunk2", "chunk3"]
-        assert sample.reference_contexts == ["chunk1", "chunk2", "chunk3"]
+        assert sample.reference_contexts is None
 
     def test_json_non_list_context_treated_as_single_chunk(self):
         """JSON that isn't a list of strings stays a single chunk."""
@@ -660,6 +720,28 @@ class TestRAGASAdapterThresholdNone:
         result = adapter(_make_evaluator_input())
 
         assert result.value == 0.3
+        assert result.label == "Fail"
+
+    def test_adapter_threshold_overrides_metric_threshold(self):
+        metric = _mock_legacy_metric(threshold=0.5, score=0.6)
+        adapter = RAGASAdapter(metric=metric, threshold=0.9)
+
+        result = adapter(_make_evaluator_input())
+
+        assert result.value == 0.6
+        assert result.label == "Fail"  # adapter override wins over metric's 0.5
+        assert "threshold=0.9" in result.explanation
+
+    def test_adapter_threshold_applies_to_collections_metrics(self):
+        metric = _FakeCollectionsMetric(value=0.6)
+        adapter = RAGASAdapter(
+            metric=metric,
+            threshold=0.7,
+            custom_mapper=lambda ev: {"response": "a", "reference": "b"},
+        )
+
+        result = adapter(_make_evaluator_input())
+
         assert result.label == "Fail"
 
     def test_threshold_none_does_not_crash(self):

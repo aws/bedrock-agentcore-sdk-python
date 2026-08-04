@@ -154,6 +154,8 @@ dev = [
     "deepeval>=3.5.0,<5.0.0",
     "autoevals>=0.3.0,<1.0.0",
     "ragas>=0.4.3,<1.0.0",
+    # ragas<1.0 imports langchain_community.chat_models.vertexai, removed in 0.4.2
+    "langchain-community>=0.3.0,<0.4.2",
     "langchain>=1.0.0",
     "langgraph>=1.0.0",
     "langchain-mcp-adapters>=0.1.0",
@@ -196,6 +198,8 @@ autoevals = [
 ]
 ragas = [
     "ragas>=0.4.3,<1.0.0",
+    # ragas<1.0 imports langchain_community.chat_models.vertexai, removed in 0.4.2
+    "langchain-community>=0.3.0,<0.4.2",
     "strands-agents-evals>=1.0.3,<2.0.0",
 ]
 
