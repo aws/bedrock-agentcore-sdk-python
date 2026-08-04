@@ -17,6 +17,7 @@ RUN:
 """
 
 import json
+import os
 
 import pytest
 
@@ -138,12 +139,25 @@ class TestAutoEvalsAdapterIntegration:
         """Verify autoevals is installed."""
         import autoevals  # noqa: F401
 
-    def test_factuality_scorer(self):
+    @pytest.fixture
+    def openai_client(self):
+        """An OpenAI client pinned to the OpenAI API.
+
+        Left to its own defaults, autoevals sends requests to the Braintrust AI
+        gateway authenticated with BRAINTRUST_API_KEY, which rejects an OpenAI
+        key with 401. Passing an explicit client is the documented way to choose
+        the provider (the api_key/base_url arguments are deprecated).
+        """
+        from openai import OpenAI
+
+        return OpenAI(api_key=os.environ["OPENAI_API_KEY"], base_url="https://api.openai.com/v1")
+
+    def test_factuality_scorer(self, openai_client):
         from autoevals import Factuality
 
         from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoEvalsAdapter
 
-        scorer = Factuality()
+        scorer = Factuality(client=openai_client)
         adapter = AutoEvalsAdapter(metric=scorer)
 
         # Assistant-only output (no tool messages), which is what the helper
@@ -156,12 +170,12 @@ class TestAutoEvalsAdapterIntegration:
         assert result.value is not None
         assert result.label in ("Pass", "Fail")
 
-    def test_custom_threshold(self):
+    def test_custom_threshold(self, openai_client):
         from autoevals import Factuality
 
         from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoEvalsAdapter
 
-        scorer = Factuality()
+        scorer = Factuality(client=openai_client)
         adapter = AutoEvalsAdapter(metric=scorer, threshold=0.9)
 
         result = adapter(_make_agent_evaluator_input())
@@ -169,12 +183,12 @@ class TestAutoEvalsAdapterIntegration:
         assert isinstance(result, EvaluatorOutput)
         assert result.value is not None
 
-    def test_with_custom_mapper(self):
+    def test_with_custom_mapper(self, openai_client):
         from autoevals import Factuality
 
         from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoEvalsAdapter
 
-        scorer = Factuality()
+        scorer = Factuality(client=openai_client)
         adapter = AutoEvalsAdapter(
             metric=scorer,
             custom_mapper=lambda ev: {
