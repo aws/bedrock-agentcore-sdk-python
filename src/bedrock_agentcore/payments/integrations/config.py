@@ -50,6 +50,11 @@ class AgentCorePaymentsPluginConfig:
             When None (default), errors produce deterministic ToolMessages directly.
         max_error_retries: Maximum times the error callback can return RETRY per tool call.
             Default 3. Set to 0 to disable the callback entirely.
+        buyer_pays_gas_fees: MPP only. Authorizes charging blockchain network (gas) fees to
+            the buyer's wallet, on top of the payment amount. MPP challenges advertise who
+            sponsors fees via methodDetails.feePayer; when the seller does not, the service
+            signs only if this is True and otherwise fails validation. None (default) leaves
+            the protocol default in place and the field unsent. Ignored for x402.
     """
 
     payment_manager_arn: str
@@ -73,6 +78,7 @@ class AgentCorePaymentsPluginConfig:
     auto_session_expiry_minutes: int = 60
     on_payment_error: Optional[Callable] = None
     max_error_retries: int = 3
+    buyer_pays_gas_fees: Optional[bool] = None
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -133,6 +139,11 @@ class AgentCorePaymentsPluginConfig:
             raise ValueError(f"max_error_retries must be an int, got {type(self.max_error_retries).__name__}")
         if self.max_error_retries < 0:
             raise ValueError(f"max_error_retries must be >= 0, got {self.max_error_retries}")
+
+        if self.buyer_pays_gas_fees is not None and not isinstance(self.buyer_pays_gas_fees, bool):
+            raise ValueError(
+                f"buyer_pays_gas_fees must be a boolean or None, got {type(self.buyer_pays_gas_fees).__name__}"
+            )
 
     def update_payment_session_id(self, payment_session_id: str) -> None:
         """Update the payment session ID.

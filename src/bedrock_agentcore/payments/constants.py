@@ -34,6 +34,14 @@ class PaymentConnectorType(Enum):
     STRIPE_PRIVY = "StripePrivy"
 
 
+class PaymentType(Enum):
+    """Payment protocols supported by ProcessPayment."""
+
+    CRYPTO_X402 = "CRYPTO_X402"
+    # MPP does not differentiate between crypto and fiat — one value covers both.
+    MPP = "MPP"
+
+
 class PaymentsAuthorizerType(Enum):
     """Payment manager authorizer types."""
 
@@ -70,3 +78,37 @@ NETWORK_PREFERENCES = [
     "eip155:84532",  # Base Sepolia (testnet)
     "eip155:11155111",  # Ethereum Sepolia (Test)
 ]
+
+# ─────────────────────────────────────────────────────────────
+# MPP (Machine Payments Protocol) — https://mpp.dev
+# ─────────────────────────────────────────────────────────────
+
+# Default MPP protocol version sent to ProcessPayment. The service model constrains
+# this to a bare numeric string (^[0-9]+$).
+MPP_DEFAULT_VERSION = "1"
+
+# The `Payment` auth-scheme name used in `WWW-Authenticate` / `Authorization` headers.
+MPP_AUTH_SCHEME = "Payment"
+
+# Only the `charge` intent is implemented. Challenges advertising `session` or
+# `subscription` are filtered out during selection.
+MPP_SUPPORTED_INTENT = "charge"
+
+# Payment method identifiers, mapped to the blockchain family of the payment
+# instrument that can satisfy them. Tempo is an EVM chain, so it maps to ETHEREUM.
+MPP_METHOD_BLOCKCHAIN = {
+    "evm": "ETHEREUM",
+    "tempo": "ETHEREUM",
+    "solana": "SOLANA",
+}
+
+# Maps a Solana `methodDetails.network` value to the network identifier used in
+# NETWORK_PREFERENCES. Per draft-solana-charge-00 the field is optional and
+# defaults to mainnet.
+MPP_SOLANA_NETWORK_ALIASES = {
+    "mainnet": "solana-mainnet",
+    "devnet": "solana-devnet",
+    "localnet": "solana-testnet",
+    "testnet": "solana-testnet",
+}
+MPP_SOLANA_DEFAULT_NETWORK = "mainnet"

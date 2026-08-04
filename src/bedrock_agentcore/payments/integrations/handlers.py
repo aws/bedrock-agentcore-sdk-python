@@ -1,8 +1,13 @@
-"""Tool-specific handlers for X.402 payment processing.
+"""Tool-specific handlers for payment processing.
 
 This module provides handlers for extracting payment information from different tool responses.
 Each handler is responsible for parsing tool-specific response formats and extracting
-HTTP status codes and X.402 payment requirements.
+HTTP status codes and payment requirements.
+
+Both supported protocols are handled: x402 (payment requirements in the response body or
+the ``Payment-Required`` header) and MPP (payment options advertised as
+``WWW-Authenticate: Payment`` challenges). Because handlers surface the full header
+dictionary, MPP challenges reach ``PaymentManager.generate_payment_header`` unmodified.
 """
 
 import ast
@@ -12,6 +17,33 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+# Header carrying MPP payment challenges on a 402 response.
+_WWW_AUTHENTICATE = "www-authenticate"
+
+# The MPP auth-scheme name, lowercased for case-insensitive comparison.
+_MPP_SCHEME = "payment"
+
+
+def has_mpp_challenge(headers: Any) -> bool:
+    """Check whether a header mapping advertises a usable MPP ``Payment`` challenge.
+
+    Delegates to the MPP parser so detection and parsing can never disagree. A
+    hand-rolled prefix check here would drift: it would miss a ``Payment`` challenge
+    that follows another scheme (``Bearer ..., Payment ...``) and would falsely match
+    a hypothetical ``PaymentXYZ`` scheme.
+
+    Args:
+        headers: A header dictionary (case-insensitive keys) or any other value.
+
+    Returns:
+        True if a parseable ``WWW-Authenticate: Payment`` challenge is present.
+    """
+    from bedrock_agentcore.payments.mpp import is_mpp_payment_required
+
+    if not isinstance(headers, dict):
+        return False
+    return is_mpp_payment_required({"headers": headers})
 
 
 class PaymentResponseHandler(ABC):
@@ -336,21 +368,46 @@ class MCPRequestPaymentHandler(PaymentResponseHandler):
         """
         return isinstance(data, dict) and "x402Version" in data and "accepts" in data
 
+    @staticmethod
+    def _response_headers(result: Any) -> Dict[str, Any]:
+        """Extract the upstream response headers from an MCP Gateway result.
+
+        Returns:
+            The ``responseHeaders`` dict, or an empty dict if absent.
+        """
+        if not isinstance(result, dict):
+            return {}
+        headers = result.get("responseHeaders")
+        return headers if isinstance(headers, dict) else {}
+
+    def _is_payment_required(self, result: Any) -> bool:
+        """Check whether the MCP result represents a payment-required response.
+
+        Covers x402 (payment data in structuredContent) and MPP (a
+        ``WWW-Authenticate: Payment`` challenge in the upstream response headers).
+        """
+        if not isinstance(result, dict):
+            return False
+        if self._is_x402_payment_data(result.get("structuredContent")):
+            return True
+        return has_mpp_challenge(self._response_headers(result))
+
     def extract_status_code(self, result: Any) -> Optional[int]:
         """Extract status code from MCP Gateway tool result.
 
-        MCP Gateway returns HTTP 200 with x402 payment data embedded in
-        structuredContent, so there is no explicit 402 status code. We infer
-        402 from the presence of x402Version + accepts fields.
+        MCP Gateway returns HTTP 200 with the payment requirement embedded in the
+        response, so there is no explicit 402 status code. We infer 402 from the
+        presence of x402Version + accepts fields, or an MPP ``Payment`` challenge
+        in the upstream response headers.
 
         Args:
             result: The tool result from AfterToolCallEvent
 
         Returns:
-            402 if x402 payment data found, None otherwise
+            402 if payment required data found, None otherwise
         """
         try:
-            if isinstance(result, dict) and self._is_x402_payment_data(result.get("structuredContent")):
+            if self._is_payment_required(result):
                 return 402
             return None
         except Exception as e:
@@ -360,18 +417,23 @@ class MCPRequestPaymentHandler(PaymentResponseHandler):
     def extract_headers(self, result: Any) -> Optional[Dict[str, Any]]:
         """Extract headers from MCP Gateway tool result.
 
-        Returns content-type header when structuredContent contains x402 data.
+        Returns the upstream ``responseHeaders`` when present — MPP challenges live
+        there and must be forwarded intact. Falls back to a synthetic content-type
+        header for x402 results, which carry their requirements in the body.
 
         Args:
             result: The tool result from AfterToolCallEvent
 
         Returns:
-            Headers dict if x402 data found, None otherwise
+            Headers dict if payment required data found, None otherwise
         """
         try:
-            if isinstance(result, dict) and self._is_x402_payment_data(result.get("structuredContent")):
-                return {"content-type": "application/json"}
-            return None
+            if not self._is_payment_required(result):
+                return None
+            response_headers = self._response_headers(result)
+            if response_headers:
+                return response_headers
+            return {"content-type": "application/json"}
         except Exception as e:
             logger.error("Error extracting headers from MCP result: %s", str(e))
             return None
@@ -379,18 +441,22 @@ class MCPRequestPaymentHandler(PaymentResponseHandler):
     def extract_body(self, result: Any) -> Optional[Dict[str, Any]]:
         """Extract body from MCP Gateway tool result.
 
-        Returns the structuredContent dict directly when it contains x402 data.
+        Returns the structuredContent dict directly when it contains payment data.
 
         Args:
             result: The tool result from AfterToolCallEvent
 
         Returns:
-            structuredContent dict if x402 data found, None otherwise
+            structuredContent dict if payment required data found, None otherwise
         """
         try:
             if isinstance(result, dict):
                 sc = result.get("structuredContent")
                 if self._is_x402_payment_data(sc):
+                    return sc
+                # MPP carries its requirement in headers; surface any structured
+                # content so error details in the body remain available.
+                if has_mpp_challenge(self._response_headers(result)) and isinstance(sc, dict):
                     return sc
             return None
         except Exception as e:
