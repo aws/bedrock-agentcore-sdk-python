@@ -18,6 +18,7 @@ SESSION_HEADER = "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"
 SHELL_ID_HEADER = "X-Amzn-Bedrock-AgentCore-Shell-Id"
 REQUEST_ID_HEADER = "X-Amzn-Bedrock-AgentCore-Runtime-Request-Id"
 ACCESS_TOKEN_HEADER = "WorkloadAccessToken"  # nosec
+IDENTITY_WAT_HEADER = "X-Amz-Bedrock-AgentCore-Identity-WAT"  # nosec
 OAUTH2_CALLBACK_URL_HEADER = "OAuth2CallbackUrl"
 AUTHORIZATION_HEADER = "Authorization"
 CUSTOM_HEADER_PREFIX = "X-Amzn-Bedrock-AgentCore-Runtime-Custom-"
@@ -171,6 +172,7 @@ TASK_ACTION_CLEAR_FORCED_STATUS = "clear_forced_status"
 
 _CUSTOM_HEADER_PREFIX_LOWER = CUSTOM_HEADER_PREFIX.lower()
 _AUTHORIZATION_HEADER_LOWER = AUTHORIZATION_HEADER.lower()
+_IDENTITY_WAT_HEADER_LOWER = IDENTITY_WAT_HEADER.lower()
 
 
 def is_forwardable_header(header_name: str) -> bool:
@@ -179,6 +181,7 @@ def is_forwardable_header(header_name: str) -> bool:
     Rules (from the AgentCore runtime header allowlist docs):
     - Not in the restricted headers list
     - Does not start with ``x-amz-`` (reserved for AWS SigV4 signing)
+      unless it is the Identity WAT header used for workload identity chain propagation
     - Does not start with ``x-amzn-`` unless it starts with the legacy
       ``X-Amzn-Bedrock-AgentCore-Runtime-Custom-`` prefix
     """
@@ -186,6 +189,9 @@ def is_forwardable_header(header_name: str) -> bool:
     if lower in RESTRICTED_HEADERS:
         return False
     if lower.startswith("x-amz-"):
+        # Allow the Identity WAT header through for workload identity chain propagation
+        if lower == _IDENTITY_WAT_HEADER_LOWER:
+            return True
         return False
     if lower.startswith("x-amzn-") and not lower.startswith(_CUSTOM_HEADER_PREFIX_LOWER):
         return False

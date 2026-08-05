@@ -274,6 +274,72 @@ def requires_api_key(*, provider_name: str, into: str = "api_key") -> Callable:
     return decorator
 
 
+def requires_wat(
+    *,
+    into: str = "identity_wat",
+) -> Callable:
+    """Decorator that reads the Workload Access Token (WAT) from context and propagates it.
+
+    The WAT is minted by the Runtime platform before the agent code runs.
+    This decorator reads the WAT from ``BedrockAgentCoreContext``, stores it for
+    automatic propagation via the ``X-Amz-Bedrock-AgentCore-Identity-WAT`` header
+    on outbound Runtime/Gateway calls, and injects it into the decorated function.
+
+    Use this when your agent needs to propagate workload identity across hops
+    (e.g., calling other AgentCore runtimes or gateways).
+
+    The agent code does NOT need to call Identity/ACPS to get the WAT — the Runtime
+    service handles WAT minting (with chain extension) and delivers the WAT to the
+    agent via the request context.
+
+    Args:
+        into: Parameter name to inject the WAT into (default: 'identity_wat').
+
+    Returns:
+        Decorator function
+
+    Example::
+
+        @requires_wat()
+        def call_downstream(query: str, *, identity_wat: str) -> str:
+            '''Call a downstream service with WAT propagation.'''
+            # identity_wat is the WAT minted by the Runtime platform
+            # For boto3 calls (invoke_agent_runtime), it auto-propagates
+            # For raw HTTP calls (gateway MCP), attach it manually:
+            #   headers["X-Amz-Bedrock-AgentCore-Identity-WAT"] = identity_wat
+            ...
+    """
+
+    def decorator(func: Callable) -> Callable:
+        def _get_wat() -> str:
+            """Read the WAT from context (already provisioned by Runtime)."""
+            wat = BedrockAgentCoreContext.get_workload_access_token()
+            if not wat:
+                raise ValueError(
+                    "No workload access token available in context. Ensure the agent is running on AgentCore runtime."
+                )
+            return wat
+
+        @wraps(func)
+        async def async_wrapper(*args: Any, **kwargs_func: Any) -> Any:
+            wat = _get_wat()
+            kwargs_func[into] = wat
+            return await func(*args, **kwargs_func)
+
+        @wraps(func)
+        def sync_wrapper(*args: Any, **kwargs_func: Any) -> Any:
+            wat = _get_wat()
+            kwargs_func[into] = wat
+            return func(*args, **kwargs_func)
+
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        else:
+            return sync_wrapper
+
+    return decorator
+
+
 def _get_oauth2_callback_url(user_provided_oauth2_callback_url: Optional[str]):
     if user_provided_oauth2_callback_url:
         return user_provided_oauth2_callback_url
