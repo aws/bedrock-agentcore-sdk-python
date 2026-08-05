@@ -396,3 +396,130 @@ class TestDeepEvalAdapterConversational:
 
         assert result.errorCode == "FIELD_EXTRACTION_ERROR"
         assert "multi-turn" in result.errorMessage.lower() or "Multiple" in result.errorMessage
+
+
+class TestDeepEvalAdapterServiceNormalizedMultiTurn:
+    """Tests for conversational metrics with service-normalized SESSION format.
+
+    The AgentCore service collapses multi-turn ADOT docs into one span with
+    span_events[*].body. These tests verify the adapter correctly extracts
+    all turns and passes a ConversationalTestCase to the metric.
+    """
+
+    def _make_session_evaluator_input(self, num_turns=3):
+        """Build EvaluatorInput in service-normalized SESSION format."""
+        span_events = []
+        for i in range(num_turns):
+            span_events.append({
+                "body": {
+                    "input": {
+                        "messages": [
+                            {"role": "user", "content": {"content": [{"text": f"User turn {i+1}"}]}}
+                        ]
+                    },
+                    "output": {
+                        "messages": [
+                            {"role": "assistant", "content": {"message": [{"text": f"Bot turn {i+1}"}]}}
+                        ]
+                    },
+                }
+            })
+        spans = [
+            {
+                "traceId": "t-session",
+                "spanId": "s-session",
+                "source": "adot_cw",
+                "attributes": {"session.id": "multi-turn-session"},
+                "span_events": span_events,
+            }
+        ]
+        return EvaluatorInput(
+            evaluation_level="SESSION",
+            session_spans=spans,
+        )
+
+    def test_conversational_metric_receives_all_turns(self):
+        """Multi-turn metric gets ConversationalTestCase with correct turn count."""
+        from deepeval.metrics import BaseConversationalMetric
+        from deepeval.test_case import ConversationalTestCase
+
+        metric = MagicMock(spec=BaseConversationalMetric)
+        type(metric).__name__ = "GoalAccuracyMetric"
+        metric.threshold = 0.5
+        metric.score = 0.9
+        metric.reason = "Goal achieved"
+        del metric.success
+
+        captured_test_case = {}
+
+        def measure_side_effect(test_case):
+            captured_test_case["tc"] = test_case
+            metric.score = 0.9
+            metric.reason = "Goal achieved"
+
+        metric.measure = MagicMock(side_effect=measure_side_effect)
+        adapter = DeepEvalAdapter(metric=metric)
+
+        result = adapter(self._make_session_evaluator_input(num_turns=4))
+
+        assert result.value == 0.9
+        assert result.label == "Pass"
+        tc = captured_test_case["tc"]
+        assert isinstance(tc, ConversationalTestCase)
+        assert len(tc.turns) == 8  # 4 user + 4 assistant turns
+
+    def test_conversational_metric_turn_content_correct(self):
+        """Verify turn content is correctly extracted from nested message format."""
+        from deepeval.metrics import BaseConversationalMetric
+        from deepeval.test_case import ConversationalTestCase
+
+        metric = MagicMock(spec=BaseConversationalMetric)
+        type(metric).__name__ = "RoleAdherenceMetric"
+        metric.threshold = 0.5
+        metric.score = 1.0
+        metric.reason = "No violations"
+        del metric.success
+
+        captured_test_case = {}
+
+        def measure_side_effect(test_case):
+            captured_test_case["tc"] = test_case
+            metric.score = 1.0
+
+        metric.measure = MagicMock(side_effect=measure_side_effect)
+        adapter = DeepEvalAdapter(metric=metric)
+
+        result = adapter(self._make_session_evaluator_input(num_turns=2))
+
+        assert result.value == 1.0
+        tc = captured_test_case["tc"]
+        assert tc.turns[0].role == "user"
+        assert tc.turns[0].content == "User turn 1"
+        assert tc.turns[1].role == "assistant"
+        assert tc.turns[1].content == "Bot turn 1"
+        assert tc.turns[2].role == "user"
+        assert tc.turns[2].content == "User turn 2"
+        assert tc.turns[3].role == "assistant"
+        assert tc.turns[3].content == "Bot turn 2"
+
+    def test_five_turn_session_evaluation(self):
+        """Realistic 5-turn session evaluation (matches typical MACE migration)."""
+        from deepeval.metrics import BaseConversationalMetric
+
+        metric = MagicMock(spec=BaseConversationalMetric)
+        type(metric).__name__ = "ConversationCompletenessMetric"
+        metric.threshold = 0.5
+        metric.score = 0.75
+        metric.reason = "Mostly complete"
+        del metric.success
+
+        metric.measure = MagicMock(side_effect=lambda tc: None)
+        adapter = DeepEvalAdapter(metric=metric)
+
+        result = adapter(self._make_session_evaluator_input(num_turns=5))
+
+        assert result.value == 0.75
+        assert result.label == "Pass"
+        metric.measure.assert_called_once()
+        tc = metric.measure.call_args[0][0]
+        assert len(tc.turns) == 10  # 5 user + 5 assistant
