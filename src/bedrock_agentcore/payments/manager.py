@@ -1042,17 +1042,33 @@ class PaymentManager:
             # Step 4: Detect the payment protocol and dispatch. An MPP 402 advertises
             # its payment options via 'WWW-Authenticate: Payment' challenges; x402
             # carries them in the body or the Payment-Required header.
+            #
+            # A response may advertise both. MPP is preferred, but an MPP challenge the
+            # instrument cannot satisfy must not fail the whole payment when a payable
+            # x402 option is also on offer — so fall through to x402 in that case.
             if is_mpp_payment_required(payment_required_request):
                 logger.debug("Detected MPP payment required request")
-                return self._generate_mpp_payment_header(
-                    payment_instrument_id=payment_instrument_id,
-                    payment_session_id=payment_session_id,
-                    payment_required_request=payment_required_request,
-                    user_id=user_id,
-                    network_preferences=network_preferences,
-                    client_token=client_token,
-                    buyer_pays_gas_fees=buyer_pays_gas_fees,
-                )
+                try:
+                    return self._generate_mpp_payment_header(
+                        payment_instrument_id=payment_instrument_id,
+                        payment_session_id=payment_session_id,
+                        payment_required_request=payment_required_request,
+                        user_id=user_id,
+                        network_preferences=network_preferences,
+                        client_token=client_token,
+                        buyer_pays_gas_fees=buyer_pays_gas_fees,
+                    )
+                except MppChallengeSelectionError as e:
+                    # Only selection failures are recoverable. A failure after the
+                    # payment was submitted must propagate: retrying under x402 could
+                    # charge the buyer twice.
+                    if not self._has_x402_payment_required(payment_required_request):
+                        raise PaymentError(str(e)) from e
+                    logger.info(
+                        "No satisfiable MPP challenge (%s); falling back to the x402 option "
+                        "advertised in the same 402 response",
+                        e,
+                    )
 
             # Step 4b: x402 — extract payload and detect version.
             x402_payload, x402_version = self._extract_x402_payload(payment_required_request)
@@ -1110,6 +1126,30 @@ class PaymentManager:
         except Exception as e:
             logger.error("Unexpected error during payment header generation: %s", str(e))
             raise PaymentError(f"Unexpected error: {str(e)}") from e
+
+    def _has_x402_payment_required(self, payment_required_request: Dict[str, Any]) -> bool:
+        """Check whether a 402 response also carries an x402 payment requirement.
+
+        Used to decide whether an unsatisfiable MPP challenge can fall back to x402.
+        Deliberately read-only and non-raising: this runs inside an exception handler,
+        so a malformed x402 payload must report "no x402 option" rather than mask the
+        original MPP selection failure.
+
+        Args:
+            payment_required_request: Dict with statusCode, headers, and body.
+
+        Returns:
+            True if a parseable x402 requirement with a non-empty ``accepts`` list is present.
+        """
+        try:
+            x402_payload, _ = self._extract_x402_payload(payment_required_request)
+        except PaymentError:
+            return False
+        except Exception:  # pragma: no cover - defensive; extraction should raise PaymentError
+            return False
+
+        accepts = x402_payload.get("accepts")
+        return isinstance(accepts, list) and bool(accepts)
 
     def _get_instrument_network(
         self,
@@ -1195,14 +1235,16 @@ class PaymentManager:
         logger.debug("Retrieved instrument with network: %s", network)
 
         # Step 3: Select the one challenge to fulfill.
-        try:
-            selected = select_challenge(
-                challenges,
-                instrument_network=network,
-                network_preferences=network_preferences,
-            )
-        except MppChallengeSelectionError as e:
-            raise PaymentError(str(e)) from e
+        # MppChallengeSelectionError is allowed to propagate rather than being converted
+        # to PaymentError here: generate_payment_header distinguishes it from other
+        # failures so it can fall back to a payable x402 option in the same 402 response.
+        # Callers reaching this method through generate_payment_header still see a
+        # PaymentError, since that wrapper converts it when no fallback exists.
+        selected = select_challenge(
+            challenges,
+            instrument_network=network,
+            network_preferences=network_preferences,
+        )
 
         selected_id = selected.get("id")
         logger.debug(
@@ -1220,8 +1262,19 @@ class PaymentManager:
         # Only send buyerPaysGasFees when the caller expressed an intent. Omitting it
         # leaves the protocol default in place rather than asserting a choice the
         # caller did not make.
+        #
+        # Require an actual bool and forward it unchanged. Coercing with bool() would
+        # make the string "false" authorize additional wallet charges, since every
+        # non-empty string is truthy — a silent, money-moving misread of the caller's
+        # intent. This matches the strict validation on the integration config.
         if buyer_pays_gas_fees is not None:
-            mpp_input["buyerPaysGasFees"] = bool(buyer_pays_gas_fees)
+            if not isinstance(buyer_pays_gas_fees, bool):
+                raise PaymentError(
+                    "Input Validation: buyer_pays_gas_fees must be a boolean or None, got "
+                    f"{type(buyer_pays_gas_fees).__name__}. Pass True or False explicitly — "
+                    "values are not coerced, because authorizing network fees must be unambiguous."
+                )
+            mpp_input["buyerPaysGasFees"] = buyer_pays_gas_fees
 
         payment_input = {"mpp": mpp_input}
 

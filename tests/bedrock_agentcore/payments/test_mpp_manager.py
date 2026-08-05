@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bedrock_agentcore.payments.manager import PaymentError, PaymentManager
+from bedrock_agentcore.payments.manager import InsufficientBudget, PaymentError, PaymentManager
 
 PAYMENT_MANAGER_ARN = "arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/pm-abc123"
 
@@ -244,16 +244,41 @@ class TestMppRouting:
 
         assert self._mpp_input(manager)["buyerPaysGasFees"] is False
 
-    @pytest.mark.parametrize("value,expected", [(1, True), (0, False)])
-    def test_buyer_pays_gas_fees_is_coerced_to_bool(self, manager, value, expected):
-        """The model types this as Boolean, so truthy inputs must not leak through as ints."""
+    @pytest.mark.parametrize("value", ["false", "true", "no", 1, 0, [], {"a": 1}])
+    def test_non_boolean_buyer_pays_gas_fees_is_rejected_not_coerced(self, manager, value):
+        """Coercion would let the string "false" authorize wallet charges.
+
+        Every non-empty string is truthy, so bool("false") is True. Authorizing network
+        fees must be unambiguous, so non-bool values are rejected rather than coerced.
+        """
+        set_instrument_network(manager, "ETHEREUM")
+        set_mpp_result(manager)
+
+        with pytest.raises(PaymentError, match="buyer_pays_gas_fees must be a boolean or None"):
+            self._process_mpp(manager, buyer_pays_gas_fees=value)
+
+        manager._payment_client.process_payment.assert_not_called()
+
+    def test_string_false_never_authorizes_gas_fees(self, manager):
+        """Regression guard for the specific money-moving misread."""
+        set_instrument_network(manager, "ETHEREUM")
+        set_mpp_result(manager)
+
+        with pytest.raises(PaymentError):
+            self._process_mpp(manager, buyer_pays_gas_fees="false")
+
+        # Nothing was sent at all, so nothing could have been authorized.
+        manager._payment_client.process_payment.assert_not_called()
+
+    @pytest.mark.parametrize("value", [True, False])
+    def test_bool_values_are_forwarded_unchanged(self, manager, value):
         set_instrument_network(manager, "ETHEREUM")
         set_mpp_result(manager)
 
         self._process_mpp(manager, buyer_pays_gas_fees=value)
 
         forwarded = self._mpp_input(manager)["buyerPaysGasFees"]
-        assert forwarded is expected
+        assert forwarded is value
         assert isinstance(forwarded, bool)
 
     def test_buyer_pays_gas_fees_not_sent_on_x402_path(self, manager):
@@ -426,6 +451,121 @@ class TestMppCredentialHandling:
         )
 
         assert header["Authorization"] == "Payment eyJhIjoxfQ"
+
+
+class TestDualProtocolFallback:
+    """A 402 may advertise both MPP and x402; an unsatisfiable MPP option must not fail it."""
+
+    X402_BODY = {
+        "x402Version": 1,
+        "accepts": [{"scheme": "exact", "network": "base-sepolia", "maxAmountRequired": "1000"}],
+    }
+
+    def _dual_402(self, challenge, body=None):
+        return {
+            "statusCode": 402,
+            "headers": {"WWW-Authenticate": challenge},
+            "body": body if body is not None else self.X402_BODY,
+        }
+
+    def _set_x402_result(self, manager):
+        manager._payment_client.process_payment.return_value = {
+            "processPayment": {"paymentOutput": {"cryptoX402": {"payload": {"signature": "0xsig"}}}}
+        }
+
+    def _generate(self, manager, challenge, body=None):
+        return manager.generate_payment_header(
+            payment_instrument_id="pi-1",
+            payment_session_id="ps-1",
+            user_id="user-1",
+            payment_required_request=self._dual_402(challenge, body),
+        )
+
+    def test_mpp_is_preferred_when_satisfiable(self, manager):
+        set_instrument_network(manager, "ETHEREUM")
+        set_mpp_result(manager, selected_payment_id="evm-1")
+
+        header = self._generate(manager, challenge_header("evm-1", "evm", evm_request()))
+
+        assert "Authorization" in header
+        assert manager._payment_client.process_payment.call_args.kwargs["paymentType"] == "MPP"
+
+    def test_falls_back_to_x402_when_mpp_is_unsatisfiable(self, manager):
+        """A SOLANA-only MPP challenge with an ETHEREUM instrument must use the x402 option."""
+        set_instrument_network(manager, "ETHEREUM")
+        self._set_x402_result(manager)
+
+        header = self._generate(manager, challenge_header("sol-1", "solana", solana_request()))
+
+        assert "X-PAYMENT" in header
+        assert "Authorization" not in header
+        assert manager._payment_client.process_payment.call_args.kwargs["paymentType"] == "CRYPTO_X402"
+
+    def test_raises_when_mpp_unsatisfiable_and_no_x402_present(self, manager):
+        set_instrument_network(manager, "ETHEREUM")
+
+        with pytest.raises(PaymentError, match="No matching challenge"):
+            self._generate(manager, challenge_header("sol-1", "solana", solana_request()), body={})
+
+        manager._payment_client.process_payment.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {},
+            {"x402Version": 1, "accepts": []},
+            {"x402Version": 1},
+            {"accepts": [{"scheme": "exact", "network": "base-sepolia"}]},
+        ],
+    )
+    def test_no_fallback_without_a_usable_x402_option(self, manager, body):
+        """An absent, empty or malformed x402 payload is not a fallback target."""
+        set_instrument_network(manager, "ETHEREUM")
+
+        with pytest.raises(PaymentError):
+            self._generate(manager, challenge_header("sol-1", "solana", solana_request()), body=body)
+
+        manager._payment_client.process_payment.assert_not_called()
+
+    def test_post_submission_failure_does_not_fall_back(self, manager):
+        """Falling back after a submitted payment could charge the buyer twice."""
+        set_instrument_network(manager, "ETHEREUM")
+        manager._payment_client.process_payment.side_effect = InsufficientBudget("Insufficient budget")
+
+        with pytest.raises(PaymentError):
+            self._generate(manager, challenge_header("evm-1", "evm", evm_request()))
+
+        attempts = [c.kwargs["paymentType"] for c in manager._payment_client.process_payment.call_args_list]
+        assert attempts == ["MPP"], f"Expected exactly one submission, got {attempts}"
+
+    def test_missing_mpp_output_does_not_fall_back(self, manager):
+        """A malformed MPP response is post-submission, so it must not retry as x402."""
+        set_instrument_network(manager, "ETHEREUM")
+        manager._payment_client.process_payment.return_value = {"processPayment": {"paymentOutput": {}}}
+
+        with pytest.raises(PaymentError, match="Missing mpp in payment output"):
+            self._generate(manager, challenge_header("evm-1", "evm", evm_request()))
+
+        attempts = [c.kwargs["paymentType"] for c in manager._payment_client.process_payment.call_args_list]
+        assert attempts == ["MPP"]
+
+    def test_x402_only_402_is_unaffected(self, manager):
+        """No MPP challenge present — the x402 path must behave exactly as before."""
+        set_instrument_network(manager, "ETHEREUM")
+        self._set_x402_result(manager)
+
+        header = manager.generate_payment_header(
+            payment_instrument_id="pi-1",
+            payment_session_id="ps-1",
+            user_id="user-1",
+            payment_required_request={
+                "statusCode": 402,
+                "headers": {"content-type": "application/json"},
+                "body": self.X402_BODY,
+            },
+        )
+
+        assert "X-PAYMENT" in header
 
 
 class TestMppSelectionErrors:

@@ -105,10 +105,15 @@ MPP_METHOD_BLOCKCHAIN = {
 # Maps a Solana `methodDetails.network` value to the network identifier used in
 # NETWORK_PREFERENCES. Per draft-solana-charge-00 the field is optional and
 # defaults to mainnet.
+#
+# `localnet` is deliberately absent. It denotes a distinct local RPC/Surfpool
+# environment, not Solana testnet; aliasing it would let a local-only challenge
+# satisfy a solana-testnet preference and outrank a genuinely payable devnet
+# challenge. Unmapped values are left unranked rather than misranked — they remain
+# selectable when they are the only option, but never win on preference order.
 MPP_SOLANA_NETWORK_ALIASES = {
     "mainnet": "solana-mainnet",
     "devnet": "solana-devnet",
-    "localnet": "solana-testnet",
     "testnet": "solana-testnet",
 }
 MPP_SOLANA_DEFAULT_NETWORK = "mainnet"

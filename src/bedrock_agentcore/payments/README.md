@@ -526,9 +526,29 @@ The parameter is optional and tri-state:
 | `False` | Buyer explicitly declines to pay network fees |
 | `True` | Buyer authorizes network fees charged to their own wallet |
 
+Only `True`, `False`, or `None` are accepted — other values raise `PaymentError` rather than
+being coerced. This is deliberate: `bool("false")` is `True` in Python, so coercion would let the
+string `"false"` authorize wallet charges. Authorizing network fees must be unambiguous.
+
 It has no effect on challenges where the seller already sponsors fees
 (`methodDetails.feePayer=true`), and is ignored on the x402 path. Both framework integrations
 expose it as `buyer_pays_gas_fees` on their config.
+
+**Responses advertising both MPP and x402**
+
+Some endpoints advertise both protocols in the same 402. MPP is preferred, but if no advertised
+MPP challenge is satisfiable by the payment instrument and the response also carries a usable
+x402 requirement, the SDK falls back to x402 rather than failing the payment:
+
+| 402 contents | Outcome |
+|---|---|
+| Satisfiable MPP challenge (± x402) | Paid via MPP → `Authorization` |
+| MPP challenge the instrument cannot satisfy **+** usable x402 `accepts` | Falls back to x402 → `X-PAYMENT` |
+| MPP challenge the instrument cannot satisfy, no usable x402 | `PaymentError` |
+
+The fallback applies **only** to challenge-selection failures, which happen before anything is
+submitted. A failure after the payment has been sent to the service always propagates — retrying
+under x402 at that point could charge the buyer twice.
 
 **Working with challenges directly**
 

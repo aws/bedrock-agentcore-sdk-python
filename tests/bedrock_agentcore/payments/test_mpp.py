@@ -380,7 +380,7 @@ class TestChallengeNetwork:
         [
             ("mainnet", "solana-mainnet"),
             ("devnet", "solana-devnet"),
-            ("localnet", "solana-testnet"),
+            ("testnet", "solana-testnet"),
             ("MAINNET", "solana-mainnet"),
         ],
     )
@@ -388,6 +388,35 @@ class TestChallengeNetwork:
         challenge = parse_www_authenticate(challenge_header("x", "solana", solana_request(network=network)))[0]
 
         assert challenge_network(challenge) == expected
+
+    def test_localnet_is_not_aliased_to_a_public_network(self):
+        """localnet is a local RPC/Surfpool environment, not Solana testnet.
+
+        Aliasing it would let a local-only challenge satisfy a solana-testnet preference.
+        """
+        challenge = parse_www_authenticate(challenge_header("x", "solana", solana_request(network="localnet")))[0]
+
+        assert challenge_network(challenge) is None
+
+    def test_payable_devnet_challenge_outranks_localnet(self):
+        """The regression this guards: a local-only challenge must not beat a payable one."""
+        header = ", ".join(
+            [
+                challenge_header("local-1", "solana", solana_request(network="localnet")),
+                challenge_header("dev-1", "solana", solana_request(network="devnet")),
+            ]
+        )
+        challenges = parse_www_authenticate(header)
+
+        selected = select_challenge(challenges, instrument_network="SOLANA")
+
+        assert selected["id"] == "dev-1"
+
+    def test_localnet_remains_selectable_when_it_is_the_only_option(self):
+        """Unranked, not unusable — a local-only challenge is still payable if alone."""
+        challenges = parse_www_authenticate(challenge_header("local-1", "solana", solana_request(network="localnet")))
+
+        assert select_challenge(challenges, instrument_network="SOLANA")["id"] == "local-1"
 
     def test_solana_defaults_to_mainnet_when_network_absent(self):
         """Per draft-solana-charge-00, methodDetails.network is optional."""

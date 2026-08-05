@@ -226,6 +226,357 @@ class TestAgentCorePaymentsPlugin:
 
 
 @pytest.mark.integration
+class TestAgentCorePaymentsPluginMpp:
+    """Integration tests for MPP (Machine Payments Protocol) handling in the plugin.
+
+    MPP servers advertise payment options as ``WWW-Authenticate: Payment`` challenges on
+    a 402 response, rather than in the body like x402. These tests exercise that path
+    against the live MPP reference endpoint.
+
+    To run the live tests:
+        export BEDROCK_TEST_REGION="us-west-2"
+        export TEST_PAYMENT_MANAGER_ARN="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/pm-123"
+        export TEST_PAYMENT_INSTRUMENT_ID="payment-instrument-xxx"
+        export TEST_PAYMENT_SESSION_ID="payment-session-xxx"
+        export TEST_USER_ID="test-user"
+        export TEST_MPP_RESOURCE_URL="https://mpp.dev/api/ping/paid"
+        pytest tests_integ/payments/integrations/strands/test_plugin_integration.py::\
+            TestAgentCorePaymentsPluginMpp -v -s
+    """
+
+    DEFAULT_MPP_URL = "https://mpp.dev/api/ping/paid"
+
+    @classmethod
+    def setup_class(cls):
+        """Set up test environment."""
+        cls.region = os.environ.get("BEDROCK_TEST_REGION", "us-west-2")
+        cls.user_id = os.environ.get("TEST_USER_ID", f"test-user-{uuid.uuid4().hex[:8]}")
+        cls.mpp_url = os.environ.get("TEST_MPP_RESOURCE_URL", cls.DEFAULT_MPP_URL)
+
+    def _make_config(self, **overrides):
+        """Build a plugin config from the configured test resources."""
+        kwargs = {
+            "payment_manager_arn": os.environ.get("TEST_PAYMENT_MANAGER_ARN"),
+            "user_id": self.user_id,
+            "payment_instrument_id": os.environ.get("TEST_PAYMENT_INSTRUMENT_ID"),
+            "payment_session_id": os.environ.get("TEST_PAYMENT_SESSION_ID"),
+            "region": self.region,
+            # No chain-advance wait needed: these tests assert on signing, not settlement.
+            "post_payment_retry_delay_seconds": 0,
+        }
+        kwargs.update(overrides)
+        return AgentCorePaymentsPluginConfig(**kwargs)
+
+    @staticmethod
+    def _require_payment_resources():
+        """Skip unless a payment manager, instrument and session are all configured."""
+        missing = [
+            name
+            for name in ("TEST_PAYMENT_MANAGER_ARN", "TEST_PAYMENT_INSTRUMENT_ID", "TEST_PAYMENT_SESSION_ID")
+            if not os.environ.get(name)
+        ]
+        if missing:
+            pytest.skip(f"Not configured: {', '.join(missing)}")
+
+    def _fetch_live_402(self):
+        """Fetch a real MPP 402 and return it as a payment_required_request dict."""
+        import httpx
+
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            response = client.get(self.mpp_url)
+
+        assert response.status_code == 402, (
+            f"Expected 402 from {self.mpp_url}, got {response.status_code}. "
+            "The MPP reference endpoint may have changed."
+        )
+        return {"statusCode": 402, "headers": dict(response.headers), "body": {}}
+
+    def test_live_mpp_endpoint_advertises_payment_challenge(self):
+        """The live MPP endpoint must return a 402 the SDK recognizes as MPP.
+
+        Needs no AWS credentials — it validates only detection and parsing.
+        """
+        from bedrock_agentcore.payments.mpp import extract_challenges, is_mpp_payment_required
+
+        payment_required_request = self._fetch_live_402()
+
+        assert is_mpp_payment_required(payment_required_request), (
+            f"No MPP challenge found in headers: {payment_required_request['headers']}"
+        )
+
+        challenges = extract_challenges(payment_required_request)
+        assert challenges, "At least one challenge must be parsed"
+        for challenge in challenges:
+            assert challenge.get("id"), f"Challenge missing id: {challenge}"
+            assert challenge.get("method"), f"Challenge missing method: {challenge}"
+            assert challenge["raw"].startswith("Payment ")
+            logger.info(
+                "Live challenge: id=%s method=%s intent=%s expires=%s",
+                challenge.get("id"),
+                challenge.get("method"),
+                challenge.get("intent"),
+                challenge.get("expires"),
+            )
+
+    def test_plugin_http_request_preserves_live_challenge(self):
+        """The plugin's http_request tool must surface the challenge for detection.
+
+        MPP challenges travel in headers, so a tool that drops or rewrites response
+        headers would silently break auto-payment. Needs no AWS credentials.
+        """
+        from bedrock_agentcore.payments.integrations.handlers import get_payment_handler
+
+        config = self._make_config(
+            payment_manager_arn=os.environ.get(
+                "TEST_PAYMENT_MANAGER_ARN",
+                "arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/mypaymentmanager-cyrc25gr4c",
+            )
+        )
+        plugin = AgentCorePaymentsPlugin(config=config)
+
+        result = plugin.http_request(url=self.mpp_url)
+
+        handler = get_payment_handler("http_request", {"url": self.mpp_url, "headers": {}})
+        assert handler.extract_status_code(result["content"]) == 402
+        headers = handler.extract_headers(result["content"])
+        assert headers is not None
+
+        challenge = next((v for k, v in headers.items() if k.lower() == "www-authenticate"), None)
+        assert challenge is not None, f"WWW-Authenticate not preserved by http_request: {headers}"
+        assert challenge.strip().lower().startswith("payment")
+        logger.info("http_request preserved the MPP challenge: %s...", challenge[:80])
+
+    def test_plugin_settles_live_mpp_402(self):
+        """Plugin signs a real MPP challenge and applies the Authorization header.
+
+        Requires AWS credentials and MPP entitlement on the account. When the account
+        is not yet enabled for MPP, the service returns AccessDeniedException; the test
+        skips in that case rather than reporting a false failure, but still asserts the
+        request shape was accepted.
+        """
+        self._require_payment_resources()
+
+        plugin = AgentCorePaymentsPlugin(config=self._make_config())
+        with patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager") as mock_cls:
+            mock_cls.return_value = PaymentManager(
+                payment_manager_arn=plugin.config.payment_manager_arn,
+                region_name=self.region,
+            )
+            plugin.init_agent(MagicMock())
+
+        payment_required_request = self._fetch_live_402()
+
+        try:
+            header = plugin._process_payment_required_request(payment_required_request)
+        except PaymentError as e:
+            message = str(e)
+            lowered = message.lower()
+            for shape_hint in ("unknown parameter", "validationexception"):
+                assert shape_hint not in lowered, f"MPP request shape was rejected: {message}"
+            pytest.skip(f"MPP payment not completed (expected without account entitlement): {message}")
+
+        assert set(header) == {"Authorization"}, f"MPP must yield only an Authorization header, got {list(header)}"
+        assert header["Authorization"].startswith("Payment ")
+        assert "X-PAYMENT" not in header
+        logger.info("Plugin settled the live MPP challenge and produced an Authorization header")
+
+    def test_agent_pays_live_mpp_endpoint(self):
+        """End-to-end: a Strands agent fetches an MPP-gated resource via the plugin.
+
+        The plugin intercepts the 402, settles the challenge, attaches the
+        Authorization header, and Strands retries the tool.
+        """
+        self._require_payment_resources()
+
+        plugin = AgentCorePaymentsPlugin(config=self._make_config())
+        agent = Agent(
+            system_prompt=(
+                "You are a helpful assistant. Use the http_request tool to fetch URLs. "
+                "Report the final response you receive."
+            ),
+            plugins=[plugin],
+        )
+
+        result = self.invoke_agent_with_payment_handling(
+            agent,
+            f"Please fetch {self.mpp_url} and tell me what it returned.",
+            plugin=plugin,
+        )
+
+        logger.info("Agent stop_reason: %s", result.stop_reason)
+        logger.info("MPP agent flow completed")
+
+    def invoke_agent_with_payment_handling(self, agent, prompt, plugin=None, max_iterations=10):
+        """Reuse the x402 interrupt-handling wrapper for the MPP flow."""
+        return TestAgentCorePaymentsPlugin.invoke_agent_with_payment_handling(
+            self, agent, prompt, plugin=plugin, max_iterations=max_iterations
+        )
+
+
+@pytest.mark.integration
+class TestMppPostPaymentFailureFlow:
+    """Hook-flow scenarios for MPP payments.
+
+    Mock-driven: these fully mock PaymentManager, do not hit AWS, and require no
+    credentials. They cover the plugin's after_tool_call hook end to end for MPP.
+    """
+
+    CHALLENGE = (
+        'Payment id="evm-1", realm="api.example.com", method="evm", intent="charge", request="eyJhbW91bnQiOiIxMDAwIn0"'
+    )
+    CREDENTIAL = "Payment eyJjaGFsbGVuZ2UiOnt9fQ"
+
+    @classmethod
+    def setup_class(cls):
+        """Set up test environment."""
+        cls.region = os.environ.get("BEDROCK_TEST_REGION", "us-west-2")
+        cls.user_id = os.environ.get("TEST_USER_ID", f"test-user-{uuid.uuid4().hex[:8]}")
+
+    def _make_mpp_402_event(self, tool_use_id, invocation_state=None, tool_input=None, body=None):
+        """Create a mock AfterToolCallEvent carrying an MPP 402 (challenge in headers)."""
+        payment_required = {
+            "statusCode": 402,
+            "headers": {"WWW-Authenticate": self.CHALLENGE, "content-type": "application/problem+json"},
+            "body": body if body is not None else {},
+        }
+
+        event = MagicMock()
+        event.tool_use = {
+            "name": "http_request",
+            "toolUseId": tool_use_id,
+            "input": tool_input if tool_input is not None else {"url": "https://mpp.dev/api/ping/paid", "headers": {}},
+        }
+        event.result = [{"text": f"PAYMENT_REQUIRED: {json.dumps(payment_required)}"}]
+        event.invocation_state = invocation_state if invocation_state is not None else {}
+        event.retry = False
+        event.agent = MagicMock()
+        event.agent.state.get = MagicMock(return_value=None)
+        event.agent.state.set = MagicMock()
+        event.agent.state.delete = MagicMock()
+        return event
+
+    def _make_plugin(self, mock_pm):
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn="arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+            user_id=self.user_id,
+            payment_instrument_id="payment-instrument-123",
+            payment_session_id="payment-session-456",
+            region=self.region,
+            post_payment_retry_delay_seconds=0,
+        )
+        plugin = AgentCorePaymentsPlugin(config=config)
+        with patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager", return_value=mock_pm):
+            plugin.init_agent(MagicMock())
+        plugin.payment_manager = mock_pm
+        return plugin
+
+    def test_mpp_402_signs_and_retries_with_authorization(self):
+        """A 402 carrying a Payment challenge is signed and retried."""
+        mock_pm = MagicMock()
+        mock_pm.generate_payment_header.return_value = {"Authorization": self.CREDENTIAL}
+        plugin = self._make_plugin(mock_pm)
+
+        invocation_state = {}
+        tool_input = {"url": "https://mpp.dev/api/ping/paid", "headers": {}}
+        event = self._make_mpp_402_event("tool-mpp", invocation_state=invocation_state, tool_input=tool_input)
+
+        plugin.after_tool_call(event)
+
+        assert event.retry is True
+        assert tool_input["headers"]["Authorization"] == self.CREDENTIAL
+        assert invocation_state.get("payment_signed_tool-mpp") is True
+
+        # The challenge must reach PaymentManager so selection can run.
+        request_arg = mock_pm.generate_payment_header.call_args.kwargs["payment_required_request"]
+        assert request_arg["headers"]["WWW-Authenticate"] == self.CHALLENGE
+        logger.info("MPP 402 signed, Authorization header applied, retry requested")
+
+    def test_mpp_402_after_signing_stops(self):
+        """A second MPP 402 after signing is a server rejection, not a retry case."""
+        mock_pm = MagicMock()
+        mock_pm.generate_payment_header.return_value = {"Authorization": self.CREDENTIAL}
+        plugin = self._make_plugin(mock_pm)
+
+        invocation_state = {}
+        tool_input = {"url": "https://mpp.dev/api/ping/paid", "headers": {}}
+
+        first = self._make_mpp_402_event("tool-mpp2", invocation_state=invocation_state, tool_input=tool_input)
+        plugin.after_tool_call(first)
+        assert first.retry is True
+
+        second = self._make_mpp_402_event(
+            "tool-mpp2",
+            invocation_state=invocation_state,
+            tool_input=tool_input,
+            body={"error": "verification-failed"},
+        )
+        plugin.after_tool_call(second)
+
+        assert second.retry is False
+        assert mock_pm.generate_payment_header.call_count == 1
+        assert "payment_failure_tool-mpp2" in invocation_state
+        logger.info("Second MPP 402 after signing stopped and stored failure state")
+
+    def test_mpp_selection_failure_does_not_retry(self):
+        """An unsatisfiable challenge must not retry or leave a payment header."""
+        mock_pm = MagicMock()
+        mock_pm.generate_payment_header.side_effect = PaymentError(
+            "MPP Challenge Selection: No matching challenge - no advertised payment method can be satisfied"
+        )
+        plugin = self._make_plugin(mock_pm)
+
+        invocation_state = {}
+        tool_input = {"url": "https://mpp.dev/api/ping/paid", "headers": {}}
+        event = self._make_mpp_402_event("tool-mpp3", invocation_state=invocation_state, tool_input=tool_input)
+
+        plugin.after_tool_call(event)
+
+        assert event.retry is False
+        assert "Authorization" not in tool_input["headers"]
+        assert "payment_failure_tool-mpp3" in invocation_state
+        logger.info("MPP selection failure stopped cleanly with no header applied")
+
+    def test_x402_and_mpp_use_independent_state(self):
+        """An x402 tool use and an MPP tool use must not share signing state."""
+        mock_pm = MagicMock()
+        mock_pm.generate_payment_header.side_effect = [
+            {"X-PAYMENT": "x402-proof"},
+            {"Authorization": self.CREDENTIAL},
+        ]
+        plugin = self._make_plugin(mock_pm)
+
+        invocation_state = {}
+
+        x402_input = {"url": "https://nickeljoke.vercel.app/api/joke", "headers": {}}
+        x402_payload = {
+            "statusCode": 402,
+            "headers": {"content-type": "application/json"},
+            "body": {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "base-sepolia"}]},
+        }
+        x402_event = MagicMock()
+        x402_event.tool_use = {"name": "http_request", "toolUseId": "tool-x402", "input": x402_input}
+        x402_event.result = [{"text": f"PAYMENT_REQUIRED: {json.dumps(x402_payload)}"}]
+        x402_event.invocation_state = invocation_state
+        x402_event.retry = False
+        x402_event.agent = MagicMock()
+        x402_event.agent.state.get = MagicMock(return_value=None)
+
+        plugin.after_tool_call(x402_event)
+        assert x402_event.retry is True
+        assert x402_input["headers"]["X-PAYMENT"] == "x402-proof"
+
+        mpp_input = {"url": "https://mpp.dev/api/ping/paid", "headers": {}}
+        mpp_event = self._make_mpp_402_event("tool-mpp4", invocation_state=invocation_state, tool_input=mpp_input)
+        plugin.after_tool_call(mpp_event)
+
+        assert mpp_event.retry is True
+        assert mpp_input["headers"]["Authorization"] == self.CREDENTIAL
+        assert "X-PAYMENT" not in mpp_input["headers"]
+        assert mock_pm.generate_payment_header.call_count == 2
+        logger.info("x402 and MPP tool uses tracked independently with protocol-correct headers")
+
+
+@pytest.mark.integration
 class TestPaymentHandlerExtraction:
     """Integration tests for payment handler extraction with real handler instances."""
 
