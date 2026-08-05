@@ -125,15 +125,63 @@ def map_spans(
     return result
 
 
+def _extract_message_text(messages: List[Dict[str, Any]]) -> Optional[str]:
+    """Extract text content from service message format.
+
+    Handles the nested structure: [{role: ..., content: {content: [{text: ...}]}}]
+    as well as the variant: [{role: ..., content: {message: [{text: ...}]}}]
+    """
+    for msg in messages:
+        content = msg.get("content", msg.get("message", {}))
+        if isinstance(content, dict):
+            # Unwrap nested content/message key
+            content = content.get("content", content.get("message", []))
+        if isinstance(content, list):
+            text = " ".join(c.get("text", "") for c in content if isinstance(c, dict)).strip()
+            if text:
+                return text
+        elif isinstance(content, str) and content.strip():
+            return content.strip()
+    return None
+
+
 def _extract_from_service_format(session_spans: List[Dict[str, Any]]) -> Optional[SpanMapResult]:
     """Extract fields from service-normalized span format.
 
-    The AgentCore evaluation service sends spans with gen_ai semantic convention
-    events (gen_ai.user.message, gen_ai.choice) instead of body with input/output.
-    This handles that format as a fallback when strands-evals mappers can't parse it.
+    Handles two service formats:
+    1. SESSION format with span_events[*].body (multi-turn conversations where the
+       service collapses all ADOT spans into one span with multiple span_events)
+    2. gen_ai semantic convention events (single-turn Strands spans)
     """
     import json as _json
 
+    # --- Multi-turn: extract from span_events[*].body ---
+    for span in session_spans:
+        span_events = span.get("span_events", [])
+        if len(span_events) >= 1:
+            turns: List[Dict[str, Any]] = []
+            last_input = None
+            last_output = None
+            for se in span_events:
+                body = se.get("body", {})
+                inp_msgs = (body.get("input") or {}).get("messages", [])
+                out_msgs = (body.get("output") or {}).get("messages", [])
+                user_text = _extract_message_text(inp_msgs) if inp_msgs else None
+                asst_text = _extract_message_text(out_msgs) if out_msgs else None
+                if user_text:
+                    turns.append({"role": "user", "content": user_text})
+                    last_input = user_text
+                if asst_text:
+                    turns.append({"role": "assistant", "content": asst_text})
+                    last_output = asst_text
+            if turns and last_input and last_output:
+                return SpanMapResult(
+                    input=last_input,
+                    actual_output=last_output,
+                    turns=turns if len(turns) > 2 else None,
+                )
+
+    # --- Single-turn: extract from gen_ai semantic convention events ---
     for span in session_spans:
         scope = span.get("scope", {}).get("name", "")
         events = span.get("events", [])

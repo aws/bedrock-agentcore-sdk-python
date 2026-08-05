@@ -185,7 +185,7 @@ class TestFieldExtractionError:
         ]
         adapter = DeepEvalAdapter(metric=_mock_metric())
         result = adapter(_make_evaluator_input(spans=spans))
-        _assert_error_response(result, "FIELD_EXTRACTION_ERROR")
+        _assert_error_response(result, "MISSING_REQUIRED_FIELD")
 
     def test_16_spans_missing_body_input(self):
         spans = [
