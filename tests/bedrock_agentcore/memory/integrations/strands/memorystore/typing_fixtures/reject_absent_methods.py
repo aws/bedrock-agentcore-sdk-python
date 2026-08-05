@@ -2,10 +2,10 @@
 
 from typing import cast
 
+from bedrock_agentcore.memory.client import MemoryClient
 from bedrock_agentcore.memory.integrations.strands.memorystore import AgentCoreMemoryStore
-from bedrock_agentcore.memory.integrations.strands.memorystore.types import AgentCoreDataPlaneClient
 
-client = cast(AgentCoreDataPlaneClient, object())
+client = cast(MemoryClient, object())
 store = AgentCoreMemoryStore(
     memory_id="memory",
     actor_id="actor",

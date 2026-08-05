@@ -14,11 +14,10 @@ from bedrock_agentcore.memory.integrations.strands.memorystore import (
     create_agentcore_memory_stores,
 )
 from bedrock_agentcore.memory.integrations.strands.memorystore.types import (
-    AgentCoreDataPlaneClient,
     CreateAgentCoreMemoryStoresInput,
 )
 
-client = cast(AgentCoreDataPlaneClient, object())
+client = cast(MemoryClient, object())
 store = AgentCoreMemoryStore(
     memory_id="memory",
     actor_id="actor",
@@ -52,45 +51,21 @@ store_config: AgentCoreMemoryStoreConfig = {
     "session_id": "session",
     "namespace": "/facts/{actorId}",
 }
-# The SDK's own MemoryClient is accepted wherever a data-plane client is.
-memory_client = cast(MemoryClient, object())
-memory_client_store = AgentCoreMemoryStore(
-    memory_id="memory",
-    actor_id="actor",
-    session_id="session",
-    namespace="/facts/{actorId}",
-    client=memory_client,
-)
-memory_client_stores = create_agentcore_memory_stores(
-    memory_id="memory",
-    actor_id="actor",
-    session_id="session",
-    namespaces=[{"namespace": "/facts/{actorId}"}],
-    client=memory_client,
-)
-assert_type(memory_client_stores, list[MemoryStore])
-memory_client_store_config: AgentCoreMemoryStoreConfig = {
-    "memory_id": "memory",
-    "actor_id": "actor",
-    "session_id": "session",
-    "namespace": "/facts/{actorId}",
-    "client": memory_client,
-}
-memory_client_factory_input: CreateAgentCoreMemoryStoresInput = {
+factory_input: CreateAgentCoreMemoryStoresInput = {
     "memory_id": "memory",
     "actor_id": "actor",
     "session_id": "session",
     "namespaces": [{"namespace": "/facts/{actorId}"}],
-    "client": memory_client,
+    "client": client,
 }
-memory_client_sender_config: AgentCoreEventSenderConfig = {
-    "client": memory_client,
+store_config_with_client: AgentCoreMemoryStoreConfig = {
     "memory_id": "memory",
     "actor_id": "actor",
     "session_id": "session",
+    "namespace": "/facts/{actorId}",
+    "client": client,
 }
 
 assert protocol_store.name == store.name
 assert sender_config["memory_id"] == store_config["memory_id"]
-assert memory_client_store.name == memory_client_store_config["namespace"].strip("/").replace("/", "-")
-assert memory_client_factory_input["memory_id"] == memory_client_sender_config["memory_id"]
+assert factory_input["memory_id"] == store_config_with_client["memory_id"]

@@ -11,6 +11,7 @@ import pytest
 from strands.memory import AggregateMemoryError
 from strands.types.content import Message
 
+from bedrock_agentcore.memory.client import MemoryClient
 from bedrock_agentcore.memory.integrations.strands.memorystore.sender import AgentCoreEventSender
 from bedrock_agentcore.memory.integrations.strands.memorystore.types import MetadataProvider, MetadataValue
 
@@ -40,8 +41,10 @@ def make_sender(
     extraction_mode: str | None = None,
 ) -> AgentCoreEventSender:
     """Build a sender with deterministic identity."""
+    memory_client = Mock(spec=MemoryClient)
+    memory_client.gmdp_client = client
     return AgentCoreEventSender(
-        client=client,
+        client=memory_client,
         memory_id="mem-1",
         actor_id="actor-1",
         session_id="sess-1",
@@ -292,7 +295,7 @@ def test_rejects_invalid_max_turns(value: object) -> None:
     """The event cap must be a positive integer."""
     with pytest.raises(ValueError, match="positive integer"):
         AgentCoreEventSender(
-            client=Mock(),
+            client=Mock(spec=MemoryClient),
             memory_id="m",
             actor_id="a",
             session_id="s",

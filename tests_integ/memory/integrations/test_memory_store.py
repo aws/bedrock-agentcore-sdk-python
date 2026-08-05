@@ -7,19 +7,20 @@ extraction is eventually consistent, so these tests poll and may take several mi
 """
 
 import asyncio
+import copy
 import os
 import time
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
-import boto3
 import pytest
 from strands import Agent
 from strands.memory import AddMessagesContext, MemoryEntry, MemoryManager
 from strands.models import BedrockModel
 from strands.types.content import Message
 
+from bedrock_agentcore.memory.client import MemoryClient
 from bedrock_agentcore.memory.integrations.strands.memorystore import (
     AgentCoreMemoryStore,
     create_agentcore_memory_stores,
@@ -45,9 +46,24 @@ async def poll_for_records(
 
 
 @pytest.fixture(scope="module")
-def data_plane_client() -> Any:
-    """Create a live boto3 AgentCore data-plane client."""
-    return boto3.client("bedrock-agentcore", region_name=REGION)
+def memory_client() -> Any:
+    """Create the live ``MemoryClient`` this integration accepts."""
+    return MemoryClient(region_name=REGION)
+
+
+def wrapping_memory_client(source: Any, data_plane: Any) -> Any:
+    """Copy a ``MemoryClient`` but vend a wrapped data-plane client.
+
+    Args:
+        source: Live client to copy region/telemetry settings from.
+        data_plane: Data-plane object the copy should vend.
+
+    Returns:
+        A ``MemoryClient`` whose ``gmdp_client`` is ``data_plane``.
+    """
+    client = copy.copy(source)
+    client.gmdp_client = data_plane
+    return client
 
 
 @pytest.fixture(scope="module")
@@ -63,22 +79,22 @@ def semantic_memory() -> dict[str, str]:
 class TestAgentCoreMemoryStore:
     """Store-level tests against the live AgentCore data plane."""
 
-    async def test_write_idempotency_batching_and_recall(self, semantic_memory: Any, data_plane_client: Any) -> None:
+    async def test_write_idempotency_batching_and_recall(self, semantic_memory: Any, memory_client: Any) -> None:
         """Write one batched event, re-fire it idempotently, and recall extracted facts."""
         actor_id = f"batch-actor-{uuid.uuid4().hex}"
         session_id = f"batch-session-{uuid.uuid4().hex}"
         create_event_calls = 0
 
-        class CountingClient:
-            """Count create-event calls while delegating to the live client."""
+        class CountingDataPlane:
+            """Count create-event calls while delegating to the live data plane."""
 
             def create_event(self, **kwargs: Any) -> dict[str, Any]:
                 nonlocal create_event_calls
                 create_event_calls += 1
-                return cast(dict[str, Any], data_plane_client.create_event(**kwargs))
+                return cast(dict[str, Any], memory_client.gmdp_client.create_event(**kwargs))
 
             def retrieve_memory_records(self, **kwargs: Any) -> dict[str, Any]:
-                return cast(dict[str, Any], data_plane_client.retrieve_memory_records(**kwargs))
+                return cast(dict[str, Any], memory_client.gmdp_client.retrieve_memory_records(**kwargs))
 
         store = AgentCoreMemoryStore(
             memory_id=semantic_memory["id"],
@@ -87,7 +103,7 @@ class TestAgentCoreMemoryStore:
             namespace=FACTS_NAMESPACE,
             writable=True,
             extraction=True,
-            client=CountingClient(),
+            client=wrapping_memory_client(memory_client, CountingDataPlane()),
         )
         messages: list[Message] = [
             {"role": "user", "content": [{"text": "I am a pilot based in Denver and fly Cessnas."}]},
@@ -111,27 +127,27 @@ class TestAgentCoreMemoryStore:
         )
 
     async def test_extraction_mode_wire_passthrough_and_recall_only_guard(
-        self, semantic_memory: Any, data_plane_client: Any
+        self, semantic_memory: Any, memory_client: Any
     ) -> None:
         """Prove live ``SKIP`` acceptance and direct recall-only write rejection."""
         captured: dict[str, Any] = {}
 
-        class CapturingClient:
+        class CapturingDataPlane:
             """Capture create-event parameters while delegating live calls."""
 
             def create_event(self, **kwargs: Any) -> dict[str, Any]:
                 captured.update(kwargs)
-                return cast(dict[str, Any], data_plane_client.create_event(**kwargs))
+                return cast(dict[str, Any], memory_client.gmdp_client.create_event(**kwargs))
 
             def retrieve_memory_records(self, **kwargs: Any) -> dict[str, Any]:
-                return cast(dict[str, Any], data_plane_client.retrieve_memory_records(**kwargs))
+                return cast(dict[str, Any], memory_client.gmdp_client.retrieve_memory_records(**kwargs))
 
         identity = {
             "memory_id": semantic_memory["id"],
             "actor_id": f"skip-actor-{uuid.uuid4().hex}",
             "session_id": f"skip-session-{uuid.uuid4().hex}",
             "namespace": FACTS_NAMESPACE,
-            "client": CapturingClient(),
+            "client": wrapping_memory_client(memory_client, CapturingDataPlane()),
         }
         writer = AgentCoreMemoryStore(
             **identity,
@@ -159,7 +175,7 @@ class TestAgentCoreMemoryStore:
             await readonly.add_messages([{"role": "user", "content": [{"text": "x"}]}])
 
     async def test_exact_and_subtree_retrieval_fields_are_accepted_live(
-        self, semantic_memory: Any, data_plane_client: Any
+        self, semantic_memory: Any, memory_client: Any
     ) -> None:
         """Exercise both AgentCore retrieval target arms against the service."""
         actor_id = f"read-actor-{uuid.uuid4().hex}"
@@ -167,7 +183,7 @@ class TestAgentCoreMemoryStore:
             "memory_id": semantic_memory["id"],
             "actor_id": actor_id,
             "session_id": f"read-session-{uuid.uuid4().hex}",
-            "client": data_plane_client,
+            "client": memory_client,
         }
         exact = AgentCoreMemoryStore(**identity, namespace=FACTS_NAMESPACE)
         subtree = AgentCoreMemoryStore(**identity, namespace_path=f"/facts/{actor_id}")
@@ -175,7 +191,7 @@ class TestAgentCoreMemoryStore:
         assert isinstance(await subtree.search("anything"), list)
 
     async def test_direct_store_and_factory_work_with_memory_manager(
-        self, semantic_memory: Any, data_plane_client: Any
+        self, semantic_memory: Any, memory_client: Any
     ) -> None:
         """Validate the direct primitive and factory output against real MemoryManager."""
         actor_id = f"manager-actor-{uuid.uuid4().hex}"
@@ -186,7 +202,7 @@ class TestAgentCoreMemoryStore:
             session_id=session_id,
             namespaces=[{"namespace": FACTS_NAMESPACE}],
             extraction=True,
-            client=data_plane_client,
+            client=memory_client,
         )
         manager = MemoryManager(stores=stores)
         assert len(stores) == 1 and stores[0].writable
@@ -199,7 +215,7 @@ class TestAgentCoreMemoryStore:
             namespace=FACTS_NAMESPACE,
             writable=True,
             extraction=True,
-            client=data_plane_client,
+            client=memory_client,
         )
         await direct.add_messages(
             [{"role": "user", "content": [{"text": "I collect vinyl records."}]}],
@@ -209,7 +225,7 @@ class TestAgentCoreMemoryStore:
 
 
 @pytest.mark.integration
-async def test_session_scoped_namespace_drift(semantic_memory: Any, data_plane_client: Any) -> None:
+async def test_session_scoped_namespace_drift(semantic_memory: Any, memory_client: Any) -> None:
     """A ``{sessionId}`` namespace does not leak records across sessions."""
     actor_id = f"drift-actor-{uuid.uuid4().hex}"
     session_a = f"drift-session-a-{uuid.uuid4().hex}"
@@ -221,7 +237,7 @@ async def test_session_scoped_namespace_drift(semantic_memory: Any, data_plane_c
         namespace=SUMMARY_NAMESPACE,
         writable=True,
         extraction=True,
-        client=data_plane_client,
+        client=memory_client,
     )
     await writer.add_messages(
         [
@@ -236,14 +252,14 @@ async def test_session_scoped_namespace_drift(semantic_memory: Any, data_plane_c
         actor_id=actor_id,
         session_id=session_a,
         namespace=SUMMARY_NAMESPACE,
-        client=data_plane_client,
+        client=memory_client,
     )
     store_b = AgentCoreMemoryStore(
         memory_id=semantic_memory["id"],
         actor_id=actor_id,
         session_id=session_b,
         namespace=SUMMARY_NAMESPACE,
-        client=data_plane_client,
+        client=memory_client,
     )
     from_a = await poll_for_records(lambda: store_a.search("What trip is planned?"))
     assert from_a, "No session-A summary surfaced before the AgentCore extraction timeout"
@@ -251,7 +267,7 @@ async def test_session_scoped_namespace_drift(semantic_memory: Any, data_plane_c
 
 
 @pytest.mark.integration
-async def test_real_agent_memory_manager_round_trip(semantic_memory: Any, data_plane_client: Any) -> None:
+async def test_real_agent_memory_manager_round_trip(semantic_memory: Any, memory_client: Any) -> None:
     """Drive extraction through a real Strands agent and poll manager recall."""
     actor_id = f"e2e-actor-{uuid.uuid4().hex}"
     stores = create_agentcore_memory_stores(
@@ -260,7 +276,7 @@ async def test_real_agent_memory_manager_round_trip(semantic_memory: Any, data_p
         session_id=f"e2e-session-{uuid.uuid4().hex}",
         namespaces=[{"namespace": FACTS_NAMESPACE}],
         extraction=True,
-        client=data_plane_client,
+        client=memory_client,
     )
     manager = MemoryManager(stores=stores)
     agent = Agent(

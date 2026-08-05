@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 from strands.memory import ExtractionTrigger, ExtractionTriggerContext, MemoryMessageFilter
 
+from bedrock_agentcore.memory.client import MemoryClient
 from bedrock_agentcore.memory.integrations.strands.memorystore.factory import (
     _assert_writable_topology,
     create_agentcore_memory_stores,
@@ -22,6 +23,13 @@ class FakeTrigger(ExtractionTrigger):
         """Accept an extraction context without registering hooks."""
 
 
+def memory_client(data_plane: Any) -> Any:
+    """Wrap a data-plane double in a ``MemoryClient``, the only client callers may pass."""
+    client = Mock(spec=MemoryClient)
+    client.gmdp_client = data_plane
+    return client
+
+
 def base_input(**overrides: Any) -> dict[str, Any]:
     """Build a two-namespace writable factory input."""
     result: dict[str, Any] = {
@@ -33,7 +41,7 @@ def base_input(**overrides: Any) -> dict[str, Any]:
             {"namespace": "/strategy/s/actor/{actorId}/preferences"},
         ],
         "extraction": {"cadence": FakeTrigger()},
-        "client": Mock(),
+        "client": memory_client(Mock()),
     }
     result.update(overrides)
     return result
@@ -154,9 +162,9 @@ def test_names_are_derived_or_respected() -> None:
 
 def test_factory_shares_one_client_across_stores() -> None:
     """Construct or accept one boto3 client for the complete topology."""
-    client = Mock()
-    stores = create_agentcore_memory_stores(**base_input(client=client))
-    assert all(isinstance(store, AgentCoreMemoryStore) and store._client is client for store in stores)
+    data_plane = Mock()
+    stores = create_agentcore_memory_stores(**base_input(client=memory_client(data_plane)))
+    assert all(isinstance(store, AgentCoreMemoryStore) and store._client is data_plane for store in stores)
 
 
 @pytest.mark.parametrize(
@@ -212,7 +220,7 @@ def hand_built_store(*, name: str = "facts", writable: bool = False) -> AgentCor
         namespace="/users/{actorId}/facts",
         name=name,
         writable=writable,
-        client=Mock(),
+        client=memory_client(Mock()),
     )
 
 
@@ -261,8 +269,6 @@ def test_factory_binds_actor_and_session_into_distinct_namespaces() -> None:
 
 def test_factory_accepts_the_sdk_memory_client_as_shared_client() -> None:
     """Share the data-plane client vended by ``MemoryClient`` across every store."""
-    from bedrock_agentcore.memory.client import MemoryClient
-
     data_plane = Mock()
     session = Mock()
     session.region_name = "us-west-2"
@@ -278,19 +284,15 @@ def test_factory_preserves_explicit_falsey_client(monkeypatch: pytest.MonkeyPatc
     """Use nullish client selection rather than truthiness."""
     from bedrock_agentcore.memory.integrations.strands.memorystore import factory as factory_module
 
-    class FalseyClient:
+    class FalseyMemoryClient(MemoryClient):
         def __bool__(self) -> bool:
             return False
 
-        def create_event(self, **_kwargs: Any) -> dict[str, Any]:
-            return {}
-
-        def retrieve_memory_records(self, **_kwargs: Any) -> dict[str, Any]:
-            return {"memoryRecordSummaries": []}
-
-    client = FalseyClient()
+    data_plane = Mock()
+    falsey = object.__new__(FalseyMemoryClient)  # skip boto3 client construction
+    falsey.gmdp_client = data_plane
     create = Mock(side_effect=AssertionError("must not construct a replacement client"))
-    monkeypatch.setattr(factory_module, "_create_data_plane_client", create)
-    stores = create_agentcore_memory_stores(**base_input(client=client))
-    assert all(store._client is client for store in stores)
+    monkeypatch.setattr(factory_module, "_create_memory_client", create)
+    stores = create_agentcore_memory_stores(**base_input(client=falsey))
+    assert all(store._client is data_plane for store in stores)
     create.assert_not_called()

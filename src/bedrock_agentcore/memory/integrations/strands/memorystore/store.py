@@ -23,13 +23,10 @@ from .types import (
     DEFAULT_REGION,
     MAX_TOPK,
     RESERVED_METADATA_PREFIX,
-    AgentCoreClient,
-    AgentCoreDataPlaneClient,
     ExtractionMode,
     MetadataProvider,
     assert_non_empty,
     assert_resolved_namespace,
-    resolve_data_plane_client,
     resolve_namespace,
     slugify_namespace,
 )
@@ -45,13 +42,11 @@ else:
 logger = logging.getLogger(__name__)
 
 
-def _create_data_plane_client(
+def _create_memory_client(
     *, region_name: str | None = None, boto3_session: boto3.Session | None = None
-) -> AgentCoreDataPlaneClient:
-    """Build the default data-plane client through this SDK's ``MemoryClient``.
+) -> MemoryClient:
+    """Build the default :class:`~bedrock_agentcore.memory.MemoryClient` for this integration.
 
-    Going through ``MemoryClient`` keeps AgentCore client construction and the
-    integration user agent in one place instead of hand-rolling a second boto3 client.
     ``MemoryClient`` re-checks the session by truthiness, so a deliberately falsey
     session-like object would be replaced by a default session there.
 
@@ -60,13 +55,11 @@ def _create_data_plane_client(
         boto3_session: Session used to construct the client.
 
     Returns:
-        The AgentCore data-plane client the store calls.
+        The client whose AgentCore data plane this integration calls.
     """
     session = boto3_session if boto3_session is not None else boto3.Session()
     region = region_name or session.region_name or os.environ.get("AWS_REGION") or DEFAULT_REGION
-    return resolve_data_plane_client(
-        MemoryClient(region_name=region, boto3_session=session, integration_source="strands")
-    )
+    return MemoryClient(region_name=region, boto3_session=session, integration_source="strands")
 
 
 class AgentCoreMemoryStore(_MemoryStoreBase):
@@ -104,7 +97,7 @@ class AgentCoreMemoryStore(_MemoryStoreBase):
         extraction_mode: ExtractionMode | None = None,
         region_name: str | None = None,
         boto3_session: boto3.Session | None = None,
-        client: AgentCoreClient | None = None,
+        client: MemoryClient | None = None,
     ) -> None:
         """Initialize one exact-namespace or subtree store.
 
@@ -125,9 +118,9 @@ class AgentCoreMemoryStore(_MemoryStoreBase):
             metadata_provider: Optional per-message event metadata callback.
             max_turns_per_event: Maximum turns packed into one event.
             extraction_mode: Optional AgentCore extraction mode, including ``SKIP``.
-            region_name: Region used when constructing the boto3 client.
-            boto3_session: Session used when constructing the boto3 client.
-            client: Preconstructed AgentCore data-plane client, or this SDK's ``MemoryClient``.
+            region_name: Region used when constructing the default ``MemoryClient``.
+            boto3_session: Session used when constructing the default ``MemoryClient``.
+            client: Preconstructed ``MemoryClient``; one is built when omitted.
 
         Raises:
             ValueError: If identity, read target, or numeric options are invalid.
@@ -177,14 +170,18 @@ class AgentCoreMemoryStore(_MemoryStoreBase):
             raise ValueError(f"AgentCoreMemoryStore: over_fetch_factor must be a number >= 1, got {over_fetch_factor}")
         self._min_score = min_score
         self._over_fetch_factor = over_fetch_factor
-        self._client = (
-            resolve_data_plane_client(client)
+        self._memory_client = (
+            client
             if client is not None
-            else _create_data_plane_client(region_name=region_name, boto3_session=boto3_session)
+            else _create_memory_client(region_name=region_name, boto3_session=boto3_session)
         )
+        # Call the data plane the client already vends: MemoryClient's own create_event is a
+        # higher-level (text, role) API with no clientToken, and its retrieve_memories swallows
+        # ClientError, while MemoryManager expects retrieval failures to surface.
+        self._client = self._memory_client.gmdp_client
         self._sender = (
             AgentCoreEventSender(
-                client=self._client,
+                client=self._memory_client,
                 memory_id=self._memory_id,
                 actor_id=self._actor_id,
                 session_id=self._session_id,

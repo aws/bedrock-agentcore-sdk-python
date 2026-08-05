@@ -7,13 +7,13 @@ from collections.abc import Sequence
 import boto3
 from strands.memory import ExtractionConfig, MemoryStore
 
-from .store import AgentCoreMemoryStore, _create_data_plane_client
+from bedrock_agentcore.memory.client import MemoryClient
+
+from .store import AgentCoreMemoryStore, _create_memory_client
 from .types import (
-    AgentCoreClient,
     AgentCoreExtractionConfig,
     AgentCoreNamespaceConfig,
     MetadataProvider,
-    resolve_data_plane_client,
 )
 
 
@@ -55,9 +55,9 @@ def create_agentcore_memory_stores(
     max_turns_per_event: int | None = None,
     region_name: str | None = None,
     boto3_session: boto3.Session | None = None,
-    client: AgentCoreClient | None = None,
+    client: MemoryClient | None = None,
 ) -> list[MemoryStore]:
-    """Build one store per exact namespace with one shared boto3 client.
+    """Build one store per exact namespace with one shared ``MemoryClient``.
 
     Args:
         memory_id: AgentCore Memory resource identifier.
@@ -69,8 +69,8 @@ def create_agentcore_memory_stores(
         max_turns_per_event: Maximum turns packed into one event.
         region_name: Region used when constructing the shared client.
         boto3_session: Session used when constructing the shared client.
-        client: Preconstructed AgentCore data-plane client, or this SDK's ``MemoryClient``,
-            shared by every store in the returned set.
+        client: Preconstructed ``MemoryClient`` shared by every store in the returned set;
+            one is built when omitted.
 
     Returns:
         One store per namespace.
@@ -110,9 +110,7 @@ def create_agentcore_memory_stores(
 
     # Build one connection and reuse it for every namespace in this identity set.
     shared_client = (
-        resolve_data_plane_client(client)
-        if client is not None
-        else _create_data_plane_client(region_name=region_name, boto3_session=boto3_session)
+        client if client is not None else _create_memory_client(region_name=region_name, boto3_session=boto3_session)
     )
     # The default writer skips explicit opt-outs. Keep multiple explicit writers
     # intact so the topology check fails loudly instead of silently choosing one.

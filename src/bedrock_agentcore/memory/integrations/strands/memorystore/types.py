@@ -2,7 +2,7 @@
 
 import re
 from collections.abc import Callable, Mapping
-from typing import Any, Literal, Protocol
+from typing import Literal
 
 import boto3
 from strands.memory import ExtractionConfig, ExtractionTrigger, MemoryMessageFilter
@@ -24,51 +24,6 @@ MAX_TOPK = 100
 DEFAULT_MAX_TURNS_PER_EVENT = 50
 # Store-supplied record fields use this prefix to avoid colliding with user metadata.
 RESERVED_METADATA_PREFIX = "_"
-
-
-class AgentCoreDataPlaneClient(Protocol):
-    """Structural type for the boto3 AgentCore data-plane client.
-
-    The default client is built through this SDK's
-    :class:`~bedrock_agentcore.memory.MemoryClient`, and callers may pass either their own
-    ``MemoryClient`` (its vended ``gmdp_client`` is unwrapped) or a boto3
-    ``bedrock-agentcore`` client. This structural type is what the store actually calls:
-    the two data-plane operations, rather than ``MemoryClient``'s higher-level convenience
-    methods, which omit the ``clientToken`` this integration needs for idempotent retries
-    and swallow retrieval errors that ``MemoryManager`` expects to see.
-    """
-
-    def create_event(self, **kwargs: Any) -> dict[str, Any]:
-        """Create an AgentCore memory event."""
-        ...
-
-    def retrieve_memory_records(self, **kwargs: Any) -> dict[str, Any]:
-        """Retrieve AgentCore long-term memory records."""
-        ...
-
-
-AgentCoreClient = AgentCoreDataPlaneClient | MemoryClient
-"""Client accepted by this integration: a boto3 data-plane client or the SDK's ``MemoryClient``."""
-
-
-def resolve_data_plane_client(client: AgentCoreClient) -> AgentCoreDataPlaneClient:
-    """Unwrap the data-plane client this SDK's ``MemoryClient`` already vends.
-
-    ``MemoryClient`` forwards ``retrieve_memory_records`` to that client, but its own
-    ``create_event`` is a higher-level ``(text, role)`` convenience API that cannot carry
-    the deterministic ``clientToken`` this integration relies on for idempotent retries.
-    Using the vended client keeps one connection (and its user agent) while preserving the
-    raw request shape.
-
-    Args:
-        client: A boto3 AgentCore data-plane client or a ``MemoryClient``.
-
-    Returns:
-        The data-plane client to call.
-    """
-    if isinstance(client, MemoryClient):
-        return client.gmdp_client  # type: ignore[no-any-return]
-    return client
 
 
 MetadataValue = str | int | float | bool
@@ -93,7 +48,7 @@ class _AgentCoreMemoryConnectionConfig(TypedDict):
     extraction_mode: NotRequired[ExtractionMode]
     region_name: NotRequired[str]
     boto3_session: NotRequired[boto3.Session]
-    client: NotRequired[AgentCoreClient]
+    client: NotRequired[MemoryClient]
 
 
 class _AgentCoreMemoryStoreOptions(_AgentCoreMemoryConnectionConfig, total=False):
@@ -133,7 +88,7 @@ the namespace template.
 class AgentCoreEventSenderConfig(TypedDict):
     """Configuration for :class:`AgentCoreEventSender`."""
 
-    client: AgentCoreClient
+    client: MemoryClient
     memory_id: str
     actor_id: str
     session_id: str
@@ -174,7 +129,7 @@ class CreateAgentCoreMemoryStoresInput(TypedDict):
     max_turns_per_event: NotRequired[int]
     region_name: NotRequired[str]
     boto3_session: NotRequired[boto3.Session]
-    client: NotRequired[AgentCoreClient]
+    client: NotRequired[MemoryClient]
 
 
 _UNRESOLVED_PLACEHOLDER = re.compile(r"\{[^{}]*\}")

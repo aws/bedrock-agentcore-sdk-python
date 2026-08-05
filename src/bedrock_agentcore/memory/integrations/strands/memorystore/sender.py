@@ -14,13 +14,13 @@ from typing import Literal
 from strands.memory import AggregateMemoryError
 from strands.types.content import Message
 
+from bedrock_agentcore.memory.client import MemoryClient
+
 from .types import (
     DEFAULT_MAX_TURNS_PER_EVENT,
-    AgentCoreClient,
     ExtractionMode,
     MetadataProvider,
     MetadataValue,
-    resolve_data_plane_client,
 )
 
 # AgentCore applies this metadata value constraint server-side rather than
@@ -102,7 +102,7 @@ class AgentCoreEventSender:
     def __init__(
         self,
         *,
-        client: AgentCoreClient,
+        client: MemoryClient,
         memory_id: str,
         actor_id: str,
         session_id: str,
@@ -114,7 +114,7 @@ class AgentCoreEventSender:
         """Initialize the sender.
 
         Args:
-            client: AgentCore data-plane client, or this SDK's ``MemoryClient``.
+            client: ``MemoryClient`` whose AgentCore data plane receives the events.
             memory_id: AgentCore Memory resource identifier.
             actor_id: Actor identifier.
             session_id: Session identifier.
@@ -130,7 +130,9 @@ class AgentCoreEventSender:
             raise ValueError(
                 f"AgentCoreEventSender: max_turns_per_event must be a positive integer, got {max_turns_per_event}"
             )
-        self._client = resolve_data_plane_client(client)
+        # Use the vended data-plane client: MemoryClient.create_event cannot carry the
+        # deterministic clientToken this sender relies on for idempotent retries.
+        self._client = client.gmdp_client
         self._memory_id = memory_id
         self._actor_id = actor_id
         self._session_id = session_id

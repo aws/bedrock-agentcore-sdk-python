@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 from strands.memory import AddMessagesContext
 
+from bedrock_agentcore.memory.client import MemoryClient
 from bedrock_agentcore.memory.integrations.strands.memorystore.store import AgentCoreMemoryStore
 from bedrock_agentcore.memory.integrations.strands.memorystore.types import RESERVED_METADATA_PREFIX
 
@@ -40,6 +41,13 @@ def client_returning(records: list[dict[str, Any]] | None) -> Mock:
     return client
 
 
+def memory_client(data_plane: Any) -> Any:
+    """Wrap a data-plane double in a ``MemoryClient``, the only client callers may pass."""
+    client = Mock(spec=MemoryClient)
+    client.gmdp_client = data_plane
+    return client
+
+
 def make_store(client: Mock, **overrides: Any) -> AgentCoreMemoryStore:
     """Build an exact-mode store with test identity."""
     config: dict[str, Any] = {
@@ -49,7 +57,7 @@ def make_store(client: Mock, **overrides: Any) -> AgentCoreMemoryStore:
         "namespace": "/strategy/s/actor/{actorId}/preferences",
         "name": "prefs",
         "writable": False,
-        "client": client,
+        "client": memory_client(client),
     }
     config.update(overrides)
     return AgentCoreMemoryStore(**config)
@@ -272,7 +280,7 @@ def test_writable_defaults_false() -> None:
         actor_id="actor-1",
         session_id="sess-1",
         namespace="/users/{actorId}/facts",
-        client=client_returning([]),
+        client=memory_client(client_returning([])),
     )
     assert store.writable is False
 
@@ -287,7 +295,7 @@ async def test_direct_store_stands_alone_without_factory() -> None:
         namespace="/users/{actorId}/facts",
         writable=True,
         extraction=True,
-        client=client,
+        client=memory_client(client),
     )
     assert store.name == "users-facts"
     assert store.extraction is True
@@ -311,7 +319,7 @@ def test_rejects_empty_identity(field: str, value: str) -> None:
         AgentCoreMemoryStore(
             **kwargs,
             namespace="/users/{actorId}/facts",
-            client=client_returning([]),
+            client=memory_client(client_returning([])),
         )
 
 
@@ -446,8 +454,6 @@ async def test_result_cap_at_limit_does_not_warn(caplog: pytest.LogCaptureFixtur
 
 def vended_memory_client(data_plane: Mock) -> Any:
     """Build a real ``MemoryClient`` whose boto3 clients are stubbed."""
-    from bedrock_agentcore.memory.client import MemoryClient
-
     session = Mock()
     session.region_name = "us-west-2"
     session.client.side_effect = lambda service, **_kwargs: data_plane if service == "bedrock-agentcore" else Mock()
@@ -456,10 +462,17 @@ def vended_memory_client(data_plane: Mock) -> Any:
 
 
 async def test_store_accepts_the_sdk_memory_client_for_reads_and_writes() -> None:
-    """Reuse the data-plane client that ``MemoryClient`` already vends."""
+    """Reuse the data-plane client that a real ``MemoryClient`` already vends."""
     data_plane = client_returning([])
-    memory_client = vended_memory_client(data_plane)
-    store = make_store(memory_client, writable=True, max_search_results=3)
+    store = AgentCoreMemoryStore(
+        memory_id="mem-1",
+        actor_id="actor-1",
+        session_id="sess-1",
+        namespace="/strategy/s/actor/{actorId}/preferences",
+        writable=True,
+        max_search_results=3,
+        client=vended_memory_client(data_plane),
+    )
 
     # The raw data-plane client is used, not MemoryClient's higher-level (text, role)
     # create_event, which cannot carry the deterministic clientToken.
@@ -490,14 +503,13 @@ def test_client_region_prefers_explicit_session_without_loading_invalid_ambient_
     monkeypatch.setenv("AWS_PROFILE", "profile-that-does-not-exist")
     monkeypatch.setenv("AWS_REGION", "environment-region")
 
-    client = store_module._create_data_plane_client(boto3_session=supplied_session)
+    client = store_module._create_memory_client(boto3_session=supplied_session)
 
-    # MemoryClient builds a control-plane and a data-plane client from the supplied session;
-    # the store uses the data-plane one.
+    # MemoryClient builds a control-plane and a data-plane client from the supplied session.
     data_plane_calls = [call for call in create_client.call_args_list if call.args[0] == "bedrock-agentcore"]
     assert len(data_plane_calls) == 1
     assert data_plane_calls[0].kwargs["region_name"] == "session-region"
-    assert client is create_client.return_value
+    assert client.gmdp_client is create_client.return_value
 
 
 def test_explicit_region_overrides_explicit_session_region(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -507,7 +519,7 @@ def test_explicit_region_overrides_explicit_session_region(monkeypatch: pytest.M
     supplied_session = Mock(region_name="session-region")
     supplied_session.client.return_value = Mock()
     monkeypatch.setenv("AWS_REGION", "environment-region")
-    store_module._create_data_plane_client(region_name="explicit-region", boto3_session=supplied_session)
+    store_module._create_memory_client(region_name="explicit-region", boto3_session=supplied_session)
     assert supplied_session.client.call_args.kwargs["region_name"] == "explicit-region"
     assert {call.args[0] for call in supplied_session.client.call_args_list} == {
         "bedrock-agentcore",
@@ -526,17 +538,17 @@ def test_client_region_falls_back_through_environment_default_and_us_west(
     session_factory = Mock(return_value=default_session)
     monkeypatch.setattr(store_module.boto3, "Session", session_factory)
     monkeypatch.setenv("AWS_REGION", "environment-region")
-    store_module._create_data_plane_client()
+    store_module._create_memory_client()
     assert default_session.client.call_args.kwargs["region_name"] == "default-region"
 
     default_session.client.reset_mock()
     default_session.region_name = None
-    store_module._create_data_plane_client()
+    store_module._create_memory_client()
     assert default_session.client.call_args.kwargs["region_name"] == "environment-region"
 
     default_session.client.reset_mock()
     monkeypatch.delenv("AWS_REGION")
-    store_module._create_data_plane_client()
+    store_module._create_memory_client()
     assert default_session.client.call_args.kwargs["region_name"] == "us-west-2"
 
 
@@ -546,43 +558,53 @@ def test_default_client_is_built_through_the_sdk_memory_client(monkeypatch: pyte
 
     session = Mock(region_name="session-region")
     monkeypatch.setattr(store_module.boto3, "Session", Mock(return_value=session))
-    # spec= keeps isinstance() true so the vended data-plane client is unwrapped.
-    memory_client = Mock(spec=store_module.MemoryClient)
+    memory_client_double = Mock(spec=store_module.MemoryClient)
     vended = Mock()
-    memory_client.gmdp_client = vended
-    memory_client_class = Mock(return_value=memory_client)
+    memory_client_double.gmdp_client = vended
+    memory_client_class = Mock(return_value=memory_client_double)
     monkeypatch.setattr(store_module, "MemoryClient", memory_client_class)
 
-    client = store_module._create_data_plane_client()
+    client = store_module._create_memory_client()
 
-    assert client is vended
+    assert client is memory_client_double
     assert memory_client_class.call_args.kwargs == {
         "region_name": "session-region",
         "boto3_session": session,
         "integration_source": "strands",
     }
 
+    # The store calls the data plane that client vends.
+    store = AgentCoreMemoryStore(
+        memory_id="mem-1",
+        actor_id="actor-1",
+        session_id="sess-1",
+        namespace="/users/{actorId}/facts",
+    )
+    assert store._client is vended
 
-class _FalseyClient:
-    """Client whose truth value is false but whose methods remain usable."""
+
+class _FalseyMemoryClient(MemoryClient):
+    """``MemoryClient`` whose truth value is false but which is still usable."""
 
     def __bool__(self) -> bool:
         return False
-
-    def retrieve_memory_records(self, **_kwargs: Any) -> dict[str, Any]:
-        return {"memoryRecordSummaries": []}
-
-    def create_event(self, **_kwargs: Any) -> dict[str, Any]:
-        return {}
 
 
 def test_store_preserves_explicit_falsey_client(monkeypatch: pytest.MonkeyPatch) -> None:
     """Use nullish client selection rather than truthiness."""
     from bedrock_agentcore.memory.integrations.strands.memorystore import store as store_module
 
-    falsey = _FalseyClient()
+    data_plane = client_returning([])
+    falsey = object.__new__(_FalseyMemoryClient)  # skip boto3 client construction
+    falsey.gmdp_client = data_plane
     create = Mock(side_effect=AssertionError("must not construct a replacement client"))
-    monkeypatch.setattr(store_module, "_create_data_plane_client", create)
-    store = make_store(falsey)  # type: ignore[arg-type]
-    assert store._client is falsey
+    monkeypatch.setattr(store_module, "_create_memory_client", create)
+    store = AgentCoreMemoryStore(
+        memory_id="mem-1",
+        actor_id="actor-1",
+        session_id="sess-1",
+        namespace="/users/{actorId}/facts",
+        client=falsey,
+    )
+    assert store._client is data_plane
     create.assert_not_called()

@@ -37,7 +37,7 @@ placeholders and malformed braces before constructing the store.
 ## Multiple namespaces
 
 `create_agentcore_memory_stores` returns `list[MemoryStore]` for direct `MemoryManager` composition.
-Each item is a concrete `AgentCoreMemoryStore`; the factory shares one boto3 client and prevents
+Each item is a concrete `AgentCoreMemoryStore`; the factory shares one `MemoryClient` and prevents
 duplicate writes by allowing at most one writer:
 
 ```python
@@ -132,8 +132,9 @@ have at most one writer.
 - Sender failures remain buffered for retry and are logged by Strands rather than propagated by
   `flush()`.
 
-By default the integration builds its connection through this SDK's `MemoryClient` and calls the
-`bedrock-agentcore` data-plane operations on it. Pass `client=` to reuse an existing connection —
-either your own `MemoryClient` (its vended data-plane client is used) or a boto3 `bedrock-agentcore`
-client. AWS credentials use boto3's normal credential chain; no credentials are stored by the
-integration.
+The integration uses this SDK's `MemoryClient`: by default it builds one
+(`integration_source="strands"`), and `client=` accepts your own to reuse a connection. It calls the
+`bedrock-agentcore` data-plane operations that client vends, because `MemoryClient.create_event`
+cannot carry the `clientToken` this integration needs for idempotent retries and
+`MemoryClient.retrieve_memories` swallows errors `MemoryManager` expects to see. AWS credentials use
+boto3's normal credential chain; no credentials are stored by the integration.
