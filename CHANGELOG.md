@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.21.0] - 2026-08-06
+
+### Other Changes
+- feat(memory): add AgentCoreMemoryStore Strands integration (#588) (439d788)
+- feat(runtime): propagate X-Amz-Bedrock-AgentCore-Identity-WAT on outbound calls (#607) (01d3800)
+
 ## [1.20.0] - 2026-08-04
 
 ### Added
