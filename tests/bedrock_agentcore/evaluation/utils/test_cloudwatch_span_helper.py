@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
+import pytest
+
 from bedrock_agentcore.evaluation.utils.cloudwatch_span_helper import (
     CloudWatchSpanHelper,
     _is_valid_adot_document,
@@ -237,3 +239,250 @@ class TestFetchSpansFromCloudWatch:
         assert len(spans) == 2
         assert spans[0]["scope"]["name"] == "test"
         assert spans[1]["scope"]["name"] == "test2"
+
+
+class TestAgentIdFiltering:
+    """Test agent_id filtering on existing methods."""
+
+    def test_query_log_group_with_agent_id(self):
+        """Test that agent_id adds parse/filter clauses to default query."""
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "q-1"}
+        mock_client.get_query_results.return_value = {"status": "Complete", "results": []}
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        start_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        end_time = datetime(2024, 1, 2, tzinfo=timezone.utc)
+
+        helper.query_log_group("aws/spans", "sess-1", start_time, end_time, agent_id="my-agent")
+
+        query = mock_client.start_query.call_args[1]["queryString"]
+        assert "parsedAgentId" in query
+        assert "my-agent" in query
+
+    def test_query_log_group_without_agent_id(self):
+        """Test that omitting agent_id does not add agent filter."""
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "q-1"}
+        mock_client.get_query_results.return_value = {"status": "Complete", "results": []}
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        start_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        end_time = datetime(2024, 1, 2, tzinfo=timezone.utc)
+
+        helper.query_log_group("aws/spans", "sess-1", start_time, end_time)
+
+        query = mock_client.start_query.call_args[1]["queryString"]
+        assert "parsedAgentId" not in query
+
+    def test_fetch_spans_passes_agent_id(self):
+        """Test that fetch_spans forwards agent_id to query_log_group."""
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "q-1"}
+        mock_client.get_query_results.return_value = {"status": "Complete", "results": []}
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        start_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        end_time = datetime(2024, 1, 2, tzinfo=timezone.utc)
+
+        helper.fetch_spans("sess-1", "/aws/logs/agent", start_time, end_time, agent_id="my-agent")
+
+        # Both calls (aws/spans + event log group) should include agent filter
+        for call in mock_client.start_query.call_args_list:
+            assert "my-agent" in call[1]["queryString"]
+
+
+class TestQuerySpansByTrace:
+    """Test query_spans_by_trace method."""
+
+    def test_returns_results(self):
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "q-1"}
+        mock_client.get_query_results.return_value = {
+            "status": "Complete",
+            "results": [[{"field": "traceId", "value": "trace-abc"}]],
+        }
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        results = helper.query_spans_by_trace("trace-abc", 1000000, 2000000)
+        assert len(results) == 1
+        mock_client.start_query.assert_called_once()
+        query = mock_client.start_query.call_args[1]["queryString"]
+        assert "trace-abc" in query
+        assert mock_client.start_query.call_args[1]["logGroupName"] == "aws/spans"
+
+    def test_empty_results(self):
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "q-1"}
+        mock_client.get_query_results.return_value = {"status": "Complete", "results": []}
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        results = helper.query_spans_by_trace("trace-abc", 1000000, 2000000)
+        assert results == []
+
+
+class TestQueryRuntimeLogsByTraces:
+    """Test query_runtime_logs_by_traces method."""
+
+    def test_batch_query(self):
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "q-1"}
+        mock_client.get_query_results.return_value = {
+            "status": "Complete",
+            "results": [
+                [{"field": "traceId", "value": "t1"}, {"field": "@message", "value": "log1"}],
+                [{"field": "traceId", "value": "t2"}, {"field": "@message", "value": "log2"}],
+            ],
+        }
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        results = helper.query_runtime_logs_by_traces(["t1", "t2"], 1000000, 2000000, "agent-1")
+        assert len(results) == 2
+        query = mock_client.start_query.call_args[1]["queryString"]
+        assert "'t1'" in query
+        assert "'t2'" in query
+        assert mock_client.start_query.call_args[1]["logGroupName"] == "/aws/bedrock-agentcore/runtimes/agent-1-DEFAULT"
+
+    def test_custom_endpoint_name(self):
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "q-1"}
+        mock_client.get_query_results.return_value = {"status": "Complete", "results": []}
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        helper.query_runtime_logs_by_traces(["t1"], 1000000, 2000000, "agent-1", endpoint_name="prod")
+        assert mock_client.start_query.call_args[1]["logGroupName"] == "/aws/bedrock-agentcore/runtimes/agent-1-prod"
+
+    def test_empty_trace_ids(self):
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = Mock()
+
+        results = helper.query_runtime_logs_by_traces([], 1000000, 2000000, "agent-1")
+        assert results == []
+        helper.logs_client.start_query.assert_not_called()
+
+    def test_fallback_to_individual_queries(self):
+        mock_client = Mock()
+        # First call (batch) fails, individual calls succeed
+        mock_client.start_query.side_effect = [
+            Exception("batch failed"),
+            {"queryId": "q-1"},
+            {"queryId": "q-2"},
+        ]
+        mock_client.get_query_results.return_value = {
+            "status": "Complete",
+            "results": [[{"field": "traceId", "value": "t1"}]],
+        }
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        results = helper.query_runtime_logs_by_traces(["t1", "t2"], 1000000, 2000000, "agent-1")
+        assert len(results) == 2
+        assert mock_client.start_query.call_count == 3
+
+
+class TestGetLatestSessionId:
+    """Test get_latest_session_id method."""
+
+    def test_returns_session_id(self):
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "q-1"}
+        mock_client.get_query_results.return_value = {
+            "status": "Complete",
+            "results": [[{"field": "attributes.session.id", "value": "sess-latest"}]],
+        }
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        result = helper.get_latest_session_id(1000000, 2000000, "agent-1")
+        assert result == "sess-latest"
+        query = mock_client.start_query.call_args[1]["queryString"]
+        assert "agent-1" in query
+        assert "limit 1" in query
+
+    def test_returns_none_when_no_results(self):
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "q-1"}
+        mock_client.get_query_results.return_value = {"status": "Complete", "results": []}
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        result = helper.get_latest_session_id(1000000, 2000000, "agent-1")
+        assert result is None
+
+    def test_returns_none_when_field_missing(self):
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "q-1"}
+        mock_client.get_query_results.return_value = {
+            "status": "Complete",
+            "results": [[{"field": "other_field", "value": "something"}]],
+        }
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        result = helper.get_latest_session_id(1000000, 2000000, "agent-1")
+        assert result is None
+
+
+class TestExecuteQuery:
+    """Test _execute_query helper."""
+
+    def test_successful_query(self):
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "q-1"}
+        mock_client.get_query_results.return_value = {
+            "status": "Complete",
+            "results": [[{"field": "f", "value": "v"}]],
+        }
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        results = helper._execute_query("fields @message", "lg", 1000000, 2000000)
+        assert len(results) == 1
+        # Verify ms -> seconds conversion
+        assert mock_client.start_query.call_args[1]["startTime"] == 1000
+        assert mock_client.start_query.call_args[1]["endTime"] == 2000
+
+    def test_failed_query_raises(self):
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "q-1"}
+        mock_client.get_query_results.return_value = {"status": "Failed"}
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        with pytest.raises(RuntimeError, match="failed with status"):
+            helper._execute_query("fields @message", "lg", 1000000, 2000000)
+
+    @patch("bedrock_agentcore.evaluation.utils.cloudwatch_span_helper.time")
+    def test_timeout_raises(self, mock_time):
+        mock_client = Mock()
+        mock_client.start_query.return_value = {"queryId": "q-1"}
+        mock_client.get_query_results.return_value = {"status": "Running"}
+        # Simulate time passing beyond timeout
+        mock_time.time.side_effect = [0, 0, 61]
+        mock_time.sleep = Mock()
+
+        helper = CloudWatchSpanHelper()
+        helper.logs_client = mock_client
+
+        with pytest.raises(TimeoutError):
+            helper._execute_query("fields @message", "lg", 1000000, 2000000)
