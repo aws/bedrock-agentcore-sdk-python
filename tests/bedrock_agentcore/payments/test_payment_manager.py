@@ -1627,6 +1627,75 @@ class TestGeneratePaymentHeaderX402Extraction:
         assert "Missing required fields" in str(exc_info.value)
 
 
+class TestGeneratePaymentHeaderPermit2AllowanceLimit:
+    """Tests for the optional permit2_allowance_limit injection into cryptoX402."""
+
+    @staticmethod
+    def _setup_manager(mock_session_class):
+        arn = "arn:aws:bedrock-agentcore:us-east-1:123456789012:payment-manager/pm-123"
+        mock_session = MagicMock()
+        mock_session.region_name = "us-east-1"
+        mock_client = MagicMock()
+        mock_session.client.return_value = mock_client
+        mock_session_class.return_value = mock_session
+
+        mock_client.get_payment_instrument.return_value = {
+            "paymentInstrument": {
+                "paymentInstrumentId": "instrument-123",
+                "paymentInstrumentType": "EMBEDDED_CRYPTO_WALLET",
+                "paymentInstrumentDetails": {"embeddedCryptoWallet": {"network": "ethereum"}},
+                "status": "active",
+            }
+        }
+        mock_client.process_payment.return_value = {
+            "paymentOutput": {"cryptoX402": {"payload": "payment-proof"}}
+        }
+        manager = PaymentManager(payment_manager_arn=arn, region_name="us-east-1")
+        return manager, mock_client
+
+    _V1_PAYLOAD = {
+        "x402Version": 1,
+        "scheme": "upto",
+        "network": "ethereum",
+        "accepts": [{"network": "ethereum", "value": "100"}],
+        "payload": "proof-data",
+    }
+
+    @patch("bedrock_agentcore.payments.manager.boto3.Session")
+    def test_permit2_allowance_limit_forwarded_onto_crypto_x402(self, mock_session_class):
+        """When set, permit2AllowanceLimit is injected at the cryptoX402 level."""
+        manager, mock_client = self._setup_manager(mock_session_class)
+
+        manager.generate_payment_header(
+            user_id="user-123",
+            payment_instrument_id="instrument-123",
+            payment_session_id="session-123",
+            payment_required_request={"statusCode": 402, "headers": {}, "body": self._V1_PAYLOAD},
+            permit2_allowance_limit="1000000",
+        )
+
+        payment_input = mock_client.process_payment.call_args.kwargs["paymentInput"]
+        crypto_x402 = payment_input["cryptoX402"]
+        assert crypto_x402["permit2AllowanceLimit"] == "1000000"
+        # Sibling of version/payload, not nested inside payload.
+        assert "permit2AllowanceLimit" not in crypto_x402["payload"]
+
+    @patch("bedrock_agentcore.payments.manager.boto3.Session")
+    def test_permit2_allowance_limit_omitted_when_not_set(self, mock_session_class):
+        """When unset (default), the exact flow is unaffected — no key added."""
+        manager, mock_client = self._setup_manager(mock_session_class)
+
+        manager.generate_payment_header(
+            user_id="user-123",
+            payment_instrument_id="instrument-123",
+            payment_session_id="session-123",
+            payment_required_request={"statusCode": 402, "headers": {}, "body": self._V1_PAYLOAD},
+        )
+
+        payment_input = mock_client.process_payment.call_args.kwargs["paymentInput"]
+        assert "permit2AllowanceLimit" not in payment_input["cryptoX402"]
+
+
 class TestGeneratePaymentHeaderNetworkDetection:
     """Tests for network detection and accept selection."""
 

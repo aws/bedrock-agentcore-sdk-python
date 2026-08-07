@@ -24,6 +24,11 @@ class AgentCorePaymentsPluginConfig:
         payment_connector_id: Payment connector ID (optional).
         region: AWS region for the payment manager.
         network_preferences_config: Ordered list of network CAIP2 identifiers.
+        permit2_allowance_limit: Optional maximum Permit2 allowance to grant, as a decimal
+            string in the asset's smallest denomination (for example, "1000000" for 1 USDC
+            at 6 decimals). Only applies to the x402 "upto" scheme; when set, the integration
+            forwards it so ProcessPayment submits an on-chain approve for the Permit2 contract
+            before signing. Leave unset (default) for the "exact" scheme.
         auto_payment: Whether to automatically process 402 responses. Default True.
         agent_name: Agent name propagated via HTTP header on data-plane calls.
         bearer_token: Static JWT for OAuth/CUSTOM_JWT auth. Mutually exclusive with token_provider.
@@ -64,6 +69,7 @@ class AgentCorePaymentsPluginConfig:
     payment_connector_id: Optional[str] = None
     region: Optional[str] = None
     network_preferences_config: Optional[List[str]] = None
+    permit2_allowance_limit: Optional[str] = None
     auto_payment: bool = True
     agent_name: Optional[str] = None
     bearer_token: Optional[str] = None
@@ -144,6 +150,18 @@ class AgentCorePaymentsPluginConfig:
             raise ValueError(
                 f"buyer_pays_gas_fees must be a boolean or None, got {type(self.buyer_pays_gas_fees).__name__}"
             )
+
+        if self.permit2_allowance_limit is not None:
+            if not isinstance(self.permit2_allowance_limit, str):
+                raise ValueError(
+                    "permit2_allowance_limit must be a string in the asset's smallest denomination, "
+                    f"got {type(self.permit2_allowance_limit).__name__}"
+                )
+            if not self.permit2_allowance_limit.isdigit() or int(self.permit2_allowance_limit) <= 0:
+                raise ValueError(
+                    "permit2_allowance_limit must be a positive integer string, "
+                    f"got {self.permit2_allowance_limit!r}"
+                )
 
     def update_payment_session_id(self, payment_session_id: str) -> None:
         """Update the payment session ID.

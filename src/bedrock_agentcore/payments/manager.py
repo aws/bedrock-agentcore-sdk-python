@@ -924,6 +924,7 @@ class PaymentManager:
         client_token: Optional[str] = None,
         payment_connector_id: Optional[str] = None,
         buyer_pays_gas_fees: Optional[bool] = None,
+        permit2_allowance_limit: Optional[str] = None,
     ) -> Dict[str, str]:
         """Generate a payment header for 402 payment required request.
 
@@ -959,6 +960,13 @@ class PaymentManager:
                 if this is True and otherwise fails validation, so the caller can decide.
                 Omitted or False means the buyer declines to pay network fees. Has no effect
                 on challenges where the seller already sponsors them. Ignored for x402.
+            permit2_allowance_limit: Optional maximum Permit2 allowance to grant, as a
+                decimal string in the asset's smallest denomination (for example,
+                "1000000" for 1 USDC at 6 decimals). Only applies to the x402 "upto"
+                scheme; when set, ProcessPayment submits an on-chain approve for the
+                Permit2 contract before signing. Supplying it for the "exact" scheme is
+                a validation error. Omit it (the default) to leave the cryptoX402 input
+                unchanged.
 
         Returns:
             Dictionary with header name and value. For x402: {"X-PAYMENT": "base64..."}
@@ -1085,6 +1093,13 @@ class PaymentManager:
                     "payload": selected_accept,
                 }
             }
+
+            # Opt-in Permit2 allowance for the "upto" scheme. Sits at the cryptoX402
+            # level (sibling of version/payload); ProcessPayment submits the on-chain
+            # approve before signing. Omitted entirely when not set so the "exact"
+            # flow is unaffected.
+            if permit2_allowance_limit is not None:
+                payment_input["cryptoX402"]["permit2AllowanceLimit"] = permit2_allowance_limit
 
             # ProcessPayment does not accept paymentConnectorId — the connector is
             # resolved server-side from the payment instrument. The argument is

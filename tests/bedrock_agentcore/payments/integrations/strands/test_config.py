@@ -585,3 +585,44 @@ class TestAgentCorePaymentsPluginConfigWhitespaceUserId:
                 payment_manager_arn="arn:aws:payment:us-east-1:123456789012:payment-manager/test",
                 user_id="\t\t",
             )
+
+
+class TestAgentCorePaymentsPluginConfigPermit2AllowanceLimit:
+    """Test permit2_allowance_limit validation."""
+
+    _ARN = "arn:aws:payment:us-east-1:123456789012:payment-manager/test"
+
+    def test_none_default_is_valid(self):
+        """Default (None) is valid — the exact-scheme flow is unaffected."""
+        config = AgentCorePaymentsPluginConfig(payment_manager_arn=self._ARN, user_id="u")
+        assert config.permit2_allowance_limit is None
+
+    def test_positive_integer_string_is_valid(self):
+        """A positive integer string in the asset's smallest denomination is accepted."""
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn=self._ARN, user_id="u", permit2_allowance_limit="1000000"
+        )
+        assert config.permit2_allowance_limit == "1000000"
+
+    def test_uint256_max_string_is_valid(self):
+        """The uint256 max (unlimited allowance) is accepted."""
+        uint256_max = "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn=self._ARN, user_id="u", permit2_allowance_limit=uint256_max
+        )
+        assert config.permit2_allowance_limit == uint256_max
+
+    @pytest.mark.parametrize("bad_value", ["0", "-1", "1.5", "abc", "", "  "])
+    def test_non_positive_integer_string_raises(self, bad_value):
+        """Non-positive-integer strings raise ValueError."""
+        with pytest.raises(ValueError, match="permit2_allowance_limit must be a positive integer string"):
+            AgentCorePaymentsPluginConfig(
+                payment_manager_arn=self._ARN, user_id="u", permit2_allowance_limit=bad_value
+            )
+
+    def test_non_string_raises(self):
+        """A non-string value raises ValueError."""
+        with pytest.raises(ValueError, match="permit2_allowance_limit must be a string"):
+            AgentCorePaymentsPluginConfig(
+                payment_manager_arn=self._ARN, user_id="u", permit2_allowance_limit=1000000
+            )

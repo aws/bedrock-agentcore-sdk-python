@@ -495,6 +495,7 @@ class AgentCorePaymentsPlugin(Plugin):
             client_token=str(uuid.uuid4()),
             payment_connector_id=self.config.payment_connector_id,
             buyer_pays_gas_fees=self.config.buyer_pays_gas_fees,
+            permit2_allowance_limit=self.config.permit2_allowance_limit,
         )
 
         logger.debug("Generated payment header: %s", list(payment_header_dict.keys()))

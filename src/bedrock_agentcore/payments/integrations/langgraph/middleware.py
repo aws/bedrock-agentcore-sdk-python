@@ -399,6 +399,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             client_token=str(uuid.uuid4()),
             payment_connector_id=self.config.payment_connector_id,
             buyer_pays_gas_fees=self.config.buyer_pays_gas_fees,
+            permit2_allowance_limit=self.config.permit2_allowance_limit,
         )
 
     def _create_auto_session(self) -> None:
