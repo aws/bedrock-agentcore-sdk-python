@@ -1,12 +1,13 @@
 # LangGraph AgentCore Payments Middleware
 
-The AgentCore Payments Middleware enables LangGraph agents to autonomously handle [x402 Payment Required](https://www.x402.org/) responses. When a tool hits a paid API that returns HTTP 402, the middleware automatically detects the payment requirement, signs the payment via PaymentManager, and retries the request with payment credentials — all transparent to the LLM.
+The AgentCore Payments Middleware enables LangGraph agents to autonomously handle [x402 Payment Required](https://www.x402.org/) and [MPP (Machine Payments Protocol)](https://mpp.dev) responses. When a tool hits a paid API that returns HTTP 402, the middleware automatically detects the payment requirement, signs the payment via PaymentManager, and retries the request with payment credentials — all transparent to the LLM.
 
 ## Overview
 
-- **Automatic x402 Payment Handling** — intercepts 402 responses, processes payment, retries with proof
+- **Automatic Payment Handling** — intercepts 402 responses, processes payment, retries with proof
+- **Multi-Protocol Support** — x402 v1/v2 and MPP, detected automatically from the 402 response
 - **Zero Wrapper Code** — no manual tool wrapping needed; just pass `middleware=[payments]` to `create_agent`
-- **Multi-Format Detection** — handles `PAYMENT_REQUIRED:` marker, raw JSON `statusCode: 402`, and x402 payloads
+- **Multi-Format Detection** — handles `PAYMENT_REQUIRED:` marker, raw JSON `statusCode: 402`, x402 payloads, and MPP `WWW-Authenticate: Payment` challenges
 - **Custom Handler Registry** — register handlers for tools with non-standard response formats
 - **Built-in Tools** — payment-aware `http_request` + payment query tools auto-registered
 - **Deterministic Error Messages** — tailored, actionable error messages returned to the LLM on failure
@@ -142,7 +143,9 @@ When a tool returns, the middleware checks for 402 in this order:
 
 1. **Custom handler** (if registered for this tool name) — full control over detection
 2. **`PAYMENT_REQUIRED:` marker** — explicit opt-in signal in content
-3. **Lenient fallback** — parses raw JSON for `statusCode: 402` or `x402Version` + `accepts` fields
+3. **Lenient fallback** — parses raw JSON for `statusCode: 402`, `x402Version` + `accepts` fields, or a
+   `WWW-Authenticate: Payment` challenge in `responseHeaders`/`headers` (MPP advertises its payment options
+   in headers rather than the body, so the challenge is itself the 402 signal)
 
 This means MCP tools and other tools that return raw JSON are handled automatically without needing the marker or a custom handler.
 
@@ -351,11 +354,12 @@ agent = create_agent(
 |-----------|------|---------|-------------|
 | `payment_manager_arn` | `str` | *required* | ARN of the payment manager resource |
 | `user_id` | `str \| None` | `None` | User ID. Required for SigV4 auth; optional with bearer token |
-| `payment_instrument_id` | `str \| None` | `None` | Instrument ID for x402 signing |
+| `payment_instrument_id` | `str \| None` | `None` | Instrument ID for payment signing |
 | `payment_session_id` | `str \| None` | `None` | Session ID for budget enforcement |
 | `payment_connector_id` | `str \| None` | `None` | Connector ID (optional) |
 | `region` | `str \| None` | `None` | AWS region |
 | `network_preferences_config` | `list[str] \| None` | `None` | Ordered CAIP-2 network identifiers |
+| `buyer_pays_gas_fees` | `bool \| None` | `None` | MPP only. Authorizes network (gas) fees charged to the buyer's wallet. `None` leaves the protocol default (buyer declines) |
 | `auto_payment` | `bool` | `True` | Enable/disable automatic 402 processing |
 | `auto_session` | `bool` | `False` | Auto-create session on first 402 |
 | `auto_session_budget` | `str` | `"1.00"` | Budget (USD) for auto-created sessions |
