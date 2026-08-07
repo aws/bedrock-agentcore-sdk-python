@@ -7,7 +7,22 @@ from enum import Enum
 
 
 class PingStatus(str, Enum):
-    """Ping status enum for health check responses."""
+    """Ping status enum for the ``GET /ping`` health-check endpoint.
+
+    The platform polls ``/ping`` every few seconds to decide whether to keep
+    the container alive.  The full JSON response body emitted by this SDK is::
+
+        {
+            "status": "<Healthy|HealthyBusy>",
+            "time_of_last_update": <unix-timestamp-int>
+        }
+
+    ``time_of_last_update`` is **required** for the idle-reaper logic.  If it
+    is absent, ``idleRuntimeSessionTimeout`` fires at the configured boundary
+    even when ``status`` is ``HealthyBusy``, silently terminating the
+    container mid-execution.  The SDK populates this field automatically; if
+    you implement a custom ping handler outside of the SDK, you must include it.
+    """
 
     HEALTHY = "Healthy"
     HEALTHY_BUSY = "HealthyBusy"
