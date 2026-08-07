@@ -20,6 +20,7 @@ from bedrock_agentcore.payments.integrations.handlers import (
     GenericPaymentHandler,
     PaymentResponseHandler,
     get_payment_handler,
+    has_mpp_challenge,
 )
 from bedrock_agentcore.payments.manager import (
     PaymentError,
@@ -181,6 +182,17 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             if "x402Version" in parsed and "accepts" in parsed:
                 logger.debug("Fallback detection: found x402 payload in raw JSON")
                 return {"statusCode": 402, "headers": {}, "body": parsed}
+
+            # MPP advertises payment options in headers rather than the body, so a
+            # WWW-Authenticate: Payment challenge is itself the 402 signal.
+            response_headers = parsed.get("responseHeaders") or parsed.get("headers")
+            if has_mpp_challenge(response_headers):
+                logger.debug("Fallback detection: found MPP Payment challenge in response headers")
+                return {
+                    "statusCode": 402,
+                    "headers": response_headers,
+                    "body": parsed.get("structuredContent") or parsed.get("body") or {},
+                }
 
             sc = parsed.get("structuredContent")
             if isinstance(sc, dict) and "x402Version" in sc and "accepts" in sc:
@@ -365,14 +377,18 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         return None
 
     def _generate_payment_header(self, payment_required_request: Dict[str, Any]) -> Dict[str, str]:
-        """Generate payment header via PaymentManager."""
+        """Generate payment header via PaymentManager.
+
+        The payment protocol (x402 or MPP) is detected by PaymentManager from the 402
+        response, so this method is protocol-agnostic.
+        """
         if self.config.payment_instrument_id is None:
-            raise PaymentInstrumentConfigurationRequired("payment_instrument_id is required for x402 payments.")
+            raise PaymentInstrumentConfigurationRequired("payment_instrument_id is required for payments.")
         if self.config.payment_session_id is None:
             if self.config.auto_session:
                 self._create_auto_session()
             else:
-                raise PaymentSessionConfigurationRequired("payment_session_id is required for x402 payments.")
+                raise PaymentSessionConfigurationRequired("payment_session_id is required for payments.")
 
         return self.payment_manager.generate_payment_header(
             user_id=self.config.user_id,
@@ -382,6 +398,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             network_preferences=self.config.network_preferences_config,
             client_token=str(uuid.uuid4()),
             payment_connector_id=self.config.payment_connector_id,
+            buyer_pays_gas_fees=self.config.buyer_pays_gas_fees,
         )
 
     def _create_auto_session(self) -> None:
