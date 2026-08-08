@@ -17,6 +17,7 @@ class TestBaggageSpanProcessorOnStart:
         from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
 
         BedrockAgentCoreContext.set_routing_experiment(None, None)
+        BedrockAgentCoreContext.set_enduser_id(None)
 
     def _make_span(self):
         span = MagicMock()
@@ -167,6 +168,82 @@ class TestBaggageSpanProcessorOnStart:
         assert results["req1"]["aws.agentcore.gateway.routing_experiment_variant_name"] == "blue"
         assert results["req2"]["aws.agentcore.gateway.routing_experiment_arn"] == "arn:exp-B"
         assert results["req2"]["aws.agentcore.gateway.routing_experiment_variant_name"] == "green"
+
+
+class TestBaggageSpanProcessorEnduserIdAttribute:
+    """enduser.id is stamped when BedrockAgentCoreContext.enduser_id is set."""
+
+    def setup_method(self):
+        from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+
+        BedrockAgentCoreContext.set_routing_experiment(None, None)
+        BedrockAgentCoreContext.set_enduser_id(None)
+
+    def _make_span(self):
+        return MagicMock()
+
+    def test_enduser_id_set_on_span(self):
+        from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+
+        BedrockAgentCoreContext.set_enduser_id("user-42")
+        span = self._make_span()
+        BaggageSpanProcessor().on_start(span)
+
+        calls = {c[0][0]: c[0][1] for c in span.set_attribute.call_args_list}
+        assert calls["enduser.id"] == "user-42"
+
+    def test_enduser_id_not_set_when_none(self):
+        from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+
+        BedrockAgentCoreContext.set_enduser_id(None)
+        span = self._make_span()
+        BaggageSpanProcessor().on_start(span)
+
+        set_keys = {c[0][0] for c in span.set_attribute.call_args_list}
+        assert "enduser.id" not in set_keys
+
+    def test_enduser_id_does_not_interfere_with_routing_experiment(self):
+        from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+
+        BedrockAgentCoreContext.set_routing_experiment("arn:aws:bedrock:us-east-1:123:exp/e1", "blue")
+        BedrockAgentCoreContext.set_enduser_id("alice")
+        span = self._make_span()
+        BaggageSpanProcessor().on_start(span)
+
+        calls = {c[0][0]: c[0][1] for c in span.set_attribute.call_args_list}
+        assert calls["aws.agentcore.gateway.routing_experiment_arn"] == "arn:aws:bedrock:us-east-1:123:exp/e1"
+        assert calls["aws.agentcore.gateway.routing_experiment_variant_name"] == "blue"
+        assert calls["enduser.id"] == "alice"
+
+    def test_different_contexts_get_different_enduser_ids(self):
+        """Concurrent requests must not bleed enduser IDs into each other."""
+        import contextvars
+
+        from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+
+        processor = BaggageSpanProcessor()
+        results = {}
+
+        def run_in_context(name, uid):
+            ctx = contextvars.copy_context()
+
+            def _inner():
+                BedrockAgentCoreContext.set_enduser_id(uid)
+                span = MagicMock()
+                processor.on_start(span)
+                results[name] = {c[0][0]: c[0][1] for c in span.set_attribute.call_args_list}
+
+            ctx.run(_inner)
+
+        t1 = threading.Thread(target=run_in_context, args=("req1", "user-A"))
+        t2 = threading.Thread(target=run_in_context, args=("req2", "user-B"))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        assert results["req1"]["enduser.id"] == "user-A"
+        assert results["req2"]["enduser.id"] == "user-B"
 
 
 class TestBaggageSpanProcessorNoOpMethods:
@@ -324,6 +401,106 @@ class TestBaggageEndToEnd:
         assert response.status_code == 200
         assert captured["arn"] is None
         assert captured["variant"] is None
+
+    def test_enduser_id_set_from_user_id_header(self):
+        """X-Amzn-Bedrock-AgentCore-Runtime-User-Id header populates enduser.id ContextVar."""
+        from starlette.testclient import TestClient
+
+        from bedrock_agentcore.runtime import BedrockAgentCoreApp
+        from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+        from bedrock_agentcore.runtime.models import USER_ID_HEADER
+
+        app = BedrockAgentCoreApp()
+        captured = {}
+
+        @app.entrypoint
+        def handler(payload):
+            captured["enduser_id"] = BedrockAgentCoreContext.get_enduser_id()
+            return {"ok": True}
+
+        client = TestClient(app)
+        client.post("/invocations", json={}, headers={USER_ID_HEADER: "explicit-user-99"})
+
+        assert captured["enduser_id"] == "explicit-user-99"
+
+    def test_enduser_id_extracted_from_jwt_sub_claim(self):
+        """Bearer JWT in Authorization header → sub claim sets enduser.id ContextVar."""
+        import base64
+        import json
+
+        from starlette.testclient import TestClient
+
+        from bedrock_agentcore.runtime import BedrockAgentCoreApp
+        from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+
+        header = base64.urlsafe_b64encode(b'{"alg":"none"}').rstrip(b"=").decode()
+        payload = base64.urlsafe_b64encode(json.dumps({"sub": "cognito-user-42"}).encode()).rstrip(b"=").decode()
+        jwt = f"{header}.{payload}.fakesig"
+
+        app = BedrockAgentCoreApp()
+        captured = {}
+
+        @app.entrypoint
+        def handler(payload_data):
+            captured["enduser_id"] = BedrockAgentCoreContext.get_enduser_id()
+            return {"ok": True}
+
+        client = TestClient(app)
+        client.post("/invocations", json={}, headers={"Authorization": f"Bearer {jwt}"})
+
+        assert captured["enduser_id"] == "cognito-user-42"
+
+    def test_user_id_header_takes_priority_over_jwt(self):
+        """Explicit User-Id header wins over JWT sub when both are present."""
+        import base64
+        import json
+
+        from starlette.testclient import TestClient
+
+        from bedrock_agentcore.runtime import BedrockAgentCoreApp
+        from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+        from bedrock_agentcore.runtime.models import USER_ID_HEADER
+
+        header = base64.urlsafe_b64encode(b'{"alg":"none"}').rstrip(b"=").decode()
+        payload = base64.urlsafe_b64encode(json.dumps({"sub": "jwt-sub"}).encode()).rstrip(b"=").decode()
+        jwt = f"{header}.{payload}.fakesig"
+
+        app = BedrockAgentCoreApp()
+        captured = {}
+
+        @app.entrypoint
+        def handler(payload_data):
+            captured["enduser_id"] = BedrockAgentCoreContext.get_enduser_id()
+            return {"ok": True}
+
+        client = TestClient(app)
+        client.post(
+            "/invocations",
+            json={},
+            headers={USER_ID_HEADER: "explicit-wins", "Authorization": f"Bearer {jwt}"},
+        )
+
+        assert captured["enduser_id"] == "explicit-wins"
+
+    def test_enduser_id_is_none_when_no_header_and_no_jwt(self):
+        """No User-Id header and no Authorization → enduser.id is None."""
+        from starlette.testclient import TestClient
+
+        from bedrock_agentcore.runtime import BedrockAgentCoreApp
+        from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+
+        app = BedrockAgentCoreApp()
+        captured = {}
+
+        @app.entrypoint
+        def handler(payload):
+            captured["enduser_id"] = BedrockAgentCoreContext.get_enduser_id()
+            return {"ok": True}
+
+        client = TestClient(app)
+        client.post("/invocations", json={})
+
+        assert captured["enduser_id"] is None
 
     def test_extract_baggage_error_clears_experiment_context(self):
         """When _extract_baggage raises, all_baggage defaults to {} and ContextVars are set to None."""
