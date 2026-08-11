@@ -28,6 +28,12 @@ from .tracing import _ensure_baggage_processor_registered
 
 logger = logging.getLogger(__name__)
 
+# The AgentCore Runtime A2A service contract fixes the container port at 9000
+# (HTTP is 8080, MCP is 8000). It is not negotiable, so it is only overridable
+# via an explicit ``port=`` argument or the protocol-scoped env var below.
+A2A_CONTRACT_PORT = 9000
+A2A_PORT_ENV = "A2A_PORT"
+
 
 def _check_a2a_sdk() -> None:
     """Raise ImportError with install instructions if a2a-sdk is missing."""
@@ -275,7 +281,7 @@ def build_a2a_app(
     from starlette.routing import Route
 
     runtime_url_override = os.environ.get(AGENTCORE_RUNTIME_URL_ENV) or runtime_url
-    advertised_url = runtime_url_override or "http://localhost:9000/"
+    advertised_url = runtime_url_override or f"http://localhost:{A2A_CONTRACT_PORT}/"
     is_a2a_v1 = _is_a2a_v1()
 
     if agent_card is None:
@@ -354,8 +360,11 @@ def serve_a2a(
         executor: An ``AgentExecutor`` that implements the agent logic.
         agent_card: Optional ``a2a.types.AgentCard`` describing the agent.
             If ``None``, one is built automatically by introspecting the executor.
-        port: Port to serve on. Defaults to the ``PORT`` environment variable,
-            or 9000 when it is unset.
+        port: Port to serve on. Defaults to the ``A2A_PORT`` environment
+            variable, or 9000 when it is unset. ``PORT`` is deliberately not
+            consulted: the AgentCore A2A contract fixes the port at 9000, and
+            ``PORT`` is widely set to another protocol's port (8080 for HTTP,
+            8000 for MCP) in images shared across runtimes.
         host: Host to bind to; auto-detected if ``None``.
         task_store: Optional ``TaskStore``; defaults to ``InMemoryTaskStore``.
         context_builder: Optional ``ServerCallContextBuilder``; defaults to
@@ -367,7 +376,17 @@ def serve_a2a(
 
     import uvicorn
 
-    resolved_port = port if port is not None else int(os.environ.get("PORT", "9000"))
+    resolved_port = port if port is not None else int(os.environ.get(A2A_PORT_ENV, A2A_CONTRACT_PORT))
+
+    if resolved_port != A2A_CONTRACT_PORT:
+        logger.warning(
+            "A2A server binding port %d, but the AgentCore Runtime A2A service contract "
+            "requires %d. Deployed invocations will fail with HTTP 424 (RuntimeClientError) "
+            "because the runtime proxies to %d only.",
+            resolved_port,
+            A2A_CONTRACT_PORT,
+            A2A_CONTRACT_PORT,
+        )
 
     app = build_a2a_app(
         executor,

@@ -4,16 +4,34 @@ These tests require `deepeval`, `autoevals`, and `ragas` packages to be installe
 They verify the full adapter flow from EvaluatorInput through span parsing
 to metric execution, using real library metrics (not mocks).
 
+Both libraries judge with an LLM, so every test here requires OPENAI_API_KEY.
+In CI the key is fetched from the central DevX Secrets Manager account as a
+repo-specific workflow secret.
+
 SETUP:
     pip install deepeval autoevals ragas
+    export OPENAI_API_KEY=...
 
 RUN:
     pytest tests_integ/evaluation/test_third_party_adapters.py -v
 """
 
+import json
+import os
+
 import pytest
 
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.models import EvaluatorInput, EvaluatorOutput
+
+
+def _text_content(text):
+    """Wrap text in the nested, double-encoded shape the CloudWatch mapper expects.
+
+    strands-evals reads message content via `content.content` / `content.message`,
+    where the inner value is a JSON-encoded list of content blocks. Passing a bare
+    string yields no AgentInvocationSpan and the adapters fail extraction.
+    """
+    return {"content": json.dumps([{"text": text}])}
 
 
 def _make_agent_evaluator_input(
@@ -25,18 +43,20 @@ def _make_agent_evaluator_input(
     output_messages = []
     if tool_messages:
         for msg in tool_messages:
-            output_messages.append({"role": "tool", "content": msg})
-    output_messages.append({"role": "assistant", "content": agent_response})
+            output_messages.append({"role": "tool", "content": _text_content(msg)})
+    output_messages.append({"role": "assistant", "content": _text_content(agent_response)})
 
     spans = [
         {
             "traceId": "integ-trace-1",
             "spanId": "integ-span-1",
+            # The mapper keys off scope.name to pick the CloudWatch span format.
+            "scope": {"name": "strands.telemetry.tracer"},
             "attributes": {"gen_ai.operation.name": "invoke_agent"},
             "span_events": [
                 {
                     "body": {
-                        "input": {"messages": [{"role": "user", "content": user_prompt}]},
+                        "input": {"messages": [{"role": "user", "content": _text_content(user_prompt)}]},
                         "output": {"messages": output_messages},
                     }
                 }
@@ -119,18 +139,30 @@ class TestAutoEvalsAdapterIntegration:
         """Verify autoevals is installed."""
         import autoevals  # noqa: F401
 
-    def test_factuality_scorer(self):
+    @pytest.fixture
+    def openai_client(self):
+        """An OpenAI client pinned to the OpenAI API.
+
+        Left to its own defaults, autoevals sends requests to the Braintrust AI
+        gateway authenticated with BRAINTRUST_API_KEY, which rejects an OpenAI
+        key with 401. Passing an explicit client is the documented way to choose
+        the provider (the api_key/base_url arguments are deprecated).
+        """
+        from openai import OpenAI
+
+        return OpenAI(api_key=os.environ["OPENAI_API_KEY"], base_url="https://api.openai.com/v1")
+
+    def test_factuality_scorer(self, openai_client):
         from autoevals import Factuality
 
         from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoEvalsAdapter
 
-        scorer = Factuality()
+        scorer = Factuality(client=openai_client)
         adapter = AutoEvalsAdapter(metric=scorer)
 
-        evaluator_input = _make_agent_evaluator_input()
-        evaluator_input.session_spans[0]["span_events"][0]["body"]["output"]["messages"] = [
-            {"role": "assistant", "content": "The capital of France is Paris."}
-        ]
+        # Assistant-only output (no tool messages), which is what the helper
+        # already builds; keep it explicit here to document the intent.
+        evaluator_input = _make_agent_evaluator_input(agent_response="The capital of France is Paris.")
 
         result = adapter(evaluator_input)
 
@@ -138,12 +170,12 @@ class TestAutoEvalsAdapterIntegration:
         assert result.value is not None
         assert result.label in ("Pass", "Fail")
 
-    def test_custom_threshold(self):
+    def test_custom_threshold(self, openai_client):
         from autoevals import Factuality
 
         from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoEvalsAdapter
 
-        scorer = Factuality()
+        scorer = Factuality(client=openai_client)
         adapter = AutoEvalsAdapter(metric=scorer, threshold=0.9)
 
         result = adapter(_make_agent_evaluator_input())
@@ -151,12 +183,12 @@ class TestAutoEvalsAdapterIntegration:
         assert isinstance(result, EvaluatorOutput)
         assert result.value is not None
 
-    def test_with_custom_mapper(self):
+    def test_with_custom_mapper(self, openai_client):
         from autoevals import Factuality
 
         from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.autoevals import AutoEvalsAdapter
 
-        scorer = Factuality()
+        scorer = Factuality(client=openai_client)
         adapter = AutoEvalsAdapter(
             metric=scorer,
             custom_mapper=lambda ev: {
@@ -170,42 +202,6 @@ class TestAutoEvalsAdapterIntegration:
 
         assert isinstance(result, EvaluatorOutput)
         assert result.value is not None
-
-
-def _make_ragas_evaluator_input(user_prompt, agent_response):
-    """Build an EvaluatorInput with CloudWatch split format spans (supported by span mappers)."""
-    import json
-
-    spans = [
-        {
-            "traceId": "integ-trace-1",
-            "spanId": "integ-span-1",
-            "scope": {"name": "strands.telemetry.tracer"},
-            "name": "invoke_agent",
-            "kind": "INTERNAL",
-            "startTimeUnixNano": 1000000000,
-            "endTimeUnixNano": 2000000000,
-            "attributes": {"gen_ai.operation.name": "invoke_agent", "session.id": "integ-session"},
-            "status": {"code": "UNSET"},
-        },
-        {
-            "traceId": "integ-trace-1",
-            "spanId": "integ-span-1",
-            "scope": {"name": "strands.telemetry.tracer"},
-            "timeUnixNano": 2000000000,
-            "observedTimeUnixNano": 2000000001,
-            "severityNumber": 9,
-            "body": {
-                "input": {"messages": [{"role": "user", "content": {"content": json.dumps([{"text": user_prompt}])}}]},
-                "output": {"messages": [{"role": "assistant", "content": {"message": agent_response}}]},
-            },
-        },
-    ]
-    return EvaluatorInput(
-        evaluation_level="TRACE",
-        session_spans=spans,
-        target_trace_id="integ-trace-1",
-    )
 
 
 class TestRAGASAdapterIntegration:
@@ -227,7 +223,7 @@ class TestRAGASAdapterIntegration:
         adapter = RAGASAdapter(metric=ExactMatch())
 
         result = adapter(
-            _make_ragas_evaluator_input(
+            _make_agent_evaluator_input(
                 user_prompt="What is the capital of France?\n\nReference Answer:\nThe capital of France is Paris.",
                 agent_response="The capital of France is Paris.",
             )
@@ -245,7 +241,7 @@ class TestRAGASAdapterIntegration:
         adapter = RAGASAdapter(metric=ExactMatch())
 
         result = adapter(
-            _make_ragas_evaluator_input(
+            _make_agent_evaluator_input(
                 user_prompt="What is the capital of France?\n\nReference Answer:\nParis",
                 agent_response="The capital of France is Paris.",
             )
@@ -263,7 +259,7 @@ class TestRAGASAdapterIntegration:
         adapter = RAGASAdapter(metric=ExactMatch())
 
         result = adapter(
-            _make_ragas_evaluator_input(
+            _make_agent_evaluator_input(
                 user_prompt="What is the capital of France?",
                 agent_response="The capital of France is Paris.",
             )
@@ -304,7 +300,7 @@ class TestRAGASAdapterIntegration:
         adapter = RAGASAdapter(metric=CollectionsExactMatch())
 
         result = adapter(
-            _make_ragas_evaluator_input(
+            _make_agent_evaluator_input(
                 user_prompt="What is the capital of France?\n\nReference Answer:\nThe capital of France is Paris.",
                 agent_response="The capital of France is Paris.",
             )

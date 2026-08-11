@@ -503,7 +503,7 @@ wheels = [
 
 [[package]]
 name = "bedrock-agentcore"
-version = "1.19.0"
+version = "1.21.0"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
@@ -594,8 +594,8 @@ requires-dist = [
     { name = "a2a-sdk", extras = ["http-server"], marker = "extra == 'a2a-v1'", specifier = ">=1.0.1,<2.0" },
     { name = "ag-ui-protocol", marker = "extra == 'ag-ui'", specifier = ">=0.1.10" },
     { name = "autoevals", marker = "extra == 'autoevals'", specifier = ">=0.3.0,<1.0.0" },
-    { name = "boto3", specifier = ">=1.43.31" },
-    { name = "botocore", specifier = ">=1.43.31" },
+    { name = "boto3", specifier = ">=1.43.35" },
+    { name = "botocore", specifier = ">=1.43.35" },
     { name = "deepeval", marker = "extra == 'deepeval'", specifier = ">=3.5.0,<5.0.0" },
     { name = "httpx", marker = "extra == 'langgraph'", specifier = ">=0.27.0" },
     { name = "jinja2", marker = "extra == 'simulation'", specifier = ">=3.1.0" },
@@ -608,7 +608,7 @@ requires-dist = [
     { name = "ragas", marker = "extra == 'ragas'", specifier = ">=0.4.3,<1.0.0" },
     { name = "requests", marker = "extra == 'datasets'", specifier = ">=2.31.0" },
     { name = "starlette", specifier = ">=0.46.2" },
-    { name = "strands-agents", marker = "extra == 'strands-agents'", specifier = ">=1.20.0" },
+    { name = "strands-agents", marker = "extra == 'strands-agents'", specifier = ">=1.46.0" },
     { name = "strands-agents-evals", marker = "extra == 'autoevals'", specifier = ">=1.0.3,<2.0.0" },
     { name = "strands-agents-evals", marker = "extra == 'deepeval'", specifier = ">=1.0.3,<2.0.0" },
     { name = "strands-agents-evals", marker = "extra == 'ragas'", specifier = ">=1.0.3,<2.0.0" },
@@ -643,7 +643,7 @@ dev = [
     { name = "pytest-rerunfailures", specifier = ">=15.0" },
     { name = "ragas", specifier = ">=0.4.3,<1.0.0" },
     { name = "ruff", specifier = ">=0.12.0" },
-    { name = "strands-agents", specifier = ">=1.20.0" },
+    { name = "strands-agents", specifier = ">=1.46.0" },
     { name = "strands-agents-evals", specifier = ">=1.0.3,<2.0.0" },
     { name = "websockets", specifier = ">=14.1" },
     { name = "wheel", specifier = ">=0.45.1" },
