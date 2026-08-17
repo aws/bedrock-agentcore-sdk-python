@@ -108,7 +108,7 @@ jobs:
 
       - name: Check package
         run: |
-          uv pip install twine==6.2.0
+          uv pip install twine==7.0.0
           uv run twine check dist/*
 
       - name: Upload artifacts
