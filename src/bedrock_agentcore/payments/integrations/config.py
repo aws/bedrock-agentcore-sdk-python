@@ -69,7 +69,6 @@ class AgentCorePaymentsPluginConfig:
     payment_connector_id: Optional[str] = None
     region: Optional[str] = None
     network_preferences_config: Optional[List[str]] = None
-    permit2_allowance_limit: Optional[str] = None
     auto_payment: bool = True
     agent_name: Optional[str] = None
     bearer_token: Optional[str] = None
@@ -85,6 +84,7 @@ class AgentCorePaymentsPluginConfig:
     on_payment_error: Optional[Callable] = None
     max_error_retries: int = 3
     buyer_pays_gas_fees: Optional[bool] = None
+    permit2_allowance_limit: Optional[str] = None
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
