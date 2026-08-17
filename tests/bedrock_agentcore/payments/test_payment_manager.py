@@ -1647,9 +1647,7 @@ class TestGeneratePaymentHeaderPermit2AllowanceLimit:
                 "status": "active",
             }
         }
-        mock_client.process_payment.return_value = {
-            "paymentOutput": {"cryptoX402": {"payload": "payment-proof"}}
-        }
+        mock_client.process_payment.return_value = {"paymentOutput": {"cryptoX402": {"payload": "payment-proof"}}}
         manager = PaymentManager(payment_manager_arn=arn, region_name="us-east-1")
         return manager, mock_client
 

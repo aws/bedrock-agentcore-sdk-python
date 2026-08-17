@@ -616,13 +616,9 @@ class TestAgentCorePaymentsPluginConfigPermit2AllowanceLimit:
     def test_non_positive_integer_string_raises(self, bad_value):
         """Non-positive-integer strings raise ValueError."""
         with pytest.raises(ValueError, match="permit2_allowance_limit must be a positive integer string"):
-            AgentCorePaymentsPluginConfig(
-                payment_manager_arn=self._ARN, user_id="u", permit2_allowance_limit=bad_value
-            )
+            AgentCorePaymentsPluginConfig(payment_manager_arn=self._ARN, user_id="u", permit2_allowance_limit=bad_value)
 
     def test_non_string_raises(self):
         """A non-string value raises ValueError."""
         with pytest.raises(ValueError, match="permit2_allowance_limit must be a string"):
-            AgentCorePaymentsPluginConfig(
-                payment_manager_arn=self._ARN, user_id="u", permit2_allowance_limit=1000000
-            )
+            AgentCorePaymentsPluginConfig(payment_manager_arn=self._ARN, user_id="u", permit2_allowance_limit=1000000)

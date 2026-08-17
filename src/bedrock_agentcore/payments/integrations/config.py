@@ -159,8 +159,7 @@ class AgentCorePaymentsPluginConfig:
                 )
             if not self.permit2_allowance_limit.isdigit() or int(self.permit2_allowance_limit) <= 0:
                 raise ValueError(
-                    "permit2_allowance_limit must be a positive integer string, "
-                    f"got {self.permit2_allowance_limit!r}"
+                    f"permit2_allowance_limit must be a positive integer string, got {self.permit2_allowance_limit!r}"
                 )
 
     def update_payment_session_id(self, payment_session_id: str) -> None:
