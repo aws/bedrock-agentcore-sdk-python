@@ -275,7 +275,10 @@ class TestPaymentConnectorOperations:
     @patch("bedrock_agentcore.payments.client.boto3.client")
     @patch("bedrock_agentcore.payments.client.boto3.Session")
     def test_create_payment_connector_manual_omits_provision_mode(self, mock_session, mock_boto3_client):
-        """When provision_mode is not supplied, provisionMode is absent from the request (service defaults to MANUAL)."""
+        """Omit provisionMode when provision_mode is not supplied.
+
+        The service defaults the omitted field to MANUAL.
+        """
         mock_session.return_value.region_name = "us-west-2"
         mock_cp_client = MagicMock()
         mock_boto3_client.return_value = mock_cp_client

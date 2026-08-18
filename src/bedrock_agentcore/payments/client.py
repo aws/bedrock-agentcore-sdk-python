@@ -658,10 +658,10 @@ class PaymentClient:
         credential_provider_configurations: List[Dict[str, Any]],
         description: Optional[str] = None,
         client_token: Optional[str] = None,
-        provision_mode: Optional[str] = None,
         wait_for_ready: bool = False,
         max_wait: int = 300,
         poll_interval: int = 10,
+        provision_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a payment connector for a provider.
 
@@ -676,14 +676,14 @@ class PaymentClient:
                 provisions the credential provider after OAuth consent.
             description: Optional description
             client_token: Optional idempotency token. If not provided, a UUID will be generated.
+            wait_for_ready: Whether to wait for connector to reach READY status
+            max_wait: Maximum seconds to wait if wait_for_ready is True
+            poll_interval: Seconds between checks if wait_for_ready is True
             provision_mode: Optional provisioning mode ("MANUAL" or "QUICK_CREATE"; see
                 :class:`~bedrock_agentcore.payments.constants.PaymentConnectorProvisionMode`).
                 Defaults to the service default (MANUAL) when omitted. With "QUICK_CREATE" the
                 connector is created in PENDING_AUTHENTICATION and the response carries an
                 ``authorizationUrl`` the user must open to complete OAuth consent.
-            wait_for_ready: Whether to wait for connector to reach READY status
-            max_wait: Maximum seconds to wait if wait_for_ready is True
-            poll_interval: Seconds between checks if wait_for_ready is True
 
         Returns:
             Dictionary with paymentConnectorId and status, plus authorizationUrl when the
