@@ -1655,7 +1655,7 @@ class TestGeneratePaymentHeaderPermit2AllowanceLimit:
         "x402Version": 1,
         "scheme": "upto",
         "network": "ethereum",
-        "accepts": [{"network": "ethereum", "value": "100"}],
+        "accepts": [{"scheme": "upto", "network": "ethereum", "value": "100"}],
         "payload": "proof-data",
     }
 
@@ -1692,6 +1692,41 @@ class TestGeneratePaymentHeaderPermit2AllowanceLimit:
 
         payment_input = mock_client.process_payment.call_args.kwargs["paymentInput"]
         assert "permit2AllowanceLimit" not in payment_input["cryptoX402"]
+
+    @patch("bedrock_agentcore.payments.manager.boto3.Session")
+    def test_permit2_allowance_limit_omitted_for_exact_scheme(self, mock_session_class):
+        manager, mock_client = self._setup_manager(mock_session_class)
+        payload = {
+            **self._V1_PAYLOAD,
+            "scheme": "exact",
+            "accepts": [{"scheme": "exact", "network": "ethereum", "value": "100"}],
+        }
+
+        manager.generate_payment_header(
+            user_id="user-123",
+            payment_instrument_id="instrument-123",
+            payment_session_id="session-123",
+            payment_required_request={"statusCode": 402, "headers": {}, "body": payload},
+            permit2_allowance_limit="1000000",
+        )
+
+        payment_input = mock_client.process_payment.call_args.kwargs["paymentInput"]
+        assert "permit2AllowanceLimit" not in payment_input["cryptoX402"]
+
+    @patch("bedrock_agentcore.payments.manager.boto3.Session")
+    def test_invalid_permit2_allowance_is_rejected_for_upto(self, mock_session_class):
+        manager, mock_client = self._setup_manager(mock_session_class)
+
+        with pytest.raises(PaymentError, match="positive ASCII integer"):
+            manager.generate_payment_header(
+                user_id="user-123",
+                payment_instrument_id="instrument-123",
+                payment_session_id="session-123",
+                payment_required_request={"statusCode": 402, "headers": {}, "body": self._V1_PAYLOAD},
+                permit2_allowance_limit="9" * 79,
+            )
+
+        mock_client.process_payment.assert_not_called()
 
 
 class TestGeneratePaymentHeaderNetworkDetection:

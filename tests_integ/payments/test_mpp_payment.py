@@ -50,6 +50,8 @@ import json
 import os
 import uuid
 
+import botocore
+import httpx
 import pytest
 
 from bedrock_agentcore.payments.manager import PaymentError, PaymentManager
@@ -143,8 +145,6 @@ class TestMppModelSupport:
 
     def test_botocore_models_mpp_payment_input(self):
         """Skips (rather than fails) when the installed botocore predates MPP."""
-        import botocore
-
         manager = PaymentManager(payment_manager_arn=self.payment_manager_arn, region_name=self.region)
         shapes = self._shape_map(manager)
 
@@ -377,8 +377,6 @@ class TestMppLiveResource:
     )
     def test_live_402_challenge_is_parseable(self):
         """A real server's 402 must produce at least one usable challenge."""
-        import httpx
-
         with httpx.Client(timeout=30.0, follow_redirects=True) as client:
             response = client.get(self.resource_url)
 
@@ -414,8 +412,6 @@ class TestMppLiveResource:
     )
     def test_end_to_end_pay_and_retry(self):
         """Full loop: 402 → select → pay → retry with Authorization → 200."""
-        import httpx
-
         manager = PaymentManager(payment_manager_arn=self.payment_manager_arn, region_name=self.region)
 
         with httpx.Client(timeout=30.0, follow_redirects=True) as client:

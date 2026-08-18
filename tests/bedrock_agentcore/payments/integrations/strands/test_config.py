@@ -612,10 +612,13 @@ class TestAgentCorePaymentsPluginConfigPermit2AllowanceLimit:
         )
         assert config.permit2_allowance_limit == uint256_max
 
-    @pytest.mark.parametrize("bad_value", ["0", "-1", "1.5", "abc", "", "  "])
+    @pytest.mark.parametrize(
+        "bad_value",
+        ["0", "-1", "1.5", "abc", "", "  ", "１２３", "²", "9" * 79],
+    )
     def test_non_positive_integer_string_raises(self, bad_value):
         """Non-positive-integer strings raise ValueError."""
-        with pytest.raises(ValueError, match="permit2_allowance_limit must be a positive integer string"):
+        with pytest.raises(ValueError, match="permit2_allowance_limit must be a positive ASCII integer"):
             AgentCorePaymentsPluginConfig(payment_manager_arn=self._ARN, user_id="u", permit2_allowance_limit=bad_value)
 
     def test_non_string_raises(self):

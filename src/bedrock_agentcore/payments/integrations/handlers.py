@@ -16,6 +16,8 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
+from bedrock_agentcore.payments.mpp import is_mpp_payment_required
+
 logger = logging.getLogger(__name__)
 
 # Header carrying MPP payment challenges on a 402 response.
@@ -39,8 +41,6 @@ def has_mpp_challenge(headers: Any) -> bool:
     Returns:
         True if a parseable ``WWW-Authenticate: Payment`` challenge is present.
     """
-    from bedrock_agentcore.payments.mpp import is_mpp_payment_required
-
     if not isinstance(headers, dict):
         return False
     return is_mpp_payment_required({"headers": headers})

@@ -25,6 +25,7 @@ import base64
 import binascii
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -41,6 +42,8 @@ logger = logging.getLogger(__name__)
 
 # Header names that may carry MPP challenges on a 402 response.
 _WWW_AUTHENTICATE = "www-authenticate"
+_REQUIRED_CHALLENGE_FIELDS = ("id", "realm", "method", "intent", "request")
+_BASE64URL_PATTERN = re.compile(r"[A-Za-z0-9_-]+\Z")
 
 
 class MppChallengeSelectionError(Exception):
@@ -164,7 +167,7 @@ def parse_www_authenticate(header_value: str) -> List[Dict[str, Any]]:
         header_value: Raw header value, possibly containing several challenges.
 
     Returns:
-        List of challenge dicts. Each contains the parsed auth-params (``id``,
+        List of valid challenge dicts. Each contains the parsed auth-params (``id``,
         ``realm``, ``method``, ``intent``, ``request``, ``expires``, ``opaque``, plus
         any unknown params) and a ``raw`` key holding the verbatim single-challenge
         header value to forward to ProcessPayment.
@@ -180,7 +183,10 @@ def parse_www_authenticate(header_value: str) -> List[Dict[str, Any]]:
     def _flush() -> None:
         if current is not None and current_parts:
             current["raw"] = f"{MPP_AUTH_SCHEME} " + ", ".join(current_parts)
-            challenges.append(current)
+            if _is_valid_challenge(current):
+                challenges.append(current)
+            else:
+                logger.debug("MPP: discarded malformed challenge id=%s", current.get("id"))
 
     for part in _split_outside_quotes(header_value):
         lowered = part.lower()
@@ -278,13 +284,13 @@ def decode_challenge_request(challenge: Dict[str, Any]) -> Dict[str, Any]:
         unusable challenge rather than failing the whole call.
     """
     encoded = challenge.get("request")
-    if not encoded or not isinstance(encoded, str):
+    if not encoded or not isinstance(encoded, str) or not _BASE64URL_PATTERN.fullmatch(encoded):
         return {}
 
     # base64url without padding — restore padding before decoding.
     padded = encoded + "=" * (-len(encoded) % 4)
     try:
-        decoded = base64.urlsafe_b64decode(padded.encode("ascii"))
+        decoded = base64.b64decode(padded.encode("ascii"), altchars=b"-_", validate=True)
         request = json.loads(decoded)
     except (binascii.Error, ValueError, json.JSONDecodeError, UnicodeDecodeError) as e:
         logger.debug("MPP: failed to decode challenge request for id=%s: %s", challenge.get("id"), e)
@@ -294,6 +300,20 @@ def decode_challenge_request(challenge: Dict[str, Any]) -> Dict[str, Any]:
         logger.debug("MPP: challenge request for id=%s decoded to a non-object", challenge.get("id"))
         return {}
     return request
+
+
+def _is_valid_challenge(challenge: Dict[str, Any]) -> bool:
+    """Return whether a parsed challenge satisfies the core MPP requirements."""
+    for field in _REQUIRED_CHALLENGE_FIELDS:
+        value = challenge.get(field)
+        if not isinstance(value, str) or not value.strip():
+            return False
+
+    method = challenge["method"]
+    if not method.isascii() or not method.isalpha() or method.lower() != method:
+        return False
+
+    return bool(decode_challenge_request(challenge))
 
 
 def challenge_network(challenge: Dict[str, Any]) -> Optional[str]:
@@ -406,10 +426,11 @@ def select_challenge(
     Raises:
         MppChallengeSelectionError: If no advertised challenge can be satisfied.
     """
+    challenges = [challenge for challenge in challenges if _is_valid_challenge(challenge)]
     if not challenges:
         raise MppChallengeSelectionError(
             "MPP Challenge Selection: No challenges - the 402 response contained no "
-            "parseable 'WWW-Authenticate: Payment' challenge."
+            "valid 'WWW-Authenticate: Payment' challenge."
         )
 
     blockchain = (instrument_network or "").strip().upper()
@@ -425,10 +446,8 @@ def select_challenge(
     skipped_intents: List[str] = []
     expired_count = 0
     for challenge in challenges:
-        intent = (challenge.get("intent") or "").strip().lower()
-        # Per draft-*-charge-00 the intent MUST be lowercase; an absent intent is
-        # treated as charge since charge is the only intent this SDK implements.
-        if intent and intent != MPP_SUPPORTED_INTENT:
+        intent = challenge["intent"].strip().lower()
+        if intent != MPP_SUPPORTED_INTENT:
             skipped_intents.append(intent)
             continue
         if is_expired(challenge, reference):

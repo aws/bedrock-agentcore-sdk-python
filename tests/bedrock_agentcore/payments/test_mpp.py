@@ -163,7 +163,7 @@ class TestParseWwwAuthenticate:
 
     def test_quoted_value_containing_spaces_is_not_mistaken_for_a_scheme(self):
         """`description="fast access now"` is an auth-param, not a new scheme."""
-        header = 'Payment id="x", method="evm", description="fast access now"'
+        header = challenge_header("x", "evm", evm_request()) + ', description="fast access now"'
 
         challenges = parse_www_authenticate(header)
 
@@ -171,19 +171,25 @@ class TestParseWwwAuthenticate:
         assert challenges[0]["description"] == "fast access now"
 
     def test_scheme_name_is_case_insensitive(self):
-        challenges = parse_www_authenticate('payment id="x", method="evm", intent="charge"')
+        header = challenge_header("x", "evm", evm_request()).replace("Payment ", "payment ", 1)
+        challenges = parse_www_authenticate(header)
 
         assert len(challenges) == 1
         assert challenges[0]["id"] == "x"
 
     def test_auth_param_keys_are_lowercased(self):
-        challenges = parse_www_authenticate('Payment ID="x", Method="evm"')
+        header = (
+            challenge_header("x", "evm", evm_request())
+            .replace('id="x"', 'ID="x"')
+            .replace('method="evm"', 'Method="evm"')
+        )
+        challenges = parse_www_authenticate(header)
 
         assert challenges[0]["id"] == "x"
         assert challenges[0]["method"] == "evm"
 
     def test_commas_inside_quoted_values_are_not_split(self):
-        header = 'Payment id="x", method="evm", description="Premium, fast access"'
+        header = challenge_header("x", "evm", evm_request()) + ', description="Premium, fast access"'
 
         challenges = parse_www_authenticate(header)
 
@@ -191,7 +197,7 @@ class TestParseWwwAuthenticate:
         assert challenges[0]["description"] == "Premium, fast access"
 
     def test_escaped_quote_inside_quoted_value(self):
-        header = 'Payment id="x", method="evm", description="a \\"quoted\\" word"'
+        header = challenge_header("x", "evm", evm_request()) + ', description="a \\"quoted\\" word"'
 
         challenges = parse_www_authenticate(header)
 
@@ -199,7 +205,7 @@ class TestParseWwwAuthenticate:
 
     def test_unknown_auth_params_are_retained_not_rejected(self):
         """The spec requires clients to ignore unknown params, not fail on them."""
-        header = 'Payment id="x", method="evm", intent="charge", futureParam="v", opaque="o"'
+        header = challenge_header("x", "evm", evm_request()) + ', futureParam="v", opaque="o"'
 
         challenges = parse_www_authenticate(header)
 
@@ -208,7 +214,9 @@ class TestParseWwwAuthenticate:
         assert challenges[0]["opaque"] == "o"
 
     def test_unquoted_values_are_accepted(self):
-        challenges = parse_www_authenticate("Payment id=abc, method=evm, intent=charge")
+        challenges = parse_www_authenticate(
+            f"Payment id=abc, realm=api.example.com, method=evm, intent=charge, request={b64url(evm_request())}"
+        )
 
         assert challenges[0]["id"] == "abc"
         assert challenges[0]["method"] == "evm"
@@ -219,6 +227,35 @@ class TestParseWwwAuthenticate:
 
     def test_bare_payment_scheme_without_params_is_dropped(self):
         assert parse_www_authenticate("Payment") == []
+
+    @pytest.mark.parametrize("missing_field", ["id", "realm", "method", "intent", "request"])
+    def test_missing_required_field_is_rejected(self, missing_field):
+        values = {
+            "id": "x",
+            "realm": "api.example.com",
+            "method": "evm",
+            "intent": "charge",
+            "request": b64url(evm_request()),
+        }
+        del values[missing_field]
+        header = "Payment " + ", ".join(f'{name}="{value}"' for name, value in values.items())
+
+        assert parse_www_authenticate(header) == []
+
+    @pytest.mark.parametrize(
+        "encoded_request",
+        ["!!!not-base64!!!", b64url("not json"), b64url(["not", "object"])],
+    )
+    def test_invalid_request_is_rejected(self, encoded_request):
+        header = f'Payment id="x", realm="api.example.com", method="evm", intent="charge", request="{encoded_request}"'
+
+        assert parse_www_authenticate(header) == []
+
+    def test_invalid_sibling_does_not_suppress_valid_challenge(self):
+        invalid = 'Payment method="evm"'
+        valid = challenge_header("valid", "evm", evm_request())
+
+        assert [challenge["id"] for challenge in parse_www_authenticate(f"{invalid}, {valid}")] == ["valid"]
 
 
 class TestExtractChallenges:
@@ -326,29 +363,23 @@ class TestDecodeChallengeRequest:
         encoded = b64url(payload)
         assert not encoded.endswith("=")
 
-        challenge = parse_www_authenticate(f'Payment id="x", method="solana", request="{encoded}"')[0]
+        challenge = parse_www_authenticate(challenge_header("x", "solana", payload))[0]
 
         assert decode_challenge_request(challenge) == payload
 
-    @pytest.mark.parametrize(
-        "bad_request",
-        ['request="!!!not-base64!!!"', 'request="' + base64.urlsafe_b64encode(b"not json").decode() + '"'],
-    )
+    @pytest.mark.parametrize("bad_request", ["!!!not-base64!!!", base64.urlsafe_b64encode(b"not json").decode()])
     def test_undecodable_request_returns_empty_dict(self, bad_request):
-        challenge = parse_www_authenticate(f'Payment id="x", method="evm", {bad_request}')[0]
+        challenge = {"id": "x", "request": bad_request}
 
         assert decode_challenge_request(challenge) == {}
 
     def test_missing_request_returns_empty_dict(self):
-        challenge = parse_www_authenticate('Payment id="x", method="evm"')[0]
-
-        assert decode_challenge_request(challenge) == {}
+        assert decode_challenge_request({"id": "x"}) == {}
 
     def test_non_object_json_returns_empty_dict(self):
         encoded = base64.urlsafe_b64encode(b'["a","list"]').decode().rstrip("=")
-        challenge = parse_www_authenticate(f'Payment id="x", method="evm", request="{encoded}"')[0]
 
-        assert decode_challenge_request(challenge) == {}
+        assert decode_challenge_request({"id": "x", "request": encoded}) == {}
 
 
 class TestChallengeNetwork:
@@ -566,10 +597,10 @@ class TestSelectChallenge:
         with pytest.raises(MppChallengeSelectionError, match="charge"):
             select_challenge(challenges, instrument_network="ETHEREUM")
 
-    def test_absent_intent_is_treated_as_charge(self):
-        challenges = parse_www_authenticate(f'Payment id="x", method="evm", request="{b64url(evm_request())}"')
+    def test_absent_intent_is_rejected(self):
+        header = f'Payment id="x", realm="api.example.com", method="evm", request="{b64url(evm_request())}"'
 
-        assert select_challenge(challenges, instrument_network="ETHEREUM")["id"] == "x"
+        assert parse_www_authenticate(header) == []
 
     def test_expired_challenge_is_filtered_out(self):
         challenges = self._parse(

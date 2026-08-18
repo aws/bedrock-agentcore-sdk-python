@@ -10,11 +10,13 @@ import uuid
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from strands import Agent
 from strands_tools import http_request
 
 from bedrock_agentcore.payments.integrations.config import AgentCorePaymentsPluginConfig
+from bedrock_agentcore.payments.integrations.handlers import get_payment_handler
 from bedrock_agentcore.payments.integrations.strands.plugin import AgentCorePaymentsPlugin
 from bedrock_agentcore.payments.manager import (
     PaymentError,
@@ -23,6 +25,7 @@ from bedrock_agentcore.payments.manager import (
     PaymentSessionConfigurationRequired,
     PaymentSessionNotFound,
 )
+from bedrock_agentcore.payments.mpp import extract_challenges, is_mpp_payment_required
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -280,8 +283,6 @@ class TestAgentCorePaymentsPluginMpp:
 
     def _fetch_live_402(self):
         """Fetch a real MPP 402 and return it as a payment_required_request dict."""
-        import httpx
-
         with httpx.Client(timeout=30.0, follow_redirects=True) as client:
             response = client.get(self.mpp_url)
 
@@ -296,8 +297,6 @@ class TestAgentCorePaymentsPluginMpp:
 
         Needs no AWS credentials — it validates only detection and parsing.
         """
-        from bedrock_agentcore.payments.mpp import extract_challenges, is_mpp_payment_required
-
         payment_required_request = self._fetch_live_402()
 
         assert is_mpp_payment_required(payment_required_request), (
@@ -324,8 +323,6 @@ class TestAgentCorePaymentsPluginMpp:
         MPP challenges travel in headers, so a tool that drops or rewrites response
         headers would silently break auto-payment. Needs no AWS credentials.
         """
-        from bedrock_agentcore.payments.integrations.handlers import get_payment_handler
-
         config = self._make_config(
             payment_manager_arn=os.environ.get(
                 "TEST_PAYMENT_MANAGER_ARN",

@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+from .._validation import validate_permit2_allowance_limit
 from .handlers import PaymentResponseHandler
 
 
@@ -151,16 +152,7 @@ class AgentCorePaymentsPluginConfig:
                 f"buyer_pays_gas_fees must be a boolean or None, got {type(self.buyer_pays_gas_fees).__name__}"
             )
 
-        if self.permit2_allowance_limit is not None:
-            if not isinstance(self.permit2_allowance_limit, str):
-                raise ValueError(
-                    "permit2_allowance_limit must be a string in the asset's smallest denomination, "
-                    f"got {type(self.permit2_allowance_limit).__name__}"
-                )
-            if not self.permit2_allowance_limit.isdigit() or int(self.permit2_allowance_limit) <= 0:
-                raise ValueError(
-                    f"permit2_allowance_limit must be a positive integer string, got {self.permit2_allowance_limit!r}"
-                )
+        validate_permit2_allowance_limit(self.permit2_allowance_limit)
 
     def update_payment_session_id(self, payment_session_id: str) -> None:
         """Update the payment session ID.

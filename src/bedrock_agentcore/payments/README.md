@@ -61,8 +61,9 @@ source .venv/bin/activate
 
 ## Prerequisites
 
-AgentCore Payments connects to external payment providers for wallet operations. You must obtain
-credentials from at least one supported provider before creating a Payment Connector.
+AgentCore Payments connects to external payment providers for wallet operations. Manual connectors
+require provider credentials. Coinbase CDP connectors can instead use Quick Create, where the service
+provisions credentials after OAuth consent.
 
 **Supported providers:**
 - **Coinbase CDP** — API key ID, API key secret, and wallet secret
@@ -212,6 +213,28 @@ For Stripe Privy, use `"StripePrivy"` as the `credential_provider_vendor` with t
     "authorization_key": os.environ.get("STRIPE_PRIVY_AUTH_KEY", ""),  # optional
 }
 ```
+
+Coinbase CDP also supports Quick Create without a credential provider ARN:
+
+```python
+from bedrock_agentcore.payments import PaymentClient, PaymentConnectorProvisionMode
+
+payment_client = PaymentClient(region_name="us-east-1")
+connector = payment_client.create_payment_connector(
+    payment_manager_id="payment-manager-id",
+    name="coinbase-quick-create",
+    connector_type="CoinbaseCDP",
+    credential_provider_configurations=[],
+    provision_mode=PaymentConnectorProvisionMode.QUICK_CREATE,
+)
+
+print(connector["authorizationUrl"])
+```
+
+Quick Create initially returns `PENDING_AUTHENTICATION`. Open the authorization URL, complete
+consent, and then poll `get_payment_connector()` until it returns `READY`. Because consent requires
+user interaction, `wait_for_ready=True` cannot be used when creating a Quick Create connector.
+`get_payment_connector()` returns the live authorization URL only while authorization is pending.
 
 ---
 
@@ -427,6 +450,23 @@ header = manager.generate_payment_header(
 2. Use provided `network_preferences` or fall back to the default `NETWORK_PREFERENCES`
 3. Pick the first network from preferences that matches a filtered accept
 4. If no match found, return the first filtered accept
+
+For x402 `upto` requirements, `permit2_allowance_limit` can opt into the required Permit2
+allowance transaction:
+
+```python
+header = manager.generate_payment_header(
+    payment_instrument_id=payment_instrument_id,
+    payment_session_id=payment_session_id,
+    payment_required_request=payment_required_request,
+    user_id="user-123",
+    permit2_allowance_limit="1000000",
+)
+```
+
+The value is a positive ASCII integer of 1–78 digits in the asset's smallest denomination.
+It is sent only when the selected x402 requirement uses `scheme="upto"` and is omitted for
+`exact` or scheme-less requirements.
 
 ---
 
@@ -890,6 +930,7 @@ except PaymentError as e:
 | `PaymentManagerStatus` | Payment manager resource statuses (CREATING, READY, etc.) |
 | `PaymentConnectorStatus` | Payment connector statuses |
 | `PaymentConnectorType` | Supported connector types (CoinbaseCDP, StripePrivy) |
+| `PaymentConnectorProvisionMode` | Connector provisioning modes (MANUAL, QUICK_CREATE) |
 | `PaymentsAuthorizerType` | Authorizer types (AWS_IAM, CUSTOM_JWT) |
 | `NETWORK_PREFERENCES` | Default blockchain network preference order |
 | `DEFAULT_MAX_RESULTS` | Default pagination limit (100) |

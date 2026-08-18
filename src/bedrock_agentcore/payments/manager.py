@@ -16,6 +16,7 @@ from botocore.exceptions import ClientError
 from bedrock_agentcore._utils.endpoints import get_data_plane_endpoint
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
+from ._validation import validate_permit2_allowance_limit
 from .constants import MPP_AUTH_SCHEME, MPP_DEFAULT_VERSION
 from .mpp import (
     MppChallengeSelectionError,
@@ -1098,7 +1099,12 @@ class PaymentManager:
             # level (sibling of version/payload); ProcessPayment submits the on-chain
             # approve before signing. Omitted entirely when not set so the "exact"
             # flow is unaffected.
-            if permit2_allowance_limit is not None:
+            scheme = selected_accept.get("scheme")
+            if permit2_allowance_limit is not None and isinstance(scheme, str) and scheme.strip().lower() == "upto":
+                try:
+                    validate_permit2_allowance_limit(permit2_allowance_limit)
+                except ValueError as e:
+                    raise PaymentError(f"Input Validation: {e}") from e
                 payment_input["cryptoX402"]["permit2AllowanceLimit"] = permit2_allowance_limit
 
             # ProcessPayment does not accept paymentConnectorId — the connector is

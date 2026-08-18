@@ -20,6 +20,8 @@ from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 from bedrock_agentcore.services.identity import IdentityClient
 
+from .constants import PaymentConnectorProvisionMode, PaymentConnectorStatus
+
 logger = logging.getLogger(__name__)
 
 
@@ -661,7 +663,7 @@ class PaymentClient:
         wait_for_ready: bool = False,
         max_wait: int = 300,
         poll_interval: int = 10,
-        provision_mode: Optional[str] = None,
+        provision_mode: Optional[Union[str, PaymentConnectorProvisionMode]] = None,
     ) -> Dict[str, Any]:
         """Create a payment connector for a provider.
 
@@ -692,7 +694,17 @@ class PaymentClient:
         Raises:
             ClientError: If creation fails
             TimeoutError: If wait_for_ready is True and max_wait is exceeded
+            ValueError: If wait_for_ready is used with QUICK_CREATE
         """
+        normalized_provision_mode = (
+            provision_mode.value if isinstance(provision_mode, PaymentConnectorProvisionMode) else provision_mode
+        )
+        if normalized_provision_mode == PaymentConnectorProvisionMode.QUICK_CREATE.value and wait_for_ready:
+            raise ValueError(
+                "wait_for_ready cannot be used with QUICK_CREATE; complete authorization first, "
+                "then poll get_payment_connector() for READY"
+            )
+
         if client_token is None:
             client_token = str(uuid.uuid4())
 
@@ -714,8 +726,8 @@ class PaymentClient:
             if self._is_not_blank(description):
                 params["description"] = description
 
-            if self._is_not_blank(provision_mode):
-                params["provisionMode"] = provision_mode
+            if self._is_not_blank(normalized_provision_mode):
+                params["provisionMode"] = normalized_provision_mode
 
             response = self.payments_cp_client.create_payment_connector(**params)
 
@@ -747,7 +759,7 @@ class PaymentClient:
             }
             # Present only for QUICK_CREATE connectors awaiting OAuth consent
             # (status PENDING_AUTHENTICATION); omitted otherwise.
-            if self._is_not_blank(authorization_url):
+            if status == PaymentConnectorStatus.PENDING_AUTHENTICATION.value and self._is_not_blank(authorization_url):
                 result["authorizationUrl"] = authorization_url
 
             return result
@@ -775,7 +787,7 @@ class PaymentClient:
                 paymentManagerId=payment_manager_id, paymentConnectorId=payment_connector_id
             )
 
-            return {
+            result = {
                 "paymentConnectorId": response.get("paymentConnectorId"),
                 "paymentManagerId": response.get("paymentManagerId"),
                 "name": response.get("name"),
@@ -785,6 +797,12 @@ class PaymentClient:
                 "createdAt": response.get("createdAt"),
                 "updatedAt": response.get("lastUpdatedAt"),
             }
+            authorization_url = response.get("authorizationUrl")
+            if response.get("status") == PaymentConnectorStatus.PENDING_AUTHENTICATION.value and self._is_not_blank(
+                authorization_url
+            ):
+                result["authorizationUrl"] = authorization_url
+            return result
 
         except ClientError as e:
             logger.error("Failed to get payment connector: %s", e)

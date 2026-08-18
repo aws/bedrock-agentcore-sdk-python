@@ -501,6 +501,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             return result
 
         payment_required_request = None
+        payment_header = None
         try:
             payment_required_request = self._extract_payment_request(detection)
             payment_header = self._generate_payment_header(payment_required_request)
@@ -535,6 +536,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                     tool_name=detection.tool_name,
                     tool_args=detection.tool_args,
                     payment_required_request=payment_required_request,
+                    payment_header=payment_header,
                     request=request,
                     handler=handler,
                 )
@@ -548,6 +550,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         tool_name: str,
         tool_args: Dict[str, Any],
         payment_required_request: Optional[Dict[str, Any]],
+        payment_header: Optional[Dict[str, str]],
         request: "ToolCallRequest",
         handler: Callable,
     ) -> Optional[Union[ToolMessage, Command]]:
@@ -585,7 +588,8 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             logger.info("on_payment_error returned RETRY (attempt %d/%d)", retry_count, self.config.max_error_retries)
 
             try:
-                payment_header = self._generate_payment_header(payment_required_request or {})
+                if payment_header is None:
+                    payment_header = self._generate_payment_header(payment_required_request or {})
 
                 inject_error = self._inject_for_error_retry(request, tool_name, tool_args, payment_header)
                 if inject_error is not None:
@@ -636,6 +640,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             return result
 
         payment_required_request = None
+        payment_header = None
         try:
             payment_required_request = self._extract_payment_request(detection)
             payment_header = await asyncio.to_thread(self._generate_payment_header, payment_required_request)
@@ -670,6 +675,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                     tool_name=detection.tool_name,
                     tool_args=detection.tool_args,
                     payment_required_request=payment_required_request,
+                    payment_header=payment_header,
                     request=request,
                     handler=handler,
                 )
@@ -683,6 +689,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         tool_name: str,
         tool_args: Dict[str, Any],
         payment_required_request: Optional[Dict[str, Any]],
+        payment_header: Optional[Dict[str, str]],
         request: "ToolCallRequest",
         handler: Callable,
     ) -> Optional[Union[ToolMessage, Command]]:
@@ -718,7 +725,10 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             )
 
             try:
-                payment_header = await asyncio.to_thread(self._generate_payment_header, payment_required_request or {})
+                if payment_header is None:
+                    payment_header = await asyncio.to_thread(
+                        self._generate_payment_header, payment_required_request or {}
+                    )
 
                 inject_error = self._inject_for_error_retry(request, tool_name, tool_args, payment_header)
                 if inject_error is not None:

@@ -10,6 +10,7 @@ from bedrock_agentcore.payments.integrations.handlers import (
     MCPRequestPaymentHandler,
     has_mpp_challenge,
 )
+from bedrock_agentcore.payments.mpp import is_mpp_payment_required
 
 CHALLENGE = 'Payment id="evm-1", realm="api.example.com", method="evm", intent="charge", request="eyJhIjoxfQ"'
 
@@ -28,7 +29,7 @@ class TestHasMppChallenge:
         assert has_mpp_challenge({"www-authenticate": ['Bearer realm="x"', CHALLENGE]}) is True
 
     def test_scheme_name_is_case_insensitive(self):
-        assert has_mpp_challenge({"www-authenticate": 'payment id="x"'}) is True
+        assert has_mpp_challenge({"www-authenticate": CHALLENGE.replace("Payment ", "payment ", 1)}) is True
 
     def test_rejects_bearer_scheme(self):
         assert has_mpp_challenge({"WWW-Authenticate": 'Bearer realm="x"'}) is False
@@ -60,8 +61,6 @@ class TestHasMppChallenge:
     )
     def test_agrees_with_the_mpp_parser(self, header_value):
         """Detection must never disagree with the parser that does the real work."""
-        from bedrock_agentcore.payments.mpp import is_mpp_payment_required
-
         headers = {"WWW-Authenticate": header_value}
 
         assert has_mpp_challenge(headers) == is_mpp_payment_required({"headers": headers})
