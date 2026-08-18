@@ -3,12 +3,12 @@ revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.13' and extra != 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1'",
-    "python_full_version >= '3.11' and python_full_version < '3.13' and extra != 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1'",
-    "python_full_version < '3.11' and extra != 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1'",
     "python_full_version >= '3.13' and extra == 'extra-17-bedrock-agentcore-a2a' and extra != 'extra-17-bedrock-agentcore-a2a-v1' and extra != 'group-17-bedrock-agentcore-dev'",
-    "python_full_version < '3.13' and extra == 'extra-17-bedrock-agentcore-a2a' and extra != 'extra-17-bedrock-agentcore-a2a-v1' and extra != 'group-17-bedrock-agentcore-dev'",
     "python_full_version >= '3.13' and extra != 'extra-17-bedrock-agentcore-a2a' and extra != 'extra-17-bedrock-agentcore-a2a-v1'",
+    "python_full_version >= '3.11' and python_full_version < '3.13' and extra != 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1'",
     "python_full_version >= '3.11' and python_full_version < '3.13' and extra != 'extra-17-bedrock-agentcore-a2a' and extra != 'extra-17-bedrock-agentcore-a2a-v1'",
+    "python_full_version < '3.11' and extra != 'extra-17-bedrock-agentcore-a2a' and extra == 'extra-17-bedrock-agentcore-a2a-v1'",
+    "python_full_version < '3.13' and extra == 'extra-17-bedrock-agentcore-a2a' and extra != 'extra-17-bedrock-agentcore-a2a-v1' and extra != 'group-17-bedrock-agentcore-dev'",
     "python_full_version < '3.11' and extra != 'extra-17-bedrock-agentcore-a2a' and extra != 'extra-17-bedrock-agentcore-a2a-v1'",
 ]
 conflicts = [[
@@ -456,7 +456,7 @@ wheels = [
 
 [[package]]
 name = "bedrock-agentcore"
-version = "1.21.0"
+version = "1.22.0"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
