@@ -1,22 +1,22 @@
 # Strands AgentCore Payments Plugin
 
 The AgentCore Payments Plugin leverages Amazon Bedrock AgentCore Payments to provide automated payment processing
-capabilities for Strands Agents. It supports the [x402 Payment Required](https://www.x402.org/) protocol, enabling
-agents to automatically handle HTTP 402 responses by processing microtransaction payments to access paid APIs,
-MCP servers, and premium content.
+capabilities for Strands Agents. It supports the [x402 Payment Required](https://www.x402.org/) and
+[MPP (Machine Payments Protocol)](https://mpp.dev) protocols, enabling agents to automatically handle HTTP 402
+responses by processing microtransaction payments to access paid APIs, MCP servers, and premium content.
 
 ## Overview
 
-- **Automatic x402 Payment Handling** — intercepts HTTP 402 responses from tools, processes payment requirements, and retries requests with payment headers
+- **Automatic Payment Handling** — intercepts HTTP 402 responses from tools, processes payment requirements, and retries requests with payment headers
 - **Payment Query Tools** — built-in tools for agents to query payment instruments and sessions at runtime
-- **Multi-Protocol Support** — handles x402 v1 and v2 payment protocols
+- **Multi-Protocol Support** — handles x402 v1/v2 and MPP, detected automatically from the 402 response
 - **Multi-Handler Architecture** — supports generic tools, `http_request` tools, and MCP Gateway proxy tools
 - **Interrupt-Based Error Handling** — raises Strands SDK interrupts on payment failures so the agent (or application) can respond dynamically
 - **Configurable Auto-Payment** — enable or disable automatic payment processing per plugin instance
 
 ## How It Works
 
-### x402 Payment Flow
+### Payment Flow
 
 ```
 ┌─────────┐     ┌──────────┐     ┌──────────────┐     ┌────────────────┐
@@ -31,13 +31,29 @@ MCP servers, and premium content.
 ```
 
 1. Agent calls a tool (e.g., `http_request`) that hits a paid API
-2. The API returns HTTP 402 with x402 payment requirements
+2. The API returns HTTP 402 with payment requirements — x402 (body / `Payment-Required` header) or
+   MPP (`WWW-Authenticate: Payment` challenges)
 3. The plugin's `after_tool_call` hook intercepts the 402 response
 4. The plugin extracts payment requirements using the appropriate handler
-5. The plugin calls `PaymentManager.generate_payment_header()` to process the payment
-6. The payment header is applied to the tool input
+5. The plugin calls `PaymentManager.generate_payment_header()`, which detects the protocol,
+   selects a payment option, and processes the payment
+6. The payment header is applied to the tool input — `X-PAYMENT` (x402 v1),
+   `PAYMENT-SIGNATURE` (x402 v2), or `Authorization: Payment <token>` (MPP)
 7. The tool is automatically retried with the payment credentials
 8. The API returns a successful response
+
+### MPP challenge selection
+
+An MPP server may advertise several payment options, but `ProcessPayment` fulfills exactly one
+per call. The plugin delegates to `PaymentManager`, which filters to `charge`-intent,
+unexpired challenges your instrument can satisfy (`evm`/`tempo` → ETHEREUM, `solana` → SOLANA),
+orders them by `network_preferences_config`, and pays the best match. The selected challenge
+header is forwarded verbatim so its HMAC stays valid. See the
+[payments README](../../README.md#mpp-machine-payments-protocol) for the full algorithm.
+
+If a challenge does not offer seller-sponsored network fees, signing requires
+`buyer_pays_gas_fees=True` on the plugin config — the gas cost is not visible in the challenge
+`amount`, so it is not assumed on the buyer's behalf.
 
 ## Installation
 
@@ -429,6 +445,7 @@ agent("Fetch data from https://premium-api.example.com/data")
 | `payment_session_id` | `Optional[str]` | No | `None` | Payment session ID. Can be set later via `update_payment_session_id()` |
 | `region` | `Optional[str]` | No | `None` | AWS region for the payment manager |
 | `network_preferences_config` | `Optional[list[str]]` | No | `None` | List of network CAIP-2 identifiers in order of preference |
+| `buyer_pays_gas_fees` | `Optional[bool]` | No | `None` | MPP only. Authorizes network (gas) fees charged to the buyer's wallet, on top of the payment amount. `None` leaves the protocol default (buyer declines) |
 | `auto_payment` | `bool` | No | `True` | Whether to automatically process 402 payment requirements |
 | `max_interrupt_retries` | `int` | No | `5` | Maximum interrupt retries per tool use. Set to 0 to disable interrupts |
 | `agent_name` | `Optional[str]` | No | `None` | Agent name propagated via HTTP header on API calls |

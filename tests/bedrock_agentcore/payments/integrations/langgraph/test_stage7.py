@@ -152,6 +152,27 @@ class TestRetryLoop:
     """Callback can retry multiple times up to max_error_retries."""
 
     @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_paid_request_retry_reuses_generated_payment(self, mock_pm_cls):
+        mock_pm = mock_pm_cls.return_value
+        mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "sig"}
+        config = _make_config(on_payment_error=lambda ctx: ErrorResolution.RETRY, max_error_retries=1)
+        middleware = AgentCorePaymentsMiddleware(config)
+        request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
+        handler = MagicMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                TimeoutError("ambiguous paid request failure"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
+
+        result = middleware.wrap_tool_call(request, handler)
+
+        assert json.loads(result.content)["statusCode"] == 200
+        mock_pm.generate_payment_header.assert_called_once()
+        assert request.tool_call["args"]["headers"]["X-PAYMENT"] == "sig"
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
     def test_max_retries_exhausted(self, mock_pm_cls):
         """Callback always retries but PM always fails → exhausts max retries."""
         mock_pm_cls.return_value.generate_payment_header.side_effect = PaymentError("always fails")
@@ -254,6 +275,27 @@ class TestContextPopulated:
 
 class TestAsyncErrorHandler:
     """Async callbacks are awaited correctly."""
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_paid_request_retry_reuses_generated_payment(self, mock_pm_cls):
+        mock_pm = mock_pm_cls.return_value
+        mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "sig"}
+        config = _make_config(on_payment_error=lambda ctx: ErrorResolution.RETRY, max_error_retries=1)
+        middleware = AgentCorePaymentsMiddleware(config)
+        request = _make_request(tool_args={"url": "http://x.com", "headers": {}})
+        handler = AsyncMock(
+            side_effect=[
+                ToolMessage(content=_402_content(), tool_call_id="tc-1"),
+                TimeoutError("ambiguous paid request failure"),
+                ToolMessage(content=_200_content(), tool_call_id="tc-1"),
+            ]
+        )
+
+        result = asyncio.run(middleware.awrap_tool_call(request, handler))
+
+        assert json.loads(result.content)["statusCode"] == 200
+        mock_pm.generate_payment_header.assert_called_once()
+        assert request.tool_call["args"]["headers"]["X-PAYMENT"] == "sig"
 
     @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
     def test_async_callback_awaited(self, mock_pm_cls):

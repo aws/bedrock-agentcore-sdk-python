@@ -25,6 +25,11 @@ class PaymentConnectorStatus(Enum):
     CREATE_FAILED = "CREATE_FAILED"
     UPDATE_FAILED = "UPDATE_FAILED"
     DELETE_FAILED = "DELETE_FAILED"
+    # Quick Create (QUICK_CREATE provision mode) statuses
+    PENDING_AUTHENTICATION = "PENDING_AUTHENTICATION"
+    PROVISIONING = "PROVISIONING"
+    AUTHENTICATION_EXPIRED = "AUTHENTICATION_EXPIRED"
+    AUTHENTICATION_FAILED = "AUTHENTICATION_FAILED"
 
 
 class PaymentConnectorType(Enum):
@@ -32,6 +37,26 @@ class PaymentConnectorType(Enum):
 
     COINBASE_CDP = "CoinbaseCDP"
     STRIPE_PRIVY = "StripePrivy"
+
+
+class PaymentConnectorProvisionMode(Enum):
+    """Payment connector provisioning modes.
+
+    MANUAL (the default) requires the caller to supply the credential provider
+    configuration up front. QUICK_CREATE lets the service orchestrate OAuth
+    consent and provision the credential provider on the caller's behalf.
+    """
+
+    MANUAL = "MANUAL"
+    QUICK_CREATE = "QUICK_CREATE"
+
+
+class PaymentType(Enum):
+    """Payment protocols supported by ProcessPayment."""
+
+    CRYPTO_X402 = "CRYPTO_X402"
+    # MPP does not differentiate between crypto and fiat — one value covers both.
+    MPP = "MPP"
 
 
 class PaymentsAuthorizerType(Enum):
@@ -70,3 +95,42 @@ NETWORK_PREFERENCES = [
     "eip155:84532",  # Base Sepolia (testnet)
     "eip155:11155111",  # Ethereum Sepolia (Test)
 ]
+
+# ─────────────────────────────────────────────────────────────
+# MPP (Machine Payments Protocol) — https://mpp.dev
+# ─────────────────────────────────────────────────────────────
+
+# Default MPP protocol version sent to ProcessPayment. The service model constrains
+# this to a bare numeric string (^[0-9]+$).
+MPP_DEFAULT_VERSION = "1"
+
+# The `Payment` auth-scheme name used in `WWW-Authenticate` / `Authorization` headers.
+MPP_AUTH_SCHEME = "Payment"
+
+# Only the `charge` intent is implemented. Challenges advertising `session` or
+# `subscription` are filtered out during selection.
+MPP_SUPPORTED_INTENT = "charge"
+
+# Payment method identifiers, mapped to the blockchain family of the payment
+# instrument that can satisfy them. Tempo is an EVM chain, so it maps to ETHEREUM.
+MPP_METHOD_BLOCKCHAIN = {
+    "evm": "ETHEREUM",
+    "tempo": "ETHEREUM",
+    "solana": "SOLANA",
+}
+
+# Maps a Solana `methodDetails.network` value to the network identifier used in
+# NETWORK_PREFERENCES. Per draft-solana-charge-00 the field is optional and
+# defaults to mainnet.
+#
+# `localnet` is deliberately absent. It denotes a distinct local RPC/Surfpool
+# environment, not Solana testnet; aliasing it would let a local-only challenge
+# satisfy a solana-testnet preference and outrank a genuinely payable devnet
+# challenge. Unmapped values are left unranked rather than misranked — they remain
+# selectable when they are the only option, but never win on preference order.
+MPP_SOLANA_NETWORK_ALIASES = {
+    "mainnet": "solana-mainnet",
+    "devnet": "solana-devnet",
+    "testnet": "solana-testnet",
+}
+MPP_SOLANA_DEFAULT_NETWORK = "mainnet"
