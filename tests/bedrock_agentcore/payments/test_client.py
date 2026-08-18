@@ -241,6 +241,67 @@ class TestPaymentConnectorOperations:
 
     @patch("bedrock_agentcore.payments.client.boto3.client")
     @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_create_payment_connector_quick_create(self, mock_session, mock_boto3_client):
+        """QUICK_CREATE passes provisionMode through and returns the authorizationUrl."""
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+
+        mock_cp_client.create_payment_connector.return_value = {
+            "paymentConnectorId": "pc-qc-1",
+            "status": "PENDING_AUTHENTICATION",
+            "authorizationUrl": "https://bedrock-agentcore.us-west-2.amazonaws.com/identities/oauth2/authorize?request_uri=urn:x",
+        }
+
+        client = PaymentClient(region_name="us-west-2")
+        result = client.create_payment_connector(
+            payment_manager_id="pm-123",
+            name="test-connector",
+            connector_type="CoinbaseCDP",
+            credential_provider_configurations=[],
+            provision_mode="QUICK_CREATE",
+        )
+
+        # provisionMode is threaded into the outgoing request.
+        call_kwargs = mock_cp_client.create_payment_connector.call_args[1]
+        assert call_kwargs["provisionMode"] == "QUICK_CREATE"
+        assert call_kwargs["credentialProviderConfigurations"] == []
+
+        # authorizationUrl is surfaced for a PENDING_AUTHENTICATION connector.
+        assert result["paymentConnectorId"] == "pc-qc-1"
+        assert result["status"] == "PENDING_AUTHENTICATION"
+        assert result["authorizationUrl"].startswith("https://")
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_create_payment_connector_manual_omits_provision_mode(self, mock_session, mock_boto3_client):
+        """When provision_mode is not supplied, provisionMode is absent from the request (service defaults to MANUAL)."""
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+
+        mock_cp_client.create_payment_connector.return_value = {
+            "paymentConnectorId": "pc-123",
+            "status": "READY",
+        }
+
+        client = PaymentClient(region_name="us-west-2")
+        result = client.create_payment_connector(
+            payment_manager_id="pm-123",
+            name="test-connector",
+            connector_type="CoinbaseCDP",
+            credential_provider_configurations=[
+                {"coinbaseCDP": {"credentialProviderArn": "arn:aws:secretsmanager:us-west-2:123456789012:secret:test"}}
+            ],
+        )
+
+        call_kwargs = mock_cp_client.create_payment_connector.call_args[1]
+        assert "provisionMode" not in call_kwargs
+        # No authorizationUrl in the response -> not present in the result.
+        assert "authorizationUrl" not in result
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
     def test_get_payment_connector_success(self, mock_session, mock_boto3_client):
         """Test successful payment connector retrieval."""
         mock_session.return_value.region_name = "us-west-2"

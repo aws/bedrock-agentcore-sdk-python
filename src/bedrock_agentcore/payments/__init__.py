@@ -3,6 +3,7 @@
 from .client import PaymentClient
 from .constants import (
     DEFAULT_MAX_RESULTS,
+    PaymentConnectorProvisionMode,
     PaymentConnectorStatus,
     PaymentConnectorType,
     PaymentManagerStatus,
@@ -42,6 +43,7 @@ __all__ = [
     "PaymentManagerStatus",
     "PaymentConnectorStatus",
     "PaymentConnectorType",
+    "PaymentConnectorProvisionMode",
     "PaymentsAuthorizerType",
     "PaymentType",
     "DEFAULT_MAX_RESULTS",

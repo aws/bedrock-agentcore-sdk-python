@@ -25,6 +25,11 @@ class PaymentConnectorStatus(Enum):
     CREATE_FAILED = "CREATE_FAILED"
     UPDATE_FAILED = "UPDATE_FAILED"
     DELETE_FAILED = "DELETE_FAILED"
+    # Quick Create (QUICK_CREATE provision mode) statuses
+    PENDING_AUTHENTICATION = "PENDING_AUTHENTICATION"
+    PROVISIONING = "PROVISIONING"
+    AUTHENTICATION_EXPIRED = "AUTHENTICATION_EXPIRED"
+    AUTHENTICATION_FAILED = "AUTHENTICATION_FAILED"
 
 
 class PaymentConnectorType(Enum):
@@ -32,6 +37,18 @@ class PaymentConnectorType(Enum):
 
     COINBASE_CDP = "CoinbaseCDP"
     STRIPE_PRIVY = "StripePrivy"
+
+
+class PaymentConnectorProvisionMode(Enum):
+    """Payment connector provisioning modes.
+
+    MANUAL (the default) requires the caller to supply the credential provider
+    configuration up front. QUICK_CREATE lets the service orchestrate OAuth
+    consent and provision the credential provider on the caller's behalf.
+    """
+
+    MANUAL = "MANUAL"
+    QUICK_CREATE = "QUICK_CREATE"
 
 
 class PaymentType(Enum):
