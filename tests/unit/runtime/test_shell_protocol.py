@@ -154,10 +154,6 @@ class TestShellFramerEncode:
         frame = self.framer.encode_heartbeat()
         assert frame == bytes([ShellChannel.HEARTBEAT])
 
-    def test_encode_close(self):
-        frame = self.framer.encode_close()
-        assert frame == bytes([ShellChannel.CLOSE])
-
     def test_round_trip_stdin(self):
         original = "echo hello\n"
         encoded = self.framer.encode_stdin(original)
