@@ -24,7 +24,7 @@ permissions:
 jobs:
   prepare-release:
     name: Prepare Release
-    runs-on: ubuntu-latest
+    runs-on: aws-release-4-core
     outputs:
       version: ${{ steps.bump.outputs.version }}
 
@@ -174,7 +174,7 @@ jobs:
   test-and-build:
     name: Test and Build
     needs: prepare-release
-    runs-on: ubuntu-latest
+    runs-on: aws-release-4-core
 
     steps:
       - uses: actions/checkout@v6
