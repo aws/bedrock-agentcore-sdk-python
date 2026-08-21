@@ -688,6 +688,19 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             logger.debug("Message has no event ID and was not found in buffer - skipping update")
             return
 
+        # Strands' RepositorySessionManager.initialize_agent passes SessionMessage objects
+        # whose message_id is a sequential integer index (0, 1, 2 …), not an AWS eventId
+        # string (e.g. "4#abc123f").  Passing an integer to delete_event causes a
+        # ParamValidationError at the botocore layer.  Skip the update — the event
+        # cannot be located by a positional index alone.
+        if isinstance(old_message_id, int):
+            logger.warning(
+                "update_message: message_id %r is a Strands positional integer index, not an "
+                "AWS eventId string — skipping delete of old event (see issue #556)",
+                old_message_id,
+            )
+            return
+
         # Create a new event with the updated message content
         try:
             updated_message = SessionMessage(
