@@ -46,11 +46,12 @@ from .models import (
     TASK_ACTION_FORCE_HEALTHY,
     TASK_ACTION_JOB_STATUS,
     TASK_ACTION_PING_STATUS,
+    USER_ID_HEADER,
     PingStatus,
     is_forwardable_header,
 )
 from .tracing import _ensure_baggage_processor_registered
-from .utils import convert_complex_objects
+from .utils import convert_complex_objects, extract_sub_from_bearer
 
 # Sentinel so we only parse OTEL_RESOURCE_ATTRIBUTES once per process.
 _UNRESOLVED = object()
@@ -412,6 +413,11 @@ class BedrockAgentCoreApp(Starlette):
 
             session_id = headers.get(SESSION_HEADER)
             BedrockAgentCoreContext.set_request_context(request_id, session_id)
+
+            enduser_id = headers.get(USER_ID_HEADER) or extract_sub_from_bearer(
+                headers.get(AUTHORIZATION_HEADER) or headers.get(_AUTHORIZATION_HEADER_LOWER)
+            )
+            BedrockAgentCoreContext.set_enduser_id(enduser_id)
 
             agent_identity_token = headers.get(IDENTITY_WAT_HEADER) or headers.get(ACCESS_TOKEN_HEADER)
             if agent_identity_token:
