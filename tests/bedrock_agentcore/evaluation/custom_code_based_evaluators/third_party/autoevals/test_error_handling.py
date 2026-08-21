@@ -107,7 +107,7 @@ class TestFieldExtractionError:
         ]
         adapter = AutoEvalsAdapter(metric=_mock_scorer())
         result = adapter(_make_evaluator_input(spans=spans))
-        _assert_error_response(result, "FIELD_EXTRACTION_ERROR")
+        _assert_error_response(result, "MISSING_REQUIRED_FIELD")
 
     def test_03_spans_missing_body_input(self):
         spans = [
