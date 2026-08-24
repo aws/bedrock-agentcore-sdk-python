@@ -1,13 +1,16 @@
 # Bedrock AgentCore payments SDK
 
 High-level Python SDK for AWS Bedrock AgentCore payments service with support for payment instrument management,
-session-based payment limits, and x402 payment processing for AI agent microtransactions.
+session-based payment limits, and internet native payment protocols support such as x402 and MPP for AI agent microtransactions.
 
 ## Overview
 
 The Bedrock AgentCore Payments SDK enables AI agents to process microtransaction payments to access paid APIs,
-MCP servers, and premium content. The SDK supports the [x402 Payment Required](https://www.x402.org/) protocol,
-allowing agents to automatically handle HTTP 402 responses and complete cryptocurrency transactions on behalf of users.
+MCP servers, and premium content. The SDK supports two payment protocols — [x402 Payment
+Required](https://www.x402.org/) and [MPP (Machine Payments Protocol)](https://mpp.dev) — allowing agents to
+automatically handle HTTP 402 responses and complete transactions on behalf of users. The protocol is detected
+from the 402 response, so a single `generate_payment_header` call covers both
+(see [Payment Header Generation](#payment-header-generation) and [MPP](#mpp-machine-payments-protocol)).
 
 ### Architecture
 
@@ -33,7 +36,7 @@ PaymentClient (Control Plane)
 |-----------|-------|---------|
 | `PaymentClient` | Control plane | Create and manage payment infrastructure (managers, connectors, credential providers) |
 | `PaymentManager` | Data plane | Payment operations (instruments, sessions, payment processing, header generation) |
-| `AgentCorePaymentsPlugin` | Framework integration | Strands Agents plugin for automatic x402 payment handling ([see Strands README](integrations/strands/README.md)) |
+| `AgentCorePaymentsPlugin` | Framework integration | Strands Agents plugin for automatic x402 and MPP payment handling ([see Strands README](integrations/strands/README.md)) |
 
 ## Installation
 
@@ -58,8 +61,9 @@ source .venv/bin/activate
 
 ## Prerequisites
 
-AgentCore Payments connects to external payment providers for wallet operations. You must obtain
-credentials from at least one supported provider before creating a Payment Connector.
+AgentCore Payments connects to external payment providers for wallet operations. Manual connectors
+require provider credentials. Coinbase CDP connectors can instead use Quick Create, where the service
+provisions credentials after OAuth consent.
 
 **Supported providers:**
 - **Coinbase CDP** — API key ID, API key secret, and wallet secret
@@ -210,6 +214,28 @@ For Stripe Privy, use `"StripePrivy"` as the `credential_provider_vendor` with t
 }
 ```
 
+Coinbase CDP also supports Quick Create without a credential provider ARN:
+
+```python
+from bedrock_agentcore.payments import PaymentClient, PaymentConnectorProvisionMode
+
+payment_client = PaymentClient(region_name="us-east-1")
+connector = payment_client.create_payment_connector(
+    payment_manager_id="payment-manager-id",
+    name="coinbase-quick-create",
+    connector_type="CoinbaseCDP",
+    credential_provider_configurations=[],
+    provision_mode=PaymentConnectorProvisionMode.QUICK_CREATE,
+)
+
+print(connector["authorizationUrl"])
+```
+
+Quick Create initially returns `PENDING_AUTHENTICATION`. Open the authorization URL, complete
+consent, and then poll `get_payment_connector()` until it returns `READY`. Because consent requires
+user interaction, `wait_for_ready=True` cannot be used when creating a Quick Create connector.
+`get_payment_connector()` returns the live authorization URL only while authorization is pending.
+
 ---
 
 ### Creating a Payment Instrument
@@ -349,12 +375,48 @@ payment = manager.process_payment(
 )
 ```
 
+For MPP, pass `payment_type="MPP"` and forward the raw challenge header verbatim:
+
+```python
+payment = manager.process_payment(
+    payment_session_id=payment_session_id,
+    payment_instrument_id=payment_instrument_id,
+    payment_type="MPP",
+    payment_input={
+        "mpp": {
+            "version": "1",
+            # Exactly one challenge per call, passed exactly as the server sent it.
+            "wwwAuthenticateHeaders": [
+                'Payment id="aB3cDeF4", realm="api.example.com", method="evm", '
+                'intent="charge", request="eyJhbW91bnQ..."'
+            ],
+            # Optional. Authorizes charging network (gas) fees to the buyer's wallet.
+            "buyerPaysGasFees": True,
+        }
+    },
+    user_id="test-user-123",
+)
+# payment["paymentOutput"]["mpp"] -> {"version", "selectedPaymentId", "paymentCredential"}
+```
+
+Most callers should prefer `generate_payment_header` below, which selects the challenge and
+builds the `Authorization` header for you.
+
 ---
 
 ### Payment Header Generation
 
-Generate x402 payment headers for HTTP 402 Payment Required responses. This is the core method
-used by the Strands plugin under the hood:
+Generate payment headers for HTTP 402 Payment Required responses. This is the core method
+used by the Strands plugin under the hood.
+
+Two protocols are supported and the protocol is **detected automatically** from the 402
+response, so callers use the same method for both:
+
+| 402 response contains | Protocol | Returned header |
+|---|---|---|
+| `WWW-Authenticate: Payment ...` | MPP | `{"Authorization": "Payment <token>"}` |
+| `x402Version` + `accepts` in the body | x402 v1 | `{"X-PAYMENT": "base64..."}` |
+| `Payment-Required` header | x402 v2 | `{"PAYMENT-SIGNATURE": "base64..."}` |
 
 ```python
 header = manager.generate_payment_header(
@@ -383,12 +445,167 @@ header = manager.generate_payment_header(
 # Returns: {"X-PAYMENT": "base64..."} (v1) or {"PAYMENT-SIGNATURE": "base64..."} (v2)
 ```
 
-**Network selection process:**
+**Network selection process (x402):**
 1. Filter accepts to those matching the instrument's blockchain type (Ethereum or Solana)
 2. Use provided `network_preferences` or fall back to the default `NETWORK_PREFERENCES`
 3. Pick the first network from preferences that matches a filtered accept
 4. If no match found, return the first filtered accept
 
+For x402 `upto` requirements, `permit2_allowance_limit` can opt into the required Permit2
+allowance transaction:
+
+```python
+header = manager.generate_payment_header(
+    payment_instrument_id=payment_instrument_id,
+    payment_session_id=payment_session_id,
+    payment_required_request=payment_required_request,
+    user_id="user-123",
+    permit2_allowance_limit="1000000",
+)
+```
+
+The value is a positive ASCII integer of 1–78 digits in the asset's smallest denomination.
+It is sent only when the selected x402 requirement uses `scheme="upto"` and is omitted for
+`exact` or scheme-less requirements.
+
+---
+
+### MPP (Machine Payments Protocol)
+
+[MPP](https://mpp.dev) servers answer with `402 Payment Required` and advertise their payment
+options as `WWW-Authenticate: Payment` challenges. The same `generate_payment_header` call
+handles them — pass the 402 response through and attach the returned header on retry:
+
+```python
+header = manager.generate_payment_header(
+    payment_instrument_id=payment_instrument_id,
+    payment_session_id=payment_session_id,
+    payment_required_request={
+        "statusCode": 402,
+        "headers": {
+            # One challenge per payment option. Repeated headers may also be
+            # passed as a list of strings.
+            "WWW-Authenticate": (
+                'Payment id="aB3cDeF4", realm="api.example.com", method="evm", '
+                'intent="charge", request="eyJhbW91bnQ...", expires="2026-04-01T12:05:00Z", '
+                'Payment id="sol-1", realm="api.example.com", method="solana", '
+                'intent="charge", request="eyJhbW91bnQ..."'
+            ),
+        },
+        "body": {},
+    },
+    user_id="test-user-123",
+)
+# Returns: {"Authorization": "Payment <base64url-token>"}
+
+# Retry the original request with the header attached.
+response = httpx.get("https://api.example.com/resource", headers=header)
+```
+
+**Supported methods and intents**
+
+| Payment method | Satisfied by instrument network |
+|---|---|
+| `evm` | `ETHEREUM` |
+| `tempo` | `ETHEREUM` (Tempo is an EVM chain) |
+| `solana` | `SOLANA` |
+
+Only the `charge` intent is implemented. Challenges advertising `session` or `subscription`
+are filtered out. A challenge with no `intent` param is treated as `charge`.
+
+**Challenge selection process**
+
+`ProcessPayment` fulfills exactly one challenge per call, so the SDK reduces the advertised
+options to the single one your instrument can pay:
+
+1. Drop challenges whose `intent` is not `charge`
+2. Drop challenges whose `expires` is in the past
+3. Keep only challenges whose `method` the instrument's blockchain can satisfy
+4. Order the survivors by `network_preferences` (default `NETWORK_PREFERENCES`), deriving each
+   challenge's network from its decoded `request` — `methodDetails.chainId` becomes
+   `eip155:<chainId>`, and Solana's `methodDetails.network` becomes `solana-mainnet` /
+   `solana-devnet` / `solana-testnet` (defaults to mainnet when absent)
+5. Break ties on the soonest expiry, then on the order the server advertised them
+
+Selection failures raise `PaymentError` **before** any service call, so an unsatisfiable 402
+never consumes session budget.
+
+The selected challenge's raw header value is forwarded to the service **verbatim**. This is
+deliberate: the challenge HMAC binds to the exact base64url `request`/`opaque` bytes, so the
+SDK never re-encodes them. Unknown auth-params are preserved rather than rejected, per the
+specification's "unknown parameters must be ignored by clients" rule.
+
+**Network (gas) fees**
+
+An MPP challenge advertises who sponsors blockchain network fees via its
+`methodDetails.feePayer` flag: `true` means the seller sponsors them, `false` or absent (the
+protocol default) means the buyer pays them from the paying wallet, on top of the challenge
+`amount`.
+
+Because that extra cost is **not visible in the challenge `amount`**, the service does not
+assume the buyer accepts it. When a challenge does not offer seller-sponsored fees, the payment
+is signed only if you pass `buyer_pays_gas_fees=True`; otherwise it fails with a validation
+error so you can decide — or obtain a challenge whose seller sponsors fees.
+
+```python
+header = manager.generate_payment_header(
+    payment_instrument_id=payment_instrument_id,
+    payment_session_id=payment_session_id,
+    payment_required_request=payment_required_request,
+    user_id="test-user-123",
+    # Explicitly accept paying network fees from the buyer's wallet.
+    buyer_pays_gas_fees=True,
+)
+```
+
+The parameter is optional and tri-state:
+
+| Value | Meaning |
+|---|---|
+| omitted / `None` | Field is not sent; the protocol default applies (buyer declines) |
+| `False` | Buyer explicitly declines to pay network fees |
+| `True` | Buyer authorizes network fees charged to their own wallet |
+
+Only `True`, `False`, or `None` are accepted — other values raise `PaymentError` rather than
+being coerced. This is deliberate: `bool("false")` is `True` in Python, so coercion would let the
+string `"false"` authorize wallet charges. Authorizing network fees must be unambiguous.
+
+It has no effect on challenges where the seller already sponsors fees
+(`methodDetails.feePayer=true`), and is ignored on the x402 path. Both framework integrations
+expose it as `buyer_pays_gas_fees` on their config.
+
+**Responses advertising both MPP and x402**
+
+Some endpoints advertise both protocols in the same 402. MPP is preferred, but if no advertised
+MPP challenge is satisfiable by the payment instrument and the response also carries a usable
+x402 requirement, the SDK falls back to x402 rather than failing the payment:
+
+| 402 contents | Outcome |
+|---|---|
+| Satisfiable MPP challenge (± x402) | Paid via MPP → `Authorization` |
+| MPP challenge the instrument cannot satisfy **+** usable x402 `accepts` | Falls back to x402 → `X-PAYMENT` |
+| MPP challenge the instrument cannot satisfy, no usable x402 | `PaymentError` |
+
+The fallback applies **only** to challenge-selection failures, which happen before anything is
+submitted. A failure after the payment has been sent to the service always propagates — retrying
+under x402 at that point could charge the buyer twice.
+
+**Working with challenges directly**
+
+The parsing and selection helpers are exported for callers who need them:
+
+```python
+from bedrock_agentcore.payments import (
+    extract_challenges,
+    is_mpp_payment_required,
+    select_challenge,
+)
+
+if is_mpp_payment_required(payment_required_request):
+    challenges = extract_challenges(payment_required_request)
+    selected = select_challenge(challenges, instrument_network="ETHEREUM")
+    print(selected["id"], selected["method"], selected["raw"])
+```
 ---
 
 ### Deleting Resources
@@ -663,7 +880,7 @@ except PaymentError as e:
 | `list_payment_sessions()` | List payment sessions for a user |
 | `delete_payment_session()` | Delete a payment session (hard delete) |
 | `process_payment()` | Process a payment transaction |
-| `generate_payment_header()` | Generate x402 payment headers for 402 responses |
+| `generate_payment_header()` | Generate payment headers for 402 responses (x402 or MPP, auto-detected) |
 
 ### PaymentManager Constructor Parameters
 
@@ -713,6 +930,7 @@ except PaymentError as e:
 | `PaymentManagerStatus` | Payment manager resource statuses (CREATING, READY, etc.) |
 | `PaymentConnectorStatus` | Payment connector statuses |
 | `PaymentConnectorType` | Supported connector types (CoinbaseCDP, StripePrivy) |
+| `PaymentConnectorProvisionMode` | Connector provisioning modes (MANUAL, QUICK_CREATE) |
 | `PaymentsAuthorizerType` | Authorizer types (AWS_IAM, CUSTOM_JWT) |
 | `NETWORK_PREFERENCES` | Default blockchain network preference order |
 | `DEFAULT_MAX_RESULTS` | Default pagination limit (100) |

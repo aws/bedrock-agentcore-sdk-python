@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.22.0] - 2026-08-18
+
+### Other Changes
+- feat(payments): add MPP, x402 upto, and Quick Create support (#643) (66a68e3)
+
 ## [1.21.0] - 2026-08-06
 
 ### Other Changes

@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+from .._validation import validate_permit2_allowance_limit
 from .handlers import PaymentResponseHandler
 
 
@@ -24,6 +25,11 @@ class AgentCorePaymentsPluginConfig:
         payment_connector_id: Payment connector ID (optional).
         region: AWS region for the payment manager.
         network_preferences_config: Ordered list of network CAIP2 identifiers.
+        permit2_allowance_limit: Optional maximum Permit2 allowance to grant, as a decimal
+            string in the asset's smallest denomination (for example, "1000000" for 1 USDC
+            at 6 decimals). Only applies to the x402 "upto" scheme; when set, the integration
+            forwards it so ProcessPayment submits an on-chain approve for the Permit2 contract
+            before signing. Leave unset (default) for the "exact" scheme.
         auto_payment: Whether to automatically process 402 responses. Default True.
         agent_name: Agent name propagated via HTTP header on data-plane calls.
         bearer_token: Static JWT for OAuth/CUSTOM_JWT auth. Mutually exclusive with token_provider.
@@ -50,6 +56,11 @@ class AgentCorePaymentsPluginConfig:
             When None (default), errors produce deterministic ToolMessages directly.
         max_error_retries: Maximum times the error callback can return RETRY per tool call.
             Default 3. Set to 0 to disable the callback entirely.
+        buyer_pays_gas_fees: MPP only. Authorizes charging blockchain network (gas) fees to
+            the buyer's wallet, on top of the payment amount. MPP challenges advertise who
+            sponsors fees via methodDetails.feePayer; when the seller does not, the service
+            signs only if this is True and otherwise fails validation. None (default) leaves
+            the protocol default in place and the field unsent. Ignored for x402.
     """
 
     payment_manager_arn: str
@@ -73,6 +84,8 @@ class AgentCorePaymentsPluginConfig:
     auto_session_expiry_minutes: int = 60
     on_payment_error: Optional[Callable] = None
     max_error_retries: int = 3
+    buyer_pays_gas_fees: Optional[bool] = None
+    permit2_allowance_limit: Optional[str] = None
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -133,6 +146,13 @@ class AgentCorePaymentsPluginConfig:
             raise ValueError(f"max_error_retries must be an int, got {type(self.max_error_retries).__name__}")
         if self.max_error_retries < 0:
             raise ValueError(f"max_error_retries must be >= 0, got {self.max_error_retries}")
+
+        if self.buyer_pays_gas_fees is not None and not isinstance(self.buyer_pays_gas_fees, bool):
+            raise ValueError(
+                f"buyer_pays_gas_fees must be a boolean or None, got {type(self.buyer_pays_gas_fees).__name__}"
+            )
+
+        validate_permit2_allowance_limit(self.permit2_allowance_limit)
 
     def update_payment_session_id(self, payment_session_id: str) -> None:
         """Update the payment session ID.

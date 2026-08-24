@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 class AgentCorePaymentsPlugin(Plugin):
-    """Plugin for handling X402 payment requirements and providing payment tools in Strands Agents.
+    """Plugin for handling payment requirements and providing payment tools in Strands Agents.
 
     This plugin provides tools for querying payment information and making paid HTTP calls:
     - http_request: Call a (paid) HTTP endpoint; 402 responses are settled automatically
@@ -35,9 +35,15 @@ class AgentCorePaymentsPlugin(Plugin):
     - getPaymentSession: Retrieve details about a specific payment session
 
     The plugin also intercepts tool calls and responses to handle HTTP 402 Payment Required
-    responses by processing X402 payment requirements and retrying requests with
+    responses by processing the payment requirement and retrying requests with
     appropriate payment credentials. Payment processing is controlled by the auto_payment
     configuration flag (default: True).
+
+    Both payment protocols are supported and detected automatically from the 402 response:
+    x402 (requirements in the body or the ``Payment-Required`` header, settled with an
+    ``X-PAYMENT`` / ``PAYMENT-SIGNATURE`` header) and MPP (options advertised as
+    ``WWW-Authenticate: Payment`` challenges, settled with an ``Authorization: Payment
+    <token>`` header).
 
     Attributes:
         name: Plugin identifier ("agent-core-payments-plugin")
@@ -258,6 +264,12 @@ class AgentCorePaymentsPlugin(Plugin):
             # can submit in the same second the signature was minted, hitting the
             # contract's strict ``block.timestamp > validAfter`` check and producing
             # a misleading "invalid_payload" 402 from the seller.
+            #
+            # This applies to MPP too: an evm-charge credential of type "authorization"
+            # is an EIP-3009 authorization carrying the same validAfter field. The delay
+            # is harmless for credential types that settle without it (e.g. Solana push
+            # mode, where the transaction is already confirmed) and is configurable via
+            # post_payment_retry_delay_seconds.
             delay = self.config.post_payment_retry_delay_seconds
             if delay > 0:
                 logger.info(
@@ -435,13 +447,17 @@ class AgentCorePaymentsPlugin(Plugin):
         """Process 402 payment required request and generate payment header.
 
         Calls PaymentManager.generate_payment_header with the 402 payment required request
-        and returns the payment header dictionary.
+        and returns the payment header dictionary. The payment protocol (x402 or MPP) is
+        detected from the 402 response by PaymentManager, so this method is
+        protocol-agnostic.
 
         Args:
             payment_required_request: Dictionary containing 402 payment requirements with statusCode, headers, and body
 
         Returns:
-            Dictionary with payment header name and value (e.g., {"X-PAYMENT": "base64..."})
+            Dictionary with payment header name and value. For x402:
+            {"X-PAYMENT": "base64..."} or {"PAYMENT-SIGNATURE": "base64..."}.
+            For MPP: {"Authorization": "Payment <base64url-token>"}.
 
         Raises:
             PaymentError: If payment processing fails
@@ -453,7 +469,7 @@ class AgentCorePaymentsPlugin(Plugin):
 
         if self.config.payment_instrument_id is None:
             raise PaymentInstrumentConfigurationRequired(
-                "payment_instrument_id is required for x402 payments.\n"
+                "payment_instrument_id is required for payments.\n"
                 "Setup steps:\n"
                 "1. Create instrument: PaymentManager.create_payment_instrument(connector_id, type, details, user_id)\n"
                 "2. Fund wallet: https://faucet.circle.com/ (Base Sepolia, USDC, paste wallet address)\n"
@@ -463,7 +479,7 @@ class AgentCorePaymentsPlugin(Plugin):
 
         if self.config.payment_session_id is None:
             raise PaymentSessionConfigurationRequired(
-                "payment_session_id is required for x402 payments.\n"
+                "payment_session_id is required for payments.\n"
                 "Create a session: PaymentManager.create_payment_session(expiry_time_in_minutes, user_id, limits)\n"
                 "Then pass session_id in invoke payload or plugin config.\n"
                 "Tip: use 'agentcore invoke --payment-session-id <id>' or '--auto-session' from the CLI."
@@ -478,6 +494,8 @@ class AgentCorePaymentsPlugin(Plugin):
             network_preferences=self.config.network_preferences_config,
             client_token=str(uuid.uuid4()),
             payment_connector_id=self.config.payment_connector_id,
+            buyer_pays_gas_fees=self.config.buyer_pays_gas_fees,
+            permit2_allowance_limit=self.config.permit2_allowance_limit,
         )
 
         logger.debug("Generated payment header: %s", list(payment_header_dict.keys()))
@@ -768,16 +786,20 @@ class AgentCorePaymentsPlugin(Plugin):
         """Call an HTTP endpoint. 402 Payment Required responses are settled automatically.
 
         When the endpoint responds with HTTP 402, this plugin's after_tool_call hook
-        intercepts the result, generates an x402 payment header via the configured
-        PaymentManager, mutates ``headers`` with the X-PAYMENT (v1) or
-        PAYMENT-SIGNATURE (v2) header, and Strands re-invokes this tool — yielding
-        the final 200 response and (when applicable) a settle hash in the
-        PAYMENT-RESPONSE header.
+        intercepts the result, generates a payment header via the configured
+        PaymentManager, mutates ``headers`` with it, and Strands re-invokes this tool
+        — yielding the final 200 response and (when applicable) a settle hash in the
+        PAYMENT-RESPONSE header (x402) or a receipt in Payment-Receipt (MPP).
+
+        The header depends on the protocol detected in the 402: X-PAYMENT (x402 v1),
+        PAYMENT-SIGNATURE (x402 v2), or Authorization (MPP).
 
         Returns a Strands ToolResult dict: ``status`` is always ``success`` (HTTP
         errors are returned in the body, not raised), and ``content`` is a single
         text block. On 402 the text is prefixed with ``PAYMENT_REQUIRED:`` so the
-        SDK's payment handlers can extract the x402 payload.
+        SDK's payment handlers can extract the payment requirement. All response
+        headers are included verbatim, so MPP ``WWW-Authenticate`` challenges survive
+        intact.
 
         Args:
             url: The full URL to request.

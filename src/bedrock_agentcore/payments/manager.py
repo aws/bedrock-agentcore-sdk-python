@@ -16,6 +16,15 @@ from botocore.exceptions import ClientError
 from bedrock_agentcore._utils.endpoints import get_data_plane_endpoint
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
+from ._validation import validate_permit2_allowance_limit
+from .constants import MPP_AUTH_SCHEME, MPP_DEFAULT_VERSION
+from .mpp import (
+    MppChallengeSelectionError,
+    extract_challenges,
+    is_mpp_payment_required,
+    select_challenge,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -915,6 +924,8 @@ class PaymentManager:
         network_preferences: Optional[list[str]] = None,
         client_token: Optional[str] = None,
         payment_connector_id: Optional[str] = None,
+        buyer_pays_gas_fees: Optional[bool] = None,
+        permit2_allowance_limit: Optional[str] = None,
     ) -> Dict[str, str]:
         """Generate a payment header for 402 payment required request.
 
@@ -943,10 +954,25 @@ class PaymentManager:
                 forwarded to process_payment. ProcessPayment derives the connector
                 from the payment instrument; sending paymentConnectorId on that call
                 was rejected by the API as an unknown parameter.
+            buyer_pays_gas_fees: MPP only. Authorizes the service to sign a payment whose
+                blockchain network (gas) fees are charged to the buyer's own wallet, on top
+                of the payment amount. When the challenge does not offer seller-sponsored
+                fees (``methodDetails.feePayer`` is false or absent), the service signs only
+                if this is True and otherwise fails validation, so the caller can decide.
+                Omitted or False means the buyer declines to pay network fees. Has no effect
+                on challenges where the seller already sponsors them. Ignored for x402.
+            permit2_allowance_limit: Optional maximum Permit2 allowance to grant, as a
+                decimal string in the asset's smallest denomination (for example,
+                "1000000" for 1 USDC at 6 decimals). Only applies to the x402 "upto"
+                scheme; when set, ProcessPayment submits an on-chain approve for the
+                Permit2 contract before signing. Supplying it for the "exact" scheme is
+                a validation error. Omit it (the default) to leave the cryptoX402 input
+                unchanged.
 
         Returns:
-            Dictionary with header name and value (e.g., {"X-PAYMENT": "base64..."} or
-            {"PAYMENT-SIGNATURE": "base64..."}) for X402 payment required request
+            Dictionary with header name and value. For x402: {"X-PAYMENT": "base64..."}
+            (v1) or {"PAYMENT-SIGNATURE": "base64..."} (v2). For MPP:
+            {"Authorization": "Payment <base64url-token>"}
 
         Raises:
             PaymentError: For validation or processing failures
@@ -971,6 +997,11 @@ class PaymentManager:
             )
             # Returns: {"X-PAYMENT": "base64..."} or {"PAYMENT-SIGNATURE": "base64..."}
             ```
+
+        Note:
+            The payment protocol is detected from the 402 response. A
+            ``WWW-Authenticate: Payment`` header routes to MPP; otherwise the
+            response is treated as x402.
         """
         user_id = user_id.strip() if user_id else None
 
@@ -1012,31 +1043,43 @@ class PaymentManager:
                     raise PaymentError("client_token is invalid - cannot be empty")
                 logger.debug("Using provided client_token: %s", client_token[:8] + "...")
 
-            # Step 4: Extract X.402 payload and detect version.
-            # Will have another method for MPP or any other payments protocols
+            # Step 4: Detect the payment protocol and dispatch. An MPP 402 advertises
+            # its payment options via 'WWW-Authenticate: Payment' challenges; x402
+            # carries them in the body or the Payment-Required header.
+            #
+            # A response may advertise both. MPP is preferred, but an MPP challenge the
+            # instrument cannot satisfy must not fail the whole payment when a payable
+            # x402 option is also on offer — so fall through to x402 in that case.
+            if is_mpp_payment_required(payment_required_request):
+                logger.debug("Detected MPP payment required request")
+                try:
+                    return self._generate_mpp_payment_header(
+                        payment_instrument_id=payment_instrument_id,
+                        payment_session_id=payment_session_id,
+                        payment_required_request=payment_required_request,
+                        user_id=user_id,
+                        network_preferences=network_preferences,
+                        client_token=client_token,
+                        buyer_pays_gas_fees=buyer_pays_gas_fees,
+                    )
+                except MppChallengeSelectionError as e:
+                    # Only selection failures are recoverable. A failure after the
+                    # payment was submitted must propagate: retrying under x402 could
+                    # charge the buyer twice.
+                    if not self._has_x402_payment_required(payment_required_request):
+                        raise PaymentError(str(e)) from e
+                    logger.info(
+                        "No satisfiable MPP challenge (%s); falling back to the x402 option "
+                        "advertised in the same 402 response",
+                        e,
+                    )
+
+            # Step 4b: x402 — extract payload and detect version.
             x402_payload, x402_version = self._extract_x402_payload(payment_required_request)
             logger.debug("Extracted X.402 payload version %d", x402_version)
 
             # Step 5: Retrieve payment instrument and extract network
-            instrument = self.get_payment_instrument(
-                user_id=user_id,
-                payment_instrument_id=payment_instrument_id,
-            )
-            logger.debug("Retrieved instrument: %s", instrument)
-
-            # Extract network from nested structure: paymentInstrumentDetails.embeddedCryptoWallet.network
-            network = None
-            if "paymentInstrumentDetails" in instrument:
-                details = instrument.get("paymentInstrumentDetails", {})
-                if "embeddedCryptoWallet" in details:
-                    network = details.get("embeddedCryptoWallet", {}).get("network")
-
-            if not network:
-                raise PaymentError(
-                    "Instrument Retrieval: Missing network information - "
-                    "instrument details do not contain network information at "
-                    "paymentInstrumentDetails.embeddedCryptoWallet.network"
-                )
+            network = self._get_instrument_network(payment_instrument_id, user_id)
             logger.debug("Retrieved instrument with network: %s", network)
 
             # Step 6: Validate instrument network and select matching accept
@@ -1051,6 +1094,18 @@ class PaymentManager:
                     "payload": selected_accept,
                 }
             }
+
+            # Opt-in Permit2 allowance for the "upto" scheme. Sits at the cryptoX402
+            # level (sibling of version/payload); ProcessPayment submits the on-chain
+            # approve before signing. Omitted entirely when not set so the "exact"
+            # flow is unaffected.
+            scheme = selected_accept.get("scheme")
+            if permit2_allowance_limit is not None and isinstance(scheme, str) and scheme.strip().lower() == "upto":
+                try:
+                    validate_permit2_allowance_limit(permit2_allowance_limit)
+                except ValueError as e:
+                    raise PaymentError(f"Input Validation: {e}") from e
+                payment_input["cryptoX402"]["permit2AllowanceLimit"] = permit2_allowance_limit
 
             # ProcessPayment does not accept paymentConnectorId — the connector is
             # resolved server-side from the payment instrument. The argument is
@@ -1087,6 +1142,206 @@ class PaymentManager:
         except Exception as e:
             logger.error("Unexpected error during payment header generation: %s", str(e))
             raise PaymentError(f"Unexpected error: {str(e)}") from e
+
+    def _has_x402_payment_required(self, payment_required_request: Dict[str, Any]) -> bool:
+        """Check whether a 402 response also carries an x402 payment requirement.
+
+        Used to decide whether an unsatisfiable MPP challenge can fall back to x402.
+        Deliberately read-only and non-raising: this runs inside an exception handler,
+        so a malformed x402 payload must report "no x402 option" rather than mask the
+        original MPP selection failure.
+
+        Args:
+            payment_required_request: Dict with statusCode, headers, and body.
+
+        Returns:
+            True if a parseable x402 requirement with a non-empty ``accepts`` list is present.
+        """
+        try:
+            x402_payload, _ = self._extract_x402_payload(payment_required_request)
+        except PaymentError:
+            return False
+        except Exception:  # pragma: no cover - defensive; extraction should raise PaymentError
+            return False
+
+        accepts = x402_payload.get("accepts")
+        return isinstance(accepts, list) and bool(accepts)
+
+    def _get_instrument_network(
+        self,
+        payment_instrument_id: str,
+        user_id: Optional[str],
+    ) -> str:
+        """Retrieve a payment instrument and extract its blockchain network.
+
+        Args:
+            payment_instrument_id: Unique identifier for the payment instrument
+            user_id: Unique identifier for the user (optional, omitted for bearer auth)
+
+        Returns:
+            The instrument's network (e.g. "ETHEREUM", "SOLANA")
+
+        Raises:
+            PaymentError: If the instrument carries no network information
+        """
+        instrument = self.get_payment_instrument(
+            user_id=user_id,
+            payment_instrument_id=payment_instrument_id,
+        )
+        logger.debug("Retrieved instrument: %s", instrument)
+
+        # Extract network from nested structure: paymentInstrumentDetails.embeddedCryptoWallet.network
+        network = None
+        if "paymentInstrumentDetails" in instrument:
+            details = instrument.get("paymentInstrumentDetails", {})
+            if "embeddedCryptoWallet" in details:
+                network = details.get("embeddedCryptoWallet", {}).get("network")
+
+        if not network:
+            raise PaymentError(
+                "Instrument Retrieval: Missing network information - "
+                "instrument details do not contain network information at "
+                "paymentInstrumentDetails.embeddedCryptoWallet.network"
+            )
+        return network
+
+    def _generate_mpp_payment_header(
+        self,
+        payment_instrument_id: str,
+        payment_session_id: str,
+        payment_required_request: Dict[str, Any],
+        user_id: Optional[str] = None,
+        network_preferences: Optional[list[str]] = None,
+        client_token: Optional[str] = None,
+        buyer_pays_gas_fees: Optional[bool] = None,
+    ) -> Dict[str, str]:
+        """Generate an MPP Authorization header for a 402 payment required response.
+
+        MPP servers advertise their payment options as ``WWW-Authenticate: Payment``
+        challenges. ProcessPayment fulfills exactly one challenge per call, so this
+        method selects the single challenge the instrument can satisfy and forwards its
+        raw header value verbatim — preserving the exact base64url ``request``/``opaque``
+        bytes the challenge HMAC binds to.
+
+        Args:
+            payment_instrument_id: Unique identifier for the payment instrument
+            payment_session_id: Unique identifier for the payment session
+            payment_required_request: Dict with statusCode, headers, and body
+            user_id: Unique identifier for the user (optional, omitted for bearer auth)
+            network_preferences: Optional network identifiers in order of preference.
+                Defaults to NETWORK_PREFERENCES from constants.
+            client_token: Idempotency token
+            buyer_pays_gas_fees: Authorizes charging blockchain network (gas) fees to the
+                buyer's wallet on top of the payment amount. Only sent when not None, so
+                omitting it preserves the service-side protocol default.
+
+        Returns:
+            Dictionary with the ready-to-send Authorization header,
+            e.g. {"Authorization": "Payment eyJ..."}
+
+        Raises:
+            PaymentError: If no challenge can be satisfied or payment processing fails
+        """
+        # Step 1: Parse the advertised challenges.
+        challenges = extract_challenges(payment_required_request)
+        logger.debug("Parsed %d MPP challenge(s) from 402 response", len(challenges))
+
+        # Step 2: Retrieve the instrument network to determine which methods we can pay.
+        network = self._get_instrument_network(payment_instrument_id, user_id)
+        logger.debug("Retrieved instrument with network: %s", network)
+
+        # Step 3: Select the one challenge to fulfill.
+        # MppChallengeSelectionError is allowed to propagate rather than being converted
+        # to PaymentError here: generate_payment_header distinguishes it from other
+        # failures so it can fall back to a payable x402 option in the same 402 response.
+        # Callers reaching this method through generate_payment_header still see a
+        # PaymentError, since that wrapper converts it when no fallback exists.
+        selected = select_challenge(
+            challenges,
+            instrument_network=network,
+            network_preferences=network_preferences,
+        )
+
+        selected_id = selected.get("id")
+        logger.debug(
+            "Selected MPP challenge id=%s method=%s",
+            selected_id,
+            selected.get("method"),
+        )
+
+        # Step 4: Process the payment. The raw header value is forwarded verbatim.
+        mpp_input: Dict[str, Any] = {
+            "version": MPP_DEFAULT_VERSION,
+            "wwwAuthenticateHeaders": [selected["raw"]],
+        }
+
+        # Only send buyerPaysGasFees when the caller expressed an intent. Omitting it
+        # leaves the protocol default in place rather than asserting a choice the
+        # caller did not make.
+        #
+        # Require an actual bool and forward it unchanged. Coercing with bool() would
+        # make the string "false" authorize additional wallet charges, since every
+        # non-empty string is truthy — a silent, money-moving misread of the caller's
+        # intent. This matches the strict validation on the integration config.
+        if buyer_pays_gas_fees is not None:
+            if not isinstance(buyer_pays_gas_fees, bool):
+                raise PaymentError(
+                    "Input Validation: buyer_pays_gas_fees must be a boolean or None, got "
+                    f"{type(buyer_pays_gas_fees).__name__}. Pass True or False explicitly — "
+                    "values are not coerced, because authorizing network fees must be unambiguous."
+                )
+            mpp_input["buyerPaysGasFees"] = buyer_pays_gas_fees
+
+        payment_input = {"mpp": mpp_input}
+
+        payment_result = self.process_payment(
+            user_id=user_id,
+            payment_session_id=payment_session_id,
+            payment_instrument_id=payment_instrument_id,
+            payment_type="MPP",
+            payment_input=payment_input,
+            client_token=client_token,
+        )
+        logger.debug("MPP payment processed successfully")
+
+        # Step 5: Extract the minted credential.
+        # Defend against malformed payloads at each level rather than chaining .get():
+        # a null or non-object member would otherwise surface as an opaque AttributeError
+        # instead of a message naming the field at fault.
+        payment_output = payment_result.get("paymentOutput") if isinstance(payment_result, dict) else None
+        mpp_output = payment_output.get("mpp") if isinstance(payment_output, dict) else None
+        if not isinstance(mpp_output, dict) or not mpp_output:
+            raise PaymentError(
+                "Payment Processing: Missing mpp in payment output - payment result does not contain an MPP credential"
+            )
+
+        credential = mpp_output.get("paymentCredential")
+        if not credential or not isinstance(credential, str) or not credential.strip():
+            raise PaymentError(
+                "Payment Processing: Missing paymentCredential - MPP payment output does not "
+                "contain a payment credential"
+            )
+
+        returned_id = mpp_output.get("selectedPaymentId")
+        if returned_id and selected_id and returned_id != selected_id:
+            # The service echoes the challenge it paid. A mismatch means we would attach
+            # a credential for a different challenge than the one we selected.
+            raise PaymentError(
+                f"Payment Processing: Challenge mismatch - requested challenge "
+                f"'{selected_id}' but the service paid '{returned_id}'"
+            )
+
+        # Step 6: Build the Authorization header. The service returns a ready-to-send
+        # value; only add the scheme prefix if it is not already present.
+        credential = credential.strip()
+        scheme_prefix = f"{MPP_AUTH_SCHEME} "
+        if credential.lower().startswith(scheme_prefix.lower()):
+            header_value = credential
+        else:
+            header_value = f"{scheme_prefix}{credential}"
+
+        logger.info("Successfully generated MPP payment header for challenge %s", selected_id)
+        return {"Authorization": header_value}
 
     def __getattr__(self, name: str):
         """Dynamically forward method calls to the PaymentClient.

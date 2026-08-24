@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-from bedrock_agentcore.payments import PaymentClient
+from bedrock_agentcore.payments import PaymentClient, PaymentConnectorProvisionMode
 from bedrock_agentcore.payments.client import PaymentConnectorConfig
 
 # Get role ARN from environment variable, with fallback for testing
@@ -241,6 +241,90 @@ class TestPaymentConnectorOperations:
 
     @patch("bedrock_agentcore.payments.client.boto3.client")
     @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_create_payment_connector_quick_create(self, mock_session, mock_boto3_client):
+        """QUICK_CREATE passes provisionMode through and returns the authorizationUrl."""
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+
+        mock_cp_client.create_payment_connector.return_value = {
+            "paymentConnectorId": "pc-qc-1",
+            "status": "PENDING_AUTHENTICATION",
+            "authorizationUrl": "https://bedrock-agentcore.us-west-2.amazonaws.com/identities/oauth2/authorize?request_uri=urn:x",
+        }
+
+        client = PaymentClient(region_name="us-west-2")
+        result = client.create_payment_connector(
+            payment_manager_id="pm-123",
+            name="test-connector",
+            connector_type="CoinbaseCDP",
+            credential_provider_configurations=[],
+            provision_mode=PaymentConnectorProvisionMode.QUICK_CREATE,
+        )
+
+        # provisionMode is threaded into the outgoing request.
+        call_kwargs = mock_cp_client.create_payment_connector.call_args[1]
+        assert call_kwargs["provisionMode"] == "QUICK_CREATE"
+        assert call_kwargs["credentialProviderConfigurations"] == []
+
+        # authorizationUrl is surfaced for a PENDING_AUTHENTICATION connector.
+        assert result["paymentConnectorId"] == "pc-qc-1"
+        assert result["status"] == "PENDING_AUTHENTICATION"
+        assert result["authorizationUrl"].startswith("https://")
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_quick_create_rejects_wait_for_ready_before_create(self, mock_session, mock_boto3_client):
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+        client = PaymentClient(region_name="us-west-2")
+
+        with pytest.raises(ValueError, match="wait_for_ready cannot be used with QUICK_CREATE"):
+            client.create_payment_connector(
+                payment_manager_id="pm-123",
+                name="test-connector",
+                connector_type="CoinbaseCDP",
+                credential_provider_configurations=[],
+                provision_mode=PaymentConnectorProvisionMode.QUICK_CREATE,
+                wait_for_ready=True,
+            )
+
+        mock_cp_client.create_payment_connector.assert_not_called()
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_create_payment_connector_manual_omits_provision_mode(self, mock_session, mock_boto3_client):
+        """Omit provisionMode when provision_mode is not supplied.
+
+        The service defaults the omitted field to MANUAL.
+        """
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+
+        mock_cp_client.create_payment_connector.return_value = {
+            "paymentConnectorId": "pc-123",
+            "status": "READY",
+        }
+
+        client = PaymentClient(region_name="us-west-2")
+        result = client.create_payment_connector(
+            payment_manager_id="pm-123",
+            name="test-connector",
+            connector_type="CoinbaseCDP",
+            credential_provider_configurations=[
+                {"coinbaseCDP": {"credentialProviderArn": "arn:aws:secretsmanager:us-west-2:123456789012:secret:test"}}
+            ],
+        )
+
+        call_kwargs = mock_cp_client.create_payment_connector.call_args[1]
+        assert "provisionMode" not in call_kwargs
+        # No authorizationUrl in the response -> not present in the result.
+        assert "authorizationUrl" not in result
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
     def test_get_payment_connector_success(self, mock_session, mock_boto3_client):
         """Test successful payment connector retrieval."""
         mock_session.return_value.region_name = "us-west-2"
@@ -263,6 +347,36 @@ class TestPaymentConnectorOperations:
 
         assert result["paymentConnectorId"] == "pc-123"
         assert result["name"] == "test-connector"
+
+    @pytest.mark.parametrize(
+        ("status", "includes_authorization_url"),
+        [("PENDING_AUTHENTICATION", True), ("READY", False)],
+    )
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_get_payment_connector_only_returns_live_authorization_url(
+        self,
+        mock_session,
+        mock_boto3_client,
+        status,
+        includes_authorization_url,
+    ):
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+        mock_cp_client.get_payment_connector.return_value = {
+            "paymentConnectorId": "pc-qc-1",
+            "paymentManagerId": "pm-123",
+            "name": "test-connector",
+            "type": "CoinbaseCDP",
+            "status": status,
+            "authorizationUrl": "https://example.com/authorize",
+        }
+
+        client = PaymentClient(region_name="us-west-2")
+        result = client.get_payment_connector("pm-123", "pc-qc-1")
+
+        assert ("authorizationUrl" in result) is includes_authorization_url
 
     @patch("bedrock_agentcore.payments.client.boto3.client")
     @patch("bedrock_agentcore.payments.client.boto3.Session")
