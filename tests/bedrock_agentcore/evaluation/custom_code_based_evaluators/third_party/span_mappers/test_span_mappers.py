@@ -7,6 +7,10 @@ from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_
     SpanMapResult,
     map_spans,
 )
+from bedrock_agentcore.evaluation.custom_code_based_evaluators.third_party.span_mappers.registry import (
+    _extract_from_service_format,
+    _extract_message_text,
+)
 
 
 def _make_strands_cloudwatch_spans():
@@ -119,28 +123,47 @@ def _make_service_normalized_session_spans(num_turns=3):
 
     This is the format the AgentCore service sends to Lambda for SESSION-level
     evaluators: one span with multiple span_events, each representing a turn.
+
+    Uses the REAL Strands body shape as emitted by ``invoke_agent`` and normalized
+    by the service: message content is DOUBLE-ENCODED JSON under ``content`` /
+    ``message`` (a JSON string, not an already-parsed list). This is the same
+    shape the single-turn ``_valid_strands_spans`` fixtures use. Tests that assert
+    on turn content therefore also guard against the "raw JSON leaks into the turn
+    text" regression.
     """
+    import json
+
     span_events = []
     for i in range(num_turns):
-        span_events.append({
-            "body": {
-                "input": {
-                    "messages": [
-                        {"role": "user", "content": {"content": [{"text": f"User message {i+1}"}]}}
-                    ]
-                },
-                "output": {
-                    "messages": [
-                        {"role": "assistant", "content": {"message": [{"text": f"Assistant response {i+1}"}]}}
-                    ]
+        span_events.append(
+            {
+                "event_name": "strands.telemetry.tracer",
+                "body": {
+                    "input": {
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": {"content": json.dumps([{"text": f"User message {i + 1}"}])},
+                            }
+                        ]
+                    },
+                    "output": {
+                        "messages": [
+                            {
+                                "role": "assistant",
+                                "content": {"message": json.dumps([{"text": f"Assistant response {i + 1}"}])},
+                            }
+                        ]
+                    },
                 },
             }
-        })
+        )
     return [
         {
             "traceId": "trace-multi",
             "spanId": "span-multi",
             "source": "adot_cw",
+            "scope": {"name": "strands.telemetry.tracer"},
             "attributes": {"session.id": "session-1"},
             "span_events": span_events,
         }
@@ -160,6 +183,32 @@ class TestServiceNormalizedMultiTurn:
         assert result.turns[1] == {"role": "assistant", "content": "Assistant response 1"}
         assert result.turns[4] == {"role": "user", "content": "User message 3"}
         assert result.turns[5] == {"role": "assistant", "content": "Assistant response 3"}
+
+    def test_turn_content_has_no_json_syntax(self):
+        """Regression guard: turn content must be decoded plain text, not raw JSON.
+
+        Real service bodies double-encode content as a JSON string
+        ('[{"text": ...}]'). If the extractor returns that string verbatim, the
+        turn content would contain JSON punctuation. This asserts the double
+        encoding is decoded to plain text.
+        """
+        spans = _make_service_normalized_session_spans(num_turns=3)
+        result = map_spans(spans)
+
+        assert result.turns is not None
+        for turn in result.turns:
+            content = turn["content"]
+            assert "text" not in content or content in (
+                "User message 1",
+                "User message 2",
+                "User message 3",
+                "Assistant response 1",
+                "Assistant response 2",
+                "Assistant response 3",
+            )
+            assert not any(ch in content for ch in ("{", "}", "[", "]", '"')), (
+                f"turn content still contains raw JSON syntax: {content!r}"
+            )
 
     def test_input_and_output_are_last_turn(self):
         spans = _make_service_normalized_session_spans(num_turns=3)
@@ -220,28 +269,20 @@ class TestServiceNormalizedMultiTurn:
                     {
                         "body": {
                             "input": {
-                                "messages": [
-                                    {"role": "user", "content": {"content": [{"text": "Turn 1 input"}]}}
-                                ]
+                                "messages": [{"role": "user", "content": {"content": [{"text": "Turn 1 input"}]}}]
                             },
                             "output": {
-                                "messages": [
-                                    {"role": "assistant", "content": {"message": [{"text": "Turn 1 output"}]}}
-                                ]
+                                "messages": [{"role": "assistant", "content": {"message": [{"text": "Turn 1 output"}]}}]
                             },
                         }
                     },
                     {
                         "body": {
                             "input": {
-                                "messages": [
-                                    {"role": "user", "content": {"content": [{"text": "Turn 2 input"}]}}
-                                ]
+                                "messages": [{"role": "user", "content": {"content": [{"text": "Turn 2 input"}]}}]
                             },
                             "output": {
-                                "messages": [
-                                    {"role": "assistant", "content": {"message": [{"text": "Turn 2 output"}]}}
-                                ]
+                                "messages": [{"role": "assistant", "content": {"message": [{"text": "Turn 2 output"}]}}]
                             },
                         }
                     },
@@ -266,3 +307,129 @@ class TestServiceNormalizedMultiTurn:
         assert len(result.turns) == 10
         assert result.input == "User message 5"
         assert result.actual_output == "Assistant response 5"
+
+    def test_split_user_and_assistant_events_yield_single_turn(self):
+        """Two span_events that each carry only one side form a single turn, not multi-turn."""
+        spans = [
+            {
+                "traceId": "t1",
+                "spanId": "s1",
+                "attributes": {"session.id": "sess"},
+                "span_events": [
+                    {"body": {"input": {"messages": [{"role": "user", "content": "Only a question"}]}}},
+                    {"body": {"output": {"messages": [{"role": "assistant", "content": "Only an answer"}]}}},
+                ],
+            }
+        ]
+        result = map_spans(spans)
+
+        assert result.turns is None
+        assert result.input == "Only a question"
+        assert result.actual_output == "Only an answer"
+
+
+class TestExtractMessageText:
+    """Tests for decoding service-format message content into plain text."""
+
+    def test_whitespace_only_content_returns_none(self):
+        assert _extract_message_text([{"role": "user", "content": "   "}], role="user") is None
+
+    def test_json_non_list_content_returned_verbatim(self):
+        assert _extract_message_text([{"role": "user", "content": '{"a": 1}'}], role="user") == '{"a": 1}'
+
+    def test_unsupported_content_type_returns_none(self):
+        assert _extract_message_text([{"role": "user", "content": 42}], role="user") is None
+
+    def test_prefers_latest_message_with_matching_role(self):
+        messages = [
+            {"role": "user", "content": "first question"},
+            {"role": "user", "content": "latest question"},
+            {"role": "system", "content": "system text"},
+        ]
+        assert _extract_message_text(messages, role="user") == "latest question"
+
+    def test_skips_matching_role_without_text(self):
+        messages = [
+            {"role": "user", "content": "real question"},
+            {"role": "user", "content": ""},
+        ]
+        assert _extract_message_text(messages, role="user") == "real question"
+
+    def test_falls_back_to_any_message_when_role_absent(self):
+        messages = ["not-a-dict", {"content": "roleless text"}]
+        assert _extract_message_text(messages, role="user") == "roleless text"
+
+    def test_without_role_returns_first_text(self):
+        messages = [{"role": "assistant", "content": ""}, {"role": "assistant", "content": "answer"}]
+        assert _extract_message_text(messages) == "answer"
+
+
+def _make_gen_ai_span(events, scope="strands.telemetry.tracer"):
+    return {"traceId": "t1", "spanId": "s1", "scope": {"name": scope}, "events": events}
+
+
+class TestExtractFromServiceFormat:
+    """Tests for the service-format extractor, including the gen_ai single-turn path."""
+
+    def test_gen_ai_events_with_json_content(self):
+        import json
+
+        span = _make_gen_ai_span(
+            [
+                {"name": "gen_ai.system.message", "attributes": {"content": json.dumps([{"text": "Be helpful"}])}},
+                {"name": "gen_ai.user.message", "attributes": {"content": json.dumps([{"text": "Hi there"}])}},
+                {"name": "gen_ai.choice", "attributes": {"message": json.dumps([{"text": "Hello"}])}},
+                {"name": "gen_ai.unrelated.event", "attributes": {"content": "ignored"}},
+            ]
+        )
+        result = _extract_from_service_format([span])
+
+        assert result is not None
+        assert result.input == "Hi there"
+        assert result.actual_output == "Hello"
+        assert result.system_prompt == "Be helpful"
+        assert result.turns is None
+
+    def test_gen_ai_events_with_plain_string_content(self):
+        span = _make_gen_ai_span(
+            [
+                {"name": "gen_ai.system.message", "attributes": {"content": "plain system"}},
+                {"name": "gen_ai.user.message", "attributes": {"content": "plain question"}},
+                {"name": "gen_ai.choice", "attributes": {"message": "plain answer"}},
+            ]
+        )
+        result = _extract_from_service_format([span])
+
+        assert result is not None
+        assert result.input == "plain question"
+        assert result.actual_output == "plain answer"
+        assert result.system_prompt == "plain system"
+
+    def test_gen_ai_events_missing_output_returns_none(self):
+        span = _make_gen_ai_span([{"name": "gen_ai.user.message", "attributes": {"content": "question"}}])
+        assert _extract_from_service_format([span]) is None
+
+    def test_non_strands_scope_is_skipped(self):
+        span = _make_gen_ai_span(
+            [
+                {"name": "gen_ai.user.message", "attributes": {"content": "question"}},
+                {"name": "gen_ai.choice", "attributes": {"message": "answer"}},
+            ],
+            scope="other.framework",
+        )
+        assert _extract_from_service_format([span]) is None
+
+    def test_empty_multi_event_span_falls_through_to_gen_ai_span(self):
+        """A multi-event span with no extractable text must not stop the search."""
+        empty_multi = {"traceId": "t1", "spanId": "s0", "span_events": [{"body": {}}, {"body": {}}]}
+        gen_ai = _make_gen_ai_span(
+            [
+                {"name": "gen_ai.user.message", "attributes": {"content": "question"}},
+                {"name": "gen_ai.choice", "attributes": {"message": "answer"}},
+            ]
+        )
+        result = _extract_from_service_format([empty_multi, gen_ai])
+
+        assert result is not None
+        assert result.input == "question"
+        assert result.actual_output == "answer"

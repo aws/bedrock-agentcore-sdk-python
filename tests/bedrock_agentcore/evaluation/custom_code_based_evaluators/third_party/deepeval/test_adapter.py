@@ -407,28 +407,44 @@ class TestDeepEvalAdapterServiceNormalizedMultiTurn:
     """
 
     def _make_session_evaluator_input(self, num_turns=3):
-        """Build EvaluatorInput in service-normalized SESSION format."""
+        """Build EvaluatorInput in service-normalized SESSION format.
+
+        Uses the REAL Strands body shape: message content is double-encoded JSON
+        under ``content`` / ``message`` (a JSON string, matching what the service
+        actually sends), so this exercises the CloudWatch-consistent decoding path
+        rather than a pre-parsed convenience shape.
+        """
+        import json
+
         span_events = []
         for i in range(num_turns):
             span_events.append({
+                "event_name": "strands.telemetry.tracer",
                 "body": {
                     "input": {
                         "messages": [
-                            {"role": "user", "content": {"content": [{"text": f"User turn {i+1}"}]}}
+                            {
+                                "role": "user",
+                                "content": {"content": json.dumps([{"text": f"User turn {i + 1}"}])},
+                            }
                         ]
                     },
                     "output": {
                         "messages": [
-                            {"role": "assistant", "content": {"message": [{"text": f"Bot turn {i+1}"}]}}
+                            {
+                                "role": "assistant",
+                                "content": {"message": json.dumps([{"text": f"Bot turn {i + 1}"}])},
+                            }
                         ]
                     },
-                }
+                },
             })
         spans = [
             {
                 "traceId": "t-session",
                 "spanId": "s-session",
                 "source": "adot_cw",
+                "scope": {"name": "strands.telemetry.tracer"},
                 "attributes": {"session.id": "multi-turn-session"},
                 "span_events": span_events,
             }
@@ -471,7 +487,6 @@ class TestDeepEvalAdapterServiceNormalizedMultiTurn:
     def test_conversational_metric_turn_content_correct(self):
         """Verify turn content is correctly extracted from nested message format."""
         from deepeval.metrics import BaseConversationalMetric
-        from deepeval.test_case import ConversationalTestCase
 
         metric = MagicMock(spec=BaseConversationalMetric)
         type(metric).__name__ = "RoleAdherenceMetric"
