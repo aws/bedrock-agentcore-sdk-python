@@ -1,5 +1,6 @@
 """Span mapping orchestration — uses strands-evals mappers with auto-detection."""
 
+import json
 import logging
 import warnings
 from typing import Any, Dict, List, Optional
@@ -83,7 +84,28 @@ def map_spans(
         # Mapper couldn't find AgentInvocationSpan — try service format fallback
         result = None
 
-    # Fallback: extract from service-normalized format (gen_ai events)
+    # Multi-turn reachability: when the service collapses a session into a single
+    # span with multiple span_events (one per turn), the CloudWatch mapper still
+    # produces a valid single-turn input/actual_output from the first/last event,
+    # so the `not result.input` guard below would never fire and the multi-turn
+    # turns would be lost. Detect the collapsed multi-event shape up front and run
+    # the service-format extractor so `turns` is populated even when the mapper
+    # already found a valid single-turn pair.
+    if _has_multi_event_span(session_spans):
+        service_result = _extract_from_service_format(session_spans)
+        if service_result is not None and service_result.turns:
+            if result is None:
+                result = service_result
+            else:
+                # Keep the mapper's richer fields (tools, retrieval_context, etc.)
+                # but adopt the multi-turn conversation extracted from span_events,
+                # including its input/actual_output (the latest turn) so single-turn
+                # fields stay consistent with the extracted conversation.
+                result.turns = service_result.turns
+                result.input = service_result.input
+                result.actual_output = service_result.actual_output
+
+    # Fallback: extract from service-normalized format (span_events / gen_ai events)
     if result is None or not result.input or not result.actual_output:
         service_result = _extract_from_service_format(session_spans)
         if service_result:
@@ -125,23 +147,86 @@ def map_spans(
     return result
 
 
-def _extract_message_text(messages: List[Dict[str, Any]]) -> Optional[str]:
-    """Extract text content from service message format.
+def _has_multi_event_span(session_spans: List[Dict[str, Any]]) -> bool:
+    """Return True if any span carries more than one span_event.
 
-    Handles the nested structure: [{role: ..., content: {content: [{text: ...}]}}]
-    as well as the variant: [{role: ..., content: {message: [{text: ...}]}}]
+    This is the signature of the service-normalized SESSION format, where the
+    evaluation service collapses all ADOT spans sharing a session.id into a
+    single span with one span_event per conversation turn.
     """
-    for msg in messages:
-        content = msg.get("content", msg.get("message", {}))
+    for span in session_spans:
+        if isinstance(span, dict) and len(span.get("span_events", []) or []) > 1:
+            return True
+    return False
+
+
+def _extract_message_text(messages: List[Dict[str, Any]], role: Optional[str] = None) -> Optional[str]:
+    """Extract plain text from a service-format message list.
+
+    Decodes the double-encoded ``content`` that real Strands ``invoke_agent``
+    bodies emit (a JSON string like ``'[{"text": ...}]'``) into plain text,
+    mirroring the single-turn decoding behavior (PR #454) rather than returning
+    the serialized JSON literally. Plain strings and already-decoded
+    ``[{"text": ...}]`` lists are also handled.
+
+    Args:
+        messages: The ``body.input.messages`` or ``body.output.messages`` list.
+        role: If given, prefer the last message whose ``role`` matches (latest
+            user / latest assistant, in chronological order). Falls back to any
+            message with text.
+
+    Returns:
+        The extracted plain text, or None if no text could be parsed.
+    """
+
+    def _text_from_list(items: List[Any]) -> Optional[str]:
+        text = " ".join(c.get("text", "") for c in items if isinstance(c, dict)).strip()
+        return text or None
+
+    def _text_from_raw(raw: Any) -> Optional[str]:
+        # Decode the double-encoded JSON-string content: a string that parses to a
+        # list of {"text": ...} blocks. Falls back to the plain string on failure.
+        if isinstance(raw, str):
+            stripped = raw.strip()
+            if not stripped:
+                return None
+            try:
+                parsed = json.loads(stripped)
+            except (ValueError, TypeError):
+                return stripped
+            if isinstance(parsed, list):
+                return _text_from_list(parsed)
+            return stripped
+        # Already-decoded list variant: [{"text": ...}, ...]
+        if isinstance(raw, list):
+            return _text_from_list(raw)
+        return None
+
+    def _text(msg: Dict[str, Any]) -> Optional[str]:
+        content = msg.get("content", msg.get("message"))
+        # Service shape: content/message is a dict wrapping the raw value under a
+        # nested "content"/"message" key (double-encoded JSON string, plain string,
+        # or already-decoded list).
         if isinstance(content, dict):
-            # Unwrap nested content/message key
-            content = content.get("content", content.get("message", []))
-        if isinstance(content, list):
-            text = " ".join(c.get("text", "") for c in content if isinstance(c, dict)).strip()
+            inner = content.get("content", content.get("message"))
+            return _text_from_raw(inner)
+        # Top-level raw value: JSON string, plain string, or list.
+        return _text_from_raw(content)
+
+    if role is not None:
+        # Prefer the latest message matching the requested role (chronological).
+        for msg in reversed(messages):
+            if isinstance(msg, dict) and msg.get("role") == role:
+                text = _text(msg)
+                if text:
+                    return text
+
+    # Fallback: first message that yields any text.
+    for msg in messages:
+        if isinstance(msg, dict):
+            text = _text(msg)
             if text:
                 return text
-        elif isinstance(content, str) and content.strip():
-            return content.strip()
     return None
 
 
@@ -153,12 +238,14 @@ def _extract_from_service_format(session_spans: List[Dict[str, Any]]) -> Optiona
        service collapses all ADOT spans into one span with multiple span_events)
     2. gen_ai semantic convention events (single-turn Strands spans)
     """
-    import json as _json
-
     # --- Multi-turn: extract from span_events[*].body ---
+    # Only treat a span as a collapsed multi-turn conversation when it carries
+    # more than one span_event. A single span_event is a single-turn span the
+    # CloudWatch mapper already handles, and hijacking it here would mislabel
+    # single-turn sessions.
     for span in session_spans:
         span_events = span.get("span_events", [])
-        if len(span_events) >= 1:
+        if len(span_events) > 1:
             turns: List[Dict[str, Any]] = []
             last_input = None
             last_output = None
@@ -166,8 +253,8 @@ def _extract_from_service_format(session_spans: List[Dict[str, Any]]) -> Optiona
                 body = se.get("body", {})
                 inp_msgs = (body.get("input") or {}).get("messages", [])
                 out_msgs = (body.get("output") or {}).get("messages", [])
-                user_text = _extract_message_text(inp_msgs) if inp_msgs else None
-                asst_text = _extract_message_text(out_msgs) if out_msgs else None
+                user_text = _extract_message_text(inp_msgs, role="user") if inp_msgs else None
+                asst_text = _extract_message_text(out_msgs, role="assistant") if out_msgs else None
                 if user_text:
                     turns.append({"role": "user", "content": user_text})
                     last_input = user_text
@@ -199,19 +286,19 @@ def _extract_from_service_format(session_spans: List[Dict[str, Any]]) -> Optiona
 
             if event_name == "gen_ai.user.message" and content:
                 try:
-                    parts = _json.loads(content)
+                    parts = json.loads(content)
                     user_input = " ".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
                 except (ValueError, TypeError):
                     user_input = content
             elif event_name == "gen_ai.choice" and attrs.get("message"):
                 try:
-                    parts = _json.loads(attrs["message"])
+                    parts = json.loads(attrs["message"])
                     assistant_output = " ".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
                 except (ValueError, TypeError):
                     assistant_output = attrs["message"]
             elif event_name == "gen_ai.system.message" and content:
                 try:
-                    parts = _json.loads(content)
+                    parts = json.loads(content)
                     system_prompt = " ".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
                 except (ValueError, TypeError):
                     system_prompt = content

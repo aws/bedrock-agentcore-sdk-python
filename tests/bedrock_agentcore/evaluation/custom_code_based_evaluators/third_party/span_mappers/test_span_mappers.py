@@ -119,28 +119,45 @@ def _make_service_normalized_session_spans(num_turns=3):
 
     This is the format the AgentCore service sends to Lambda for SESSION-level
     evaluators: one span with multiple span_events, each representing a turn.
+
+    Uses the REAL Strands body shape as emitted by ``invoke_agent`` and normalized
+    by the service: message content is DOUBLE-ENCODED JSON under ``content`` /
+    ``message`` (a JSON string, not an already-parsed list). This is the same
+    shape the single-turn ``_valid_strands_spans`` fixtures use. Tests that assert
+    on turn content therefore also guard against the "raw JSON leaks into the turn
+    text" regression.
     """
+    import json
+
     span_events = []
     for i in range(num_turns):
         span_events.append({
+            "event_name": "strands.telemetry.tracer",
             "body": {
                 "input": {
                     "messages": [
-                        {"role": "user", "content": {"content": [{"text": f"User message {i+1}"}]}}
+                        {
+                            "role": "user",
+                            "content": {"content": json.dumps([{"text": f"User message {i + 1}"}])},
+                        }
                     ]
                 },
                 "output": {
                     "messages": [
-                        {"role": "assistant", "content": {"message": [{"text": f"Assistant response {i+1}"}]}}
+                        {
+                            "role": "assistant",
+                            "content": {"message": json.dumps([{"text": f"Assistant response {i + 1}"}])},
+                        }
                     ]
                 },
-            }
+            },
         })
     return [
         {
             "traceId": "trace-multi",
             "spanId": "span-multi",
             "source": "adot_cw",
+            "scope": {"name": "strands.telemetry.tracer"},
             "attributes": {"session.id": "session-1"},
             "span_events": span_events,
         }
@@ -160,6 +177,32 @@ class TestServiceNormalizedMultiTurn:
         assert result.turns[1] == {"role": "assistant", "content": "Assistant response 1"}
         assert result.turns[4] == {"role": "user", "content": "User message 3"}
         assert result.turns[5] == {"role": "assistant", "content": "Assistant response 3"}
+
+    def test_turn_content_has_no_json_syntax(self):
+        """Regression guard: turn content must be decoded plain text, not raw JSON.
+
+        Real service bodies double-encode content as a JSON string
+        ('[{"text": ...}]'). If the extractor returns that string verbatim, the
+        turn content would contain JSON punctuation. This asserts the double
+        encoding is decoded to plain text.
+        """
+        spans = _make_service_normalized_session_spans(num_turns=3)
+        result = map_spans(spans)
+
+        assert result.turns is not None
+        for turn in result.turns:
+            content = turn["content"]
+            assert "text" not in content or content in (
+                "User message 1",
+                "User message 2",
+                "User message 3",
+                "Assistant response 1",
+                "Assistant response 2",
+                "Assistant response 3",
+            )
+            assert not any(ch in content for ch in ("{", "}", "[", "]", '"')), (
+                f"turn content still contains raw JSON syntax: {content!r}"
+            )
 
     def test_input_and_output_are_last_turn(self):
         spans = _make_service_normalized_session_spans(num_turns=3)
