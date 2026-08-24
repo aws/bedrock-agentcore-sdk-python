@@ -1,7 +1,7 @@
 """Tests for RAGASAdapter."""
 
-import math
 from types import SimpleNamespace
+from typing import Any, List
 from unittest.mock import MagicMock
 
 from bedrock_agentcore.evaluation.custom_code_based_evaluators.models import EvaluatorInput, EvaluatorOutput
@@ -75,6 +75,27 @@ class _FakeCollectionsMetric:
     def score(self, **kwargs):
         self.score_calls.append(kwargs)
         return SimpleNamespace(value=self._value, reason=self._reason)
+
+
+class _FakeConversationalCollectionsMetric:
+    """Fake collections metric whose ascore expects conversation-shaped inputs.
+
+    Mirrors ragas.metrics.collections.ToolCallAccuracy, which declares
+    ``user_input`` as a message list and requires ``reference_tool_calls``.
+    """
+
+    name = "tool_call_accuracy"
+
+    def __init__(self, value=1.0):
+        self._value = value
+        self.score_calls = []
+
+    async def ascore(self, user_input: List[Any], reference_tool_calls: List[Any]):
+        """Typed signature the adapter introspects to detect conversation inputs."""
+
+    def score(self, **kwargs):
+        self.score_calls.append(kwargs)
+        return SimpleNamespace(value=self._value, reason=None)
 
 
 class _FakeDecoratorMetric:
@@ -270,6 +291,115 @@ class TestRAGASAdapterCollectionsMetrics:
 
         assert result.value == 0.9
         assert metric.score_calls == [{"user_input": "q", "response": "a", "my_custom_field": "x"}]
+
+
+class TestRAGASAdapterConversationalCollections:
+    """Collections metrics with conversation-shaped signatures get converted fields.
+
+    Without this, a string user_input and absent reference_tool_calls make the
+    metric fail validation even though the trace carries the needed data.
+    """
+
+    def test_conversation_fields_supplied_to_collections_metric(self):
+        from ragas.messages import AIMessage, HumanMessage
+
+        metric = _FakeConversationalCollectionsMetric(value=1.0)
+        adapter = RAGASAdapter(metric=metric)
+
+        evaluator_input = _make_evaluator_input(
+            reference_inputs=[{"expectedTrajectory": {"toolNames": ["search"]}}],
+        )
+        result = adapter(evaluator_input)
+
+        assert result.errorCode is None
+        assert result.value == 1.0
+        kwargs = metric.score_calls[0]
+        # user_input must be a message list, not the flat string
+        assert isinstance(kwargs["user_input"], list)
+        assert isinstance(kwargs["user_input"][0], HumanMessage)
+        assert isinstance(kwargs["user_input"][1], AIMessage)
+        assert [tc.name for tc in kwargs["reference_tool_calls"]] == ["search"]
+
+    def test_missing_expected_trajectory_returns_error(self):
+        metric = _FakeConversationalCollectionsMetric()
+        adapter = RAGASAdapter(metric=metric)
+
+        result = adapter(_make_evaluator_input())
+
+        assert result.errorCode == "MISSING_REQUIRED_FIELD"
+        assert "reference_tool_calls" in result.errorMessage
+        assert metric.score_calls == []
+
+    def test_expects_sequence_detects_bare_and_parameterized_annotations(self):
+        """Bare `list` has no typing origin, so it needs explicit handling."""
+        assert RAGASAdapter._expects_sequence(list) is True
+        assert RAGASAdapter._expects_sequence(List[Any]) is True
+        assert RAGASAdapter._expects_sequence(List[str]) is True
+        assert RAGASAdapter._expects_sequence(str) is False
+        assert RAGASAdapter._expects_sequence(int) is False
+
+    def test_single_turn_collections_metric_keeps_flat_fields(self):
+        """Signatures declaring str inputs must not receive message lists."""
+        metric = _FakeCollectionsMetric(value=1.0)
+        adapter = RAGASAdapter(metric=metric)
+
+        spans = _make_spans(user_content='[{"text": "What is 2+2?\\n\\nReference Answer:\\n4"}]')
+        result = adapter(_make_evaluator_input(spans=spans))
+
+        assert result.value == 1.0
+        kwargs = metric.score_calls[0]
+        assert kwargs["response"] == "AI is artificial intelligence."
+        assert kwargs["reference"] == "4"
+        assert "user_input" not in kwargs  # not in the ascore signature
+
+
+class TestRAGASAdapterReferenceToolCallArgs:
+    """Argument alignment for reference tool calls, shared by both conversational paths.
+
+    expectedTrajectory.toolNames names tools without arguments, so the
+    predicted arguments of same-named calls are adopted.
+    """
+
+    def test_reference_args_aligned_from_predicted_call(self):
+        from ragas.messages import ToolCall
+
+        adapter = RAGASAdapter(metric=_mock_multi_turn_metric())
+        reference = [ToolCall(name="search", args={}), ToolCall(name="untouched", args={"a": 1})]
+        tools_called = [
+            {"name": "search", "input_parameters": {"q": "python"}},
+            {"name": "untouched", "input_parameters": {"a": 2}},
+        ]
+
+        aligned = adapter._align_reference_args(reference, tools_called)
+
+        assert aligned[0].args == {"q": "python"}  # filled from prediction
+        assert aligned[1].args == {"a": 1}  # already had args, left alone
+
+    def test_repeated_tool_name_args_aligned_in_call_order(self):
+        """A tool expected twice pairs with each invocation, not the first one twice."""
+        from ragas.messages import ToolCall
+
+        adapter = RAGASAdapter(metric=_mock_multi_turn_metric())
+        reference = [ToolCall(name="search", args={}), ToolCall(name="search", args={})]
+        tools_called = [
+            {"name": "search", "input_parameters": {"q": "first"}},
+            {"name": "search", "input_parameters": {"q": "second"}},
+        ]
+
+        aligned = adapter._align_reference_args(reference, tools_called)
+
+        assert [call.args for call in aligned] == [{"q": "first"}, {"q": "second"}]
+
+    def test_uncalled_reference_tool_keeps_empty_args(self):
+        """A tool that was never called has no arguments to adopt."""
+        from ragas.messages import ToolCall
+
+        adapter = RAGASAdapter(metric=_mock_multi_turn_metric())
+        reference = [ToolCall(name="never_called", args={})]
+
+        aligned = adapter._align_reference_args(reference, [{"name": "other", "input_parameters": {"a": 1}}])
+
+        assert aligned[0].args == {}
 
 
 class TestRAGASAdapterValidation:
@@ -577,14 +707,6 @@ class TestRAGASAdapterEdgeCases:
 
         assert result.label == "Pass"
 
-    def test_math_isnan_not_triggered_by_valid_score(self):
-        metric = _mock_legacy_metric(score=0.5)
-        adapter = RAGASAdapter(metric=metric)
-
-        result = adapter(_make_evaluator_input())
-
-        assert not math.isnan(result.value)
-
 
 class TestRAGASAdapterEmbeddedParsing:
     """Tests for parsing reference/context embedded in the user message.
@@ -703,6 +825,7 @@ class TestRAGASAdapterThresholdNone:
     """Tests for metrics where threshold is explicitly None (e.g. SemanticSimilarity)."""
 
     def test_threshold_none_defaults_to_half(self):
+        """No TypeError comparing score >= None, and 0.5 is used instead."""
         metric = _mock_legacy_metric(name="semantic_similarity", score=0.6)
         metric.threshold = None
         adapter = RAGASAdapter(metric=metric)
@@ -711,6 +834,7 @@ class TestRAGASAdapterThresholdNone:
 
         assert result.value == 0.6
         assert result.label == "Pass"
+        assert "threshold=0.5" in result.explanation
 
     def test_threshold_none_score_below_default(self):
         metric = _mock_legacy_metric(name="semantic_similarity", score=0.3)
@@ -743,16 +867,3 @@ class TestRAGASAdapterThresholdNone:
         result = adapter(_make_evaluator_input())
 
         assert result.label == "Fail"
-
-    def test_threshold_none_does_not_crash(self):
-        """No TypeError when comparing score >= None."""
-        metric = _mock_legacy_metric(name="semantic_similarity", score=0.85)
-        metric.threshold = None
-        adapter = RAGASAdapter(metric=metric)
-
-        result = adapter(_make_evaluator_input())
-
-        assert isinstance(result, EvaluatorOutput)
-        assert result.value == 0.85
-        assert result.label == "Pass"
-        assert "threshold=0.5" in result.explanation
