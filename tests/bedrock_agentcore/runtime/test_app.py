@@ -8,9 +8,10 @@ import threading
 import time
 from datetime import datetime
 from decimal import Decimal
-from typing import TypedDict
+from typing import AsyncIterator, TypedDict
 from unittest.mock import MagicMock, patch
 
+import httpx2
 import pytest
 from starlette.testclient import TestClient
 
@@ -414,8 +415,9 @@ class TestBedrockAgentCoreApp:
             greeting: str
                                                                            
         @contextlib.asynccontextmanager              
-        async def lifespan(app):
-            yield { "greeting": expected_greeting }
+        async def lifespan(app) -> AsyncIterator[AppState]:
+            async with httpx2.AsyncClient() as client:
+                yield { "greeting": expected_greeting }
                                                                            
         app = BedrockAgentCoreApp(lifespan=lifespan)
                                                                            
