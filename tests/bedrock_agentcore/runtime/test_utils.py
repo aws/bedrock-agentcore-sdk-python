@@ -1,11 +1,58 @@
 """Tests for Bedrock AgentCore runtime utilities."""
 
+import base64
+import json
 from dataclasses import dataclass
 from typing import List, Optional
 
 from pydantic import BaseModel
 
-from bedrock_agentcore.runtime.utils import convert_complex_objects, is_valid_partition
+from bedrock_agentcore.runtime.utils import convert_complex_objects, extract_sub_from_bearer, is_valid_partition
+
+
+def _make_jwt(claims: dict) -> str:
+    """Produce a structurally valid (but unsigned) JWT with the given payload claims."""
+    header = base64.urlsafe_b64encode(b'{"alg":"none"}').rstrip(b"=").decode()
+    payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=").decode()
+    return f"{header}.{payload}.fakesig"
+
+
+class TestExtractSubFromBearer:
+    def test_returns_sub_from_valid_jwt(self):
+        token = _make_jwt({"sub": "user-123", "iss": "https://example.com"})
+        assert extract_sub_from_bearer(f"Bearer {token}") == "user-123"
+
+    def test_case_insensitive_bearer_prefix(self):
+        token = _make_jwt({"sub": "user-abc"})
+        assert extract_sub_from_bearer(f"bearer {token}") == "user-abc"
+        assert extract_sub_from_bearer(f"BEARER {token}") == "user-abc"
+
+    def test_returns_none_when_no_sub_claim(self):
+        token = _make_jwt({"email": "user@example.com"})
+        assert extract_sub_from_bearer(f"Bearer {token}") is None
+
+    def test_returns_none_for_none_input(self):
+        assert extract_sub_from_bearer(None) is None
+
+    def test_returns_none_for_empty_string(self):
+        assert extract_sub_from_bearer("") is None
+
+    def test_returns_none_for_non_bearer_scheme(self):
+        assert extract_sub_from_bearer("Basic dXNlcjpwYXNz") is None
+
+    def test_returns_none_for_malformed_jwt(self):
+        assert extract_sub_from_bearer("Bearer notajwt") is None
+
+    def test_returns_none_for_invalid_base64_payload(self):
+        assert extract_sub_from_bearer("Bearer abc.!!!.sig") is None
+
+    def test_sub_coerced_to_str(self):
+        token = _make_jwt({"sub": 42})
+        assert extract_sub_from_bearer(f"Bearer {token}") == "42"
+
+    def test_strips_trailing_whitespace_from_token(self):
+        token = _make_jwt({"sub": "clean-user"})
+        assert extract_sub_from_bearer(f"Bearer  {token}  ") == "clean-user"
 
 
 class TestConvertComplexObjects:

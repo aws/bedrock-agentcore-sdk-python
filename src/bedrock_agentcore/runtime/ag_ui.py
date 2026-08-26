@@ -31,10 +31,12 @@ from .models import (
     OAUTH2_CALLBACK_URL_HEADER,
     REQUEST_ID_HEADER,
     SESSION_HEADER,
+    USER_ID_HEADER,
     PingStatus,
     is_forwardable_header,
 )
 from .tracing import _ensure_baggage_processor_registered
+from .utils import extract_sub_from_bearer
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +164,11 @@ class AGUIApp(Starlette):
         request_id = headers.get(REQUEST_ID_HEADER) or str(uuid.uuid4())
         session_id = headers.get(SESSION_HEADER)
         BedrockAgentCoreContext.set_request_context(request_id, session_id)
+
+        enduser_id = headers.get(USER_ID_HEADER) or extract_sub_from_bearer(
+            headers.get(AUTHORIZATION_HEADER) or headers.get(_AUTHORIZATION_HEADER_LOWER)
+        )
+        BedrockAgentCoreContext.set_enduser_id(enduser_id)
 
         workload_access_token = headers.get(ACCESS_TOKEN_HEADER)
         if workload_access_token:
