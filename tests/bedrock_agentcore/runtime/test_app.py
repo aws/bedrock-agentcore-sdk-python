@@ -8,6 +8,7 @@ import threading
 import time
 from datetime import datetime
 from decimal import Decimal
+from typing import TypedDict
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -403,6 +404,33 @@ class TestBedrockAgentCoreApp:
         with TestClient(app):
             assert startup_called is True
         assert shutdown_called is True
+
+    def test_lifespan_state_access(self):
+        """ Test that we can access lifespan state """
+
+        expected_greeting = "hello world"
+
+        class AppState(TypedDict):
+            greeting: str
+                                                                           
+        @contextlib.asynccontextmanager              
+        async def lifespan(app):
+            yield { "greeting": expected_greeting }
+                                                                           
+        app = BedrockAgentCoreApp(lifespan=lifespan)
+                                                                           
+        @app.entrypoint
+        async def invoke(payload, context):
+            greet = context.request.state["greeting"]
+            return {"greeting": greet} 
+                                                                           
+        with TestClient(app) as client:
+            response = client.post("/invocations", json={"input": "test"})
+            assert response.status_code == 200
+                                                                           
+            payload = response.json()
+            assert "greeting" in payload
+            assert payload["greeting"] == expected_greeting
 
     def test_initialization_without_lifespan(self):
         """Test that BedrockAgentCoreApp still works without lifespan."""
