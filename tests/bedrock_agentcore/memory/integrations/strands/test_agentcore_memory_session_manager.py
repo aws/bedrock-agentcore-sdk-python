@@ -3925,4 +3925,104 @@ class TestMonotonicTimestamp:
         # through as a false non-tie.
         assert r1 == datetime(2024, 1, 1, 12, 0, 0, 0, tzinfo=timezone.utc)
         assert r2 == datetime(2024, 1, 1, 12, 0, 0, 1000, tzinfo=timezone.utc)
-        assert r2 > r1
+
+
+class TestFilterRestoredToolContext:
+    """Regression tests for _filter_restored_tool_context with extended thinking.
+
+    Regression for https://github.com/aws/bedrock-agentcore-sdk-python/issues/621.
+
+    When extended thinking is enabled, Bedrock rejects assistant messages whose
+    reasoningContent blocks have been stripped of their companion toolUse blocks
+    (or vice-versa). The filter must remove reasoningContent blocks alongside
+    toolUse/toolResult so that no partial assistant message reaches the API.
+    """
+
+    def _make_session_message(self, role: str, content: list) -> SessionMessage:
+        return SessionMessage.from_message({"role": role, "content": content}, 0)
+
+    def test_strips_reasoning_content_alongside_tool_use(self, session_manager):
+        """reasoningContent blocks paired with toolUse must both be removed."""
+        messages = [
+            self._make_session_message(
+                "assistant",
+                [
+                    {"reasoningContent": {"reasoningText": {"text": "I should call weather.", "signature": "sig1"}}},
+                    {"toolUse": {"toolUseId": "tu_1", "name": "get_weather", "input": {"city": "Paris"}}},
+                ],
+            ),
+            self._make_session_message("user", [{"toolResult": {"toolUseId": "tu_1", "content": [{"text": "22C"}]}}]),
+            self._make_session_message("assistant", [{"text": "It is 22°C in Paris."}]),
+        ]
+
+        result = session_manager._filter_restored_tool_context(messages)
+
+        # The tool-use assistant turn and its toolResult are dropped entirely.
+        # The plain-text assistant turn survives.
+        assert len(result) == 1
+        assert result[0].to_message()["content"] == [{"text": "It is 22°C in Paris."}]
+
+    def test_message_with_only_reasoning_and_tool_use_is_dropped_entirely(self, session_manager):
+        """An assistant message whose entire content is reasoningContent + toolUse
+        produces an empty filtered_content and must be excluded from the output."""
+        messages = [
+            self._make_session_message(
+                "assistant",
+                [
+                    {"reasoningContent": {"reasoningText": {"text": "Reasoning.", "signature": "s"}}},
+                    {"toolUse": {"toolUseId": "tu_x", "name": "calc", "input": {}}},
+                ],
+            ),
+        ]
+
+        result = session_manager._filter_restored_tool_context(messages)
+        assert result == []
+
+    def test_text_alongside_reasoning_and_tool_use_is_preserved(self, session_manager):
+        """If the assistant message has text content in addition to reasoningContent
+        and toolUse, the text survives after the other blocks are stripped."""
+        messages = [
+            self._make_session_message(
+                "assistant",
+                [
+                    {"reasoningContent": {"reasoningText": {"text": "Let me look this up.", "signature": "s"}}},
+                    {"text": "Checking now…"},
+                    {"toolUse": {"toolUseId": "tu_2", "name": "search", "input": {"q": "Paris weather"}}},
+                ],
+            ),
+        ]
+
+        result = session_manager._filter_restored_tool_context(messages)
+
+        assert len(result) == 1
+        content = result[0].to_message()["content"]
+        assert content == [{"text": "Checking now…"}]
+
+    def test_messages_without_tool_context_are_unchanged(self, session_manager):
+        """Plain user/assistant messages (no tool or reasoning blocks) pass through."""
+        messages = [
+            self._make_session_message("user", [{"text": "What is the weather?"}]),
+            self._make_session_message("assistant", [{"text": "I don't know."}]),
+        ]
+
+        result = session_manager._filter_restored_tool_context(messages)
+
+        assert len(result) == 2
+        assert result[0].to_message()["content"] == [{"text": "What is the weather?"}]
+        assert result[1].to_message()["content"] == [{"text": "I don't know."}]
+
+    def test_existing_tool_use_filtering_still_works(self, session_manager):
+        """Original toolUse/toolResult filtering behaviour is preserved."""
+        messages = [
+            self._make_session_message(
+                "assistant",
+                [{"toolUse": {"toolUseId": "tu_3", "name": "calc", "input": {"expr": "1+1"}}}],
+            ),
+            self._make_session_message("user", [{"toolResult": {"toolUseId": "tu_3", "content": [{"text": "2"}]}}]),
+            self._make_session_message("assistant", [{"text": "The answer is 2."}]),
+        ]
+
+        result = session_manager._filter_restored_tool_context(messages)
+
+        assert len(result) == 1
+        assert result[0].to_message()["content"] == [{"text": "The answer is 2."}]

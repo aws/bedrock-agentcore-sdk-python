@@ -55,8 +55,12 @@ class AgentCoreMemoryConfig(BaseModel):
             Default is None (disabled).
         context_tag: XML tag name used to wrap retrieved memory context injected into messages.
             Default is "user_context".
-        filter_restored_tool_context: When True, strip historical toolUse/toolResult blocks from
-            restored messages before loading them into Strands runtime memory. Default is False.
+        filter_restored_tool_context: When True, strip historical toolUse, toolResult, and
+            reasoningContent (extended thinking) blocks from restored messages before loading them
+            into Strands runtime memory. Default is False.
+            Note: reasoningContent blocks are always stripped together with their companion toolUse
+            blocks because Bedrock rejects assistant messages that contain reasoning blocks without
+            the tool calls that followed them.
         default_metadata: Optional default metadata key-value pairs to attach to every message event.
             Merged with any per-call metadata. Maximum 15 total keys per event (including internal keys).
             Accepts plain strings (auto-wrapped) or explicit MetadataValue dicts.
