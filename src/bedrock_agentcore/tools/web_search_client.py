@@ -470,6 +470,13 @@ def _decode_jsonrpc(content_type: str, data: bytes) -> Optional[Dict[str, Any]]:
 class WebSearchClient:
     """Client for AgentCore Web Search.
 
+    Calls are authenticated with SigV4 using ordinary AWS credentials. There is no
+    web search API key: the credentials this client resolves need
+    ``bedrock-agentcore:InvokeGateway`` on the gateway ARN, and the gateway's own
+    service role needs ``bedrock-agentcore:InvokeWebSearch`` on the connector.
+    An ``AccessDeniedException`` from a search is almost always the first of those
+    two missing.
+
     Attributes:
         region (str): The region being used.
         backend (WebSearchBackend): The transport in use.
@@ -590,15 +597,26 @@ class WebSearchClient:
 
         The filter arguments need connector version 1.2.0 or later on the target.
         On an earlier version the tool accepts only ``query`` and ``max_results``.
-        Target level domain rules always apply on top and cannot be relaxed here.
+
+        Request filters compose with the target's own domain rules and can never
+        widen them. A domain is dropped if it appears on either exclude list. A
+        domain is returned only if it appears on every include list that is set,
+        so when the target already has an include list, passing ``include_domains``
+        narrows to the intersection of the two. If the two share no domains the
+        search returns nothing, which is a silent empty result rather than an
+        error, so check the target's configuration when a filtered search comes
+        back empty.
 
         Args:
             query: What to search for. 200 characters or fewer.
             max_results: How many results to return, 1 to 25. Service default is 10.
-            include_domains: Restrict results to these domains.
-            exclude_domains: Drop results from these domains.
+            include_domains: Restrict results to these domains. Up to 100. A root
+                domain matches its subdomains.
+            exclude_domains: Drop results from these domains. Up to 100.
             published_after: Earliest publication date, ISO-8601 UTC, inclusive.
+                Applies to web results only.
             published_before: Latest publication date, ISO-8601 UTC, inclusive.
+                Applies to web results only.
 
         Returns:
             The search results.
