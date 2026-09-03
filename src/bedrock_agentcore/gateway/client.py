@@ -16,6 +16,18 @@ logger = logging.getLogger(__name__)
 _GATEWAY_FAILED_STATUSES = {"FAILED", "UPDATE_UNSUCCESSFUL"}
 _TARGET_FAILED_STATUSES = {"FAILED", "UPDATE_UNSUCCESSFUL", "SYNCHRONIZE_UNSUCCESSFUL"}
 
+#: Default name for a web search target. Gateway prefixes every tool with the name of
+#: the target it came from, so this is what makes the tool read as
+#: "amazon-web-search___WebSearch" to the agent.
+DEFAULT_WEB_SEARCH_TARGET_NAME = "amazon-web-search"
+
+#: First connector version that accepts a target-level include list. The connector's
+#: default is older, so an include list has to pin this.
+_INCLUDE_DOMAINS_MIN_CONNECTOR_VERSION = "1.2.0"
+
+#: Documented maximum length of either domain list on a web search target.
+_MAX_DOMAIN_FILTER_ENTRIES = 100
+
 
 class GatewayClient:
     """Client for Bedrock AgentCore Gateway operations.
@@ -381,6 +393,113 @@ class GatewayClient:
             **target_kwargs,
         )
 
+    # Web Search target helpers
+    # -------------------------------------------------------------------------
+    def create_web_search_target(
+        self,
+        gateway_identifier: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        exclude_domains: Optional[List[str]] = None,
+        include_domains: Optional[List[str]] = None,
+        connector_version: Optional[str] = None,
+        parameter_overrides: Optional[List[Dict[str, Any]]] = None,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Create a gateway target that exposes Amazon Web Search as an MCP WebSearch tool.
+
+        The tool the agent discovers is named "<target name>___WebSearch", because Gateway
+        prefixes every tool with its target name. The default target name is therefore chosen
+        so the agent-facing tool reads as "amazon-web-search___WebSearch".
+
+        The gateway's service role needs bedrock-agentcore:InvokeWebSearch on the connector,
+        and whoever calls the resulting tool needs bedrock-agentcore:InvokeGateway on the
+        gateway ARN. Web search takes no API key of its own.
+
+        Args:
+            gateway_identifier: Gateway ID or ARN.
+            name: Target name, and the prefix of the agent-facing tool name.
+                Defaults to "amazon-web-search".
+            description: Agent-facing description of the WebSearch tool.
+            exclude_domains: Optional list of domains to drop from results, up to 100.
+                Enforced server-side and hidden from the calling agent. A result is
+                dropped if its domain is on this list or on the caller's own exclude
+                list, so the agent can narrow this but never relax it.
+            include_domains: Optional list of domains to restrict results to, up to 100.
+                Needs connector version 1.2.0 or later, which this method pins for you
+                when you pass one and do not pin a version yourself. A result is
+                returned only if its domain appears on every include list that is set,
+                so a caller passing its own include list narrows to the intersection
+                with this one, and disjoint lists return no results at all. A root
+                domain matches its subdomains.
+            connector_version: Optional connector version to pin, e.g. "1.2.0". Defaults
+                to the connector's current default version, except that an include list
+                pins 1.2.0 as described above.
+            parameter_overrides: Optional per-parameter visibility/description overrides,
+                keyed by JSONPath, e.g. {"path": "$.maxResults", "visible": True}.
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Additional arguments forwarded to create_gateway_target
+                (e.g., credentialProviderConfigurations, roleArn). Overrides built values on conflict.
+
+        Returns:
+            Gateway target details when READY.
+
+        Raises:
+            ValueError: If either domain list is longer than 100, or if include_domains
+                is combined with a pinned connector version that predates it.
+        """
+        # parameterValues is always sent, even when empty. The service drops every
+        # configuration whose parameterValues is absent before it validates them, so a
+        # configuration carrying nothing but a name leaves nothing to validate and the
+        # request is rejected with "Connector configurations must not be empty".
+        # An empty object is accepted.
+        tool_config: Dict[str, Any] = {"name": "WebSearch", "parameterValues": {}}
+        domain_filter: Dict[str, List[str]] = {}
+        if include_domains:
+            domain_filter["include"] = _checked_domains("include_domains", include_domains)
+        if exclude_domains:
+            domain_filter["exclude"] = _checked_domains("exclude_domains", exclude_domains)
+        if domain_filter:
+            tool_config["parameterValues"]["domainFilter"] = domain_filter
+        if description:
+            tool_config["description"] = description
+        if parameter_overrides:
+            tool_config["parameterOverrides"] = parameter_overrides
+
+        source: Dict[str, Any] = {"connectorId": "web-search"}
+        if include_domains:
+            # A target-level include list only exists from 1.2.0 on, and the connector
+            # default is older, so sending one unpinned is rejected server-side. Pin the
+            # first version that accepts it rather than build a request that cannot
+            # validate.
+            connector_version = _connector_version_for_include_domains(connector_version)
+        if connector_version:
+            source["version"] = connector_version
+
+        target_kwargs = {
+            "gatewayIdentifier": gateway_identifier,
+            "name": name or DEFAULT_WEB_SEARCH_TARGET_NAME,
+            "targetConfiguration": {
+                "mcp": {
+                    "connector": {
+                        "source": source,
+                        "enabled": ["WebSearch"],
+                        "configurations": [tool_config],
+                    },
+                },
+            },
+            "credentialProviderConfigurations": [
+                {"credentialProviderType": "GATEWAY_IAM_ROLE"},
+            ],
+        }
+        target_kwargs.update(kwargs)
+
+        return self.create_gateway_target_and_wait(
+            wait_config=wait_config,
+            **target_kwargs,
+        )
+
     # Name-based lookup
     # -------------------------------------------------------------------------
     def get_gateway_by_name(self, name: str, **kwargs) -> Optional[Dict[str, Any]]:
@@ -439,3 +558,42 @@ class GatewayClient:
             if not response.get("nextToken"):
                 return None
             params["nextToken"] = response["nextToken"]
+
+
+def _checked_domains(argument: str, domains: List[str]) -> List[str]:
+    """Return the domain list, rejecting one longer than the documented maximum."""
+    values = list(domains)
+    if len(values) > _MAX_DOMAIN_FILTER_ENTRIES:
+        raise ValueError(f"{argument} accepts at most {_MAX_DOMAIN_FILTER_ENTRIES} domains, got {len(values)}")
+    return values
+
+
+def _connector_version_for_include_domains(connector_version: Optional[str]) -> str:
+    """Return the connector version to pin when a target-level include list is set.
+
+    Raises:
+        ValueError: If the caller pinned a version that predates the include list.
+    """
+    if connector_version is None:
+        return _INCLUDE_DOMAINS_MIN_CONNECTOR_VERSION
+    if _version_tuple(connector_version) < _version_tuple(_INCLUDE_DOMAINS_MIN_CONNECTOR_VERSION):
+        raise ValueError(
+            f"include_domains requires connector version {_INCLUDE_DOMAINS_MIN_CONNECTOR_VERSION} or later, "
+            f"got {connector_version}"
+        )
+    return connector_version
+
+
+def _version_tuple(version: str) -> tuple:
+    """Read a dotted version into comparable integers, ignoring anything unparseable.
+
+    Missing components count as zero, so "1.2" is not read as older than "1.2.0". An
+    unrecognized version sorts high, so a version this SDK does not understand is passed
+    through to the service to accept or reject rather than rejected locally.
+    """
+    parts = [0, 0, 0]
+    for index, part in enumerate(version.split(".")):
+        if not part.isdigit() or index >= len(parts):
+            return (float("inf"),)
+        parts[index] = int(part)
+    return tuple(parts)
