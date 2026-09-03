@@ -381,6 +381,101 @@ class GatewayClient:
             **target_kwargs,
         )
 
+    # Web Search target helpers
+    # -------------------------------------------------------------------------
+    def create_web_search_target(
+        self,
+        gateway_identifier: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        exclude_domains: Optional[List[str]] = None,
+        include_domains: Optional[List[str]] = None,
+        connector_version: Optional[str] = None,
+        parameter_overrides: Optional[List[Dict[str, Any]]] = None,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Create a gateway target that exposes Amazon Web Search as an MCP WebSearch tool.
+
+        The tool the agent discovers is named "<target name>___WebSearch", because Gateway
+        prefixes every tool with its target name. The default target name is therefore chosen
+        so the agent-facing tool reads as "amazon-web-search___WebSearch".
+
+        The gateway's service role needs bedrock-agentcore:InvokeWebSearch on the connector,
+        and whoever calls the resulting tool needs bedrock-agentcore:InvokeGateway on the
+        gateway ARN. Web search takes no API key of its own.
+
+        Args:
+            gateway_identifier: Gateway ID or ARN.
+            name: Target name, and the prefix of the agent-facing tool name.
+                Defaults to "amazon-web-search".
+            description: Agent-facing description of the WebSearch tool.
+            exclude_domains: Optional list of domains to drop from results, up to 100.
+                Enforced server-side and hidden from the calling agent. A result is
+                dropped if its domain is on this list or on the caller's own exclude
+                list, so the agent can narrow this but never relax it.
+            include_domains: Optional list of domains to restrict results to, up to 100.
+                Requires connector version 1.2.0 or later. A result is returned only if
+                its domain appears on every include list that is set, so a caller
+                passing its own include list narrows to the intersection with this one,
+                and disjoint lists return no results at all. A root domain matches its
+                subdomains.
+            connector_version: Optional connector version to pin, e.g. "1.2.0". Defaults
+                to the connector's current default version.
+            parameter_overrides: Optional per-parameter visibility/description overrides,
+                keyed by JSONPath, e.g. {"path": "$.maxResults", "visible": True}.
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Additional arguments forwarded to create_gateway_target
+                (e.g., credentialProviderConfigurations, roleArn). Overrides built values on conflict.
+
+        Returns:
+            Gateway target details when READY.
+        """
+        # parameterValues is always sent, even when empty. The service drops every
+        # configuration whose parameterValues is absent before it validates them, so a
+        # configuration carrying nothing but a name leaves nothing to validate and the
+        # request is rejected with "Connector configurations must not be empty".
+        # An empty object is accepted.
+        tool_config: Dict[str, Any] = {"name": "WebSearch", "parameterValues": {}}
+        domain_filter: Dict[str, List[str]] = {}
+        if include_domains:
+            domain_filter["include"] = include_domains
+        if exclude_domains:
+            domain_filter["exclude"] = exclude_domains
+        if domain_filter:
+            tool_config["parameterValues"]["domainFilter"] = domain_filter
+        if description:
+            tool_config["description"] = description
+        if parameter_overrides:
+            tool_config["parameterOverrides"] = parameter_overrides
+
+        source: Dict[str, Any] = {"connectorId": "web-search"}
+        if connector_version:
+            source["version"] = connector_version
+
+        target_kwargs = {
+            "gatewayIdentifier": gateway_identifier,
+            "name": name or "amazon-web-search",
+            "targetConfiguration": {
+                "mcp": {
+                    "connector": {
+                        "source": source,
+                        "enabled": ["WebSearch"],
+                        "configurations": [tool_config],
+                    },
+                },
+            },
+            "credentialProviderConfigurations": [
+                {"credentialProviderType": "GATEWAY_IAM_ROLE"},
+            ],
+        }
+        target_kwargs.update(kwargs)
+
+        return self.create_gateway_target_and_wait(
+            wait_config=wait_config,
+            **target_kwargs,
+        )
+
     # Name-based lookup
     # -------------------------------------------------------------------------
     def get_gateway_by_name(self, name: str, **kwargs) -> Optional[Dict[str, Any]]:
