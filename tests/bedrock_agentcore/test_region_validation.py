@@ -7,10 +7,12 @@ construction allows request redirection to non-AWS hosts.
 import pytest
 
 from bedrock_agentcore._utils.endpoints import (
+    InvalidGatewayIdentifierError,
     InvalidRegionError,
     _validate_endpoint_url,
     get_control_plane_endpoint,
     get_data_plane_endpoint,
+    get_gateway_mcp_endpoint,
     validate_region,
 )
 
@@ -171,6 +173,55 @@ class TestEndpointFunctions:
     def test_govcloud_regions(self):
         url = get_data_plane_endpoint("us-gov-west-1")
         assert "us-gov-west-1" in url
+
+
+class TestGatewayMcpEndpoint:
+    """Tests for get_gateway_mcp_endpoint.
+
+    The gateway identifier becomes a DNS label in the hostname, so it needs the
+    same treatment as the region.
+    """
+
+    def test_valid_endpoint(self):
+        url = get_gateway_mcp_endpoint("my-gateway-abc123", "us-east-1")
+        assert url == "https://my-gateway-abc123.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp"
+
+    def test_malicious_region_rejected(self):
+        with pytest.raises(InvalidRegionError):
+            get_gateway_mcp_endpoint("my-gateway", "x@attacker.com:443/#")
+
+    @pytest.mark.parametrize(
+        "gateway_id",
+        [
+            "evil.example.com",
+            "gw@attacker.com",
+            "gw/../../",
+            "gw:443",
+            "gw#fragment",
+            "gw?a=b",
+            "gw abc",
+            "gw\n",
+            "-gw",
+            "",
+            "a" * 64,
+        ],
+    )
+    def test_malicious_gateway_id_rejected(self, gateway_id):
+        with pytest.raises(InvalidGatewayIdentifierError):
+            get_gateway_mcp_endpoint(gateway_id, "us-east-1")
+
+    def test_non_string_gateway_id_rejected(self):
+        with pytest.raises(InvalidGatewayIdentifierError):
+            get_gateway_mcp_endpoint(None, "us-east-1")  # type: ignore[arg-type]
+
+    def test_error_is_valueerror_subclass(self):
+        with pytest.raises(ValueError):
+            get_gateway_mcp_endpoint("evil.example.com", "us-east-1")
+
+    def test_arn_is_not_accepted_as_an_identifier(self):
+        arn = "arn:aws:bedrock-agentcore:us-east-1:123456789012:gateway/gw-abc123"
+        with pytest.raises(InvalidGatewayIdentifierError):
+            get_gateway_mcp_endpoint(arn, "us-east-1")
 
 
 # ---------------------------------------------------------------------------
