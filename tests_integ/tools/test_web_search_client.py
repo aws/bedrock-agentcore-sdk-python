@@ -11,7 +11,10 @@ Requires environment variables:
     WEB_SEARCH_GATEWAY_ID: ID of a gateway with a web search connector target
     BEDROCK_TEST_REGION: AWS region (default: us-east-1). The connector is only
         offered in us-east-1, eu-west-1 and ap-northeast-1.
-    WEB_SEARCH_TARGET_NAME: Optional. The target name, if it is not the SDK default.
+    WEB_SEARCH_TARGET_NAME: Optional. The name of the web search target on that
+        gateway. Supplying it saves a tools/list call, since Gateway prefixes every
+        tool with the name of the target it came from. Without it the client
+        discovers the tool instead.
 """
 
 import os
@@ -68,14 +71,24 @@ class TestWebSearchClient:
         assert len(response) == 1
 
     def test_search_with_domain_filter(self):
-        """Needs connector version 1.2.0 or later on the target."""
+        """Needs connector version 1.2.0 or later on the target.
+
+        An include filter set per request is only accepted from 1.2.0 on, and the
+        version of an existing gateway's target is not this test's to choose, so an
+        older target skips rather than fails.
+        """
         with self._client() as client:
-            response = self._search(
-                client,
-                "agentcore gateway connector targets",
-                max_results=5,
-                include_domains=["docs.aws.amazon.com"],
-            )
+            try:
+                response = self._search(
+                    client,
+                    "agentcore gateway connector targets",
+                    max_results=5,
+                    include_domains=["docs.aws.amazon.com"],
+                )
+            except WebSearchError as e:
+                if "domainFilter" in str(e) or "include" in str(e):
+                    pytest.skip(f"target's connector version does not accept an include filter: {e}")
+                raise
 
         assert len(response) > 0
         for result in response:

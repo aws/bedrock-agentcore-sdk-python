@@ -27,6 +27,7 @@ from .config import (
     create_browser_config,
 )
 from .web_search_client import (
+    GatewayMcpBackend,
     WebSearchBackend,
     WebSearchClient,
     WebSearchError,
@@ -50,6 +51,7 @@ __all__ = [
     "EnterprisePolicyS3Location",
     "ExtensionS3Location",
     "ExternalProxy",
+    "GatewayMcpBackend",
     "NetworkConfiguration",
     "ProfileConfiguration",
     "ProxyConfiguration",

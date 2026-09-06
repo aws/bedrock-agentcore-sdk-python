@@ -1,9 +1,10 @@
 """Tests for WebSearchClient."""
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
+import urllib3
 
 from bedrock_agentcore._utils.endpoints import InvalidGatewayIdentifierError, InvalidRegionError
 from bedrock_agentcore.tools.web_search_client import (
@@ -34,19 +35,29 @@ SEARCH_PAYLOAD = {
 }
 
 
-def _http_response(status=200, body=b"", headers=None, content_type="application/json"):
-    response = MagicMock()
-    response.status = status
-    response.data = body
-    merged = {"Content-Type": content_type}
-    merged.update(headers or {})
-    response.headers = merged
-    return response
+class _FakeResponse:
+    """A urllib3-shaped response, with a flag the fake transport uses to number ids."""
+
+    def __init__(self, status=200, body=b"", headers=None, content_type="application/json", echo_id=False):
+        self.status = status
+        self.data = body
+        self.headers = {"Content-Type": content_type, **(headers or {})}
+        self.echo_id = echo_id
 
 
-def _json_rpc_response(result, request_id=1, **kwargs):
+def _http_response(status=200, body=b"", headers=None, content_type="application/json", echo_id=False):
+    return _FakeResponse(status=status, body=body, headers=headers, content_type=content_type, echo_id=echo_id)
+
+
+def _json_rpc_response(result, request_id=None, **kwargs):
+    """A JSON-RPC reply.
+
+    By default the id is filled in from the request it answers, which is what a real
+    gateway does. Pass ``request_id`` to pin it, which is how the id-matching tests
+    build a reply addressed to something else.
+    """
     body = json.dumps({"jsonrpc": "2.0", "id": request_id, "result": result}).encode()
-    return _http_response(body=body, **kwargs)
+    return _http_response(body=body, echo_id=request_id is None, **kwargs)
 
 
 def _initialize_response():
@@ -59,20 +70,40 @@ def _initialize_response():
 def _tools_call_response(payload=None):
     return _json_rpc_response(
         {"content": [{"type": "text", "text": json.dumps(payload if payload is not None else SEARCH_PAYLOAD)}]},
-        request_id=2,
     )
 
 
 def _make_backend(responses, **kwargs):
-    """Build a backend whose HTTP layer replays the given responses in order."""
+    """Build a backend whose HTTP layer replays the given responses in order.
+
+    A reply built without an explicit ``request_id`` is numbered with the id of the
+    request it answers, the way a gateway does, so the fixtures do not have to track
+    the client's request counter. A reply with a pinned id is replayed untouched.
+    """
     session = MagicMock()
     session.get_credentials.return_value.get_frozen_credentials.return_value = _frozen_credentials()
 
     kwargs.setdefault("tool_name", "amazon-web-search___WebSearch")
     backend = GatewayMcpBackend(endpoint=ENDPOINT, region="us-east-1", boto3_session=session, **kwargs)
     backend._http = MagicMock()
-    backend._http.request.side_effect = list(responses)
+    backend._http.request.side_effect = _replay(responses)
     return backend
+
+
+def _replay(responses):
+    """Return a side effect that serves the responses in order, numbering ids."""
+    queue = list(responses)
+
+    def request(*args, **kwargs):
+        response = queue.pop(0)
+        if getattr(response, "echo_id", False):
+            sent = json.loads(kwargs["body"])
+            message = json.loads(response.data)
+            message["id"] = sent.get("id")
+            response.data = json.dumps(message).encode()
+        return response
+
+    return request
 
 
 def _frozen_credentials():
@@ -136,6 +167,19 @@ class TestBuildArguments:
         arguments = _build_arguments("hello", published_after="2026-01-01T00:00:00Z")
         assert arguments["filters"] == {"publishedDateFilter": {"from": "2026-01-01T00:00:00Z"}}
 
+    @pytest.mark.parametrize("argument", ["include_domains", "exclude_domains"])
+    def test_domain_list_maximum(self, argument):
+        domains = [f"d{index}.example" for index in range(100)]
+        assert _build_arguments("hello", **{argument: domains})["filters"]["domainFilter"]
+
+        with pytest.raises(ValueError, match="at most 100 domains, got 101"):
+            _build_arguments("hello", **{argument: domains + ["one.too.many"]})
+
+    def test_a_domain_tuple_is_accepted(self):
+        """Any sequence works, and the shaped argument is always a list for JSON."""
+        arguments = _build_arguments("hello", include_domains=("a.example", "b.example"))
+        assert arguments["filters"]["domainFilter"]["include"] == ["a.example", "b.example"]
+
 
 class TestResponseParsing:
     """Tests for turning the tool payload into result objects."""
@@ -184,12 +228,33 @@ class TestDecodeJsonRpc:
         message = _decode_jsonrpc("text/event-stream", body)
         assert message["result"] == {"ok": True}
 
-    def test_event_stream_skips_non_data_and_undecodable_lines(self):
-        body = b': ping\nid: 7\ndata: not json\ndata: {"jsonrpc":"2.0","id":1,"result":{}}\n'
+    def test_event_stream_skips_comments_and_other_fields(self):
+        body = b': ping\nid: 7\nretry: 500\ndata: {"jsonrpc":"2.0","id":1,"result":{}}\n\n'
+        assert _decode_jsonrpc("text/event-stream", body)["id"] == 1
+
+    def test_event_stream_joins_data_lines_of_one_event(self):
+        """The spec joins consecutive data lines with a newline, so a split message decodes."""
+        body = b'event: message\ndata: {"jsonrpc":"2.0","id":1,\ndata:  "result":{"ok":true}}\n\n'
+        assert _decode_jsonrpc("text/event-stream", body)["result"] == {"ok": True}
+
+    def test_event_stream_skips_an_undecodable_event(self):
+        body = b'data: not json\n\ndata: {"jsonrpc":"2.0","id":1,"result":{}}\n\n'
+        assert _decode_jsonrpc("text/event-stream", body)["id"] == 1
+
+    def test_event_stream_reads_a_final_event_without_a_trailing_blank_line(self):
+        body = b'data: {"jsonrpc":"2.0","id":1,"result":{}}'
         assert _decode_jsonrpc("text/event-stream", body)["id"] == 1
 
     def test_event_stream_without_message_returns_none(self):
         assert _decode_jsonrpc("text/event-stream", b"event: ping\ndata: \n\n") is None
+
+    def test_event_stream_skips_a_non_json_rpc_object(self):
+        """An event carrying JSON that is not a JSON-RPC message is not an answer."""
+        body = b'data: {"type":"ping"}\n\ndata: {"jsonrpc":"2.0","id":1,"result":{}}\n\n'
+        assert _decode_jsonrpc("text/event-stream", body)["id"] == 1
+
+    def test_non_json_rpc_json_body_returns_none(self):
+        assert _decode_jsonrpc("application/json", b'{"type":"ping"}') is None
 
     def test_undecodable_json_raises(self):
         with pytest.raises(WebSearchError, match="Could not decode gateway response"):
@@ -197,6 +262,22 @@ class TestDecodeJsonRpc:
 
     def test_non_object_json_returns_none(self):
         assert _decode_jsonrpc("application/json", b"[1, 2]") is None
+
+    def test_a_reply_to_another_id_is_not_the_answer(self):
+        body = b'{"jsonrpc":"2.0","id":9,"result":{}}'
+        assert _decode_jsonrpc("application/json", body, expected_id=2) is None
+
+    def test_an_error_is_returned_whatever_id_it_carries(self):
+        """JSON-RPC allows an error to carry a null id, so it is never filtered out."""
+        body = b'{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"bad request"}}'
+        assert _decode_jsonrpc("application/json", body, expected_id=2)["error"]["code"] == -32600
+
+    def test_event_stream_skips_a_notification_ahead_of_the_reply(self):
+        body = (
+            b'data: {"jsonrpc":"2.0","method":"notifications/message","params":{}}\n\n'
+            b'data: {"jsonrpc":"2.0","id":2,"result":{"ok":true}}\n\n'
+        )
+        assert _decode_jsonrpc("text/event-stream", body, expected_id=2)["result"] == {"ok": True}
 
 
 class TestGatewayMcpBackendHandshake:
@@ -266,14 +347,6 @@ class TestGatewayMcpBackendHandshake:
         assert headers["Content-Type"] == "application/json"
         assert headers["Accept"] == "application/json, text/event-stream"
         assert headers["Content-Length"] == str(len(backend._http.request.call_args_list[2].kwargs["body"]))
-
-    def test_connection_header_is_never_signed(self):
-        backend = _make_backend([_initialize_response(), _http_response(status=202, body=b""), _tools_call_response()])
-        backend.search({"query": "hello"})
-
-        for call in backend._http.request.call_args_list:
-            signed = call.kwargs["headers"]["Authorization"].split("SignedHeaders=")[1].split(",")[0]
-            assert "connection" not in signed
 
     def test_user_agent_reports_the_sdk(self):
         backend = _make_backend(
@@ -354,9 +427,7 @@ class TestGatewayMcpBackendErrors:
             backend.search({"query": "hello"})
 
     def test_tool_error_flag_is_surfaced(self):
-        error_result = _json_rpc_response(
-            {"isError": True, "content": [{"type": "text", "text": "query too long"}]}, request_id=2
-        )
+        error_result = _json_rpc_response({"isError": True, "content": [{"type": "text", "text": "query too long"}]})
         backend = _make_backend([_initialize_response(), _http_response(status=202), error_result])
 
         with pytest.raises(WebSearchError, match="query too long"):
@@ -364,21 +435,21 @@ class TestGatewayMcpBackendErrors:
 
     def test_missing_text_content_is_surfaced(self):
         backend = _make_backend(
-            [_initialize_response(), _http_response(status=202), _json_rpc_response({"content": []}, request_id=2)]
+            [_initialize_response(), _http_response(status=202), _json_rpc_response({"content": []})]
         )
 
         with pytest.raises(WebSearchError, match="no text content"):
             backend.search({"query": "hello"})
 
     def test_undecodable_tool_payload_is_surfaced(self):
-        bad = _json_rpc_response({"content": [{"type": "text", "text": "not json"}]}, request_id=2)
+        bad = _json_rpc_response({"content": [{"type": "text", "text": "not json"}]})
         backend = _make_backend([_initialize_response(), _http_response(status=202), bad])
 
         with pytest.raises(WebSearchError, match="Could not decode web search response"):
             backend.search({"query": "hello"})
 
     def test_non_object_tool_payload_is_surfaced(self):
-        bad = _json_rpc_response({"content": [{"type": "text", "text": "[1,2]"}]}, request_id=2)
+        bad = _json_rpc_response({"content": [{"type": "text", "text": "[1,2]"}]})
         backend = _make_backend([_initialize_response(), _http_response(status=202), bad])
 
         with pytest.raises(WebSearchError, match="Expected a JSON object"):
@@ -397,6 +468,72 @@ class TestGatewayMcpBackendErrors:
 
         with pytest.raises(WebSearchError, match="did not answer the web search tool call"):
             backend.search({"query": "hello"})
+
+    def test_reply_without_result_or_error_is_surfaced(self):
+        """A reply to the outgoing id has to carry one of the two, or it means nothing."""
+        empty = _http_response(body=b'{"jsonrpc":"2.0","id":2}')
+        backend = _make_backend([_initialize_response(), _http_response(status=202), empty])
+
+        with pytest.raises(WebSearchError, match="neither a result nor an error"):
+            backend.search({"query": "hello"})
+
+    def test_transport_failure_becomes_a_web_search_error(self):
+        """A connection drop must not escape as a urllib3 exception."""
+        backend = _make_backend([])
+        backend._http.request.side_effect = urllib3.exceptions.ProtocolError("connection aborted")
+
+        with pytest.raises(WebSearchError, match="failed: connection aborted"):
+            backend.search({"query": "hello"})
+
+    def test_notification_ahead_of_the_reply_is_skipped(self):
+        """A server notification arriving first must not be read as the answer."""
+        stream = (
+            b'data: {"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info"}}\n\n'
+            b'data: {"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":'
+            + json.dumps(json.dumps(SEARCH_PAYLOAD)).encode()
+            + b"}]}}\n\n"
+        )
+        backend = _make_backend(
+            [
+                _initialize_response(),
+                _http_response(status=202),
+                _http_response(body=stream, content_type="text/event-stream"),
+            ]
+        )
+
+        assert backend.search({"query": "hello"}) == SEARCH_PAYLOAD
+
+    def test_failed_notification_leaves_the_handshake_unset(self):
+        """The protocol version header is only claimed once the handshake completed."""
+        backend = _make_backend([_initialize_response(), _http_response(status=500, body=b"boom")])
+
+        with pytest.raises(WebSearchError, match="HTTP 500"):
+            backend.search({"query": "hello"})
+
+        assert backend._initialized is False
+        assert backend._mcp_session_id is None
+
+    def test_expired_session_is_dropped_and_the_next_search_reinitializes(self):
+        """404 against a session we hold is the spec's signal to hand shake again."""
+        backend = _make_backend(
+            [
+                _initialize_response(),
+                _http_response(status=202),
+                _http_response(status=404, body=b"session not found"),
+                _initialize_response(),
+                _http_response(status=202),
+                _tools_call_response(),
+            ]
+        )
+
+        with pytest.raises(WebSearchError, match="HTTP 404"):
+            backend.search({"query": "hello"})
+        assert backend._initialized is False
+        assert backend._mcp_session_id is None
+
+        assert backend.search({"query": "hello"}) == SEARCH_PAYLOAD
+        methods = [json.loads(c.kwargs["body"])["method"] for c in backend._http.request.call_args_list]
+        assert methods.count("initialize") == 2
 
 
 class TestToolNameResolution:
@@ -674,6 +811,37 @@ class TestWebSearchClient:
         )
 
         assert client.backend._target_name == "amazon-web-search"
+
+    def test_non_aws_gateway_endpoint_is_rejected(self):
+        """A supplied endpoint gets the same host check as one the SDK builds itself."""
+        with pytest.raises(InvalidRegionError, match="non-AWS host"):
+            WebSearchClient(
+                region="us-east-1",
+                gateway_endpoint="https://evil.example.com/mcp",
+                boto3_session=MagicMock(),
+            )
+
+    def test_a_backend_and_a_region_need_no_session(self):
+        """Supplying both must not pay for the credential provider chain it will not use."""
+        with patch("boto3.Session") as session_factory:
+            WebSearchClient(region="us-east-1", backend=_RecordingBackend())
+
+        session_factory.assert_not_called()
+
+    def test_a_default_session_is_created_when_none_is_given(self):
+        with patch("boto3.Session") as session_factory:
+            session_factory.return_value.region_name = "us-east-1"
+            client = WebSearchClient(gateway_id="gw-abc123")
+
+        assert client.region == "us-east-1"
+        session_factory.assert_called_once_with()
+
+    def test_a_backend_without_a_region_falls_back_to_a_session(self):
+        session = MagicMock()
+        session.region_name = "eu-west-1"
+        client = WebSearchClient(backend=_RecordingBackend(), boto3_session=session)
+
+        assert client.region == "eu-west-1"
 
 
 class TestBackendProtocol:

@@ -20,13 +20,13 @@ import json
 import logging
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterator, List, Optional, Sequence
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 import urllib3
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 
-from bedrock_agentcore._utils.endpoints import get_gateway_mcp_endpoint
+from bedrock_agentcore._utils.endpoints import _validate_endpoint_url, get_gateway_mcp_endpoint
 from bedrock_agentcore._utils.user_agent import SDK_VERSION, build_user_agent_suffix
 
 logger = logging.getLogger(__name__)
@@ -37,9 +37,6 @@ WEB_SEARCH_TOOL_NAME = "WebSearch"
 #: Gateway prefixes every tool it exposes with the name of the target it came from.
 GATEWAY_TOOL_NAME_DELIMITER = "___"
 
-#: Default target name used by ``GatewayClient.create_web_search_target``.
-DEFAULT_TARGET_NAME = "amazon-web-search"
-
 #: Service name the gateway data plane signs as.
 GATEWAY_SIGNING_SERVICE = "bedrock-agentcore"
 
@@ -47,6 +44,7 @@ GATEWAY_SIGNING_SERVICE = "bedrock-agentcore"
 MAX_QUERY_LENGTH = 200
 MIN_MAX_RESULTS = 1
 MAX_MAX_RESULTS = 25
+MAX_DOMAIN_FILTER_ENTRIES = 100
 
 #: Regions where the web search connector is offered. Used for a warning only, never
 #: to block a call, so that a newly added region does not require an SDK release.
@@ -128,8 +126,9 @@ def _build_arguments(
     """Validate search inputs and shape them into the tool's argument object.
 
     Raises:
-        ValueError: If the query is empty or over the documented length limit, or
-            if max_results falls outside the documented range.
+        ValueError: If the query is empty or over the documented length limit, if
+            max_results falls outside the documented range, or if either domain
+            list is longer than the documented maximum.
     """
     if not query or not query.strip():
         raise ValueError("query must be a non-empty string")
@@ -148,9 +147,9 @@ def _build_arguments(
     filters: Dict[str, Any] = {}
     domain_filter: Dict[str, List[str]] = {}
     if include_domains:
-        domain_filter["include"] = list(include_domains)
+        domain_filter["include"] = _checked_domains("include_domains", include_domains)
     if exclude_domains:
-        domain_filter["exclude"] = list(exclude_domains)
+        domain_filter["exclude"] = _checked_domains("exclude_domains", exclude_domains)
     if domain_filter:
         filters["domainFilter"] = domain_filter
 
@@ -166,6 +165,14 @@ def _build_arguments(
         arguments["filters"] = filters
 
     return arguments
+
+
+def _checked_domains(argument: str, domains: Sequence[str]) -> List[str]:
+    """Return the domain list, rejecting one longer than the documented maximum."""
+    values = list(domains)
+    if len(values) > MAX_DOMAIN_FILTER_ENTRIES:
+        raise ValueError(f"{argument} accepts at most {MAX_DOMAIN_FILTER_ENTRIES} domains, got {len(values)}")
+    return values
 
 
 def _extract_search_payload(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -302,8 +309,15 @@ class GatewayMcpBackend(WebSearchBackend):
         return dict(request.headers)
 
     def _post(self, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Send one JSON-RPC message and return the decoded reply, if there is one."""
+        """Send one JSON-RPC message and return the reply to it, if there is one.
+
+        Raises:
+            WebSearchError: If the transport fails, the gateway answers with an HTTP
+                error or a JSON-RPC error, or the reply carries neither a result nor
+                an error.
+        """
         body = json.dumps(message).encode("utf-8")
+        expected_id = message.get("id")
 
         extra: Dict[str, str] = {}
         if self._mcp_session_id:
@@ -311,14 +325,20 @@ class GatewayMcpBackend(WebSearchBackend):
         if self._initialized:
             extra["MCP-Protocol-Version"] = self._protocol_version
 
-        response = self._http.request(
-            "POST",
-            self._endpoint,
-            body=body,
-            headers=self._signed_headers(body, extra),
-            timeout=urllib3.Timeout(total=self._timeout),
-            preload_content=True,
-        )
+        try:
+            response = self._http.request(
+                "POST",
+                self._endpoint,
+                body=body,
+                headers=self._signed_headers(body, extra),
+                timeout=urllib3.Timeout(total=self._timeout),
+                preload_content=True,
+            )
+        except urllib3.exceptions.HTTPError as exc:
+            # Connection refused, DNS failure, TLS errors and read timeouts all land
+            # here. search() promises WebSearchError, so they cannot escape as urllib3
+            # exceptions.
+            raise WebSearchError(f"Web search request to {self._endpoint} failed: {exc}") from exc
 
         session_id = response.headers.get("Mcp-Session-Id")
         if session_id:
@@ -326,18 +346,30 @@ class GatewayMcpBackend(WebSearchBackend):
 
         if response.status >= 400:
             body_text = response.data.decode("utf-8", "replace")[:500]
+            # 404 against a session we hold is the spec's signal that the session is
+            # gone. Forget it, so the next call re-initializes rather than failing
+            # this way until someone calls close().
+            if response.status == 404 and self._mcp_session_id:
+                self._reset_session()
             raise WebSearchError(f"Web search request failed with HTTP {response.status}: {body_text}")
 
         if not response.data:
             return None
 
-        reply = _decode_jsonrpc(response.headers.get("Content-Type", ""), response.data)
+        reply = _decode_jsonrpc(response.headers.get("Content-Type", ""), response.data, expected_id)
         if reply is None:
             return None
         if "error" in reply:
             error = reply["error"] or {}
             raise WebSearchError(f"Gateway returned a JSON-RPC error {error.get('code')}: {error.get('message')}")
+        if expected_id is not None and "result" not in reply:
+            raise WebSearchError(f"Gateway reply carried neither a result nor an error: {reply}")
         return reply
+
+    def _reset_session(self) -> None:
+        """Forget the MCP session, so the next call performs the handshake again."""
+        self._initialized = False
+        self._mcp_session_id = None
 
     # MCP session
     # -------------------------------------------------------------------------
@@ -364,8 +396,16 @@ class GatewayMcpBackend(WebSearchBackend):
         if isinstance(negotiated, str) and negotiated:
             self._protocol_version = negotiated
 
+        # Set before the notification is sent, because from here on every request
+        # carries MCP-Protocol-Version. If the notification fails, the handshake did
+        # not complete, so the flag is rolled back rather than left claiming a session
+        # the gateway never acknowledged.
         self._initialized = True
-        self._post({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        try:
+            self._post({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        except Exception:
+            self._reset_session()
+            raise
 
     def _ensure_tool_name(self) -> str:
         """Resolve the fully qualified tool name, discovering it if necessary."""
@@ -433,30 +473,22 @@ class GatewayMcpBackend(WebSearchBackend):
     def close(self) -> None:
         """Close the connection pool."""
         self._http.clear()
-        self._initialized = False
-        self._mcp_session_id = None
+        self._reset_session()
 
 
-def _decode_jsonrpc(content_type: str, data: bytes) -> Optional[Dict[str, Any]]:
-    """Decode a JSON-RPC reply from either a JSON body or an SSE stream.
+def _decode_jsonrpc(content_type: str, data: bytes, expected_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    """Decode the JSON-RPC reply to ``expected_id`` from a JSON body or an SSE stream.
 
-    Returns None when the body carries no JSON-RPC message, which is what a
-    notification acknowledgement looks like.
+    Returns None when the body carries no reply to that id, which is what a
+    notification acknowledgement looks like. A message addressed to another id, such
+    as a server notification arriving ahead of the reply, is skipped rather than
+    mistaken for the answer.
     """
     text = data.decode("utf-8", "replace")
 
     if "text/event-stream" in content_type.lower():
-        for line in text.splitlines():
-            if not line.startswith("data:"):
-                continue
-            chunk = line[len("data:") :].strip()
-            if not chunk:
-                continue
-            try:
-                message = json.loads(chunk)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(message, dict) and "jsonrpc" in message:
+        for message in _iter_sse_messages(text):
+            if _answers(message, expected_id):
                 return message
         return None
 
@@ -464,7 +496,59 @@ def _decode_jsonrpc(content_type: str, data: bytes) -> Optional[Dict[str, Any]]:
         message = json.loads(text)
     except json.JSONDecodeError as exc:
         raise WebSearchError(f"Could not decode gateway response as JSON: {text[:200]!r}") from exc
-    return message if isinstance(message, dict) else None
+    if not isinstance(message, dict):
+        return None
+    return message if _answers(message, expected_id) else None
+
+
+def _answers(message: Any, expected_id: Optional[int]) -> bool:
+    """Whether a decoded JSON-RPC message is the reply to ``expected_id``."""
+    if not isinstance(message, dict) or "jsonrpc" not in message:
+        return False
+    if "error" in message:
+        # A JSON-RPC error is allowed to carry a null id, so it is always surfaced
+        # rather than filtered out for not matching.
+        return True
+    if expected_id is None:
+        return True
+    return message.get("id") == expected_id
+
+
+def _iter_sse_messages(text: str) -> Iterator[Dict[str, Any]]:
+    """Yield the JSON objects carried by the ``data`` field of each SSE event.
+
+    Consecutive ``data:`` lines belonging to one event are joined with a newline, as
+    the SSE specification requires, so a message split across lines is decoded rather
+    than dropped. A blank line ends an event.
+    """
+    buffer: List[str] = []
+
+    def flush() -> Optional[Dict[str, Any]]:
+        if not buffer:
+            return None
+        joined = "\n".join(buffer)
+        buffer.clear()
+        try:
+            message = json.loads(joined)
+        except json.JSONDecodeError:
+            return None
+        return message if isinstance(message, dict) else None
+
+    for line in text.splitlines():
+        if line.startswith("data:"):
+            value = line[len("data:") :]
+            buffer.append(value[1:] if value.startswith(" ") else value)
+            continue
+        if line.strip():
+            # Any other SSE field (event:, id:, retry:) or a comment line.
+            continue
+        message = flush()
+        if message is not None:
+            yield message
+
+    message = flush()
+    if message is not None:
+        yield message
 
 
 class WebSearchClient:
@@ -518,7 +602,9 @@ class WebSearchClient:
             region: Region to call. Defaults to the session's region.
             gateway_id: ID of a gateway with a web search connector target.
             gateway_arn: ARN of that gateway. The ID and region are read from it.
-            gateway_endpoint: A gateway MCP endpoint URL, if you already have one.
+            gateway_endpoint: A gateway MCP endpoint URL, if you already have one. The
+                host has to be an AWS one, the same check applied to endpoints this SDK
+                builds itself.
             target_name: Name of the connector target. Supplying it avoids a
                 ``tools/list`` round trip on the first search.
             tool_name: Fully qualified tool name, if you already know it.
@@ -529,16 +615,19 @@ class WebSearchClient:
 
         Raises:
             ValueError: If no gateway is identified, or more than one is.
+            InvalidGatewayIdentifierError: If ``gateway_id`` is not a gateway ID.
+            InvalidRegionError: If the region is malformed, or a supplied
+                ``gateway_endpoint`` does not point at an AWS host.
         """
-        import boto3
-
-        self._session = boto3_session or boto3.Session()
+        self._session = boto3_session
         self._owns_backend = backend is None
 
         if backend is not None:
             if any(value is not None for value in (gateway_id, gateway_arn, gateway_endpoint)):
                 raise ValueError("Pass either backend or one of gateway_id/gateway_arn/gateway_endpoint, not both")
-            self.region = region or self._session.region_name
+            # Only resolve a session if the region has to come from one, so supplying a
+            # backend does not pay for the credential provider chain it will not use.
+            self.region = region or self._resolve_session().region_name
             self.backend: WebSearchBackend = backend
             return
 
@@ -558,7 +647,7 @@ class WebSearchClient:
             gateway_id, arn_region = _parse_gateway_arn(gateway_arn)
             region = region or arn_region
 
-        self.region = region or self._session.region_name
+        self.region = region or self._resolve_session().region_name
         if not self.region:
             raise ValueError("region could not be determined. Pass region= or configure a default region.")
         if self.region not in KNOWN_REGIONS:
@@ -570,18 +659,30 @@ class WebSearchClient:
 
         if gateway_id:
             gateway_endpoint = get_gateway_mcp_endpoint(gateway_id, self.region)
+        elif gateway_endpoint:
+            # Signed requests carry the caller's credentials, including a session token,
+            # so a supplied endpoint gets the same host check as one this SDK builds.
+            gateway_endpoint = _validate_endpoint_url(gateway_endpoint)
         if not gateway_endpoint:
             raise ValueError("One of gateway_id, gateway_arn, gateway_endpoint or backend is required")
 
         self.backend = GatewayMcpBackend(
             endpoint=gateway_endpoint,
             region=self.region,
-            boto3_session=self._session,
+            boto3_session=self._resolve_session(),
             tool_name=tool_name,
             target_name=target_name,
             timeout=timeout,
             integration_source=integration_source,
         )
+
+    def _resolve_session(self) -> Any:
+        """Return the boto3 session, creating a default one only when first needed."""
+        if self._session is None:
+            import boto3
+
+            self._session = boto3.Session()
+        return self._session
 
     def search(
         self,
@@ -622,7 +723,8 @@ class WebSearchClient:
             The search results.
 
         Raises:
-            ValueError: If the query or max_results is outside the documented limits.
+            ValueError: If the query, max_results or either domain list is outside the
+                documented limits.
             WebSearchError: If the call fails or the response cannot be decoded.
         """
         arguments = _build_arguments(
@@ -649,7 +751,7 @@ class WebSearchClient:
         self.close()
 
 
-def _parse_gateway_arn(arn: str) -> tuple:
+def _parse_gateway_arn(arn: str) -> Tuple[str, str]:
     """Pull the gateway ID and region out of a gateway ARN.
 
     Raises:
