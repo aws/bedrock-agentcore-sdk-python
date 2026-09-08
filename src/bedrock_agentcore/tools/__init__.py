@@ -26,6 +26,14 @@ from .config import (
     VpcConfig,
     create_browser_config,
 )
+from .web_search_client import (
+    GatewayMcpBackend,
+    WebSearchBackend,
+    WebSearchClient,
+    WebSearchError,
+    WebSearchResponse,
+    WebSearchResult,
+)
 
 __all__ = [
     "BasicAuth",
@@ -43,6 +51,7 @@ __all__ = [
     "EnterprisePolicyS3Location",
     "ExtensionS3Location",
     "ExternalProxy",
+    "GatewayMcpBackend",
     "NetworkConfiguration",
     "ProfileConfiguration",
     "ProxyConfiguration",
@@ -53,5 +62,10 @@ __all__ = [
     "SessionConfiguration",
     "ViewportConfiguration",
     "VpcConfig",
+    "WebSearchBackend",
+    "WebSearchClient",
+    "WebSearchError",
+    "WebSearchResponse",
+    "WebSearchResult",
     "create_browser_config",
 ]
