@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   call:
-    uses: aws/agentcore-devx-devtools/.github/workflows/reusable-pr-security-review.yml@458c0a684af0f9e3a013ec05cd23851def4f9cab
+    uses: aws/agentcore-devx-devtools/.github/workflows/reusable-pr-security-review.yml@51d084b0bf4585725bf370f31cd1e30c4dddfd93
     with:
       runner: ubuntu
       pr_number: ${{ inputs.pr_number || format('{0}', github.event.pull_request.number) }}
