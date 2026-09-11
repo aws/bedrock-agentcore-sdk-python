@@ -170,7 +170,7 @@ a2a-v1 = ["a2a-sdk[http-server]>=1.0.1,<2.0"]
 ag-ui = ["ag-ui-protocol>=0.1.10"]
 strands-agents = [
     "strands-agents>=1.46.0",
-    "mcp>=1.23.0,<2.0.0",
+    "mcp>=1.23.0,<3.0.0",
 ]
 langgraph = [
     "langchain>=1.0.0",
