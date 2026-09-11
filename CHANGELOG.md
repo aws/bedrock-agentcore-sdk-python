@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.23.0] - 2026-09-11
+
+### Added
+- feat: add RAGAS adapter for third-party eval metrics (#618) (d53af20)
+
+### Other Changes
+- Bump agentcore-devx-devtools reusable workflow pin (#660) (3c9f15e)
+- feat(tools): add WebSearchClient for invoking Amazon Web Search (#658) (cf71b14)
+- feat(gateway): add create_web_search_target() helper (#656) (7f75652)
+- fix(runtime): update shell session wire protocol (#642) (826416a)
+- ci: use dedicated release runners (#645) (ddfab76)
+
 ## [1.22.0] - 2026-08-18
 
 ### Other Changes
