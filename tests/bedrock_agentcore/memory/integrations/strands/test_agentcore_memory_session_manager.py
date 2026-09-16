@@ -2,6 +2,7 @@
 
 import asyncio
 import inspect
+import json
 import logging
 import time
 from datetime import datetime, timedelta, timezone
@@ -2675,8 +2676,8 @@ class TestThinkingModeCompatibility:
                     assert "</user_context>" in content[0]["text"]
 
 
-class TestAfterInvocationHook:
-    """Test AfterInvocationEvent hook integration."""
+class TestSessionHooks:
+    """Test session lifecycle hook integration."""
 
     def test_after_invocation_hook_registered(self, batching_session_manager):
         """Test that AfterInvocationEvent hook is registered when batching is enabled."""
@@ -2740,6 +2741,35 @@ class TestAfterInvocationHook:
             and "_flush_messages" in str(cb.__code__.co_names)
         ]
         assert len(flush_callbacks) == 0
+
+    @pytest.mark.parametrize("async_mode", [False, True])
+    @pytest.mark.parametrize("event_type", [AfterInvocationEvent, BidiAgentStopEvent])
+    async def test_completion_flushes_messages_and_final_state(
+        self, batching_config, mock_memory_client, async_mode, event_type
+    ):
+        """Completion flushes a partial batch, including the final state update."""
+        batching_config.async_mode = async_mode
+        manager = _create_session_manager(batching_config, mock_memory_client)
+        manager.session_repository = manager
+        agent = Mock(agent_id="test-agent")
+        agent.state.get.return_value = {}
+        manager.create_agent(manager.session_id, SessionAgent.from_agent(agent))
+        manager.create_message(
+            manager.session_id,
+            agent.agent_id,
+            SessionMessage(message={"role": "user", "content": [{"text": "Hello"}]}, message_id=0),
+        )
+        manager.memory_client.gmdp_client.create_event.assert_not_called()
+
+        agent.state.get.return_value = {"status": "stopped"}
+        registry = HookRegistry()
+        manager.register_hooks(registry)
+        await registry.invoke_callbacks_async(event_type(agent=agent))
+
+        assert manager.pending_message_count() == 0
+        assert manager.pending_agent_state_count() == 0
+        state_payloads = manager.memory_client.gmdp_client.create_event.call_args.kwargs["payload"]
+        assert [json.loads(payload["blob"])["state"] for payload in state_payloads] == [{}, {"status": "stopped"}]
 
 
 class TestIntervalFlush:

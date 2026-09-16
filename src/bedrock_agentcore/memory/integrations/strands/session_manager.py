@@ -920,8 +920,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         """Register additional hooks.
 
         In sync mode (the default), delegates to the base class and adds the
-        retrieve_customer_context + batching callbacks synchronously, preserving
-        existing behavior exactly.
+        retrieve_customer_context + batching callbacks synchronously.
 
         In async mode, registers async callbacks that wrap every per-turn
         boto3-backed operation (append_message, sync_agent, buffer flushes,
@@ -938,12 +937,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             **kwargs: Additional keyword arguments.
         """
         if not self.config.async_mode:
+            if self.config.batch_size > 1:
+                # Completion callbacks run in reverse order, so register flushes before state syncs.
+                registry.add_callback(AfterInvocationEvent, lambda event: self._flush_messages())
+                registry.add_callback(BidiAgentStopEvent, lambda event: self._flush_messages())
+
             RepositorySessionManager.register_hooks(self, registry, **kwargs)
             registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
-
-            # Only register AfterInvocationEvent hook when batching is enabled
-            if self.config.batch_size > 1:
-                registry.add_callback(AfterInvocationEvent, lambda event: self._flush_messages())
             return
 
         # Async mode: register async callbacks that offload the existing sync
@@ -967,6 +967,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
             return _callback
 
+        if self.config.batch_size > 1:
+            # Completion callbacks run in reverse order, so register flushes before state syncs.
+            registry.add_callback(AfterInvocationEvent, _offload(self._flush_messages))
+            registry.add_callback(BidiAgentStopEvent, _offload(self._flush_messages))
+
         registry.add_callback(AgentInitializedEvent, lambda event: self.initialize(event.agent))
 
         async def _on_message_added_persist(event: MessageAddedEvent) -> None:
@@ -976,9 +981,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         registry.add_callback(MessageAddedEvent, _on_message_added_persist)
         registry.add_callback(AfterInvocationEvent, _offload(self.sync_agent, lambda e: e.agent))
         registry.add_callback(MessageAddedEvent, _offload(self.retrieve_customer_context, lambda e: e))
-
-        if self.config.batch_size > 1:
-            registry.add_callback(AfterInvocationEvent, _offload(self._flush_messages))
 
         # Register multi-agent callbacks so async-mode parity matches sync-mode
         registry.add_callback(MultiAgentInitializedEvent, _offload(self.initialize_multi_agent, lambda e: e.source))
