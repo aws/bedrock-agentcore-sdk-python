@@ -11,17 +11,13 @@ import pytest
 from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 from strands.agent.agent import Agent
-from strands.experimental.hooks.events import (
-    BidiAfterInvocationEvent,
-    BidiAgentInitializedEvent,
-    BidiMessageAddedEvent,
-)
+from strands.experimental.bidi.hooks import BidiAgentStopEvent
 from strands.experimental.hooks.multiagent.events import (
     AfterMultiAgentInvocationEvent,
     AfterNodeCallEvent,
     MultiAgentInitializedEvent,
 )
-from strands.hooks import AfterInvocationEvent, MessageAddedEvent
+from strands.hooks import AfterInvocationEvent, AgentInitializedEvent, MessageAddedEvent
 from strands.hooks.registry import HookRegistry
 from strands.types.exceptions import SessionException
 from strands.types.session import Session, SessionAgent, SessionMessage, SessionType
@@ -3749,16 +3745,13 @@ class TestAsyncMode:
         registry = HookRegistry()
         manager.register_hooks(registry)
 
-        # BidiAgentInitializedEvent dispatches via the sync hook path, so its callback must NOT be a coroutine.
-        init_callbacks = list(registry.get_callbacks_for(BidiAgentInitializedEvent(agent=Mock())))
-        assert init_callbacks, "No callbacks registered for BidiAgentInitializedEvent"
+        init_callbacks = list(registry.get_callbacks_for(AgentInitializedEvent(agent=Mock())))
+        assert init_callbacks
         assert not any(asyncio.iscoroutinefunction(cb) for cb in init_callbacks)
 
-        # BidiMessageAddedEvent and BidiAfterInvocationEvent dispatch via invoke_callbacks_async,
-        # so their callbacks should be async to keep the event loop unblocked.
         for event in (
-            BidiMessageAddedEvent(agent=Mock(), message={"role": "user", "content": [{"text": "x"}]}),
-            BidiAfterInvocationEvent(agent=Mock()),
+            MessageAddedEvent(agent=Mock(), message={"role": "user", "content": [{"text": "x"}]}),
+            BidiAgentStopEvent(agent=Mock()),
         ):
             callbacks = list(registry.get_callbacks_for(event))
             assert callbacks, f"No callbacks registered for {type(event).__name__}"

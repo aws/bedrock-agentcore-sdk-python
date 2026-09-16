@@ -11,11 +11,7 @@ from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional
 
 import boto3
 from botocore.config import Config as BotocoreConfig
-from strands.experimental.hooks.events import (
-    BidiAfterInvocationEvent,
-    BidiAgentInitializedEvent,
-    BidiMessageAddedEvent,
-)
+from strands.experimental.bidi.hooks import BidiAgentStopEvent
 from strands.experimental.hooks.multiagent.events import (
     AfterMultiAgentInvocationEvent,
     AfterNodeCallEvent,
@@ -45,7 +41,7 @@ from .config import AgentCoreMemoryConfig, PersistenceMode, RetrievalConfig, nor
 from .converters import MemoryConverter
 
 if TYPE_CHECKING:
-    from strands.agent.agent import Agent
+    from strands.types.agent import LocalAgent
 
 logger = logging.getLogger(__name__)
 
@@ -829,7 +825,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
     # region RepositorySessionManager overrides
     @override
-    def append_message(self, message: Message, agent: "Agent", **kwargs: Any) -> None:
+    def append_message(self, message: Message, agent: "LocalAgent", **kwargs: Any) -> None:
         """Append a message to the agent's session using AgentCore's eventId as message_id.
 
         Args:
@@ -951,9 +947,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             return
 
         # Async mode: register async callbacks that offload the existing sync
-        # methods to a worker thread via asyncio.to_thread. AgentInitializedEvent
-        # and BidiAgentInitializedEvent must stay sync (Strands disallows async
-        # callbacks for AgentInitializedEvent — see strands/hooks/registry.py:227).
+        # methods to a worker thread via asyncio.to_thread. Initialization
+        # callbacks must stay synchronous.
         logger.warning(
             "AgentCoreMemorySessionManager async_mode=True: the agent must be invoked "
             "via the async path (e.g. agent.stream_async(...) or agent.invoke_async(...)). "
@@ -990,21 +985,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         registry.add_callback(AfterNodeCallEvent, _offload(self.sync_multi_agent, lambda e: e.source))
         registry.add_callback(AfterMultiAgentInvocationEvent, _offload(self.sync_multi_agent, lambda e: e.source))
 
-        # Register BidiAgent callbacks so async-mode parity matches sync-mode.
-        # BidiAgentInitializedEvent dispatches through invoke_callbacks (sync),
-        # so its callback must stay sync; the other two dispatch through
-        # invoke_callbacks_async, so async wrappers are safe.
-        registry.add_callback(BidiAgentInitializedEvent, lambda event: self.initialize_bidi_agent(event.agent))
-
-        async def _on_bidi_message_added(event: BidiMessageAddedEvent) -> None:
-            await asyncio.to_thread(self.append_bidi_message, event.message, event.agent)
-            await asyncio.to_thread(self.sync_bidi_agent, event.agent)
-
-        registry.add_callback(BidiMessageAddedEvent, _on_bidi_message_added)
-        registry.add_callback(BidiAfterInvocationEvent, _offload(self.sync_bidi_agent, lambda e: e.agent))
+        registry.add_callback(BidiAgentStopEvent, _offload(self.sync_agent, lambda e: e.agent))
 
     @override
-    def initialize(self, agent: "Agent", **kwargs: Any) -> None:
+    def initialize(self, agent: "LocalAgent", **kwargs: Any) -> None:
         if self.has_existing_agent:
             logger.warning(
                 "An Agent already exists in session %s. We currently support one agent per session.", self.session_id
