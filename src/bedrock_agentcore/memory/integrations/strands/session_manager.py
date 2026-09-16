@@ -11,11 +11,6 @@ from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional
 
 import boto3
 from botocore.config import Config as BotocoreConfig
-from strands.experimental.hooks.events import (
-    BidiAfterInvocationEvent,
-    BidiAgentInitializedEvent,
-    BidiMessageAddedEvent,
-)
 from strands.experimental.hooks.multiagent.events import (
     AfterMultiAgentInvocationEvent,
     AfterNodeCallEvent,
@@ -923,9 +918,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
         """Register additional hooks.
 
-        In sync mode (the default), delegates to the base class and adds the
-        retrieve_customer_context + batching callbacks synchronously, preserving
-        existing behavior exactly.
+        In sync mode (the default), registers the standard session callbacks and
+        adds the retrieve_customer_context + batching callbacks synchronously.
 
         In async mode, registers async callbacks that wrap every per-turn
         boto3-backed operation (append_message, sync_agent, buffer flushes,
@@ -942,7 +936,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             **kwargs: Additional keyword arguments.
         """
         if not self.config.async_mode:
-            RepositorySessionManager.register_hooks(self, registry, **kwargs)
+            registry.add_callback(AgentInitializedEvent, lambda event: self.initialize(event.agent))
+            registry.add_callback(MessageAddedEvent, lambda event: self.append_message(event.message, event.agent))
+            registry.add_callback(MessageAddedEvent, lambda event: self.sync_agent(event.agent))
+            registry.add_callback(AfterInvocationEvent, lambda event: self.sync_agent(event.agent))
+            registry.add_callback(MultiAgentInitializedEvent, lambda event: self.initialize_multi_agent(event.source))
+            registry.add_callback(AfterNodeCallEvent, lambda event: self.sync_multi_agent(event.source))
+            registry.add_callback(AfterMultiAgentInvocationEvent, lambda event: self.sync_multi_agent(event.source))
             registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
 
             # Only register AfterInvocationEvent hook when batching is enabled
@@ -952,8 +952,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
         # Async mode: register async callbacks that offload the existing sync
         # methods to a worker thread via asyncio.to_thread. AgentInitializedEvent
-        # and BidiAgentInitializedEvent must stay sync (Strands disallows async
-        # callbacks for AgentInitializedEvent — see strands/hooks/registry.py:227).
+        # must stay sync because Strands disallows async callbacks for it (see
+        # strands/hooks/registry.py:227).
         logger.warning(
             "AgentCoreMemorySessionManager async_mode=True: the agent must be invoked "
             "via the async path (e.g. agent.stream_async(...) or agent.invoke_async(...)). "
@@ -989,19 +989,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         registry.add_callback(MultiAgentInitializedEvent, _offload(self.initialize_multi_agent, lambda e: e.source))
         registry.add_callback(AfterNodeCallEvent, _offload(self.sync_multi_agent, lambda e: e.source))
         registry.add_callback(AfterMultiAgentInvocationEvent, _offload(self.sync_multi_agent, lambda e: e.source))
-
-        # Register BidiAgent callbacks so async-mode parity matches sync-mode.
-        # BidiAgentInitializedEvent dispatches through invoke_callbacks (sync),
-        # so its callback must stay sync; the other two dispatch through
-        # invoke_callbacks_async, so async wrappers are safe.
-        registry.add_callback(BidiAgentInitializedEvent, lambda event: self.initialize_bidi_agent(event.agent))
-
-        async def _on_bidi_message_added(event: BidiMessageAddedEvent) -> None:
-            await asyncio.to_thread(self.append_bidi_message, event.message, event.agent)
-            await asyncio.to_thread(self.sync_bidi_agent, event.agent)
-
-        registry.add_callback(BidiMessageAddedEvent, _on_bidi_message_added)
-        registry.add_callback(BidiAfterInvocationEvent, _offload(self.sync_bidi_agent, lambda e: e.agent))
 
     @override
     def initialize(self, agent: "Agent", **kwargs: Any) -> None:
