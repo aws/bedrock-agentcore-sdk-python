@@ -47,7 +47,8 @@ class AgentCoreMemoryConfig(BaseModel):
         memory_id: Required Bedrock AgentCore Memory ID
         session_id: Required unique ID for the session
         actor_id: Required unique ID for the agent instance/user
-        retrieval_config: Optional dictionary mapping namespaces to retrieval configurations
+        retrieval_config: Optional dictionary mapping namespaces to retrieval configurations.
+            Automatic context retrieval applies to Agent only.
         batch_size: Number of messages to batch before sending to AgentCore Memory.
             Default of 1 means immediate sending (no batching). Max 100.
         flush_interval_seconds: Optional interval in seconds for automatic buffer flushing.

@@ -606,7 +606,7 @@ requires-dist = [
     { name = "ragas", marker = "extra == 'ragas'", specifier = ">=0.4.3,<1.0.0" },
     { name = "requests", marker = "extra == 'datasets'", specifier = ">=2.31.0" },
     { name = "starlette", specifier = ">=0.46.2" },
-    { name = "strands-agents", marker = "extra == 'strands-agents'", specifier = ">=1.46.0" },
+    { name = "strands-agents", marker = "extra == 'strands-agents'", specifier = ">=1.56.0" },
     { name = "strands-agents-evals", marker = "extra == 'autoevals'", specifier = ">=1.0.3,<2.0.0" },
     { name = "strands-agents-evals", marker = "extra == 'deepeval'", specifier = ">=1.0.3,<2.0.0" },
     { name = "strands-agents-evals", marker = "extra == 'ragas'", specifier = ">=1.0.3,<2.0.0" },
@@ -641,7 +641,7 @@ dev = [
     { name = "pytest-rerunfailures", specifier = ">=15.0" },
     { name = "ragas", specifier = ">=0.4.3,<1.0.0" },
     { name = "ruff", specifier = ">=0.12.0" },
-    { name = "strands-agents", specifier = ">=1.46.0" },
+    { name = "strands-agents", specifier = ">=1.56.0" },
     { name = "strands-agents-evals", specifier = ">=1.0.3,<2.0.0" },
     { name = "websockets", specifier = ">=14.1" },
     { name = "wheel", specifier = ">=0.45.1" },
@@ -5059,7 +5059,7 @@ wheels = [
 
 [[package]]
 name = "strands-agents"
-version = "1.50.2"
+version = "1.56.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "boto3" },
@@ -5076,9 +5076,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "watchdog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d0/7a/b5e20f5ee859c71e451e2e06de8767aab73d850018167c436e3a96446caf/strands_agents-1.50.2.tar.gz", hash = "sha256:7b45c41593e41f22383962a233b6616360b8c3686ae8b902059b6a6fab3deacf", size = 1224067, upload-time = "2026-07-27T20:38:48.238Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4c/2f/c980715e56a2017280ba597aea83e77ec37a94eeaaabc47114e354a6846e/strands_agents-1.56.0.tar.gz", hash = "sha256:d0a4587065f9b9f4890455ce947474067e5deaadf140d1b2ef5153a67ebf80a3", size = 1662954, upload-time = "2026-09-15T19:54:39.56Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d8/d6/2fd27147f53c45e546c0c542c6ea4a24b93c1f3908dcbad164624e5ddfa6/strands_agents-1.50.2-py3-none-any.whl", hash = "sha256:39c6b755e579e0b631ea01af78a0a201019320670b87adcf0b5c8dd1e5a2cef8", size = 638411, upload-time = "2026-07-27T20:38:46.12Z" },
+    { url = "https://files.pythonhosted.org/packages/89/07/0d8955760ed673c3112af65d2a026e79bbcb3c869b3eadc896820b64edd7/strands_agents-1.56.0-py3-none-any.whl", hash = "sha256:8026a2fde7ca3d2f2760ea57003dd7163761bfba74972762468b745b4f7bfd08", size = 838144, upload-time = "2026-09-15T19:54:37.448Z" },
 ]
 
 [[package]]
