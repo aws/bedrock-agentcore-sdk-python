@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.23.1] - 2026-09-16
+
+### Other Changes
+- fix(integ): adjust timeout on memory test.  (#667) (2715d6f)
+- fix(memory): use current Strands bidi session hooks (#664) (cc980d1)
+
 ## [1.23.0] - 2026-09-11
 
 ### Added
