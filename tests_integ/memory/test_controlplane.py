@@ -72,7 +72,7 @@ class TestMemoryControlPlaneClient:
         if len(self.memory_ids) < 1:
             pytest.skip("prerequisite test did not create memory")
         memory_id = self.memory_ids[0]
-        self.client.update_memory(memory_id=memory_id, description="updated description")
+        self.client.update_memory(memory_id=memory_id, description="updated description", wait_for_active=True)
         details = self.client.get_memory(memory_id)
         assert details["description"] == "updated description"
 
