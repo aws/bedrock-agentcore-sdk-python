@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional
 
 import boto3
 from botocore.config import Config as BotocoreConfig
+from strands.experimental.bidi import BidiAgent
 from strands.experimental.bidi.hooks import BidiAgentStopEvent
 from strands.experimental.hooks.multiagent.events import (
     AfterMultiAgentInvocationEvent,
@@ -840,11 +841,14 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self._latest_agent_message[agent.agent_id] = session_message
 
     def retrieve_customer_context(self, event: MessageAddedEvent) -> None:
-        """Retrieve customer LTM context before processing support query.
+        """Retrieve customer LTM context for regular Agent invocations.
 
         Args:
             event (MessageAddedEvent): The message added event containing the agent and message data.
         """
+        if isinstance(event.agent, BidiAgent):
+            return None
+
         messages = event.agent.messages
         if not messages or messages[-1].get("role") != "user":
             return None
