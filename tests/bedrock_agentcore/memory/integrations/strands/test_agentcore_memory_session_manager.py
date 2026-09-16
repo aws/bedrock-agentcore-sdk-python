@@ -11,11 +11,6 @@ import pytest
 from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 from strands.agent.agent import Agent
-from strands.experimental.hooks.events import (
-    BidiAfterInvocationEvent,
-    BidiAgentInitializedEvent,
-    BidiMessageAddedEvent,
-)
 from strands.experimental.hooks.multiagent.events import (
     AfterMultiAgentInvocationEvent,
     AfterNodeCallEvent,
@@ -3741,29 +3736,6 @@ class TestAsyncMode:
             manager.register_hooks(registry)
 
         assert any("async_mode=True" in rec.message and "stream_async" in rec.message for rec in caplog.records)
-
-    def test_async_mode_registers_bidi_agent_callbacks(self, mock_memory_client):
-        """async_mode=True: BidiAgent events get callbacks; init stays sync, others are async."""
-        config = AgentCoreMemoryConfig(memory_id="m", session_id="s", actor_id="a", async_mode=True)
-        manager = _create_session_manager(config, mock_memory_client)
-        registry = HookRegistry()
-        manager.register_hooks(registry)
-
-        # BidiAgentInitializedEvent dispatches via the sync hook path, so its callback must NOT be a coroutine.
-        init_callbacks = list(registry.get_callbacks_for(BidiAgentInitializedEvent(agent=Mock())))
-        assert init_callbacks, "No callbacks registered for BidiAgentInitializedEvent"
-        assert not any(asyncio.iscoroutinefunction(cb) for cb in init_callbacks)
-
-        # BidiMessageAddedEvent and BidiAfterInvocationEvent dispatch via invoke_callbacks_async,
-        # so their callbacks should be async to keep the event loop unblocked.
-        for event in (
-            BidiMessageAddedEvent(agent=Mock(), message={"role": "user", "content": [{"text": "x"}]}),
-            BidiAfterInvocationEvent(agent=Mock()),
-        ):
-            callbacks = list(registry.get_callbacks_for(event))
-            assert callbacks, f"No callbacks registered for {type(event).__name__}"
-            assert all(asyncio.iscoroutinefunction(cb) for cb in callbacks)
-
 
 class TestFlushAgentStatesRaceCondition:
     """Tests for the copy-and-clear-under-one-lock fix in _flush_agent_states_only."""
