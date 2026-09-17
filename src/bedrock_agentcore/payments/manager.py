@@ -173,6 +173,7 @@ class PaymentManager:
         agent_name: Optional[str] = None,
         bearer_token: Optional[str] = None,
         token_provider: Optional[Callable[[], str]] = None,
+        integration_source: str = "raw-sdk",
     ):
         """Initialize a PaymentManager instance.
 
@@ -193,6 +194,9 @@ class PaymentManager:
             token_provider: Optional callable that returns a fresh JWT bearer token string.
                            Called before each request to support token refresh.
                            Mutually exclusive with bearer_token.
+            integration_source: Identifier of the surface making payment calls, propagated
+                           via the boto3 User-Agent header for usage measurement. Defaults
+                           to "raw-sdk"; integrations set "strands", "langgraph", etc.
 
         Raises:
             ValueError: If payment_manager_arn is invalid, region_name conflicts with boto3_session region,
@@ -219,6 +223,7 @@ class PaymentManager:
         # Store payment manager ARN
         self._payment_manager_arn: str = payment_manager_arn
         self._agent_name: Optional[str] = agent_name
+        self._integration_source: str = integration_source or "raw-sdk"
         self._bearer_token: Optional[str] = bearer_token
         self._token_provider: Optional[Callable[[], str]] = token_provider
 
@@ -334,7 +339,7 @@ class PaymentManager:
         Returns:
             Final client configuration with SDK user agent
         """
-        user_agent_extra = build_user_agent_suffix()
+        user_agent_extra = build_user_agent_suffix(integration_source=self._integration_source, feature="payments")
 
         if boto_client_config:
             existing_user_agent = getattr(boto_client_config, "user_agent_extra", None)
