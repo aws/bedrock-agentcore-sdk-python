@@ -250,20 +250,21 @@ class PaymentClient:
     def __init__(
         self,
         region_name: Optional[str] = None,
-        integration_source: Optional[str] = None,
+        integration_source: str = "raw-sdk",
     ) -> None:
         """Initialize the Payments control plane client.
 
         Args:
             region_name: AWS region name. Defaults to boto3 session region or us-west-2
-            integration_source: Optional identifier for tracking integration source in telemetry
+            integration_source: Identifier of the surface making the calls, propagated via
+                the boto3 User-Agent header for usage measurement. Defaults to "raw-sdk".
 
         """
         self.region_name = region_name or boto3.Session().region_name or "us-west-2"
-        self.integration_source = integration_source
+        self.integration_source = integration_source or "raw-sdk"
 
         # Build config with user-agent for telemetry
-        user_agent_extra = build_user_agent_suffix(integration_source)
+        user_agent_extra = build_user_agent_suffix(integration_source=self.integration_source, feature="payments")
         client_config = Config(user_agent_extra=user_agent_extra)
 
         # Control plane operations are available through bedrock-agentcore-control service

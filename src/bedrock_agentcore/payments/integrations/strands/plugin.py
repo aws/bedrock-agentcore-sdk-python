@@ -104,6 +104,7 @@ class AgentCorePaymentsPlugin(Plugin):
                 agent_name=self.config.agent_name,
                 bearer_token=self.config.bearer_token,
                 token_provider=self.config.token_provider,
+                integration_source="strands",
             )
             logger.info("PaymentManager initialized successfully")
         except Exception as e:
