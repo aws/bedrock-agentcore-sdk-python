@@ -127,6 +127,7 @@ class TestAgentCorePaymentsPluginInitialization:
             agent_name=None,
             bearer_token=None,
             token_provider=None,
+            integration_source="strands",
         )
         assert plugin.payment_manager == mock_pm_instance
 
@@ -1282,6 +1283,7 @@ class TestAgentCorePaymentsPluginAgentName:
             agent_name="my-agent",
             bearer_token=None,
             token_provider=None,
+            integration_source="strands",
         )
 
     @patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager")
@@ -1307,6 +1309,7 @@ class TestAgentCorePaymentsPluginAgentName:
             agent_name=None,
             bearer_token=None,
             token_provider=None,
+            integration_source="strands",
         )
 
 

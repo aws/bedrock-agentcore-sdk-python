@@ -225,6 +225,7 @@ class TestAgentCorePaymentsMiddlewareInstantiation:
             agent_name="test-agent",
             bearer_token=None,
             token_provider=None,
+            integration_source="langgraph",
         )
         assert mw.config is config
         assert mw.payment_manager is mock_pm_cls.return_value
@@ -242,6 +243,7 @@ class TestAgentCorePaymentsMiddlewareInstantiation:
             agent_name=None,
             bearer_token="my-jwt",
             token_provider=None,
+            integration_source="langgraph",
         )
 
     @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")

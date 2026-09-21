@@ -99,6 +99,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
                 agent_name=config.agent_name,
                 bearer_token=config.bearer_token,
                 token_provider=config.token_provider,
+                integration_source="langgraph",
             )
         except Exception as e:
             raise RuntimeError(f"Failed to initialize PaymentManager: {e}") from e
