@@ -51,6 +51,17 @@ class PaymentConnectorProvisionMode(Enum):
     QUICK_CREATE = "QUICK_CREATE"
 
 
+class CoinbaseCdpSecret(Enum):
+    """Service-managed Coinbase CDP secrets that can be rotated.
+
+    Only credentials the service provisioned (QUICK_CREATE provision mode) are
+    rotatable. Credentials you supplied yourself remain your responsibility.
+    """
+
+    API_KEY = "API_KEY"
+    WALLET_SECRET = "WALLET_SECRET"
+
+
 class PaymentType(Enum):
     """Payment protocols supported by ProcessPayment."""
 
