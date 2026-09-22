@@ -30,6 +30,11 @@ from bedrock_agentcore.tools.web_search_client import WebSearchError
 DEFAULT_MODEL_ID = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
 
+def _numbered_blocks(text):
+    """Count the results in formatted output, by the lines that open a block."""
+    return sum(1 for line in text.splitlines() if line[:1].isdigit() and line[1:3] == ". ")
+
+
 @pytest.mark.integration
 class TestAgentCoreWebSearchIntegration:
     """AgentCoreWebSearch against a live gateway target."""
@@ -73,7 +78,10 @@ class TestAgentCoreWebSearchIntegration:
         with self._search_tool() as tool:
             text = self._search(tool, "python urllib3 release notes", max_results=2)
 
-        assert "3. " not in text
+        # Counting the lines that open a numbered block, rather than searching for
+        # "3. " anywhere: extracts are arbitrary web prose and quite often contain a
+        # digit followed by a period themselves.
+        assert _numbered_blocks(text) == 2
 
     def test_search_with_domain_filter(self):
         """Needs connector version 1.2.0 or later on the target.
@@ -109,11 +117,21 @@ class TestAgentCoreWebSearchIntegration:
             assert tool._client.backend._tool_name.endswith("WebSearch")
 
     def test_the_client_is_reused_across_searches(self):
+        """Two searches share one backend and one connection pool.
+
+        Not asserted through ``Mcp-Session-Id``: that header is optional in MCP and
+        this connector does not send one, so the backend's session id stays None even
+        though the transport underneath is being reused.
+        """
         with self._search_tool() as tool:
+            backend = tool._client.backend
+            pool = backend._http
+
             self._search(tool, "first query", max_results=1)
             self._search(tool, "second query", max_results=1)
 
-            assert tool._client.backend._mcp_session_id
+            assert tool._client.backend is backend
+            assert tool._client.backend._http is pool
 
     def test_an_agent_calls_the_tool_and_cites_a_url(self):
         """The end to end path: a model decides to search, and the URL reaches its answer.
