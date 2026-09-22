@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 import boto3
 from botocore.config import Config
 
+import bedrock_agentcore.evaluation.spans as span_helpers
 from bedrock_agentcore.evaluation.agent_span_collector import AgentSpanCollector
 
 from ..dataset_types import Dataset, PredefinedScenario, Scenario, SimulatedScenario
@@ -228,8 +229,8 @@ class OnDemandEvaluationDatasetRunner:
             List of (evaluator_id, request_dict) tuples.
         """
         base: Dict[str, Any] = {"evaluationInput": {"sessionSpans": spans}}
-        trace_ids = self._extract_trace_ids(spans)
-        tool_span_ids = self._extract_tool_span_ids(spans)
+        trace_ids = span_helpers.trace_ids(spans)
+        tool_span_ids = span_helpers.tool_span_ids(spans)
 
         reference_inputs = self._build_reference_inputs(scenario, trace_ids, session_id)
         if reference_inputs:
@@ -267,27 +268,6 @@ class OnDemandEvaluationDatasetRunner:
                     raise ValueError(f"Unknown evaluator level: {level}")
 
         return requests
-
-    def _extract_trace_ids(self, spans: list) -> List[str]:
-        """Extract unique trace IDs from spans, ordered by appearance."""
-        trace_ids = []
-        seen = set()
-        for span in spans:
-            trace_id = span.get("traceId")
-            if trace_id and trace_id not in seen:
-                trace_ids.append(trace_id)
-                seen.add(trace_id)
-        return trace_ids
-
-    def _extract_tool_span_ids(self, spans: list) -> List[str]:
-        """Extract span IDs for tool execution spans (supports Strands and LangGraph)."""
-        tool_span_ids = []
-        for span in spans:
-            if self._is_tool_span(span):
-                span_id = span.get("spanId")
-                if span_id:
-                    tool_span_ids.append(span_id)
-        return tool_span_ids
 
     def _build_reference_inputs(
         self,
@@ -421,15 +401,3 @@ class OnDemandEvaluationDatasetRunner:
         """Yield successive batches of the given size from items."""
         for i in range(0, len(items), size):
             yield items[i : i + size]
-
-    @staticmethod
-    def _is_tool_span(span: Dict) -> bool:
-        """Check if a span represents a tool execution (supports Strands and LangGraph)."""
-        attrs = span.get("attributes", {})
-        if not isinstance(attrs, dict):
-            return False
-        return (
-            attrs.get("gen_ai.operation.name") == "execute_tool"
-            or attrs.get("openinference.span.kind") == "TOOL"
-            or attrs.get("traceloop.span.kind") == "tool"
-        )

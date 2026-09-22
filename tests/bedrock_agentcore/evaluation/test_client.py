@@ -225,28 +225,41 @@ class TestRunEndToEnd:
             assert duration == timedelta(hours=2)
 
 
-# --- _get_evaluator_level tests ---
+# --- get_evaluator_level tests ---
 
 
 class TestGetEvaluatorLevel:
-    def test_returns_level_from_api(self, client):
-        client._cp_client.get_evaluator.return_value = {"level": "TRACE"}
-        assert client._get_evaluator_level("eval-1") == "TRACE"
+    @pytest.mark.parametrize("level", ["SESSION", "TRACE", "TOOL_CALL"])
+    def test_returns_level_from_api(self, client, level):
+        client._cp_client.get_evaluator.return_value = {"level": level}
+        assert client.get_evaluator_level("eval-1") == level
+        client._cp_client.get_evaluator.assert_called_once_with(evaluatorId="eval-1")
+
+    def test_missing_level_falls_back_to_session(self, client):
+        client._cp_client.get_evaluator.return_value = {}
+        assert client.get_evaluator_level("eval-1") == "SESSION"
+
+    def test_cache_is_per_evaluator(self, client):
+        client._cp_client.get_evaluator.side_effect = [{"level": "TRACE"}, {"level": "TOOL_CALL"}]
+        assert client.get_evaluator_level("eval-1") == "TRACE"
+        assert client.get_evaluator_level("eval-2") == "TOOL_CALL"
+        assert client.get_evaluator_level("eval-1") == "TRACE"
+        assert client._cp_client.get_evaluator.call_count == 2
 
     def test_caches_level(self, client):
         client._cp_client.get_evaluator.return_value = {"level": "TRACE"}
-        client._get_evaluator_level("eval-1")
-        client._get_evaluator_level("eval-1")
+        client.get_evaluator_level("eval-1")
+        client.get_evaluator_level("eval-1")
         client._cp_client.get_evaluator.assert_called_once()
 
     def test_falls_back_to_session_on_error(self, client):
         client._cp_client.get_evaluator.side_effect = RuntimeError("not found")
-        assert client._get_evaluator_level("eval-1") == "SESSION"
+        assert client.get_evaluator_level("eval-1") == "SESSION"
 
     def test_caches_fallback(self, client):
         client._cp_client.get_evaluator.side_effect = RuntimeError("not found")
-        client._get_evaluator_level("eval-1")
-        client._get_evaluator_level("eval-1")
+        client.get_evaluator_level("eval-1")
+        client.get_evaluator_level("eval-1")
         client._cp_client.get_evaluator.assert_called_once()
 
 
@@ -295,68 +308,6 @@ class TestBuildRequestsForLevel:
         assert len(requests) == 2
         assert len(requests[0]["evaluationTarget"]["traceIds"]) == 10
         assert len(requests[1]["evaluationTarget"]["traceIds"]) == 2
-
-
-# --- Static helper tests ---
-
-
-class TestExtractTraceIds:
-    def test_extracts_unique_ordered(self):
-        ids = EvaluationClient._extract_trace_ids(SAMPLE_SPANS)
-        assert ids == ["trace-1", "trace-2"]
-
-    def test_empty_spans(self):
-        assert EvaluationClient._extract_trace_ids([]) == []
-
-    def test_skips_missing_trace_id(self):
-        spans = [{"spanId": "s1"}, {"traceId": "t1", "spanId": "s2"}]
-        assert EvaluationClient._extract_trace_ids(spans) == ["t1"]
-
-
-class TestExtractToolSpanIds:
-    def test_extracts_tool_spans(self):
-        ids = EvaluationClient._extract_tool_span_ids(SAMPLE_SPANS)
-        assert ids == ["span-2", "span-3", "span-5"]
-
-    def test_ignores_non_tool_spans(self):
-        spans = [
-            {"name": "Agent.invoke", "kind": "SPAN_KIND_SERVER", "spanId": "s1"},
-            {"name": "LLM.call", "kind": "SPAN_KIND_INTERNAL", "spanId": "s2"},
-        ]
-        assert EvaluationClient._extract_tool_span_ids(spans) == []
-
-    def test_empty_spans(self):
-        assert EvaluationClient._extract_tool_span_ids([]) == []
-
-    def test_filters_by_trace_id(self):
-        ids = EvaluationClient._extract_tool_span_ids(SAMPLE_SPANS, trace_id="trace-1")
-        assert ids == ["span-2", "span-3"]
-
-    def test_filters_by_trace_id_no_match(self):
-        ids = EvaluationClient._extract_tool_span_ids(SAMPLE_SPANS, trace_id="trace-999")
-        assert ids == []
-
-    def test_extracts_langgraph_tool_spans(self):
-        spans = [
-            {"spanId": "s1", "traceId": "t1", "attributes": {"openinference.span.kind": "TOOL"}},
-            {"spanId": "s2", "traceId": "t1", "attributes": {"openinference.span.kind": "LLM"}},
-        ]
-        assert EvaluationClient._extract_tool_span_ids(spans) == ["s1"]
-
-    def test_extracts_traceloop_tool_spans(self):
-        spans = [
-            {"spanId": "s1", "traceId": "t1", "attributes": {"traceloop.span.kind": "tool"}},
-            {"spanId": "s2", "traceId": "t1", "attributes": {"traceloop.span.kind": "workflow"}},
-        ]
-        assert EvaluationClient._extract_tool_span_ids(spans) == ["s1"]
-
-    def test_ignores_span_without_tool_attributes(self):
-        spans = [
-            {"spanId": "s1", "traceId": "t1", "attributes": {"gen_ai.operation.name": "invoke_agent"}},
-            {"spanId": "s2", "traceId": "t1", "attributes": {"some.other.attr": "value"}},
-            {"spanId": "s3", "traceId": "t1"},
-        ]
-        assert EvaluationClient._extract_tool_span_ids(spans) == []
 
 
 # --- trace_id tests ---

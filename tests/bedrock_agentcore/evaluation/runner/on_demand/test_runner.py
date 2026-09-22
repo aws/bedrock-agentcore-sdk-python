@@ -172,24 +172,6 @@ class TestOnDemandEvaluationDatasetRunnerRun:
     def test_batch_empty(self):
         assert list(OnDemandEvaluationDatasetRunner._batch([], 10)) == []
 
-    def test_is_tool_span_strands(self):
-        span = {"attributes": {"gen_ai.operation.name": "execute_tool"}}
-        assert OnDemandEvaluationDatasetRunner._is_tool_span(span) is True
-
-    def test_is_tool_span_langgraph_openinference(self):
-        span = {"attributes": {"openinference.span.kind": "TOOL"}}
-        assert OnDemandEvaluationDatasetRunner._is_tool_span(span) is True
-
-    def test_is_tool_span_langgraph_otel(self):
-        assert OnDemandEvaluationDatasetRunner._is_tool_span({"attributes": {"traceloop.span.kind": "tool"}}) is True
-
-    def test_is_tool_span_not_tool(self):
-        assert OnDemandEvaluationDatasetRunner._is_tool_span({"attributes": {"gen_ai.operation.name": "chat"}}) is False
-
-    def test_is_tool_span_no_attributes(self):
-        assert OnDemandEvaluationDatasetRunner._is_tool_span({}) is False
-        assert OnDemandEvaluationDatasetRunner._is_tool_span({"attributes": None}) is False
-
     # --- Helpers ---
 
     def _make_dataset(self):
