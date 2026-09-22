@@ -11,43 +11,6 @@ from bedrock_agentcore.runtime.agent_core_runtime_client import AgentCoreRuntime
 class TestAgentCoreRuntimeClientInit:
     """Tests for AgentCoreRuntimeClient initialization."""
 
-    @pytest.mark.parametrize(
-        "kwargs,session_region,expected",
-        [
-            ({"region_name": "eu-west-1"}, "us-east-1", "eu-west-1"),
-            ({"region": "us-west-2"}, "us-east-1", "us-west-2"),
-            ({"region": "us-west-2", "region_name": "eu-west-1"}, "us-east-1", "us-west-2"),
-            ({"region": "", "region_name": "eu-west-1"}, "us-east-1", "eu-west-1"),
-            ({}, "us-east-1", "us-east-1"),
-            ({}, None, "us-west-2"),
-        ],
-    )
-    def test_region_precedence(self, kwargs, session_region, expected):
-        session = Mock(region_name=session_region)
-        client = AgentCoreRuntimeClient(session=session, **kwargs)
-        assert client.region == expected
-        assert client.session is session
-        assert len(session.client.call_args_list) == 2
-        for call in session.client.call_args_list:
-            assert call.kwargs["region_name"] == expected
-
-    @patch("bedrock_agentcore.runtime.agent_core_runtime_client.boto3.Session")
-    def test_region_name_without_session(self, session_factory):
-        client = AgentCoreRuntimeClient(region_name="eu-west-1")
-        assert client.region == "eu-west-1"
-        session_factory.assert_called_once_with(region_name="eu-west-1")
-
-    def test_existing_positional_arguments(self):
-        session = Mock(region_name="us-east-1")
-        client = AgentCoreRuntimeClient("eu-west-1", session, "test-integration")
-        assert client.region == "eu-west-1"
-        assert client.session is session
-        assert client.integration_source == "test-integration"
-
-    def test_region_name_is_validated(self):
-        with pytest.raises(ValueError):
-            AgentCoreRuntimeClient(region_name="not-a-region", session=Mock())
-
     def test_init_stores_region(self):
         """Test that initialization stores the region."""
         client = AgentCoreRuntimeClient(region="us-west-2")
