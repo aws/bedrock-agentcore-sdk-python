@@ -4,6 +4,25 @@ This document provides practical examples for using the `AgentCoreRuntimeClient`
 
 ## Basic Usage
 
+`AgentCoreRuntimeClient` accepts either `region` or `region_name`. If both are
+provided, `region` takes precedence. You can also import `WaitConfig` alongside
+the client to configure polling:
+
+```python
+from bedrock_agentcore.runtime import AgentCoreRuntimeClient, WaitConfig
+
+client = AgentCoreRuntimeClient(region_name="us-west-2")
+wait_config = WaitConfig(max_wait=900, poll_interval=10)
+```
+
+Pass `wait_config=wait_config` to `create_agent_runtime_and_wait` or
+`update_agent_runtime_and_wait` alongside the runtime's configuration.
+
+`WaitConfig` is also available from `bedrock_agentcore.evaluation`,
+`bedrock_agentcore.gateway`, `bedrock_agentcore.knowledge_base`, and
+`bedrock_agentcore.policy`. `BatchEvaluationRunner` likewise accepts
+`region_name`, with the same precedence as the runtime client.
+
 ### Backend Service (SigV4 Headers)
 
 ```python

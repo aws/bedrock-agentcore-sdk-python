@@ -29,6 +29,37 @@ from bedrock_agentcore.evaluation.runner.invoker_types import AgentInvokerInput,
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
+class TestRegionName:
+    @pytest.mark.parametrize(
+        "kwargs,session_region,expected",
+        [
+            ({"region_name": "eu-west-1"}, "us-east-1", "eu-west-1"),
+            ({"region": "us-west-2"}, "us-east-1", "us-west-2"),
+            ({"region": "us-west-2", "region_name": "eu-west-1"}, "us-east-1", "us-west-2"),
+            ({"region": "", "region_name": "eu-west-1"}, "us-east-1", "eu-west-1"),
+            ({}, "us-east-1", "us-east-1"),
+            ({}, None, "us-west-2"),
+        ],
+    )
+    def test_region_precedence(self, kwargs, session_region, expected):
+        with patch(
+            "bedrock_agentcore.evaluation.runner.batch.batch_evaluation_runner.boto3.Session"
+        ) as session_factory:
+            session = session_factory.return_value
+            session.region_name = session_region
+            runner = BatchEvaluationRunner(**kwargs)
+        assert runner.region == expected
+        assert len(session.client.call_args_list) == 2
+        for call in session.client.call_args_list:
+            assert call.kwargs["region_name"] == expected
+
+    def test_existing_positional_region(self):
+        with patch("bedrock_agentcore.evaluation.runner.batch.batch_evaluation_runner.boto3.Session"):
+            runner = BatchEvaluationRunner("eu-west-1")
+        assert runner.region == "eu-west-1"
+
+
 _T0 = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 _T1 = datetime(2024, 1, 1, 0, 1, 0, tzinfo=timezone.utc)
 
