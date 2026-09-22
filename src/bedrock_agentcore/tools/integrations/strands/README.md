@@ -16,12 +16,12 @@ recent events and cite its sources.
 Web search reaches the service through an AgentCore Gateway connector target:
 
 ```
-┌─────────┐     ┌──────────────────┐     ┌──────────────┐     ┌────────────────┐
-│  Agent  │────▶│ AgentCoreWebSearch│────▶│   Gateway    │────▶│  web-search    │
-│         │     │  (SigV4, MCP)     │     │ connector    │     │  connector     │
-│         │◀────│  formats results  │◀────│   target     │◀────│  (AWS managed) │
-└─────────┘     └──────────────────┘     └──────────────┘     └────────────────┘
-     caller's credentials                  gateway execution role
+┌─────────┐     ┌────────────────────┐     ┌──────────────┐     ┌────────────────┐
+│  Agent  │────▶│ AgentCoreWebSearch │────▶│   Gateway    │────▶│   web-search   │
+│         │     │   (SigV4, MCP)     │     │  connector   │     │   connector    │
+│         │◀────│  formats results   │◀────│    target    │◀────│  (AWS managed) │
+└─────────┘     └────────────────────┘     └──────────────┘     └────────────────┘
+     caller's credentials                   gateway execution role
 ```
 
 The caller's credentials sign the request to the gateway. The gateway then uses its own
