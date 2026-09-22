@@ -1,8 +1,11 @@
 """Tests for AgentCoreWebSearch."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from strands import Agent
+from strands.models import Model
 
 from bedrock_agentcore.tools.integrations.strands.web_search import (
     DEFAULT_REGION,
@@ -30,6 +33,50 @@ def client():
     client = MagicMock()
     client.search.return_value = _response(_result(title="t", url="https://example.com", text="body"))
     return client
+
+
+class ScriptedModel(Model):
+    """A model that calls web_search once with fixed input, then answers.
+
+    Only the model is scripted. The agent, its tool registry and its tool
+    executor are the real ones, which is the point of using this over a mock.
+    """
+
+    def __init__(self, tool_input):
+        self.tool_input = tool_input
+        self.calls = 0
+
+    def get_config(self):
+        return {}
+
+    def update_config(self, **kwargs):
+        pass
+
+    async def structured_output(self, output_model, prompt, **kwargs):
+        raise NotImplementedError
+
+    async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            yield {"messageStart": {"role": "assistant"}}
+            yield {"contentBlockStart": {"start": {"toolUse": {"toolUseId": "tu-1", "name": "web_search"}}}}
+            yield {"contentBlockDelta": {"delta": {"toolUse": {"input": json.dumps(self.tool_input)}}}}
+            yield {"contentBlockStop": {}}
+            yield {"messageStop": {"stopReason": "tool_use"}}
+        else:
+            yield {"messageStart": {"role": "assistant"}}
+            yield {"contentBlockDelta": {"delta": {"text": "done"}}}
+            yield {"contentBlockStop": {}}
+            yield {"messageStop": {"stopReason": "end_turn"}}
+
+
+def _tool_results(agent):
+    return [
+        block["toolResult"]
+        for message in agent.messages
+        for block in message.get("content", [])
+        if isinstance(block, dict) and "toolResult" in block
+    ]
 
 
 class TestClientConstruction:
@@ -154,6 +201,44 @@ class TestSearching:
 
         with pytest.raises(ValueError, match="closed"):
             search.web_search("anything")
+
+
+class TestInsideAnAgentLoop:
+    """The tool driven through a real Agent, rather than called directly."""
+
+    def test_the_model_can_call_it_and_the_arguments_arrive(self, client):
+        search = AgentCoreWebSearch(client=client)
+        model = ScriptedModel({"query": "boto3 release notes", "max_results": 3, "include_domains": ["github.com"]})
+
+        Agent(model=model, tools=[search.web_search])("what changed in boto3?")
+
+        assert client.search.call_args.args == ("boto3 release notes",)
+        assert client.search.call_args.kwargs["max_results"] == 3
+        assert client.search.call_args.kwargs["include_domains"] == ["github.com"]
+
+    def test_the_results_reach_the_conversation(self, client):
+        search = AgentCoreWebSearch(client=client)
+        agent = Agent(model=ScriptedModel({"query": "anything"}), tools=[search.web_search])
+
+        agent("what changed in boto3?")
+
+        result = _tool_results(agent)[0]
+        assert result["status"] == "success"
+        assert "https://example.com" in result["content"][0]["text"]
+
+    def test_a_failed_search_becomes_an_error_result_the_model_can_read(self, client):
+        # Raising is deliberate, and this is what it buys: the executor turns the
+        # exception into status=error, so the failure stays distinguishable from a
+        # search that found nothing, and the agent still gets to respond.
+        client.search.side_effect = WebSearchError("connector not available for this account")
+        search = AgentCoreWebSearch(client=client)
+        agent = Agent(model=ScriptedModel({"query": "anything"}), tools=[search.web_search])
+
+        agent("what changed in boto3?")
+
+        result = _tool_results(agent)[0]
+        assert result["status"] == "error"
+        assert "connector not available for this account" in result["content"][0]["text"]
 
 
 class TestFormatting:
