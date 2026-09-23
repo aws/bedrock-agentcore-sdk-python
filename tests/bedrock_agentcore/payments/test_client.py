@@ -6,7 +6,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-from bedrock_agentcore.payments import PaymentClient, PaymentConnectorProvisionMode
+from bedrock_agentcore.payments import (
+    CoinbaseCdpSecret,
+    PaymentClient,
+    PaymentConnectorProvisionMode,
+)
 from bedrock_agentcore.payments.client import PaymentConnectorConfig
 
 # Get role ARN from environment variable, with fallback for testing
@@ -1659,3 +1663,221 @@ class TestPaymentConnectorCRUDPaths:
                 payment_manager_id="pm-123",
                 payment_connector_id="pc-123",
             )
+
+
+class TestBuildRotationConfigInput:
+    """Tests for _build_rotation_config_input static method."""
+
+    def test_coinbase_cdp_secrets(self):
+        """Enum members are normalized into the coinbaseCDP union member."""
+        result = PaymentClient._build_rotation_config_input(
+            [CoinbaseCdpSecret.API_KEY, CoinbaseCdpSecret.WALLET_SECRET]
+        )
+        assert result == {"coinbaseCDP": {"secrets": ["API_KEY", "WALLET_SECRET"]}}
+
+    def test_accepts_string_secrets(self):
+        """Raw secret strings are accepted alongside enum members."""
+        result = PaymentClient._build_rotation_config_input(["WALLET_SECRET", CoinbaseCdpSecret.API_KEY])
+        assert result == {"coinbaseCDP": {"secrets": ["WALLET_SECRET", "API_KEY"]}}
+
+    def test_secrets_passed_through_verbatim(self):
+        """Secrets are not filtered or de-duplicated; the service validates them."""
+        result = PaymentClient._build_rotation_config_input(
+            [CoinbaseCdpSecret.WALLET_SECRET, "WALLET_SECRET", "ROOT_PASSWORD"]
+        )
+        assert result == {"coinbaseCDP": {"secrets": ["WALLET_SECRET", "WALLET_SECRET", "ROOT_PASSWORD"]}}
+
+    def test_empty_secrets_passed_through(self):
+        """An empty list is sent as-is; the model's length constraint rejects it server-side."""
+        assert PaymentClient._build_rotation_config_input([]) == {"coinbaseCDP": {"secrets": []}}
+
+
+class TestRotatePaymentConnectorCredentials:
+    """Tests for PaymentClient.rotate_payment_connector_credentials."""
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_rotate_success(self, mock_session, mock_boto3_client):
+        """Successful rotation returns the connector IDs, status and completion timestamp."""
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+        mock_cp_client.rotate_payment_connector_credentials.return_value = {
+            "paymentConnectorId": "pc-123",
+            "paymentManagerId": "pm-123",
+            "status": "READY",
+            "lastUpdatedAt": "2026-09-22T00:00:00Z",
+        }
+
+        client = PaymentClient(region_name="us-west-2")
+        result = client.rotate_payment_connector_credentials(
+            payment_manager_id="pm-123",
+            payment_connector_id="pc-123",
+            secrets=[CoinbaseCdpSecret.API_KEY],
+        )
+
+        call_kwargs = mock_cp_client.rotate_payment_connector_credentials.call_args[1]
+        assert call_kwargs["paymentManagerId"] == "pm-123"
+        assert call_kwargs["paymentConnectorId"] == "pc-123"
+        assert call_kwargs["credentialsToRotate"] == {"coinbaseCDP": {"secrets": ["API_KEY"]}}
+
+        assert result == {
+            "paymentConnectorId": "pc-123",
+            "paymentManagerId": "pm-123",
+            "status": "READY",
+            "updatedAt": "2026-09-22T00:00:00Z",
+        }
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_rotate_generates_client_token(self, mock_session, mock_boto3_client):
+        """A client token is generated when the caller does not supply one."""
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+        mock_cp_client.rotate_payment_connector_credentials.return_value = {}
+
+        client = PaymentClient(region_name="us-west-2")
+        client.rotate_payment_connector_credentials(
+            payment_manager_id="pm-123",
+            payment_connector_id="pc-123",
+            secrets=["API_KEY"],
+        )
+
+        call_kwargs = mock_cp_client.rotate_payment_connector_credentials.call_args[1]
+        assert call_kwargs["clientToken"]
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_rotate_passes_client_token_through(self, mock_session, mock_boto3_client):
+        """A caller-supplied client token is used verbatim."""
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+        mock_cp_client.rotate_payment_connector_credentials.return_value = {}
+
+        client = PaymentClient(region_name="us-west-2")
+        client.rotate_payment_connector_credentials(
+            payment_manager_id="pm-123",
+            payment_connector_id="pc-123",
+            secrets=["API_KEY"],
+            client_token="token-abc",
+        )
+
+        call_kwargs = mock_cp_client.rotate_payment_connector_credentials.call_args[1]
+        assert call_kwargs["clientToken"] == "token-abc"
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_rotate_defers_validation_to_service(self, mock_session, mock_boto3_client):
+        """Secret names are not validated client-side; the service is the single source of truth."""
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+        mock_cp_client.rotate_payment_connector_credentials.side_effect = ClientError(
+            {"Error": {"Code": "ValidationException", "Message": "Unsupported secret"}},
+            "RotatePaymentConnectorCredentials",
+        )
+
+        client = PaymentClient(region_name="us-west-2")
+        with pytest.raises(ClientError):
+            client.rotate_payment_connector_credentials(
+                payment_manager_id="pm-123",
+                payment_connector_id="pc-123",
+                secrets=["ROOT_PASSWORD"],
+            )
+
+        call_kwargs = mock_cp_client.rotate_payment_connector_credentials.call_args[1]
+        assert call_kwargs["credentialsToRotate"] == {"coinbaseCDP": {"secrets": ["ROOT_PASSWORD"]}}
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_rotate_conflict_raises(self, mock_session, mock_boto3_client):
+        """A concurrent rotation surfaces as ClientError."""
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+        mock_cp_client.rotate_payment_connector_credentials.side_effect = ClientError(
+            {"Error": {"Code": "ConflictException", "Message": "Rotation already in progress"}},
+            "RotatePaymentConnectorCredentials",
+        )
+
+        client = PaymentClient(region_name="us-west-2")
+        with pytest.raises(ClientError):
+            client.rotate_payment_connector_credentials(
+                payment_manager_id="pm-123",
+                payment_connector_id="pc-123",
+                secrets=["API_KEY"],
+            )
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_rotate_reachable_through_forwarding(self, mock_session, mock_boto3_client):
+        """The operation is allowlisted for direct boto3 forwarding."""
+        mock_session.return_value.region_name = "us-west-2"
+        mock_boto3_client.return_value = MagicMock()
+
+        assert "rotate_payment_connector_credentials" in PaymentClient._ALLOWED_PAYMENTS_CP_METHODS
+
+
+class TestPaymentConnectorProvisionFields:
+    """Tests that provisionMode and credentialsUpdatedAt are surfaced to callers."""
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_get_connector_returns_provision_fields(self, mock_session, mock_boto3_client):
+        """get_payment_connector surfaces provisionMode and credentialsUpdatedAt."""
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+        mock_cp_client.get_payment_connector.return_value = {
+            "paymentConnectorId": "pc-123",
+            "paymentManagerId": "pm-123",
+            "status": "READY",
+            "provisionMode": "QUICK_CREATE",
+            "credentialsUpdatedAt": "2026-09-22T00:00:00Z",
+        }
+
+        client = PaymentClient(region_name="us-west-2")
+        result = client.get_payment_connector("pm-123", "pc-123")
+
+        assert result["provisionMode"] == "QUICK_CREATE"
+        assert result["credentialsUpdatedAt"] == "2026-09-22T00:00:00Z"
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_get_connector_omits_credentials_updated_at_when_absent(self, mock_session, mock_boto3_client):
+        """MANUAL connectors have no credentialsUpdatedAt, so the key is omitted."""
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+        mock_cp_client.get_payment_connector.return_value = {
+            "paymentConnectorId": "pc-123",
+            "status": "READY",
+            "provisionMode": "MANUAL",
+        }
+
+        client = PaymentClient(region_name="us-west-2")
+        result = client.get_payment_connector("pm-123", "pc-123")
+
+        assert result["provisionMode"] == "MANUAL"
+        assert "credentialsUpdatedAt" not in result
+
+    @patch("bedrock_agentcore.payments.client.boto3.client")
+    @patch("bedrock_agentcore.payments.client.boto3.Session")
+    def test_list_connectors_returns_provision_mode(self, mock_session, mock_boto3_client):
+        """list_payment_connectors surfaces provisionMode for each connector."""
+        mock_session.return_value.region_name = "us-west-2"
+        mock_cp_client = MagicMock()
+        mock_boto3_client.return_value = mock_cp_client
+        mock_cp_client.list_payment_connectors.return_value = {
+            "paymentConnectors": [
+                {"paymentConnectorId": "pc-1", "provisionMode": "QUICK_CREATE"},
+                {"paymentConnectorId": "pc-2", "provisionMode": "MANUAL"},
+            ]
+        }
+
+        client = PaymentClient(region_name="us-west-2")
+        result = client.list_payment_connectors("pm-123")
+
+        assert [c["provisionMode"] for c in result["paymentConnectors"]] == ["QUICK_CREATE", "MANUAL"]

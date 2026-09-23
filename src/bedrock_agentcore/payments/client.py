@@ -20,7 +20,11 @@ from bedrock_agentcore._utils.endpoints import get_control_plane_endpoint
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 from bedrock_agentcore.services.identity import IdentityClient
 
-from .constants import PaymentConnectorProvisionMode, PaymentConnectorStatus
+from .constants import (
+    CoinbaseCdpSecret,
+    PaymentConnectorProvisionMode,
+    PaymentConnectorStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +142,7 @@ class PaymentClient:
         "list_payment_connectors",
         "update_payment_connector",
         "delete_payment_connector",
+        "rotate_payment_connector_credentials",
     }
 
     @staticmethod
@@ -246,6 +251,36 @@ class PaymentClient:
             raise ValueError(
                 f"Unsupported credential_provider_vendor: '{vendor}'. Supported vendors are: CoinbaseCDP, StripePrivy"
             )
+
+    @staticmethod
+    def _build_rotation_config_input(
+        secrets: List[Union[str, CoinbaseCdpSecret]],
+    ) -> Dict[str, Any]:
+        """Build the credentialsToRotate input for a credential rotation request.
+
+        CoinbaseCDP is the only provider CredentialRotationConfig currently models, so
+        there is nothing for the caller to select. The service validates the secret names
+        (CoinbaseCdpSecret enum), rejects an empty list (@length(min: 1)) and rejects
+        duplicates (@uniqueItems), so this only normalizes enum members to their values.
+
+        Args:
+            secrets: The service-managed secrets to rotate. Accepts CoinbaseCdpSecret
+                members or their string values.
+
+        Returns:
+            Dictionary with the single provider entry for the connector type
+
+        Example:
+            For CoinbaseCDP connectors:
+            {
+                "coinbaseCDP": {
+                    "secrets": ["API_KEY", "WALLET_SECRET"]
+                }
+            }
+        """
+        normalized_secrets = [secret.value if isinstance(secret, CoinbaseCdpSecret) else secret for secret in secrets]
+
+        return {"coinbaseCDP": {"secrets": normalized_secrets}}
 
     def __init__(
         self,
@@ -794,6 +829,7 @@ class PaymentClient:
                 "name": response.get("name"),
                 "description": response.get("description"),
                 "providerType": response.get("type"),
+                "provisionMode": response.get("provisionMode"),
                 "status": response.get("status"),
                 "createdAt": response.get("createdAt"),
                 "updatedAt": response.get("lastUpdatedAt"),
@@ -803,6 +839,10 @@ class PaymentClient:
                 authorization_url
             ):
                 result["authorizationUrl"] = authorization_url
+            # Present only for QUICK_CREATE connectors, whose credentials the service manages
+            credentials_updated_at = response.get("credentialsUpdatedAt")
+            if credentials_updated_at is not None:
+                result["credentialsUpdatedAt"] = credentials_updated_at
             return result
 
         except ClientError as e:
@@ -849,6 +889,7 @@ class PaymentClient:
                         "name": connector.get("name"),
                         "description": connector.get("description"),
                         "providerType": connector.get("type"),
+                        "provisionMode": connector.get("provisionMode"),
                         "status": connector.get("status"),
                         "createdAt": connector.get("createdAt"),
                         "updatedAt": connector.get("lastUpdatedAt"),
@@ -988,6 +1029,74 @@ class PaymentClient:
 
         except ClientError as e:
             logger.error("Failed to update payment connector: %s", e)
+            raise
+
+    def rotate_payment_connector_credentials(
+        self,
+        payment_manager_id: str,
+        payment_connector_id: str,
+        secrets: List[Union[str, CoinbaseCdpSecret]],
+        client_token: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Replace a payment connector's service-managed credentials with new ones.
+
+        Use this only for connectors with a provision mode of QUICK_CREATE, whose
+        credentials the service issued and stores. For a connector with a provision mode of
+        MANUAL you own the credentials: rotate them with the payment provider, then call
+        UpdatePaymentCredentialProvider with the new values.
+
+        The rotation completes before the response is returned, so there is no status to
+        poll. On success the connector stays READY. On failure the connector and its
+        existing credentials are left unchanged and the request can be retried. Only one
+        rotation runs at a time for a given connector, so a concurrent call fails with
+        ConflictException.
+
+        Rotation replaces the credentials on the connector's credential provider, so every
+        connector that uses that provider is affected. Replace any copy of the previous
+        credentials that you use outside AgentCore.
+
+        Args:
+            payment_manager_id: ID of the payment manager
+            payment_connector_id: ID of the connector whose credentials to rotate
+            secrets: The service-managed secrets to rotate (at least one). Accepts
+                CoinbaseCdpSecret members or their string values.
+            client_token: Optional idempotency token. If not provided, a UUID will be generated.
+
+        Returns:
+            Dictionary with the connector IDs, its status after the rotation, and the
+            timestamp the rotation completed
+
+        Raises:
+            ClientError: If the rotation fails, including a ValidationException if secrets
+                is empty or names a secret the service does not support
+        """
+        credentials_to_rotate = self._build_rotation_config_input(secrets)
+
+        if client_token is None:
+            client_token = str(uuid.uuid4())
+
+        try:
+            logger.info(
+                "Rotating credentials for payment connector: %s for manager %s",
+                payment_connector_id,
+                payment_manager_id,
+            )
+            response = self.payments_cp_client.rotate_payment_connector_credentials(
+                paymentManagerId=payment_manager_id,
+                paymentConnectorId=payment_connector_id,
+                credentialsToRotate=credentials_to_rotate,
+                clientToken=client_token,
+            )
+
+            return {
+                "paymentConnectorId": response.get("paymentConnectorId"),
+                "paymentManagerId": response.get("paymentManagerId"),
+                "status": response.get("status"),
+                "updatedAt": response.get("lastUpdatedAt"),
+            }
+
+        except ClientError as e:
+            logger.error("Failed to rotate payment connector credentials: %s", e)
             raise
 
     def create_payment_manager_with_connector(

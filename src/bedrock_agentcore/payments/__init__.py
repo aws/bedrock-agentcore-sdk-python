@@ -3,6 +3,7 @@
 from .client import PaymentClient
 from .constants import (
     DEFAULT_MAX_RESULTS,
+    CoinbaseCdpSecret,
     PaymentConnectorProvisionMode,
     PaymentConnectorStatus,
     PaymentConnectorType,
@@ -44,6 +45,7 @@ __all__ = [
     "PaymentConnectorStatus",
     "PaymentConnectorType",
     "PaymentConnectorProvisionMode",
+    "CoinbaseCdpSecret",
     "PaymentsAuthorizerType",
     "PaymentType",
     "DEFAULT_MAX_RESULTS",

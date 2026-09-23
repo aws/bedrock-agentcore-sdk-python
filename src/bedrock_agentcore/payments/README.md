@@ -238,6 +238,39 @@ user interaction, `wait_for_ready=True` cannot be used when creating a Quick Cre
 
 ---
 
+### Rotating Connector Credentials
+
+Quick Create connectors have service-managed credentials, so you can replace them without signing in
+to the payment provider:
+
+```python
+from bedrock_agentcore.payments import CoinbaseCdpSecret, PaymentClient
+
+payment_client = PaymentClient(region_name="us-east-1")
+result = payment_client.rotate_payment_connector_credentials(
+    payment_manager_id="payment-manager-id",
+    payment_connector_id="payment-connector-id",
+    secrets=[CoinbaseCdpSecret.API_KEY, CoinbaseCdpSecret.WALLET_SECRET],
+)
+
+print(result["status"], result["updatedAt"])
+```
+
+The rotation completes before the response returns, so there is no status to poll — on success the
+connector stays `READY`, and on failure it is left unchanged and the request can be retried. Only one
+rotation runs at a time per connector, so a concurrent call fails with `ConflictException`.
+
+Rotation replaces the credentials on the connector's credential provider, so every connector sharing
+that provider is affected. Replace any copy of the previous credentials that you use outside
+AgentCore.
+
+This applies only to connectors with a `provisionMode` of `QUICK_CREATE` — check
+`get_payment_connector()["provisionMode"]` if you are unsure. For `MANUAL` connectors you own the
+credentials: rotate them with the payment provider, then update the credential provider with the new
+values.
+
+---
+
 ### Creating a Payment Instrument
 
 Create a payment instrument for a user. Below is an example creating an Ethereum-compatible embedded crypto wallet:
@@ -907,6 +940,7 @@ except PaymentError as e:
 | `get_payment_connector()` | Retrieve payment connector details |
 | `list_payment_connectors()` | List payment connectors for a manager |
 | `update_payment_connector()` | Update a payment connector |
+| `rotate_payment_connector_credentials()` | Rotate a connector's service-managed credentials |
 | `delete_payment_connector()` | Delete a payment connector |
 | `create_payment_manager_with_connector()` | One-step setup with automatic rollback |
 
@@ -931,6 +965,7 @@ except PaymentError as e:
 | `PaymentConnectorStatus` | Payment connector statuses |
 | `PaymentConnectorType` | Supported connector types (CoinbaseCDP, StripePrivy) |
 | `PaymentConnectorProvisionMode` | Connector provisioning modes (MANUAL, QUICK_CREATE) |
+| `CoinbaseCdpSecret` | Rotatable Coinbase CDP secrets (API_KEY, WALLET_SECRET) |
 | `PaymentsAuthorizerType` | Authorizer types (AWS_IAM, CUSTOM_JWT) |
 | `NETWORK_PREFERENCES` | Default blockchain network preference order |
 | `DEFAULT_MAX_RESULTS` | Default pagination limit (100) |
