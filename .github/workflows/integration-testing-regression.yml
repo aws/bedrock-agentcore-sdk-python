@@ -151,6 +151,9 @@ jobs:
             extra-deps: ""
           - group: evaluation
             path: tests_integ/evaluation
+            # These tests need OpenAI and Braintrust API keys, which this job
+            # doesn't have. The secure integ workflow runs them.
+            extra-args: --ignore=tests_integ/evaluation/test_third_party_adapters.py
             timeout: 15
             extra-deps: "strands-agents-evals"
           - group: services
@@ -247,16 +250,17 @@ jobs:
           BASELINE_TAG: ${{ needs.resolve-tag.outputs.tag }}
           TEST_GROUP: ${{ matrix.group }}
           PYTEST_PATH: ${{ matrix.path }}
+          PYTEST_EXTRA_ARGS: ${{ matrix.extra-args || '' }}
         timeout-minutes: ${{ matrix.timeout }}
         working-directory: /tmp/baseline-tests
-        # PYTEST_PATH comes from the job matrix and holds space-separated pytest
-        # path args; left unquoted intentionally so it word-splits.
+        # PYTEST_PATH and PYTEST_EXTRA_ARGS are unquoted on purpose so they
+        # split into separate pytest args.
         run: |
           echo "================================================"
           echo "Library:    bedrock-agentcore (PR branch source)"
           echo "Test suite: $BASELINE_TAG tests_integ/$TEST_GROUP"
           echo "================================================"
-          pytest $PYTEST_PATH \
+          pytest $PYTEST_PATH $PYTEST_EXTRA_ARGS \
             -n auto --dist=loadscope \
             -s --log-cli-level=INFO
 
