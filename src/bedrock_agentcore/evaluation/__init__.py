@@ -1,5 +1,6 @@
 """AgentCore Evaluation: EvaluationClient, OnDemandEvaluationDatasetRunner, and Strands integration."""
 
+from bedrock_agentcore._utils.config import WaitConfig
 from bedrock_agentcore.evaluation.client import EvaluationClient, ReferenceInputs
 from bedrock_agentcore.evaluation.custom_code_based_evaluators import (
     EvaluatorInput,
@@ -66,6 +67,7 @@ from bedrock_agentcore.evaluation.utils.cloudwatch_span_helper import (
 )
 
 __all__ = [
+    "WaitConfig",
     "ActorProfile",
     "AgentInvokerFn",
     "BatchEvaluationRunner",

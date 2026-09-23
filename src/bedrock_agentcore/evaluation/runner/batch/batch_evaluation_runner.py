@@ -63,14 +63,15 @@ class BatchEvaluationRunner:
         SimulatedScenario: SimulatedScenarioExecutor,
     }
 
-    def __init__(self, region: Optional[str] = None):
+    def __init__(self, region: Optional[str] = None, region_name: Optional[str] = None):
         """Initialize the batch evaluation runner.
 
         Args:
             region: AWS region. Defaults to boto3 session region or DEFAULT_REGION.
+            region_name: Alias for region. If both are provided, region takes precedence.
         """
         session = boto3.Session()
-        self.region = region or session.region_name or DEFAULT_REGION
+        self.region = region or region_name or session.region_name or DEFAULT_REGION
         self.data_plane_client = session.client(
             "bedrock-agentcore",
             region_name=self.region,

@@ -6,6 +6,8 @@ This package contains the core runtime components for Bedrock AgentCore applicat
 - BedrockAgentCoreContext: Agent identity context
 """
 
+from bedrock_agentcore._utils.config import WaitConfig
+
 from .agent_core_runtime_client import AgentCoreRuntimeClient
 from .app import BedrockAgentCoreApp
 from .context import BedrockAgentCoreContext, RequestContext
@@ -22,6 +24,7 @@ from .shell import (
 )
 
 __all__ = [
+    "WaitConfig",
     "AgentCoreRuntimeClient",
     "AGUIApp",
     "AuthMode",

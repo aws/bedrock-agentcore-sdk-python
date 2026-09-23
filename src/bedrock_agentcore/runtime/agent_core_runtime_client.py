@@ -74,6 +74,7 @@ class AgentCoreRuntimeClient:
         region: Optional[str] = None,
         session: Optional[boto3.Session] = None,
         integration_source: Optional[str] = None,
+        region_name: Optional[str] = None,
     ) -> None:
         """Initialize an AgentCoreRuntime client for the specified AWS region.
 
@@ -84,8 +85,11 @@ class AgentCoreRuntimeClient:
                 default session is created.
             integration_source: Optional integration source for user-agent
                 telemetry.
+            region_name: Alias for region. If both are provided, region takes precedence.
         """
-        self.region = validate_region(region or (session.region_name if session else None) or "us-west-2")
+        self.region = validate_region(
+            region or region_name or (session.region_name if session else None) or "us-west-2"
+        )
         self.session = session if session else boto3.Session(region_name=self.region)
         self.integration_source = integration_source
         self.logger = logging.getLogger(__name__)
