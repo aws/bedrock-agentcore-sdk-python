@@ -8,6 +8,7 @@ import boto3
 from botocore.config import Config
 from pydantic import BaseModel
 
+import bedrock_agentcore.evaluation.spans as span_helpers
 from bedrock_agentcore._utils.config import WaitConfig
 from bedrock_agentcore._utils.polling import wait_until, wait_until_deleted
 from bedrock_agentcore._utils.snake_case import accept_snake_case_kwargs, convert_kwargs
@@ -215,7 +216,7 @@ class EvaluationClient:
 
         # Add reference inputs (ground truth) if provided
         if reference_inputs:
-            all_trace_ids = self._extract_trace_ids(spans)
+            all_trace_ids = span_helpers.trace_ids(spans)
             ref_inputs = self._build_reference_inputs(
                 session_id, reference_inputs, all_trace_ids, target_trace_id=trace_id
             )
@@ -225,7 +226,7 @@ class EvaluationClient:
         # Steps 2-4: For each evaluator, look up level, build targets, call API
         all_results: List[Dict[str, Any]] = []
         for evaluator_id in evaluator_ids:
-            level = self._get_evaluator_level(evaluator_id)
+            level = self.get_evaluator_level(evaluator_id)
             logger.info("Evaluating with %s (level=%s)", evaluator_id, level)
             requests = self._build_requests_for_level(evaluator_id, level, base_input, spans, trace_id)
             if len(requests) > 1:
@@ -241,8 +242,17 @@ class EvaluationClient:
         )
         return all_results
 
-    def _get_evaluator_level(self, evaluator_id: str) -> str:
-        """Look up evaluator level with caching. Falls back to SESSION."""
+    def get_evaluator_level(self, evaluator_id: str) -> str:
+        """Look up an evaluator's level using the control plane client.
+
+        Args:
+            evaluator_id: The built-in or custom evaluator identifier.
+
+        Returns:
+            The evaluator level: SESSION, TRACE, or TOOL_CALL. Returns SESSION
+            if the lookup fails or the response omits the level. Results,
+            including fallback values, are cached for this client's lifetime.
+        """
         if evaluator_id not in self._evaluator_level_cache:
             try:
                 response = self._cp_client.get_evaluator(evaluatorId=evaluator_id)
@@ -276,7 +286,7 @@ class EvaluationClient:
         if level == "TRACE":
             if trace_id:
                 return [{**base_input, "evaluationTarget": {"traceIds": [trace_id]}}]
-            trace_ids = self._extract_trace_ids(spans)
+            trace_ids = span_helpers.trace_ids(spans)
             logger.debug("Extracted %d unique trace ID(s) for evaluator %s", len(trace_ids), evaluator_id)
             if not trace_ids:
                 logger.warning("No trace IDs found for trace-level evaluator %s, skipping", evaluator_id)
@@ -287,7 +297,7 @@ class EvaluationClient:
             ]
 
         if level == "TOOL_CALL":
-            tool_span_ids = self._extract_tool_span_ids(spans, trace_id=trace_id)
+            tool_span_ids = span_helpers.tool_span_ids(spans, trace_id=trace_id)
             logger.debug("Extracted %d tool span ID(s) for evaluator %s", len(tool_span_ids), evaluator_id)
             if not tool_span_ids:
                 logger.warning("No tool span IDs found for tool-level evaluator %s, skipping", evaluator_id)
@@ -298,41 +308,6 @@ class EvaluationClient:
             ]
 
         raise ValueError(f"Unknown evaluator level: {level}")
-
-    @staticmethod
-    def _extract_trace_ids(spans: list) -> List[str]:
-        """Extract unique trace IDs from spans, ordered by appearance."""
-        return list(dict.fromkeys(span.get("traceId") for span in spans if span.get("traceId")))
-
-    @staticmethod
-    def _is_tool_span(span: dict) -> bool:
-        """Check if a span represents a tool execution (supports Strands, LangGraph, and Traceloop)."""
-        attrs = span.get("attributes", {})
-        if not isinstance(attrs, dict):
-            return False
-        return (
-            attrs.get("gen_ai.operation.name") == "execute_tool"
-            or attrs.get("openinference.span.kind") == "TOOL"
-            or attrs.get("traceloop.span.kind") == "tool"
-        )
-
-    @staticmethod
-    def _extract_tool_span_ids(spans: list, trace_id: Optional[str] = None) -> List[str]:
-        """Extract span IDs for tool execution spans.
-
-        Args:
-            spans: List of span dicts.
-            trace_id: If provided, only include tool spans with this trace ID.
-        """
-        tool_span_ids: List[str] = []
-        for span in spans:
-            if EvaluationClient._is_tool_span(span):
-                if trace_id and span.get("traceId") != trace_id:
-                    continue
-                span_id = span.get("spanId")
-                if span_id:
-                    tool_span_ids.append(span_id)
-        return tool_span_ids
 
     @staticmethod
     def _build_reference_inputs(

@@ -60,6 +60,7 @@ from bedrock_agentcore.evaluation.runner.on_demand import (
 from bedrock_agentcore.evaluation.span_to_adot_serializer import (
     convert_strands_to_adot,
 )
+from bedrock_agentcore.evaluation.spans import is_tool_span, tool_span_ids, trace_ids
 from bedrock_agentcore.evaluation.utils.cloudwatch_span_helper import (
     fetch_spans_from_cloudwatch,
 )
@@ -113,6 +114,9 @@ __all__ = [
     "convert_strands_to_adot",
     "create_strands_evaluator",
     "fetch_spans_from_cloudwatch",
+    "is_tool_span",
+    "tool_span_ids",
+    "trace_ids",
 ]
 
 _STRANDS_EVALS_EXTRAS = {
