@@ -1,5 +1,6 @@
 """Tests for Bedrock AgentCore runtime utilities."""
 
+import json
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -177,6 +178,33 @@ class TestConvertComplexObjects:
         assert "a" in result
         assert "b" in result
         assert "c" in result
+
+    def test_bytes_become_base64_anywhere_in_the_tree(self):
+        """Bytes must end up JSON-serializable, including inside dataclasses and Pydantic models."""
+
+        @dataclass
+        class Block:
+            data: bytes
+
+        class Blob(BaseModel):
+            data: bytes
+
+        event = {
+            "raw": b"abc",
+            "buffer": bytearray(b"\x00\xff"),
+            "dataclass": Block(data=b"abc"),
+            "pydantic": Blob(data=b"abc"),
+        }
+
+        result = convert_complex_objects(event)
+
+        assert result == {
+            "raw": "YWJj",
+            "buffer": "AP8=",
+            "dataclass": {"data": "YWJj"},
+            "pydantic": {"data": "YWJj"},
+        }
+        json.dumps(result)
 
     def test_nested_sets_with_complex_objects(self):
         """Test sets containing hashable objects (complex objects can't be in sets)."""
