@@ -1059,6 +1059,14 @@ class TestSSEConversion:
             parsed_data = json.loads(json_part)
             assert parsed_data == test_data
 
+    def test_convert_to_sse_streams_bytes_as_json_object(self):
+        """An event holding bytes must arrive as a JSON object, not a string of its repr (#659)."""
+        app = BedrockAgentCoreApp()
+
+        sse_string = app._convert_to_sse({"result": {"redactedContent": b"abc"}}).decode("utf-8")
+
+        assert json.loads(sse_string[6:-2]) == {"result": {"redactedContent": "YWJj"}}
+
     def test_convert_to_sse_non_serializable_object(self):
         """Test that non-JSON-serializable objects trigger error handling."""
         app = BedrockAgentCoreApp()
