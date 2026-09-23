@@ -24,7 +24,6 @@ from .constants import (
     CoinbaseCdpSecret,
     PaymentConnectorProvisionMode,
     PaymentConnectorStatus,
-    PaymentConnectorType,
 )
 
 logger = logging.getLogger(__name__)
@@ -255,23 +254,21 @@ class PaymentClient:
 
     @staticmethod
     def _build_rotation_config_input(
-        connector_type: Union[str, PaymentConnectorType],
         secrets: List[Union[str, CoinbaseCdpSecret]],
     ) -> Dict[str, Any]:
         """Build the credentialsToRotate input for a credential rotation request.
 
+        CoinbaseCDP is the only provider CredentialRotationConfig currently models, so
+        there is nothing for the caller to select. The service validates the secret names
+        (CoinbaseCdpSecret enum), rejects an empty list (@length(min: 1)) and rejects
+        duplicates (@uniqueItems), so this only normalizes enum members to their values.
+
         Args:
-            connector_type: The connector's type, which selects the provider to rotate for
             secrets: The service-managed secrets to rotate. Accepts CoinbaseCdpSecret
-                members or their string values. Duplicates are dropped and the original
-                order is preserved.
+                members or their string values.
 
         Returns:
             Dictionary with the single provider entry for the connector type
-
-        Raises:
-            ValueError: If the connector type does not support rotation, or if secrets is
-                empty or names an unknown secret
 
         Example:
             For CoinbaseCDP connectors:
@@ -281,28 +278,7 @@ class PaymentClient:
                 }
             }
         """
-        normalized_type = connector_type.value if isinstance(connector_type, PaymentConnectorType) else connector_type
-
-        if normalized_type != PaymentConnectorType.COINBASE_CDP.value:
-            raise ValueError(
-                f"Credential rotation is not supported for connector type: '{normalized_type}'. "
-                f"Supported types are: {PaymentConnectorType.COINBASE_CDP.value}"
-            )
-
-        if not secrets:
-            raise ValueError("secrets is required and must name at least one secret to rotate")
-
-        supported_secrets = {secret.value for secret in CoinbaseCdpSecret}
-        normalized_secrets: List[str] = []
-        for secret in secrets:
-            value = secret.value if isinstance(secret, CoinbaseCdpSecret) else secret
-            if value not in supported_secrets:
-                raise ValueError(
-                    f"Unsupported CoinbaseCDP secret: '{value}'. "
-                    f"Supported secrets are: {', '.join(sorted(supported_secrets))}"
-                )
-            if value not in normalized_secrets:
-                normalized_secrets.append(value)
+        normalized_secrets = [secret.value if isinstance(secret, CoinbaseCdpSecret) else secret for secret in secrets]
 
         return {"coinbaseCDP": {"secrets": normalized_secrets}}
 
@@ -1060,7 +1036,6 @@ class PaymentClient:
         payment_manager_id: str,
         payment_connector_id: str,
         secrets: List[Union[str, CoinbaseCdpSecret]],
-        connector_type: Union[str, PaymentConnectorType] = PaymentConnectorType.COINBASE_CDP,
         client_token: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Replace a payment connector's service-managed credentials with new ones.
@@ -1085,8 +1060,6 @@ class PaymentClient:
             payment_connector_id: ID of the connector whose credentials to rotate
             secrets: The service-managed secrets to rotate (at least one). Accepts
                 CoinbaseCdpSecret members or their string values.
-            connector_type: The connector's type. Defaults to CoinbaseCDP, currently the
-                only type that supports rotation.
             client_token: Optional idempotency token. If not provided, a UUID will be generated.
 
         Returns:
@@ -1094,11 +1067,10 @@ class PaymentClient:
             timestamp the rotation completed
 
         Raises:
-            ValueError: If the connector type does not support rotation, or if secrets is
-                empty or names an unknown secret
-            ClientError: If the rotation fails
+            ClientError: If the rotation fails, including a ValidationException if secrets
+                is empty or names a secret the service does not support
         """
-        credentials_to_rotate = self._build_rotation_config_input(connector_type, secrets)
+        credentials_to_rotate = self._build_rotation_config_input(secrets)
 
         if client_token is None:
             client_token = str(uuid.uuid4())

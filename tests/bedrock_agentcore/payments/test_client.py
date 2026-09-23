@@ -10,7 +10,6 @@ from bedrock_agentcore.payments import (
     CoinbaseCdpSecret,
     PaymentClient,
     PaymentConnectorProvisionMode,
-    PaymentConnectorType,
 )
 from bedrock_agentcore.payments.client import PaymentConnectorConfig
 
@@ -1670,46 +1669,27 @@ class TestBuildRotationConfigInput:
     """Tests for _build_rotation_config_input static method."""
 
     def test_coinbase_cdp_secrets(self):
-        """CoinbaseCDP produces the coinbaseCDP union member."""
+        """Enum members are normalized into the coinbaseCDP union member."""
         result = PaymentClient._build_rotation_config_input(
-            "CoinbaseCDP", [CoinbaseCdpSecret.API_KEY, CoinbaseCdpSecret.WALLET_SECRET]
+            [CoinbaseCdpSecret.API_KEY, CoinbaseCdpSecret.WALLET_SECRET]
         )
         assert result == {"coinbaseCDP": {"secrets": ["API_KEY", "WALLET_SECRET"]}}
 
-    def test_accepts_enum_type(self):
-        """connector_type accepts a PaymentConnectorType member."""
-        result = PaymentClient._build_rotation_config_input(
-            PaymentConnectorType.COINBASE_CDP, [CoinbaseCdpSecret.API_KEY]
-        )
-        assert result == {"coinbaseCDP": {"secrets": ["API_KEY"]}}
-
     def test_accepts_string_secrets(self):
         """Raw secret strings are accepted alongside enum members."""
-        result = PaymentClient._build_rotation_config_input("CoinbaseCDP", ["WALLET_SECRET", CoinbaseCdpSecret.API_KEY])
+        result = PaymentClient._build_rotation_config_input(["WALLET_SECRET", CoinbaseCdpSecret.API_KEY])
         assert result == {"coinbaseCDP": {"secrets": ["WALLET_SECRET", "API_KEY"]}}
 
-    def test_duplicates_removed_order_preserved(self):
-        """Duplicate secrets are dropped, satisfying the model's uniqueItems constraint."""
+    def test_secrets_passed_through_verbatim(self):
+        """Secrets are not filtered or de-duplicated; the service validates them."""
         result = PaymentClient._build_rotation_config_input(
-            "CoinbaseCDP",
-            [CoinbaseCdpSecret.WALLET_SECRET, "WALLET_SECRET", CoinbaseCdpSecret.API_KEY],
+            [CoinbaseCdpSecret.WALLET_SECRET, "WALLET_SECRET", "ROOT_PASSWORD"]
         )
-        assert result == {"coinbaseCDP": {"secrets": ["WALLET_SECRET", "API_KEY"]}}
+        assert result == {"coinbaseCDP": {"secrets": ["WALLET_SECRET", "WALLET_SECRET", "ROOT_PASSWORD"]}}
 
-    def test_empty_secrets_raises(self):
-        """An empty secrets list is rejected before the request is sent."""
-        with pytest.raises(ValueError, match="at least one secret"):
-            PaymentClient._build_rotation_config_input("CoinbaseCDP", [])
-
-    def test_unknown_secret_raises(self):
-        """An unrecognized secret name is rejected."""
-        with pytest.raises(ValueError, match="Unsupported CoinbaseCDP secret"):
-            PaymentClient._build_rotation_config_input("CoinbaseCDP", ["ROOT_PASSWORD"])
-
-    def test_unsupported_connector_type_raises(self):
-        """StripePrivy has no rotatable service-managed secrets."""
-        with pytest.raises(ValueError, match="not supported for connector type"):
-            PaymentClient._build_rotation_config_input(PaymentConnectorType.STRIPE_PRIVY, [CoinbaseCdpSecret.API_KEY])
+    def test_empty_secrets_passed_through(self):
+        """An empty list is sent as-is; the model's length constraint rejects it server-side."""
+        assert PaymentClient._build_rotation_config_input([]) == {"coinbaseCDP": {"secrets": []}}
 
 
 class TestRotatePaymentConnectorCredentials:
@@ -1789,21 +1769,26 @@ class TestRotatePaymentConnectorCredentials:
 
     @patch("bedrock_agentcore.payments.client.boto3.client")
     @patch("bedrock_agentcore.payments.client.boto3.Session")
-    def test_rotate_validates_before_calling_service(self, mock_session, mock_boto3_client):
-        """Invalid input raises ValueError without issuing a request."""
+    def test_rotate_defers_validation_to_service(self, mock_session, mock_boto3_client):
+        """Secret names are not validated client-side; the service is the single source of truth."""
         mock_session.return_value.region_name = "us-west-2"
         mock_cp_client = MagicMock()
         mock_boto3_client.return_value = mock_cp_client
+        mock_cp_client.rotate_payment_connector_credentials.side_effect = ClientError(
+            {"Error": {"Code": "ValidationException", "Message": "Unsupported secret"}},
+            "RotatePaymentConnectorCredentials",
+        )
 
         client = PaymentClient(region_name="us-west-2")
-        with pytest.raises(ValueError):
+        with pytest.raises(ClientError):
             client.rotate_payment_connector_credentials(
                 payment_manager_id="pm-123",
                 payment_connector_id="pc-123",
-                secrets=[],
+                secrets=["ROOT_PASSWORD"],
             )
 
-        mock_cp_client.rotate_payment_connector_credentials.assert_not_called()
+        call_kwargs = mock_cp_client.rotate_payment_connector_credentials.call_args[1]
+        assert call_kwargs["credentialsToRotate"] == {"coinbaseCDP": {"secrets": ["ROOT_PASSWORD"]}}
 
     @patch("bedrock_agentcore.payments.client.boto3.client")
     @patch("bedrock_agentcore.payments.client.boto3.Session")
