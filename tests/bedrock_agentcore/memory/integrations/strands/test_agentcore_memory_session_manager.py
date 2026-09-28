@@ -12,14 +12,14 @@ import pytest
 from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 from strands.agent.agent import Agent
-from strands.experimental.bidi import BidiAgent
-from strands.experimental.bidi.hooks import BidiAgentStopEvent
-from strands.experimental.hooks.multiagent.events import (
+from strands.hooks import (
+    AfterInvocationEvent,
     AfterMultiAgentInvocationEvent,
     AfterNodeCallEvent,
+    AgentInitializedEvent,
+    MessageAddedEvent,
     MultiAgentInitializedEvent,
 )
-from strands.hooks import AfterInvocationEvent, AgentInitializedEvent, MessageAddedEvent
 from strands.hooks.registry import HookRegistry
 from strands.types.exceptions import SessionException
 from strands.types.session import Session, SessionAgent, SessionMessage, SessionType
@@ -2693,33 +2693,6 @@ class TestThinkingModeCompatibility:
 class TestSessionHooks:
     """Test session lifecycle hook integration."""
 
-    @pytest.mark.parametrize("async_mode", [False, True])
-    async def test_bidi_message_persists_without_retrieval(
-        self, agentcore_config_with_retrieval, mock_memory_client, async_mode
-    ):
-        """Bidi messages are persisted without retrieving or injecting context."""
-        agentcore_config_with_retrieval.async_mode = async_mode
-        manager = _create_session_manager(agentcore_config_with_retrieval, mock_memory_client)
-        manager.session_repository = Mock()
-        manager._latest_agent_message = {}
-        agent = Mock(
-            spec=BidiAgent,
-            agent_id="test-agent",
-            messages=[{"role": "user", "content": [{"text": "Hello"}]}],
-            state=Mock(),
-        )
-        agent.state.get.return_value = {}
-        mock_memory_client.retrieve_memories.return_value = [{"content": {"text": "User prefers blue"}, "score": 1.0}]
-        registry = HookRegistry()
-        manager.register_hooks(registry)
-
-        await registry.invoke_callbacks_async(MessageAddedEvent(agent=agent, message=agent.messages[0]))
-
-        mock_memory_client.retrieve_memories.assert_not_called()
-        assert agent.messages == [{"role": "user", "content": [{"text": "Hello"}]}]
-        mock_memory_client.create_event.assert_called_once()
-        manager.session_repository.update_agent.assert_called_once()
-
     def test_after_invocation_hook_registered(self, batching_session_manager):
         """Test that AfterInvocationEvent hook is registered when batching is enabled."""
         registry = HookRegistry()
@@ -2784,10 +2757,7 @@ class TestSessionHooks:
         assert len(flush_callbacks) == 0
 
     @pytest.mark.parametrize("async_mode", [False, True])
-    @pytest.mark.parametrize("event_type", [AfterInvocationEvent, BidiAgentStopEvent])
-    async def test_completion_flushes_messages_and_final_state(
-        self, batching_config, mock_memory_client, async_mode, event_type
-    ):
+    async def test_completion_flushes_messages_and_final_state(self, batching_config, mock_memory_client, async_mode):
         """Completion flushes a partial batch, including the final state update."""
         batching_config.async_mode = async_mode
         manager = _create_session_manager(batching_config, mock_memory_client)
@@ -2805,7 +2775,7 @@ class TestSessionHooks:
         agent.state.get.return_value = {"status": "stopped"}
         registry = HookRegistry()
         manager.register_hooks(registry)
-        await registry.invoke_callbacks_async(event_type(agent=agent))
+        await registry.invoke_callbacks_async(AfterInvocationEvent(agent=agent))
 
         assert manager.pending_message_count() == 0
         assert manager.pending_agent_state_count() == 0
@@ -3809,8 +3779,8 @@ class TestAsyncMode:
 
         assert any("async_mode=True" in rec.message and "stream_async" in rec.message for rec in caplog.records)
 
-    def test_async_mode_registers_bidi_agent_callbacks(self, mock_memory_client):
-        """async_mode=True: BidiAgent events get callbacks; init stays sync, others are async."""
+    def test_async_mode_registers_agent_callbacks(self, mock_memory_client):
+        """async_mode=True: initialization stays sync while message callbacks are async."""
         config = AgentCoreMemoryConfig(memory_id="m", session_id="s", actor_id="a", async_mode=True)
         manager = _create_session_manager(config, mock_memory_client)
         registry = HookRegistry()
@@ -3820,13 +3790,10 @@ class TestAsyncMode:
         assert init_callbacks
         assert not any(asyncio.iscoroutinefunction(cb) for cb in init_callbacks)
 
-        for event in (
-            MessageAddedEvent(agent=Mock(), message={"role": "user", "content": [{"text": "x"}]}),
-            BidiAgentStopEvent(agent=Mock()),
-        ):
-            callbacks = list(registry.get_callbacks_for(event))
-            assert callbacks, f"No callbacks registered for {type(event).__name__}"
-            assert all(asyncio.iscoroutinefunction(cb) for cb in callbacks)
+        event = MessageAddedEvent(agent=Mock(), message={"role": "user", "content": [{"text": "x"}]})
+        callbacks = list(registry.get_callbacks_for(event))
+        assert callbacks
+        assert all(asyncio.iscoroutinefunction(cb) for cb in callbacks)
 
 
 class TestFlushAgentStatesRaceCondition:
