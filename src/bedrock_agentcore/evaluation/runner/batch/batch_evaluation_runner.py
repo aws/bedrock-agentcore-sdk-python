@@ -13,7 +13,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 import boto3
 
-from bedrock_agentcore._utils.endpoints import DEFAULT_REGION, get_data_plane_endpoint
+from bedrock_agentcore._utils.endpoints import DEFAULT_REGION, DP_ENDPOINT_OVERRIDE
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     BatchEvaluationResult,
     BatchEvaluationRunConfig,
@@ -72,11 +72,12 @@ class BatchEvaluationRunner:
         """
         session = boto3.Session()
         self.region = region or region_name or session.region_name or DEFAULT_REGION
-        self.data_plane_client = session.client(
-            "bedrock-agentcore",
-            region_name=self.region,
-            endpoint_url=get_data_plane_endpoint(self.region),
-        )
+        # boto3 resolves the endpoint natively (partition-correct, incl. aws-cn);
+        # only override when the operator set BEDROCK_AGENTCORE_DP_ENDPOINT.
+        dp_kwargs = {"region_name": self.region}
+        if DP_ENDPOINT_OVERRIDE:
+            dp_kwargs["endpoint_url"] = DP_ENDPOINT_OVERRIDE
+        self.data_plane_client = session.client("bedrock-agentcore", **dp_kwargs)
         self._logs_client = session.client("logs", region_name=self.region)
 
     @staticmethod

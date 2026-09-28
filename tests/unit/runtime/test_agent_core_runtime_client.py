@@ -40,8 +40,10 @@ class TestParseRuntimeArn:
         assert result["runtime_id"] == "my-runtime-abc123"
 
     def test_parse_invalid_arn_partition(self):
+        # aws-iso is a real (botocore-known) partition and is now accepted; use a
+        # bogus partition to exercise the rejection path.
         with pytest.raises(ValueError, match="Invalid runtime ARN format"):
-            parse_runtime_arn("arn:aws-iso:bedrock-agentcore:us-iso-east-1:123456789012:runtime/my-runtime-abc123")
+            parse_runtime_arn("arn:aws-fake:bedrock-agentcore:us-east-1:123456789012:runtime/my-runtime-abc123")
 
     def test_parse_invalid_arn_raises_error(self):
         with pytest.raises(ValueError, match="Invalid runtime ARN format"):

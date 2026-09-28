@@ -8,7 +8,9 @@ from bedrock_agentcore.config_bundle.client import ConfigBundleClient
 
 
 class TestConfigBundleClient:
-    def test_boto_client_created_lazily_on_first_access(self):
+    def test_boto_client_created_lazily_on_first_access(self, monkeypatch):
+        # No override: boto3 resolves the endpoint natively (partition-correct).
+        monkeypatch.setattr("bedrock_agentcore.config_bundle.client.CP_ENDPOINT_OVERRIDE", None)
         mock_session = MagicMock()
         mock_boto_client = MagicMock()
         mock_session.client.return_value = mock_boto_client
@@ -24,7 +26,22 @@ class TestConfigBundleClient:
         mock_session.client.assert_called_once_with(
             "bedrock-agentcore-control",
             region_name="us-east-1",
-            endpoint_url="https://bedrock-agentcore-control.us-east-1.amazonaws.com",
+        )
+
+    def test_boto_client_honours_endpoint_override(self, monkeypatch):
+        # With BEDROCK_AGENTCORE_CP_ENDPOINT set, the override must reach boto3.
+        override = "https://bedrock-agentcore-control.gamma.example.com"
+        monkeypatch.setattr("bedrock_agentcore.config_bundle.client.CP_ENDPOINT_OVERRIDE", override)
+        mock_session = MagicMock()
+        mock_session.client.return_value = MagicMock()
+
+        client = ConfigBundleClient(region_name="us-east-1", boto3_session=mock_session)
+        _ = client.list_configuration_bundles
+
+        mock_session.client.assert_called_once_with(
+            "bedrock-agentcore-control",
+            region_name="us-east-1",
+            endpoint_url=override,
         )
 
     def test_boto_client_reused_across_calls(self):

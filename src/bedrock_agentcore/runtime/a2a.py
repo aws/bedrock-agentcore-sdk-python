@@ -135,10 +135,10 @@ def build_runtime_url(agent_arn: str, region: Optional[str] = None) -> str:
     """
     from urllib.parse import quote
 
-    from .._utils.endpoints import validate_region
+    from .._utils.endpoints import _dns_suffix_for_region, validate_region
 
     if region is None:
-        # ARN format: arn:aws:bedrock-agentcore:<region>:<account>:runtime/<id>
+        # ARN format: arn:<partition>:bedrock-agentcore:<region>:<account>:runtime/<id>
         parts = agent_arn.split(":")
         if len(parts) >= 4:
             region = parts[3]
@@ -147,7 +147,11 @@ def build_runtime_url(agent_arn: str, region: Optional[str] = None) -> str:
 
     validate_region(region)
     encoded_arn = quote(agent_arn, safe="")
-    return f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{encoded_arn}/invocations"
+    # Derive the partition-correct DNS suffix (e.g. amazonaws.com.cn in aws-cn).
+    # Intentionally region-based: this URL is advertised in the agent card, so it
+    # must not pick up a process-local BEDROCK_AGENTCORE_DP_ENDPOINT override.
+    suffix = _dns_suffix_for_region(region)
+    return f"https://bedrock-agentcore.{region}.{suffix}/runtimes/{encoded_arn}/invocations"
 
 
 class BedrockCallContextBuilder:
