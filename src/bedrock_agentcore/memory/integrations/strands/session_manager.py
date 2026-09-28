@@ -845,7 +845,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self._latest_agent_message[agent.agent_id] = session_message
 
     def retrieve_customer_context(self, event: MessageAddedEvent) -> None:
-        """Retrieve customer LTM context before processing a support query.
+        """Retrieve customer LTM context for regular Agent invocations.
 
         Args:
             event (MessageAddedEvent): The message added event containing the agent and message data.
