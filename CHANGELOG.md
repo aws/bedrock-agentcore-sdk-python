@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.24.0] - 2026-09-28
+
+### Fixed
+- fix: handle empty payload gracefully (#683) (3a6496e)
+
+### Other Changes
+- feat(endpoints): support AWS China (aws-cn) partition (#684) (35c315e)
+- fix(ci): stop flaky sleep test and compat evaluation errors (#677) (c7423e5)
+- fix(clients): expose WaitConfig and accept region_name aliases (#675) (e9dcd40)
+- fix(evaluation): expose shared span helpers and evaluator level lookup (#674) (5554fb8)
+- feat(payments): attribute SDK usage via user-agent integration source (#669) (889615f)
+
 ## [1.23.1] - 2026-09-16
 
 ### Other Changes
