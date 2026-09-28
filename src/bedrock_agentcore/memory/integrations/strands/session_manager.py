@@ -322,8 +322,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             max_results=1,
         )
         if events:
-            session_data = json.loads(events[0].get("payload", {})[0].get("blob"))
-            return Session.from_dict(session_data)
+            payload = events[0].get("payload") or []
+            if payload:
+                session_data = json.loads(payload[0].get("blob"))
+                return Session.from_dict(session_data)
 
         # 2. Fallback: check for legacy event and migrate
         legacy_actor_id = f"{LEGACY_SESSION_PREFIX}{session_id}"
@@ -335,7 +337,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         )
         if events:
             old_event = events[0]
-            session_data = json.loads(old_event.get("payload", {})[0].get("blob"))
+            payload = old_event.get("payload") or []
+            if not payload:
+                return None
+            session_data = json.loads(payload[0].get("blob"))
             session = Session.from_dict(session_data)
             # Migrate: create new event with metadata, delete old
             if self.persistence_mode is not PersistenceMode.NONE:
