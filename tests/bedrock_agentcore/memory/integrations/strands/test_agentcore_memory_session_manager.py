@@ -207,10 +207,10 @@ class TestAgentCoreMemorySessionManager:
         """Test reading a legacy session event triggers migration."""
         legacy_session_data = '{"session_id": "test-session-456", "session_type": "AGENT"}'
 
-        # First call (new approach with metadata) returns empty
+        # First call returns an event whose payload is no longer available
         # Second call (legacy actor_id) returns the legacy event
         mock_memory_client.list_events.side_effect = [
-            [],  # New approach returns nothing
+            [{"eventId": "expired-session-event", "payload": []}],
             [{"eventId": "legacy-event-1", "payload": [{"blob": legacy_session_data}]}],  # Legacy approach
         ]
         mock_memory_client.gmdp_client.create_event.return_value = {"event": {"eventId": "new-event-1"}}
@@ -233,6 +233,19 @@ class TestAgentCoreMemorySessionManager:
         delete_call_kwargs = mock_memory_client.gmdp_client.delete_event.call_args.kwargs
         assert delete_call_kwargs["actorId"] == "session_test-session-456"
         assert delete_call_kwargs["eventId"] == "legacy-event-1"
+
+    def test_read_session_empty_payload_returns_none(self, session_manager, mock_memory_client):
+        """Test session events with empty payloads are treated as unavailable."""
+        mock_memory_client.list_events.side_effect = [
+            [{"eventId": "session-event-1", "payload": []}],
+            [{"eventId": "legacy-event-1", "payload": []}],
+        ]
+
+        result = session_manager.read_session("test-session-456")
+
+        assert result is None
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+        mock_memory_client.gmdp_client.delete_event.assert_not_called()
 
     def test_create_agent(self, session_manager):
         """Test creating an agent."""
