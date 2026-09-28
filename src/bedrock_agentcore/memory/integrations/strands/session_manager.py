@@ -148,8 +148,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self.converter = converter or AgentCoreMemoryConverter
         self.config = agentcore_memory_config
         self.persistence_mode = agentcore_memory_config.persistence_mode
-        self.memory_client = MemoryClient(region_name=region_name)
         session = boto_session or boto3.Session(region_name=region_name)
+        self.memory_client = MemoryClient(region_name=region_name, boto3_session=session)
         self.has_existing_agent = False
 
         # Instance-scoped monotonic-timestamp state. Per-instance so concurrent
