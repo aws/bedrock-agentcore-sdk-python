@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
+from bedrock_agentcore.runtime.shell._validation import parse_runtime_arn
 from bedrock_agentcore.runtime.utils import convert_complex_objects, is_valid_partition
 
 
@@ -340,5 +341,17 @@ class TestConvertComplexObjects:
         """Test valid partitions for arn parsing"""
 
         assert is_valid_partition("aws")
+        assert is_valid_partition("aws-cn")
         assert is_valid_partition("aws-us-gov")
-        assert not is_valid_partition("aws-iso")
+        # aws-iso is a real (botocore-known) partition, so it is accepted too —
+        # matching the TS SDK, which accepts any arn:aws[a-z0-9-]* partition.
+        assert is_valid_partition("aws-iso")
+        assert not is_valid_partition("not-a-partition")
+        assert not is_valid_partition("gcp")
+
+    def test_parse_runtime_arn_accepts_aws_cn(self):
+        """A China (aws-cn) runtime ARN parses without error."""
+        parsed = parse_runtime_arn("arn:aws-cn:bedrock-agentcore:cn-north-1:111122223333:runtime/my-agent-abc")
+        assert parsed["region"] == "cn-north-1"
+        assert parsed["account_id"] == "111122223333"
+        assert parsed["runtime_id"] == "my-agent-abc"

@@ -6,7 +6,7 @@ from typing import Optional
 
 import boto3
 
-from .._utils.endpoints import DEFAULT_REGION, get_control_plane_endpoint
+from .._utils.endpoints import CP_ENDPOINT_OVERRIDE, DEFAULT_REGION
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +53,13 @@ class ConfigBundleClient:
             with self._client_lock:
                 if self.__dict__.get("_client") is None:
                     session = self._boto3_session or boto3.Session()
-                    self._client = session.client(
-                        "bedrock-agentcore-control",
-                        region_name=self._region,
-                        endpoint_url=get_control_plane_endpoint(self._region),
-                    )
+                    # Let boto3 resolve the endpoint natively (partition-correct,
+                    # incl. aws-cn). Only pass endpoint_url when the operator set
+                    # an override (e.g. gamma/preprod).
+                    client_kwargs = {"region_name": self._region}
+                    if CP_ENDPOINT_OVERRIDE:
+                        client_kwargs["endpoint_url"] = CP_ENDPOINT_OVERRIDE
+                    self._client = session.client("bedrock-agentcore-control", **client_kwargs)
         return self._client
 
     def __getattr__(self, name: str):

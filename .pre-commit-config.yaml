@@ -24,6 +24,20 @@ repos:
       - id: ruff-format
         stages: [pre-commit]
 
+  # Partition safety: forbid hardcoding the ".amazonaws.com" DNS suffix in
+  # endpoint construction. Matches ".amazonaws.com" only when it directly
+  # follows an interpolated value ({...}), so docstrings and the fallback /
+  # allowlist in _utils/endpoints.py do not trigger. Derive the suffix from the
+  # region's partition instead (see _dns_suffix_for_region).
+  - repo: local
+    hooks:
+      - id: no-hardcoded-endpoint-suffix
+        name: no hardcoded amazonaws.com in endpoint construction
+        language: pygrep
+        entry: '\{[^}]*\}[^"'']*\.amazonaws\.com'
+        files: ^src/.*\.py$
+        stages: [pre-commit]
+
   # Basic file hygiene (FAST + AUTO-FIX)
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0

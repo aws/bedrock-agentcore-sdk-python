@@ -13,7 +13,7 @@ import boto3
 from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 
-from bedrock_agentcore._utils.endpoints import get_data_plane_endpoint
+from bedrock_agentcore._utils.endpoints import DP_ENDPOINT_OVERRIDE
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
 from ._validation import validate_permit2_allowance_limit
@@ -231,14 +231,14 @@ class PaymentManager:
         self.region_name = self._validate_and_resolve_region(region_name, boto3_session)
         session = boto3_session if boto3_session else boto3.Session()
 
-        # Configure and create boto3 client
+        # Configure and create boto3 client. boto3 resolves the endpoint natively
+        # (partition-correct, incl. aws-cn); only override when the operator set
+        # BEDROCK_AGENTCORE_DP_ENDPOINT.
         client_config = self._build_client_config(boto_client_config)
-        self._payment_client = session.client(
-            "bedrock-agentcore",
-            region_name=self.region_name,
-            config=client_config,
-            endpoint_url=get_data_plane_endpoint(self.region_name),
-        )
+        dp_kwargs = {"region_name": self.region_name, "config": client_config}
+        if DP_ENDPOINT_OVERRIDE:
+            dp_kwargs["endpoint_url"] = DP_ENDPOINT_OVERRIDE
+        self._payment_client = session.client("bedrock-agentcore", **dp_kwargs)
 
         # Register event handler to inject agent name header on every data-plane call
         if self._agent_name:

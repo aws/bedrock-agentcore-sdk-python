@@ -36,5 +36,12 @@ def convert_complex_objects(obj: Any, _depth: int = 0) -> Any:
 
 
 def is_valid_partition(partition: str) -> bool:
-    """Returns if parsed-arn partition is valid."""
-    return partition in ("aws", "aws-us-gov")
+    """Returns whether the parsed-ARN partition is a known AWS partition.
+
+    Backed by botocore's partition list (``aws``, ``aws-cn``, ``aws-us-gov``,
+    the ISO partitions, ...) so this stays in sync with the TypeScript SDK,
+    which accepts any ``arn:aws[a-z0-9-]*`` partition.
+    """
+    from .._utils.endpoints import known_partitions
+
+    return partition in known_partitions()

@@ -1,13 +1,66 @@
 """Endpoint utilities for BedrockAgentCore services."""
 
+import functools
+import logging
 import os
 import re
 from urllib.parse import urlparse
+
+from botocore.exceptions import UnknownRegionError
+from botocore.loaders import create_loader
+from botocore.regions import EndpointResolver
+
+logger = logging.getLogger(__name__)
 
 # Environment-configurable constants with fallback defaults
 DP_ENDPOINT_OVERRIDE = os.getenv("BEDROCK_AGENTCORE_DP_ENDPOINT")
 CP_ENDPOINT_OVERRIDE = os.getenv("BEDROCK_AGENTCORE_CP_ENDPOINT")
 DEFAULT_REGION = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-west-2"
+
+
+@functools.lru_cache(maxsize=1)
+def _endpoint_resolver() -> EndpointResolver:
+    """Build a resolver over botocore's bundled static endpoint data (once, lazily).
+
+    Uses only public botocore APIs and performs no network I/O — the partition
+    table ships with botocore. Cached so the ``endpoints.json`` load happens at
+    most once, since this module sits on the runtime hot path.
+    """
+    return EndpointResolver(create_loader().load_data("endpoints"))
+
+
+@functools.lru_cache(maxsize=None)
+def _dns_suffix_for_region(region: str) -> str:
+    """Return the partition DNS suffix for a region.
+
+    For example, ``us-west-2`` resolves to ``amazonaws.com`` while ``cn-north-1``
+    resolves to ``amazonaws.com.cn`` and ``us-gov-west-1`` to ``amazonaws.com``.
+    The suffix is derived from botocore's static partition data rather than a
+    hardcoded table, so China (``aws-cn``), GovCloud (``aws-us-gov``), and future
+    partitions are handled without further changes.
+
+    Falls back to ``amazonaws.com`` only for regions botocore does not recognise,
+    logging a warning so a wrong-partition fallback is visible rather than silent.
+    """
+    resolver = _endpoint_resolver()
+    try:
+        partition = resolver.get_partition_for_region(region)
+    except UnknownRegionError:
+        logger.warning(
+            "Region %r is not recognised by botocore; falling back to the "
+            "'amazonaws.com' DNS suffix. Endpoints may be incorrect outside the "
+            "commercial partition.",
+            region,
+        )
+        return "amazonaws.com"
+    return resolver.get_partition_dns_suffix(partition) or "amazonaws.com"
+
+
+@functools.lru_cache(maxsize=1)
+def known_partitions() -> frozenset:
+    """Return the set of AWS partition names botocore knows about (offline)."""
+    return frozenset(_endpoint_resolver().get_available_partitions())
+
 
 # Regex for valid AWS region names (e.g., us-east-1, eu-west-2, cn-north-1, us-gov-west-1).
 # Uses \A and \Z anchors to prevent newline injection bypass that $ allows.
@@ -82,7 +135,7 @@ def get_data_plane_endpoint(region: str = DEFAULT_REGION) -> str:
     if DP_ENDPOINT_OVERRIDE:
         return _validate_endpoint_url(DP_ENDPOINT_OVERRIDE)
     validate_region(region)
-    url = f"https://bedrock-agentcore.{region}.amazonaws.com"
+    url = f"https://bedrock-agentcore.{region}.{_dns_suffix_for_region(region)}"
     return _validate_endpoint_url(url)
 
 
@@ -90,7 +143,7 @@ def get_control_plane_endpoint(region: str = DEFAULT_REGION) -> str:
     if CP_ENDPOINT_OVERRIDE:
         return _validate_endpoint_url(CP_ENDPOINT_OVERRIDE)
     validate_region(region)
-    url = f"https://bedrock-agentcore-control.{region}.amazonaws.com"
+    url = f"https://bedrock-agentcore-control.{region}.{_dns_suffix_for_region(region)}"
     return _validate_endpoint_url(url)
 
 
@@ -113,5 +166,5 @@ def get_gateway_mcp_endpoint(gateway_id: str, region: str = DEFAULT_REGION) -> s
             f"Invalid gateway identifier: {gateway_id!r}. Expected a gateway ID such as 'my-gateway-abc123'."
         )
     validate_region(region)
-    url = f"https://{gateway_id}.gateway.bedrock-agentcore.{region}.amazonaws.com/mcp"
+    url = f"https://{gateway_id}.gateway.bedrock-agentcore.{region}.{_dns_suffix_for_region(region)}/mcp"
     return _validate_endpoint_url(url)

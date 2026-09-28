@@ -317,3 +317,37 @@ class TestClientConstructorValidation:
             from bedrock_agentcore.memory.controlplane import MemoryControlPlaneClient
 
             MemoryControlPlaneClient(region_name="x@attacker.com:443/#")
+
+
+class TestChinaPartitionEndpoints:
+    """The endpoint builders must emit the amazonaws.com.cn suffix in aws-cn.
+
+    These pin the partition-suffix derivation itself (a botocore lookup failure or
+    an f-string typo would otherwise ship green); the pre-commit pygrep hook only
+    guards against newly hardcoded suffixes.
+    """
+
+    @pytest.mark.parametrize("region", ["cn-north-1", "cn-northwest-1"])
+    def test_data_plane_endpoint_cn(self, region):
+        assert get_data_plane_endpoint(region) == f"https://bedrock-agentcore.{region}.amazonaws.com.cn"
+
+    @pytest.mark.parametrize("region", ["cn-north-1", "cn-northwest-1"])
+    def test_control_plane_endpoint_cn(self, region):
+        assert get_control_plane_endpoint(region) == f"https://bedrock-agentcore-control.{region}.amazonaws.com.cn"
+
+    @pytest.mark.parametrize("region", ["cn-north-1", "cn-northwest-1"])
+    def test_gateway_mcp_endpoint_cn(self, region):
+        assert (
+            get_gateway_mcp_endpoint("gw-abc123", region)
+            == f"https://gw-abc123.gateway.bedrock-agentcore.{region}.amazonaws.com.cn/mcp"
+        )
+
+    def test_commercial_suffix_unchanged(self):
+        assert get_data_plane_endpoint("us-west-2") == "https://bedrock-agentcore.us-west-2.amazonaws.com"
+
+    def test_build_runtime_url_cn(self):
+        from bedrock_agentcore.runtime.a2a import build_runtime_url
+
+        url = build_runtime_url("arn:aws-cn:bedrock-agentcore:cn-north-1:111122223333:runtime/my-agent-abc")
+        assert url.startswith("https://bedrock-agentcore.cn-north-1.amazonaws.com.cn/runtimes/")
+        assert url.endswith("/invocations")
