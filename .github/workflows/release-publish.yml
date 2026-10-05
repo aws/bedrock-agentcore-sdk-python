@@ -59,7 +59,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment:
-      name: pypi-approval
+      name: manual-approval
 
     steps:
       - name: Approval checkpoint
