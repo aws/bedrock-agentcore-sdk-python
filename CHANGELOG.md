@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.24.1] - 2026-10-06
+
+### Other Changes
+- feat(payments): add RotatePaymentConnectorCredentials support (#676) (2f4224d)
+- fix(ci): require approval before publishing Python SDK releases (#692) (2225a97)
+
 ## [1.24.0] - 2026-09-28
 
 ### Fixed
