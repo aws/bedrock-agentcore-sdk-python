@@ -4,6 +4,8 @@ Provides Bedrock-specific glue around the official a2a-sdk, handling header
 extraction, health checks, and Docker host detection.
 """
 
+import asyncio
+import contextvars
 import logging
 import uuid
 from importlib import import_module
@@ -33,6 +35,8 @@ logger = logging.getLogger(__name__)
 # via an explicit ``port=`` argument or the protocol-scoped env var below.
 A2A_CONTRACT_PORT = 9000
 A2A_PORT_ENV = "A2A_PORT"
+
+_CONTEXTVARS_STATE_KEY = "_bedrock_agentcore_contextvars"
 
 
 def _check_a2a_sdk() -> None:
@@ -247,6 +251,37 @@ except Exception:  # pragma: no cover
     pass
 
 
+class _ContextvarsSnapshotRequestContextBuilder:
+    """Stores a copy of the sending request's contextvars on each RequestContext.
+
+    a2a-sdk 1.x runs every message of a task in one producer task created by the
+    first request, so the executor would otherwise see that request's contextvars.
+    Remove with ``_PerMessageContextvarsExecutor`` once a2a-python#1316 is fixed.
+    """
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+
+    async def build(self, *args: Any, **kwargs: Any) -> Any:
+        request_context = await self._inner.build(*args, **kwargs)
+        request_context.call_context.state[_CONTEXTVARS_STATE_KEY] = contextvars.copy_context()
+        return request_context
+
+
+class _PerMessageContextvarsExecutor:
+    """Runs the wrapped executor in the contextvars of the request that sent the message."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+
+    async def execute(self, context: Any, event_queue: Any) -> None:
+        snapshot = context.call_context.state[_CONTEXTVARS_STATE_KEY]
+        await snapshot.run(asyncio.create_task, self._inner.execute(context, event_queue))
+
+    async def cancel(self, context: Any, event_queue: Any) -> None:
+        await self._inner.cancel(context, event_queue)
+
+
 def build_a2a_app(
     executor: Any,
     agent_card: Any = None,
@@ -300,12 +335,16 @@ def build_a2a_app(
 
     request_handler_type: Any = DefaultRequestHandler
     if is_a2a_v1:
+        from a2a.server.agent_execution import SimpleRequestContextBuilder
         from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 
         http_handler = request_handler_type(
-            agent_executor=executor,
+            agent_executor=_PerMessageContextvarsExecutor(executor),
             task_store=task_store,
             agent_card=agent_card,
+            request_context_builder=_ContextvarsSnapshotRequestContextBuilder(
+                SimpleRequestContextBuilder(should_populate_referred_tasks=False, task_store=task_store)
+            ),
         )
         routes = create_agent_card_routes(agent_card)
         routes.extend(
