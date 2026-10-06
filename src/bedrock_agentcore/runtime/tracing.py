@@ -103,7 +103,7 @@ class BaggageSpanProcessor(_get_base_class()):  # type: ignore[misc]
     """
 
     def on_start(self, span: object, parent_context: Optional[object] = None) -> None:
-        """Set routing experiment attributes on every new span.
+        """Set routing experiment and end-user identity attributes on every new span.
 
         Primary source: ContextVars set by ``_build_request_context`` — covers
         all spans created after request parsing (agent spans, tool spans, etc.).
@@ -133,6 +133,10 @@ class BaggageSpanProcessor(_get_base_class()):  # type: ignore[misc]
             span.set_attribute("aws.agentcore.gateway.routing_experiment_arn", arn)  # type: ignore[union-attr]
         if variant is not None:
             span.set_attribute("aws.agentcore.gateway.routing_experiment_variant_name", variant)  # type: ignore[union-attr]
+
+        enduser_id = _context.get_enduser_id()
+        if enduser_id is not None:
+            span.set_attribute("enduser.id", enduser_id)  # type: ignore[union-attr]
 
     def on_end(self, span: object) -> None:
         """No-op."""
