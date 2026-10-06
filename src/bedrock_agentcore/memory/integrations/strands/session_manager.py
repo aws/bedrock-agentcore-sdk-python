@@ -11,14 +11,13 @@ from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional
 
 import boto3
 from botocore.config import Config as BotocoreConfig
-from strands.experimental.bidi import BidiAgent
-from strands.experimental.bidi.hooks import BidiAgentStopEvent
-from strands.experimental.hooks.multiagent.events import (
+from strands.hooks import (
+    AfterInvocationEvent,
     AfterMultiAgentInvocationEvent,
     AfterNodeCallEvent,
+    MessageAddedEvent,
     MultiAgentInitializedEvent,
 )
-from strands.hooks import AfterInvocationEvent, MessageAddedEvent
 from strands.hooks.events import AgentInitializedEvent
 from strands.hooks.registry import HookRegistry
 from strands.session.repository_session_manager import RepositorySessionManager
@@ -851,9 +850,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         Args:
             event (MessageAddedEvent): The message added event containing the agent and message data.
         """
-        if isinstance(event.agent, BidiAgent):
-            return None
-
         messages = event.agent.messages
         if not messages or messages[-1].get("role") != "user":
             return None
@@ -949,7 +945,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             if self.config.batch_size > 1:
                 # Completion callbacks run in reverse order, so register flushes before state syncs.
                 registry.add_callback(AfterInvocationEvent, lambda event: self._flush_messages())
-                registry.add_callback(BidiAgentStopEvent, lambda event: self._flush_messages())
 
             RepositorySessionManager.register_hooks(self, registry, **kwargs)
             registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
@@ -979,7 +974,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if self.config.batch_size > 1:
             # Completion callbacks run in reverse order, so register flushes before state syncs.
             registry.add_callback(AfterInvocationEvent, _offload(self._flush_messages))
-            registry.add_callback(BidiAgentStopEvent, _offload(self._flush_messages))
 
         registry.add_callback(AgentInitializedEvent, lambda event: self.initialize(event.agent))
 
@@ -995,8 +989,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         registry.add_callback(MultiAgentInitializedEvent, _offload(self.initialize_multi_agent, lambda e: e.source))
         registry.add_callback(AfterNodeCallEvent, _offload(self.sync_multi_agent, lambda e: e.source))
         registry.add_callback(AfterMultiAgentInvocationEvent, _offload(self.sync_multi_agent, lambda e: e.source))
-
-        registry.add_callback(BidiAgentStopEvent, _offload(self.sync_agent, lambda e: e.agent))
 
     @override
     def initialize(self, agent: "LocalAgent", **kwargs: Any) -> None:
