@@ -1,0 +1,19 @@
+# Caller: posts PR-review activity to the "PR Summary" Slack workflow with @-mentions.
+# Repo-agnostic (the reusable auto-detects github.repository).
+name: Slack PR Review Notification
+
+on:
+  pull_request:
+    types: [review_requested, synchronize]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: read
+  id-token: write
+
+jobs:
+  call:
+    uses: aws/agentcore-devx-devtools/.github/workflows/reusable-slack-pr-review-notification.yml@626595f508220b53805c86c1b54d089420add4d3
+    secrets: inherit
