@@ -152,6 +152,75 @@ class MemoryClient:
             f"'bedrock-agentcore' and 'bedrock-agentcore-control' services."
         )
 
+    # ---------------------------------------------------------------------------
+    # Data-plane pass-through methods (bedrock-agentcore)
+    # Declared explicitly so that IDEs can surface them via autocomplete.
+    # ---------------------------------------------------------------------------
+
+    def retrieve_memory_records(self, **kwargs: Any) -> Dict[str, Any]:
+        """Retrieve memory records. See boto3 bedrock-agentcore docs for parameters."""
+        return accept_snake_case_kwargs(self.gmdp_client.retrieve_memory_records)(**kwargs)
+
+    def get_memory_record(self, **kwargs: Any) -> Dict[str, Any]:
+        """Get a single memory record. See boto3 bedrock-agentcore docs for parameters."""
+        return accept_snake_case_kwargs(self.gmdp_client.get_memory_record)(**kwargs)
+
+    def delete_memory_record(self, **kwargs: Any) -> Dict[str, Any]:
+        """Delete a memory record. See boto3 bedrock-agentcore docs for parameters."""
+        return accept_snake_case_kwargs(self.gmdp_client.delete_memory_record)(**kwargs)
+
+    def list_memory_records(self, **kwargs: Any) -> Dict[str, Any]:
+        """List memory records. See boto3 bedrock-agentcore docs for parameters."""
+        return accept_snake_case_kwargs(self.gmdp_client.list_memory_records)(**kwargs)
+
+    def get_event(self, **kwargs: Any) -> Dict[str, Any]:
+        """Get a single event. See boto3 bedrock-agentcore docs for parameters."""
+        return accept_snake_case_kwargs(self.gmdp_client.get_event)(**kwargs)
+
+    def delete_event(self, **kwargs: Any) -> Dict[str, Any]:
+        """Delete an event. See boto3 bedrock-agentcore docs for parameters."""
+        return accept_snake_case_kwargs(self.gmdp_client.delete_event)(**kwargs)
+
+    def batch_create_memory_records(self, **kwargs: Any) -> Dict[str, Any]:
+        """Batch-create memory records. See boto3 bedrock-agentcore docs for parameters."""
+        return accept_snake_case_kwargs(self.gmdp_client.batch_create_memory_records)(**kwargs)
+
+    def batch_delete_memory_records(self, **kwargs: Any) -> Dict[str, Any]:
+        """Batch-delete memory records. See boto3 bedrock-agentcore docs for parameters."""
+        return accept_snake_case_kwargs(self.gmdp_client.batch_delete_memory_records)(**kwargs)
+
+    def batch_update_memory_records(self, **kwargs: Any) -> Dict[str, Any]:
+        """Batch-update memory records. See boto3 bedrock-agentcore docs for parameters."""
+        return accept_snake_case_kwargs(self.gmdp_client.batch_update_memory_records)(**kwargs)
+
+    def start_memory_extraction_job(self, **kwargs: Any) -> Dict[str, Any]:
+        """Start a memory extraction job. See boto3 bedrock-agentcore docs for parameters."""
+        return accept_snake_case_kwargs(self.gmdp_client.start_memory_extraction_job)(**kwargs)
+
+    def list_memory_extraction_jobs(self, **kwargs: Any) -> Dict[str, Any]:
+        """List memory extraction jobs. See boto3 bedrock-agentcore docs for parameters."""
+        return accept_snake_case_kwargs(self.gmdp_client.list_memory_extraction_jobs)(**kwargs)
+
+    def list_sessions(self, **kwargs: Any) -> Dict[str, Any]:
+        """List sessions. See boto3 bedrock-agentcore docs for parameters."""
+        return accept_snake_case_kwargs(self.gmdp_client.list_sessions)(**kwargs)
+
+    def list_actors(self, **kwargs: Any) -> Dict[str, Any]:
+        """List actors. See boto3 bedrock-agentcore docs for parameters."""
+        return accept_snake_case_kwargs(self.gmdp_client.list_actors)(**kwargs)
+
+    # ---------------------------------------------------------------------------
+    # Control-plane pass-through methods (bedrock-agentcore-control)
+    # ---------------------------------------------------------------------------
+
+    def get_memory(self, **kwargs: Any) -> Dict[str, Any]:
+        """Get a memory resource. See boto3 bedrock-agentcore-control docs for parameters."""
+        return accept_snake_case_kwargs(self.gmcp_client.get_memory)(**kwargs)
+
+    def update_memory(self, **kwargs: Any) -> Dict[str, Any]:
+        """Update a memory resource. See boto3 bedrock-agentcore-control docs for parameters."""
+        return accept_snake_case_kwargs(self.gmcp_client.update_memory)(**kwargs)
+
     def create_memory(
         self,
         name: str,
