@@ -2174,6 +2174,41 @@ class TestEdgeCases:
             assert len(result[0]) == 2  # First turn: USER + ASSISTANT
             assert len(result[1]) == 2  # Second turn: USER + ASSISTANT
 
+    def test_get_last_k_turns_orders_messages_chronologically(self):
+        """Turns are grouped chronologically even when list_events returns newest-first.
+
+        Regression for #320/#253: the ListEvents API returns events newest-first, but
+        get_last_k_turns grouped them in arrival order, yielding turns whose messages
+        were misaligned (ASSISTANT before its USER, orphaned leading turn).
+        """
+        with patch("boto3.Session") as mock_boto_client:
+            mock_client_instance = MagicMock()
+            mock_boto_client.return_value = mock_client_instance
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            # As returned by the real API: newest event first.
+            manager._data_plane_client.list_events.return_value = {
+                "events": [
+                    {
+                        "eventId": "event-2",
+                        "eventTimestamp": datetime(2023, 1, 1, 10, 5, 0),
+                        "payload": [{"conversational": {"role": "ASSISTANT", "content": {"text": "It's sunny"}}}],
+                    },
+                    {
+                        "eventId": "event-1",
+                        "eventTimestamp": datetime(2023, 1, 1, 10, 0, 0),
+                        "payload": [{"conversational": {"role": "USER", "content": {"text": "Weather?"}}}],
+                    },
+                ]
+            }
+
+            result = manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=5)
+
+            # One turn: USER then ASSISTANT, in chronological order.
+            assert len(result) == 1
+            assert [m["role"] for m in result[0]] == ["USER", "ASSISTANT"]
+
     def test_session_delegation_with_optional_parameters(self):
         """Test MemorySession methods properly pass optional parameters."""
         with patch("boto3.Session"):
