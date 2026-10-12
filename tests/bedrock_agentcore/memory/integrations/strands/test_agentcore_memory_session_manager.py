@@ -277,6 +277,20 @@ class TestAgentCoreMemorySessionManager:
         assert result.agent_id == "test-agent-123"
         assert result.agent_id == "test-agent-123"
 
+    def test_read_agent_batched_event_returns_latest_snapshot(self, batching_session_manager, mock_memory_client):
+        """Test that an agent restored from a batched event gets the last snapshot buffered (#698)."""
+        for state in ({}, {"n": 1}, {"n": 2}):
+            batching_session_manager.create_agent(
+                "test-session-456", SessionAgent(agent_id="test-agent-123", state=state, conversation_manager_state={})
+            )
+        batching_session_manager._flush_agent_states_only()
+        written = mock_memory_client.gmdp_client.create_event.call_args.kwargs
+        mock_memory_client.list_events.return_value = [{"eventId": "event-1", "payload": written["payload"]}]
+
+        result = batching_session_manager.read_agent("test-session-456", "test-agent-123")
+
+        assert result.state == {"n": 2}
+
     def test_read_agent_no_events(self, session_manager, mock_memory_client):
         """Test reading an agent with no events."""
         mock_memory_client.list_events.return_value = []

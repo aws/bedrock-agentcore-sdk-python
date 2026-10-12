@@ -471,7 +471,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             )
 
             if events:
-                agent_data = json.loads(events[0].get("payload", {})[0].get("blob"))
+                # A batched flush packs several snapshots into one event, oldest first.
+                agent_data = json.loads(events[0].get("payload", {})[-1].get("blob"))
                 agent = SessionAgent.from_dict(agent_data)
                 # Cache the created_at timestamp to avoid re-fetching on updates
                 if agent.created_at:
