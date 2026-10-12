@@ -3896,6 +3896,50 @@ class TestFlushAgentStatesRaceCondition:
         # State must be back in the buffer for retry.
         assert batching_session_manager.pending_agent_state_count() == 1
 
+    def test_flush_agent_states_failure_keeps_newer_concurrent_state_last(
+        self, batching_session_manager, mock_memory_client
+    ):
+        """A state buffered during a failed flush must stay last, since read_agent restores the last state."""
+
+        def fail_after_concurrent_append(**kwargs):
+            batching_session_manager.create_agent(
+                "test-session-456", SessionAgent(agent_id="agent-1", state={"v": 2}, conversation_manager_state={})
+            )
+            raise Exception("API Error")
+
+        batching_session_manager.create_agent(
+            "test-session-456", SessionAgent(agent_id="agent-1", state={"v": 1}, conversation_manager_state={})
+        )
+        mock_memory_client.gmdp_client.create_event.side_effect = fail_after_concurrent_append
+        with pytest.raises(SessionException):
+            batching_session_manager._flush_agent_states_only()
+
+        assert [a.state for _, a in batching_session_manager._agent_state_buffer] == [{"v": 1}, {"v": 2}]
+
+    def test_agent_state_auto_flush_persists_buffered_messages_first(
+        self, batching_session_manager, mock_memory_client
+    ):
+        """An agent snapshot must never be persisted ahead of the messages it accounts for."""
+        mock_memory_client.gmdp_client.create_event.return_value = {"event": {"eventId": "e"}}
+        batching_session_manager.create_message(
+            "test-session-456",
+            "agent-1",
+            SessionMessage(message={"role": "user", "content": [{"text": "hi"}]}, message_id=0),
+        )
+
+        for i in range(batching_session_manager.config.batch_size):
+            batching_session_manager.create_agent(
+                "test-session-456", SessionAgent(agent_id="agent-1", state={"v": i}, conversation_manager_state={})
+            )
+
+        written = [
+            c.kwargs.get("metadata", {}).get("stateType")
+            for c in mock_memory_client.gmdp_client.create_event.call_args_list
+        ]
+        assert written[-1] == {"stringValue": "AGENT"}
+        assert batching_session_manager.pending_message_count() == 0
+        assert len(written) == 2
+
 
 class TestMonotonicTimestamp:
     """Tests for monotonic event-timestamp ordering across processes/pods.
