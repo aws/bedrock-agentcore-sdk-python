@@ -166,6 +166,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self._agent_state_buffer: list[tuple[str, SessionAgent]] = []
         self._agent_state_lock = threading.Lock()
 
+        # Serializes flushes so a retry or a late send cannot overtake a newer flush
+        self._flush_lock = threading.RLock()
+
         # Cache for agent created_at timestamps to avoid fetching on every update
         self._agent_created_at_cache: dict[str, datetime] = {}
 
@@ -1071,67 +1074,68 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if self.persistence_mode is PersistenceMode.NONE:
             return []
 
-        with self._message_lock:
-            messages_to_send = list(self._message_buffer)
-            self._message_buffer.clear()
+        with self._flush_lock:
+            with self._message_lock:
+                messages_to_send = list(self._message_buffer)
+                self._message_buffer.clear()
 
-        if not messages_to_send:
-            return []
+            if not messages_to_send:
+                return []
 
-        # Group all messages by session_id, combining conversational and blob messages
-        # Structure: {session_id: {"payload": [...], "timestamp": latest_timestamp, "metadata": {...}}}
-        session_groups: dict[str, dict[str, Any]] = {}
+            # Group all messages by session_id, combining conversational and blob messages
+            # Structure: {session_id: {"payload": [...], "timestamp": latest_timestamp, "metadata": {...}}}
+            session_groups: dict[str, dict[str, Any]] = {}
 
-        for buffered_msg in messages_to_send:
-            sid = buffered_msg.session_id
-            if sid not in session_groups:
-                session_groups[sid] = {"payload": [], "timestamp": buffered_msg.timestamp, "metadata": {}}
+            for buffered_msg in messages_to_send:
+                sid = buffered_msg.session_id
+                if sid not in session_groups:
+                    session_groups[sid] = {"payload": [], "timestamp": buffered_msg.timestamp, "metadata": {}}
 
-            if buffered_msg.is_blob:
-                for msg in buffered_msg.messages:
-                    session_groups[sid]["payload"].append({"blob": json.dumps(msg)})
-            else:
-                for text, role in buffered_msg.messages:
-                    session_groups[sid]["payload"].append(
-                        {"conversational": {"content": {"text": text}, "role": role.upper()}}
+                if buffered_msg.is_blob:
+                    for msg in buffered_msg.messages:
+                        session_groups[sid]["payload"].append({"blob": json.dumps(msg)})
+                else:
+                    for text, role in buffered_msg.messages:
+                        session_groups[sid]["payload"].append(
+                            {"conversational": {"content": {"text": text}, "role": role.upper()}}
+                        )
+
+                # Use the latest timestamp for the combined event
+                if buffered_msg.timestamp > session_groups[sid]["timestamp"]:
+                    session_groups[sid]["timestamp"] = buffered_msg.timestamp
+
+                # Merge metadata (later entries override earlier for same key)
+                if buffered_msg.metadata:
+                    session_groups[sid]["metadata"].update(buffered_msg.metadata)
+
+            results = []
+            try:
+                # Send one create_event per session_id with all messages (conversational + blob)
+                for session_id, group in session_groups.items():
+                    create_event_kwargs: dict[str, Any] = {
+                        "memoryId": self.config.memory_id,
+                        "actorId": self.config.actor_id,
+                        "sessionId": session_id,
+                        "payload": group["payload"],
+                        "eventTimestamp": group["timestamp"],
+                    }
+                    if group["metadata"]:
+                        create_event_kwargs["metadata"] = group["metadata"]
+                    event = self.memory_client.gmdp_client.create_event(**create_event_kwargs)
+                    results.append(event)
+                    logger.debug(
+                        "Flushed batched event for session %s with %d messages: %s",
+                        session_id,
+                        len(group["payload"]),
+                        event.get("eventId"),
                     )
 
-            # Use the latest timestamp for the combined event
-            if buffered_msg.timestamp > session_groups[sid]["timestamp"]:
-                session_groups[sid]["timestamp"] = buffered_msg.timestamp
-
-            # Merge metadata (later entries override earlier for same key)
-            if buffered_msg.metadata:
-                session_groups[sid]["metadata"].update(buffered_msg.metadata)
-
-        results = []
-        try:
-            # Send one create_event per session_id with all messages (conversational + blob)
-            for session_id, group in session_groups.items():
-                create_event_kwargs: dict[str, Any] = {
-                    "memoryId": self.config.memory_id,
-                    "actorId": self.config.actor_id,
-                    "sessionId": session_id,
-                    "payload": group["payload"],
-                    "eventTimestamp": group["timestamp"],
-                }
-                if group["metadata"]:
-                    create_event_kwargs["metadata"] = group["metadata"]
-                event = self.memory_client.gmdp_client.create_event(**create_event_kwargs)
-                results.append(event)
-                logger.debug(
-                    "Flushed batched event for session %s with %d messages: %s",
-                    session_id,
-                    len(group["payload"]),
-                    event.get("eventId"),
-                )
-
-        except Exception as e:
-            # Restore messages to buffer so they aren't lost
-            with self._message_lock:
-                self._message_buffer.extend(messages_to_send)
-            logger.error("Failed to flush messages to AgentCore Memory: %s", e)
-            raise SessionException(f"Failed to flush messages: {e}") from e
+            except Exception as e:
+                # Prepend so they aren't lost: messages buffered during the send are newer
+                with self._message_lock:
+                    self._message_buffer[:0] = messages_to_send
+                logger.error("Failed to flush messages to AgentCore Memory: %s", e)
+                raise SessionException(f"Failed to flush messages: {e}") from e
 
         logger.info("Flushed %d message events to AgentCore Memory", len(results))
         return results
@@ -1152,14 +1156,26 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if self.persistence_mode is PersistenceMode.NONE:
             return []
 
-        with self._agent_state_lock:
-            agent_states_to_send = list(self._agent_state_buffer)
-            self._agent_state_buffer.clear()
+        with self._flush_lock:
+            return self._send_agent_states(self._take_agent_states())
 
+    def _take_agent_states(self) -> list[tuple[str, SessionAgent]]:
+        with self._agent_state_lock:
+            agent_states = list(self._agent_state_buffer)
+            self._agent_state_buffer.clear()
+        return agent_states
+
+    def _restore_agent_states(self, agent_states: list[tuple[str, SessionAgent]]) -> None:
+        # Prepend: states buffered since they were taken are newer, and read_agent restores the last
+        with self._agent_state_lock:
+            self._agent_state_buffer[:0] = agent_states
+
+    def _send_agent_states(self, agent_states_to_send: list[tuple[str, SessionAgent]]) -> list[dict[str, Any]]:
         if not agent_states_to_send:
             return []
 
         results = []
+        sent_agent_ids: set[str] = set()
         try:
             # Group agent states by agent_id
             agent_groups: dict[str, list[dict]] = {}
@@ -1182,13 +1198,14 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                         AGENT_ID_KEY: {"stringValue": agent_id},
                     },
                 )
+                sent_agent_ids.add(agent_id)
                 results.append(event)
                 logger.debug("Flushed %d agent states for agent %s: %s", len(payloads), agent_id, event.get("eventId"))
 
         except Exception as e:
-            # Prepend so they aren't lost: states buffered during the send are newer, and read_agent restores the last
-            with self._agent_state_lock:
-                self._agent_state_buffer[:0] = agent_states_to_send
+            self._restore_agent_states(
+                [state for state in agent_states_to_send if state[1].agent_id not in sent_agent_ids]
+            )
             logger.error("Failed to flush agent states to AgentCore Memory: %s", e)
             raise SessionException(f"Failed to flush agent states: {e}") from e
 
@@ -1207,10 +1224,18 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         Raises:
             SessionException: If any message or agent state creation fails.
         """
-        results = []
-        results.extend(self._flush_messages_only())
-        results.extend(self._flush_agent_states_only())
-        return results
+        if self.persistence_mode is PersistenceMode.NONE:
+            return []
+
+        with self._flush_lock:
+            # Take agent states before messages: every message a taken state counts was buffered before it
+            agent_states = self._take_agent_states()
+            try:
+                results = self._flush_messages_only()
+            except SessionException:
+                self._restore_agent_states(agent_states)
+                raise
+            return results + self._send_agent_states(agent_states)
 
     def pending_message_count(self) -> int:
         """Return the number of messages pending in the buffer.
