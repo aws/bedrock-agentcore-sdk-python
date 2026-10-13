@@ -1,9 +1,11 @@
 """Tests for AgentCoreMemorySessionManager."""
 
 import asyncio
+import contextlib
 import inspect
 import json
 import logging
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
@@ -3939,6 +3941,148 @@ class TestFlushAgentStatesRaceCondition:
         assert written[-1] == {"stringValue": "AGENT"}
         assert batching_session_manager.pending_message_count() == 0
         assert len(written) == 2
+
+
+class TestConcurrentFlushes:
+    """Flushes from the interval timer and the agent thread must not overtake each other."""
+
+    SESSION = "test-session-456"
+
+    @staticmethod
+    def _agent(v, agent_id="agent-1"):
+        return SessionAgent(agent_id=agent_id, state={"v": v}, conversation_manager_state={})
+
+    @staticmethod
+    def _message(text):
+        return SessionMessage(message={"role": "user", "content": [{"text": text}]}, message_id=0)
+
+    @staticmethod
+    def _agent_events(mock_memory_client):
+        return [
+            c.kwargs
+            for c in mock_memory_client.gmdp_client.create_event.call_args_list
+            if c.kwargs.get("metadata", {}).get("stateType") == {"stringValue": "AGENT"}
+        ]
+
+    @pytest.mark.parametrize("first_send_fails", [False, True])
+    def test_overlapping_flushes_restore_newest_state(
+        self, batching_session_manager, mock_memory_client, first_send_fails
+    ):
+        """A flush that starts while another is sending waits, so the newest state is written last."""
+        sm = batching_session_manager
+        first_flush_sending = threading.Event()
+        release_first_flush = threading.Event()
+        monotonic_timestamp = sm._get_monotonic_timestamp
+        sent = []
+
+        def first_flush():
+            with contextlib.suppress(SessionException):
+                sm._flush_messages()
+
+        first_flush_thread = threading.Thread(target=first_flush)
+
+        def slow_first_timestamp(*args, **kwargs):
+            if threading.current_thread() is first_flush_thread and not first_flush_sending.is_set():
+                first_flush_sending.set()
+                release_first_flush.wait(timeout=5)
+            return monotonic_timestamp(*args, **kwargs)
+
+        def create_event(**kwargs):
+            if threading.current_thread() is first_flush_thread and first_send_fails:
+                raise Exception("API Error")
+            sent.append(kwargs)
+            return {"event": {"eventId": "e"}}
+
+        mock_memory_client.gmdp_client.create_event.side_effect = create_event
+        sm.create_agent(self.SESSION, self._agent(1))
+        with patch.object(sm, "_get_monotonic_timestamp", side_effect=slow_first_timestamp):
+            first_flush_thread.start()
+            assert first_flush_sending.wait(timeout=5)
+            sm.create_agent(self.SESSION, self._agent(2))
+            second_flush_thread = threading.Thread(target=sm._flush_messages)
+            second_flush_thread.start()
+            time.sleep(0.2)
+            release_first_flush.set()
+            first_flush_thread.join(timeout=5)
+            second_flush_thread.join(timeout=5)
+        sm._flush_messages()
+
+        newest = max(sent, key=lambda kwargs: kwargs["eventTimestamp"])
+        assert json.loads(newest["payload"][-1]["blob"])["state"] == {"v": 2}
+        assert sm.pending_agent_state_count() == 0
+
+    def test_flush_keeps_states_buffered_after_their_messages_were_taken(
+        self, batching_session_manager, mock_memory_client
+    ):
+        """A state buffered while messages are sending stays buffered with its message."""
+        sm = batching_session_manager
+        sm.create_message(self.SESSION, "agent-1", self._message("m1"))
+        sm.create_agent(self.SESSION, self._agent(1))
+
+        def create_event(**kwargs):
+            if "metadata" not in kwargs:
+                sm.create_message(self.SESSION, "agent-1", self._message("m2"))
+                sm.create_agent(self.SESSION, self._agent(2))
+            return {"event": {"eventId": "e"}}
+
+        mock_memory_client.gmdp_client.create_event.side_effect = create_event
+        sm._flush_messages()
+
+        [agent_event] = self._agent_events(mock_memory_client)
+        assert [json.loads(p["blob"])["state"] for p in agent_event["payload"]] == [{"v": 1}]
+        assert sm.pending_message_count() == 1
+        assert sm.pending_agent_state_count() == 1
+
+    def test_failed_message_flush_keeps_agent_states_buffered(self, batching_session_manager, mock_memory_client):
+        """Agent states are not written when their messages failed to flush."""
+        sm = batching_session_manager
+        sm.create_message(self.SESSION, "agent-1", self._message("m1"))
+        sm.create_agent(self.SESSION, self._agent(1))
+        mock_memory_client.gmdp_client.create_event.side_effect = Exception("API Error")
+
+        with pytest.raises(SessionException):
+            sm._flush_messages()
+
+        assert mock_memory_client.gmdp_client.create_event.call_count == 1
+        assert sm.pending_message_count() == 1
+        assert sm.pending_agent_state_count() == 1
+
+    def test_failed_message_flush_keeps_newer_concurrent_message_last(
+        self, batching_session_manager, mock_memory_client
+    ):
+        """A message buffered during a failed flush stays after the messages that failed."""
+        sm = batching_session_manager
+        sm.create_message(self.SESSION, "agent-1", self._message("m1"))
+
+        def fail_after_concurrent_append(**kwargs):
+            sm.create_message(self.SESSION, "agent-1", self._message("m2"))
+            raise Exception("API Error")
+
+        mock_memory_client.gmdp_client.create_event.side_effect = fail_after_concurrent_append
+        with pytest.raises(SessionException):
+            sm._flush_messages_only()
+
+        texts = [json.loads(m.messages[0][0])["message"]["content"][0]["text"] for m in sm._message_buffer]
+        assert texts == ["m1", "m2"]
+
+    def test_partial_agent_state_failure_rebuffers_only_unsent_agents(
+        self, batching_session_manager, mock_memory_client
+    ):
+        """States already written for one agent are not written again when another agent fails."""
+        sm = batching_session_manager
+        sm.create_agent(self.SESSION, self._agent(1, agent_id="agent-a"))
+        sm.create_agent(self.SESSION, self._agent(1, agent_id="agent-b"))
+
+        def fail_for_agent_b(**kwargs):
+            if kwargs["metadata"]["agentId"] == {"stringValue": "agent-b"}:
+                raise Exception("API Error")
+            return {"event": {"eventId": "e"}}
+
+        mock_memory_client.gmdp_client.create_event.side_effect = fail_for_agent_b
+        with pytest.raises(SessionException):
+            sm._flush_agent_states_only()
+
+        assert [a.agent_id for _, a in sm._agent_state_buffer] == ["agent-b"]
 
 
 class TestMonotonicTimestamp:
