@@ -400,7 +400,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 self._agent_state_buffer.append((session_id, session_agent))
                 should_flush = len(self._agent_state_buffer) >= self.config.batch_size
 
-            # Flush outside the lock to prevent deadlock, messages first so a snapshot never lands ahead of its history
+            # Flush outside the lock to prevent deadlock. Flush messages too, not just agent states: agent state
+            # depends on the messages (removed_message_count indexes into them), so they must be persisted together.
             if should_flush:
                 self._flush_messages()
 
