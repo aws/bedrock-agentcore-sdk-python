@@ -400,9 +400,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 self._agent_state_buffer.append((session_id, session_agent))
                 should_flush = len(self._agent_state_buffer) >= self.config.batch_size
 
-            # Flush only agent states outside the lock to prevent deadlock
+            # Flush outside the lock to prevent deadlock. Flush messages too, not just agent states: agent state
+            # depends on the messages (removed_message_count indexes into them), so they must be persisted together.
             if should_flush:
-                self._flush_agent_states_only()
+                self._flush_messages()
 
             logger.info(
                 "Buffered agent creation: %s in session: %s",
@@ -471,7 +472,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             )
 
             if events:
-                agent_data = json.loads(events[0].get("payload", {})[0].get("blob"))
+                # A batched flush packs several snapshots into one event, oldest first.
+                agent_data = json.loads(events[0].get("payload", {})[-1].get("blob"))
                 agent = SessionAgent.from_dict(agent_data)
                 # Cache the created_at timestamp to avoid re-fetching on updates
                 if agent.created_at:
@@ -1184,9 +1186,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 logger.debug("Flushed %d agent states for agent %s: %s", len(payloads), agent_id, event.get("eventId"))
 
         except Exception as e:
-            # Restore agent states to buffer so they aren't lost
+            # Prepend so they aren't lost: states buffered during the send are newer, and read_agent restores the last
             with self._agent_state_lock:
-                self._agent_state_buffer.extend(agent_states_to_send)
+                self._agent_state_buffer[:0] = agent_states_to_send
             logger.error("Failed to flush agent states to AgentCore Memory: %s", e)
             raise SessionException(f"Failed to flush agent states: {e}") from e
 
