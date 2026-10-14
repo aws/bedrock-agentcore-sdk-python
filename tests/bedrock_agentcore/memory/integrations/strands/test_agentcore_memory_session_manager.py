@@ -140,7 +140,26 @@ class TestAgentCoreMemorySessionManager:
 
                     assert manager.config == agentcore_config
                     assert manager.memory_client == mock_client
-                    mock_client_class.assert_called_once_with(region_name=None)
+                    # MemoryClient must receive the resolved boto3 session so it does not
+                    # build its clients from a different (default) session.
+                    mock_client_class.assert_called_once_with(region_name=None, boto3_session=mock_session)
+
+    def test_init_passes_boto_session_to_memory_client(self, agentcore_config):
+        """A user-provided boto_session must be passed through to MemoryClient (issue #681)."""
+        with patch("bedrock_agentcore.memory.integrations.strands.session_manager.MemoryClient") as mock_client_class:
+            mock_client_class.return_value = Mock()
+            user_session = Mock()
+            user_session.region_name = "eu-west-1"
+            user_session.client.return_value = Mock()
+
+            with patch(
+                "strands.session.repository_session_manager.RepositorySessionManager.__init__", return_value=None
+            ):
+                AgentCoreMemorySessionManager(agentcore_config, boto_session=user_session)
+
+                # The user's session (not a default boto3.Session) must reach MemoryClient.
+                _, kwargs = mock_client_class.call_args
+                assert kwargs["boto3_session"] is user_session
 
     def test_events_to_messages(self, session_manager):
         """Test converting Bedrock events to SessionMessages."""
