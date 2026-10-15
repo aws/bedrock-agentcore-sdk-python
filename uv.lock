@@ -596,7 +596,7 @@ requires-dist = [
     { name = "botocore", specifier = ">=1.43.115" },
     { name = "deepeval", marker = "extra == 'deepeval'", specifier = ">=3.5.0,<5.0.0" },
     { name = "httpx", marker = "extra == 'langgraph'", specifier = ">=0.27.0" },
-    { name = "jinja2", marker = "extra == 'simulation'", specifier = ">=3.1.0" },
+    { name = "jinja2", marker = "extra == 'simulation'", specifier = ">=3.1.6" },
     { name = "langchain", marker = "extra == 'langgraph'", specifier = ">=1.0.0" },
     { name = "langchain-community", marker = "extra == 'ragas'", specifier = ">=0.3.0,<0.4.2" },
     { name = "langchain-mcp-adapters", marker = "extra == 'langgraph'", specifier = ">=0.1.0" },
