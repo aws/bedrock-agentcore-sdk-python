@@ -3998,6 +3998,26 @@ class TestFilterRestoredToolContext:
         content = result[0].to_message()["content"]
         assert content == [{"text": "Checking now…"}]
 
+    def test_strips_reasoning_content_with_no_tool_blocks(self, session_manager):
+        """reasoningContent is bound to the context it was produced in, not just
+        to a following toolUse: a system-prompt change between turns (e.g. one
+        that embeds the current time) invalidates it in a text-only assistant
+        turn too, so it must still be stripped even with no tool blocks present."""
+        messages = [
+            self._make_session_message(
+                "assistant",
+                [
+                    {"reasoningContent": {"reasoningText": {"text": "Thinking it through.", "signature": "s"}}},
+                    {"text": "Here is the answer."},
+                ],
+            ),
+        ]
+
+        result = session_manager._filter_restored_tool_context(messages)
+
+        assert len(result) == 1
+        assert result[0].to_message()["content"] == [{"text": "Here is the answer."}]
+
     def test_messages_without_tool_context_are_unchanged(self, session_manager):
         """Plain user/assistant messages (no tool or reasoning blocks) pass through."""
         messages = [
