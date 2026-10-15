@@ -803,14 +803,24 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             return []
 
     def _filter_restored_tool_context(self, messages: list[SessionMessage]) -> list[SessionMessage]:
-        """Strip historical toolUse/toolResult context from restored messages."""
+        """Strip historical toolUse/toolResult context from restored messages.
+
+        Extended-thinking (reasoningContent) blocks are bound to the exact
+        context they were produced in; any edit to earlier history, including
+        this filter's own tool stripping, invalidates them. Bedrock rejects
+        an assistant message carrying a reasoningContent block on replay if
+        anything before it changed, so we strip reasoningContent unconditionally
+        alongside toolUse/toolResult rather than only when paired with a tool.
+        """
         filtered_messages: list[SessionMessage] = []
         for session_message in messages:
             message = session_message.to_message()
             filtered_content = [
                 content
                 for content in message.get("content", [])
-                if "toolUse" not in content and "toolResult" not in content
+                if "toolUse" not in content
+                and "toolResult" not in content
+                and "reasoningContent" not in content
             ]
 
             if not filtered_content:
