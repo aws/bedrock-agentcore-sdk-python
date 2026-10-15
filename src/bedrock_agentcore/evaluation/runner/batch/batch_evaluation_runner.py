@@ -20,6 +20,7 @@ from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     BatchEvaluationSummary,
     CloudWatchOutputDataConfig,
     FailedScenario,
+    InsightResult,
 )
 from bedrock_agentcore.evaluation.runner.dataset_types import Dataset, PredefinedScenario, Scenario, SimulatedScenario
 from bedrock_agentcore.evaluation.runner.invoker_types import AgentInvokerFn
@@ -429,6 +430,13 @@ class BatchEvaluationRunner:
         if "evaluationResults" in response:
             evaluation_results = BatchEvaluationSummary.model_validate(response["evaluationResults"])
 
+        # Absent and empty mean different things: the field is omitted when no
+        # analysis evaluator ran or its results were unreadable, and empty when the
+        # analysis ran and found no failures. Keep that distinction in the result.
+        insight_results = None
+        if "insightResults" in response:
+            insight_results = [InsightResult.model_validate(insight) for insight in response["insightResults"]]
+
         output_data_config = None
         if "outputConfig" in response:
             odc = response["outputConfig"].get("cloudWatchConfig")
@@ -448,6 +456,7 @@ class BatchEvaluationRunner:
             description=response.get("description"),
             agent_invocation_failures=failed_scenarios,
             evaluation_results=evaluation_results,
+            insight_results=insight_results,
             error_details=response.get("errorDetails"),
             output_data_config=output_data_config,
             kms_key_arn=response.get("kmsKeyArn"),
