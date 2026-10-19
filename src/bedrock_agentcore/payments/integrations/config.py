@@ -1,10 +1,48 @@
 """Configuration for AgentCore Payments integrations (Strands and LangGraph)."""
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 from .._validation import validate_permit2_allowance_limit
 from .handlers import PaymentResponseHandler
+
+logger = logging.getLogger(__name__)
+
+
+def resolve_authoritative_user_id(
+    configured_user_id: Optional[str], requested_user_id: Optional[str]
+) -> Optional[str]:
+    """Resolve the effective user_id for a payment tool call, config-authoritative.
+
+    Defense-in-depth: the Strands plugin and LangGraph tools expose
+    ``user_id`` as an LLM-controllable argument. A prompt-injected agent could supply a
+    different ``user_id`` to attempt an identity override. The managed service already
+    scopes every read to the server-resolved identity, so this never crossed a tenant
+    boundary -- but the SDK should not let the model attempt it in the first place.
+
+    This helper makes the configured identity authoritative: a tool-supplied ``user_id``
+    that differs from the configured one is ignored (and logged). When no identity is
+    configured (bearer/JWT auth, where the server resolves the user from the token), the
+    requested value is passed through unchanged, since there is nothing to override.
+
+    Args:
+        configured_user_id: The identity from plugin/middleware config (authoritative).
+        requested_user_id: The user_id supplied on the tool call (LLM-controllable).
+
+    Returns:
+        The configured identity when set; otherwise the (stripped) requested value.
+    """
+    requested = requested_user_id.strip() if requested_user_id else None
+    if configured_user_id:
+        if requested and requested != configured_user_id:
+            logger.warning(
+                "Ignoring tool-supplied user_id %r that differs from the configured identity; "
+                "using the configured identity (defense-in-depth).",
+                requested,
+            )
+        return configured_user_id
+    return requested
 
 
 @dataclass

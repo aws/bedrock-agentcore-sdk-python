@@ -7,6 +7,8 @@ from typing import Any, Dict, Optional, Union
 import httpx
 from langchain.tools import tool
 
+from ..config import resolve_authoritative_user_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,7 +84,7 @@ def make_get_payment_instrument_tool(middleware: Any):
 
         Args:
             payment_instrument_id: Instrument ID (falls back to middleware config).
-            user_id: User ID (falls back to middleware config).
+            user_id: User ID. The configured identity is authoritative; a differing value is ignored.
             payment_connector_id: Connector ID (optional).
 
         Returns:
@@ -91,7 +93,7 @@ def make_get_payment_instrument_tool(middleware: Any):
         resolved_id = (
             payment_instrument_id.strip() if payment_instrument_id else None
         ) or middleware.config.payment_instrument_id
-        resolved_user = (user_id.strip() if user_id else None) or middleware.config.user_id
+        resolved_user = resolve_authoritative_user_id(middleware.config.user_id, user_id)
         return middleware.payment_manager.get_payment_instrument(
             user_id=resolved_user,
             payment_instrument_id=resolved_id,
@@ -114,7 +116,7 @@ def make_list_payment_instruments_tool(middleware: Any):
         """List all payment instruments for a user.
 
         Args:
-            user_id: User ID (falls back to middleware config).
+            user_id: User ID. The configured identity is authoritative; a differing value is ignored.
             payment_connector_id: Filter by connector (optional).
             max_results: Maximum results to return (default 100).
             next_token: Pagination token (optional).
@@ -122,7 +124,7 @@ def make_list_payment_instruments_tool(middleware: Any):
         Returns:
             Dictionary with paymentInstruments list and optional nextToken.
         """
-        resolved_user = (user_id.strip() if user_id else None) or middleware.config.user_id
+        resolved_user = resolve_authoritative_user_id(middleware.config.user_id, user_id)
         return middleware.payment_manager.list_payment_instruments(
             user_id=resolved_user,
             payment_connector_id=payment_connector_id,
@@ -151,12 +153,12 @@ def make_get_payment_instrument_balance_tool(middleware: Any):
             chain: Blockchain chain (e.g., BASE_SEPOLIA, SOLANA_DEVNET).
             token: Token to query (e.g., USDC).
             payment_connector_id: Connector ID (falls back to config).
-            user_id: User ID (falls back to config).
+            user_id: User ID. The configured identity is authoritative; a differing value is ignored.
 
         Returns:
             Dictionary with balance information.
         """
-        resolved_user = (user_id.strip() if user_id else None) or middleware.config.user_id
+        resolved_user = resolve_authoritative_user_id(middleware.config.user_id, user_id)
         resolved_connector = payment_connector_id or middleware.config.payment_connector_id
         return middleware.payment_manager.get_payment_instrument_balance(
             payment_connector_id=resolved_connector,
@@ -181,7 +183,7 @@ def make_get_payment_session_tool(middleware: Any):
 
         Args:
             payment_session_id: Session ID (falls back to middleware config).
-            user_id: User ID (falls back to middleware config).
+            user_id: User ID. The configured identity is authoritative; a differing value is ignored.
 
         Returns:
             Payment session details dictionary.
@@ -189,7 +191,7 @@ def make_get_payment_session_tool(middleware: Any):
         resolved_id = (
             payment_session_id.strip() if payment_session_id else None
         ) or middleware.config.payment_session_id
-        resolved_user = (user_id.strip() if user_id else None) or middleware.config.user_id
+        resolved_user = resolve_authoritative_user_id(middleware.config.user_id, user_id)
         return middleware.payment_manager.get_payment_session(
             user_id=resolved_user,
             payment_session_id=resolved_id,
