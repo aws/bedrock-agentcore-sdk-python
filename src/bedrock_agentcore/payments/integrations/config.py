@@ -99,6 +99,19 @@ class AgentCorePaymentsPluginConfig:
             sponsors fees via methodDetails.feePayer; when the seller does not, the service
             signs only if this is True and otherwise fails validation. None (default) leaves
             the protocol default in place and the field unsent. Ignored for x402.
+        allow_unmarked_402_detection: Whether to infer an x402 payment challenge from raw
+            tool output that does NOT carry the trusted ``PAYMENT_REQUIRED:`` marker
+            (LangGraph only). Default True (current behavior). When False, a payment is
+            derived only from the integration's own payment-bearing tools via the marker,
+            so arbitrary tool content can never mint a signed authorization to an
+            actor-chosen recipient. CWE-863: set False to harden, or keep
+            True and enforce ``pre_sign_policy``.
+        pre_sign_policy: Optional callback invoked at the single signing chokepoint on every
+            detection path (marked, unmarked, and error-retry) before any payment is signed.
+            Receives the payment-required request (carrying ``payTo`` and amount) and returns
+            True to allow signing or False to block it. Raising from the callback also blocks
+            (fail-closed). Use it to enforce a recipient/amount allowlist regardless of the
+            ``allow_unmarked_402_detection`` default. None (default) applies no extra gate.
     """
 
     payment_manager_arn: str
@@ -124,6 +137,8 @@ class AgentCorePaymentsPluginConfig:
     max_error_retries: int = 3
     buyer_pays_gas_fees: Optional[bool] = None
     permit2_allowance_limit: Optional[str] = None
+    allow_unmarked_402_detection: bool = True
+    pre_sign_policy: Optional[Callable[[Any], bool]] = None
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -189,6 +204,14 @@ class AgentCorePaymentsPluginConfig:
             raise ValueError(
                 f"buyer_pays_gas_fees must be a boolean or None, got {type(self.buyer_pays_gas_fees).__name__}"
             )
+
+        if not isinstance(self.allow_unmarked_402_detection, bool):
+            raise ValueError(
+                "allow_unmarked_402_detection must be a boolean, got "
+                f"{type(self.allow_unmarked_402_detection).__name__}"
+            )
+        if self.pre_sign_policy is not None and not callable(self.pre_sign_policy):
+            raise ValueError(f"pre_sign_policy must be callable, got {type(self.pre_sign_policy).__name__}")
 
         validate_permit2_allowance_limit(self.permit2_allowance_limit)
 

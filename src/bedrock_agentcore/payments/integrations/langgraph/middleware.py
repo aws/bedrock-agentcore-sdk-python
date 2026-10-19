@@ -240,7 +240,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             status_code = detection_handler.extract_status_code(prepared)
 
         # Lenient fallback if marker detection didn't find 402
-        if status_code != 402 and not has_custom_handler:
+        if status_code != 402 and not has_custom_handler and self.config.allow_unmarked_402_detection:
             fallback = self._fallback_detect_402(result.content)
             if fallback is not None:
                 status_code = 402
@@ -336,7 +336,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
             _rh = GenericPaymentHandler()
             retry_status = _rh.extract_status_code(retry_prepared)
-            if retry_status != 402:
+            if retry_status != 402 and self.config.allow_unmarked_402_detection:
                 fallback = self._fallback_detect_402(retry_result.content)
                 if fallback is not None:
                     retry_status = 402
@@ -383,6 +383,19 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         The payment protocol (x402 or MPP) is detected by PaymentManager from the 402
         response, so this method is protocol-agnostic.
         """
+        # Defense-in-depth pre-sign gate. Runs on every signing path
+        # (marked, unmarked, and error-retry) before any value moves. Lets integrators
+        # enforce a payTo/amount allowlist regardless of the detection default. The gate is
+        # fail-closed: returning a falsy value OR raising blocks signing.
+        pre_sign_policy = self.config.pre_sign_policy
+        if pre_sign_policy is not None:
+            try:
+                allowed = pre_sign_policy(payment_required_request)
+            except Exception as exc:  # fail-closed: a policy error blocks signing
+                raise PaymentError(f"pre_sign_policy rejected the payment (raised {type(exc).__name__}).") from exc
+            if not allowed:
+                raise PaymentError("pre_sign_policy rejected the payment before signing.")
+
         if self.config.payment_instrument_id is None:
             raise PaymentInstrumentConfigurationRequired("payment_instrument_id is required for payments.")
         if self.config.payment_session_id is None:
