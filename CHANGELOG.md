@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.24.2] - 2026-10-19
+
+### Other Changes
+- fix(memory): pass boto3 session to MemoryClient in AgentCoreMemorySessionManager (#682) (b70e0b7)
+- fix(memory): restore latest agent snapshot from batched events (#700) (45260c8)
+
 ## [1.24.1] - 2026-10-06
 
 ### Other Changes
