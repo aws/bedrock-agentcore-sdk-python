@@ -1,8 +1,9 @@
 # Evaluation insight results
 
 Some evaluators go beyond scoring and group related failures across the evaluated
-sessions. Add one to `evaluator_ids` and the completed result carries them in
-`insight_results`:
+sessions. `Builtin.FailureAnalysis` is one. Add it to `evaluator_ids` and the
+completed result carries its insights in `insight_results`, alongside the scores
+from any other evaluators in the same run:
 
 ```python
 from bedrock_agentcore.evaluation import (
