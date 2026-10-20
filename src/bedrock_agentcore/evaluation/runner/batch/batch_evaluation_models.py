@@ -245,6 +245,103 @@ class CloudWatchOutputDataConfig(BaseModel):
     log_stream_name: str
 
 
+class SessionFinding(BaseModel):
+    """A failure found in a sampled session that placed it under an insight or root cause.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
+
+    Attributes:
+        description: Evidence text describing the failure.
+        target_id: Identifier of the span, trace, or span name the finding points at,
+            interpreted according to ``target_type``.
+        target_type: What ``target_id`` refers to, such as ``"SPAN_ID"``.
+        category: Failure category assigned by the analysis.
+        confidence: Confidence in the finding, between 0 and 1.
+    """
+
+    model_config = ConfigDict(alias_generator=alias_generators.to_camel, populate_by_name=True)
+
+    description: Optional[str] = None
+    target_id: Optional[str] = None
+    target_type: Optional[str] = None
+    category: Optional[str] = None
+    confidence: Optional[float] = None
+
+
+class SampleSession(BaseModel):
+    """A sampled session illustrating an insight or root cause.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
+
+    Attributes:
+        session_id: Identifier of the sampled session.
+        last_seen_at: Latest timestamp observed for the session in the batch input.
+        findings: Failures that placed this session under the insight or root cause.
+    """
+
+    model_config = ConfigDict(alias_generator=alias_generators.to_camel, populate_by_name=True)
+
+    session_id: Optional[str] = None
+    last_seen_at: Optional[datetime] = None
+    findings: Optional[List[SessionFinding]] = None
+
+
+class InsightRootCause(BaseModel):
+    """A root cause grouped under an insight.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
+
+    Attributes:
+        name: Short label for the root cause.
+        explanation: Why the grouped failures happen.
+        suggested_fix: Recommended change to address the root cause.
+        affected_session_count: Number of distinct sessions affected. A session can
+            appear under more than one root cause, so these counts can add up to more
+            than the insight's own count.
+        sample_sessions: Sessions illustrating this root cause.
+    """
+
+    model_config = ConfigDict(alias_generator=alias_generators.to_camel, populate_by_name=True)
+
+    name: Optional[str] = None
+    explanation: Optional[str] = None
+    suggested_fix: Optional[str] = None
+    affected_session_count: Optional[int] = None
+    sample_sessions: Optional[List[SampleSession]] = None
+
+
+class InsightResult(BaseModel):
+    """A job-level insight grouping related failures across the batch.
+
+    .. warning::
+        This feature is in preview and may change in future releases.
+
+    Attributes:
+        type: Kind of insight, such as ``"FAILURE"``.
+        name: Short label for the insight.
+        description: What the grouped failures have in common.
+        created_at: When the insight was generated.
+        affected_session_count: Number of distinct sessions affected.
+        sample_sessions: Sessions illustrating the insight. Populated only when the
+            insight has no root causes, since otherwise the samples sit under each
+            root cause.
+        root_causes: Root causes grouped under this insight.
+    """
+
+    model_config = ConfigDict(alias_generator=alias_generators.to_camel, populate_by_name=True)
+
+    type: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    created_at: Optional[datetime] = None
+    affected_session_count: Optional[int] = None
+    sample_sessions: Optional[List[SampleSession]] = None
+    root_causes: Optional[List[InsightRootCause]] = None
+
+
 class BatchEvaluationResult(BaseModel):
     """Result returned by :py:meth:`BatchEvaluationRunner.run`.
 
@@ -263,6 +360,11 @@ class BatchEvaluationResult(BaseModel):
             the service. ``None`` if the API did not return it.
         evaluation_results: Aggregated per-evaluator statistics. Present when
             the job completed successfully; ``None`` otherwise.
+        insight_results: Job-level insights produced by an analysis evaluator such
+            as ``Builtin.FailureAnalysis``. An empty list means the analysis ran and
+            found no failures. ``None`` means no analysis evaluator was requested, or
+            its results could not be read, in which case ``error_details`` names the
+            evaluator.
         error_details: Service-reported error messages when the job failed.
         agent_invocation_failures: Scenarios that failed during the agent
             invocation phase (before the evaluation job was started). A
@@ -285,6 +387,7 @@ class BatchEvaluationResult(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     evaluation_results: Optional[BatchEvaluationSummary] = None
+    insight_results: Optional[List[InsightResult]] = None
     error_details: Optional[List[str]] = None
     agent_invocation_failures: List[FailedScenario] = Field(default_factory=list)
     output_data_config: Optional[CloudWatchOutputDataConfig] = None

@@ -108,7 +108,12 @@ def _make_start_response(batch_evaluation_id="eval-001"):
     }
 
 
-def _make_completed_response(batch_evaluation_id="eval-001", with_output_data=False, with_eval_results=False):
+def _make_completed_response(
+    batch_evaluation_id="eval-001",
+    with_output_data=False,
+    with_eval_results=False,
+    insight_results=None,
+):
     response = {
         "batchEvaluationId": batch_evaluation_id,
         "batchEvaluationArn": f"arn:aws:bedrock-agentcore:us-west-2:123:batch-evaluation/{batch_evaluation_id}",
@@ -140,7 +145,68 @@ def _make_completed_response(batch_evaluation_id="eval-001", with_output_data=Fa
                 }
             ],
         }
+    if insight_results is not None:
+        response["insightResults"] = insight_results
     return response
+
+
+_INSIGHT_RESULTS = [
+    {
+        "type": "FAILURE",
+        "name": "IAM Permission Denial Errors",
+        "description": "The agent could not complete service operations it lacked permission for.",
+        "createdAt": _T1,
+        "affectedSessionCount": 1,
+        "rootCauses": [
+            {
+                "name": "IAM Permission Gaps Blocking Agent Service Operations",
+                "explanation": "The execution role is missing the actions the tool calls require.",
+                "suggestedFix": "Grant the execution role the actions the restart tool calls.",
+                "affectedSessionCount": 1,
+                "sampleSessions": [
+                    {
+                        "sessionId": "ops-restart-denied-1",
+                        "lastSeenAt": _T1,
+                        "findings": [
+                            {
+                                "targetId": "1a027c6a3f598862",
+                                "targetType": "SPAN_ID",
+                                "description": "restart_service raised PermissionError.",
+                                "category": "execution-error-authentication",
+                                "confidence": 0.9,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    },
+    {
+        # An insight carries its own sample sessions only when it has no root
+        # causes, so this entry covers that branch of the response.
+        "type": "FAILURE",
+        "name": "Query Timeout Errors",
+        "description": "Checkout-API queries exceeded the tool timeout.",
+        "createdAt": _T0,
+        "affectedSessionCount": 2,
+        "sampleSessions": [
+            {
+                "sessionId": "ops-query-timeout-1",
+                "lastSeenAt": _T0,
+                "findings": [
+                    {
+                        "targetId": "674d83289183f34e",
+                        "targetType": "SPAN_ID",
+                        "description": "query_metrics timed out after 30s.",
+                        "category": "execution-error-timeout",
+                        "confidence": 0.75,
+                    }
+                ],
+            },
+            {"sessionId": "ops-query-timeout-2"},
+        ],
+    },
+]
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +402,86 @@ def test_run_parses_evaluation_results():
     summary = result.evaluation_results.evaluator_summaries[0]
     assert summary.evaluator_id == "Builtin.Helpfulness"
     assert summary.statistics.average_score == 0.9
+
+
+def _run_with_insight_results(insight_results):
+    runner = _make_runner()
+    runner.data_plane_client.start_batch_evaluation.return_value = _make_start_response()
+    runner.data_plane_client.get_batch_evaluation.return_value = _make_completed_response(
+        insight_results=insight_results
+    )
+
+    with patch.object(
+        runner,
+        "_execute_scenarios_parallel",
+        return_value=(
+            [MagicMock(scenario_id="s1", session_id="s1-session-abc", start_time=_T0, end_time=_T1, ground_truth=None)],
+            [],
+        ),
+    ):
+        return runner.run_dataset_evaluation(config=_make_config(), dataset=_DATASET, agent_invoker=_make_invoker())
+
+
+def test_run_parses_insight_results():
+    result = _run_with_insight_results(_INSIGHT_RESULTS)
+
+    assert result.insight_results is not None
+    assert len(result.insight_results) == 2
+    insight = result.insight_results[0]
+    assert insight.type == "FAILURE"
+    assert insight.name == "IAM Permission Denial Errors"
+    assert insight.description == "The agent could not complete service operations it lacked permission for."
+    assert insight.created_at == _T1
+    assert insight.affected_session_count == 1
+
+    root_cause = insight.root_causes[0]
+    assert root_cause.name == "IAM Permission Gaps Blocking Agent Service Operations"
+    assert root_cause.explanation == "The execution role is missing the actions the tool calls require."
+    assert root_cause.suggested_fix == "Grant the execution role the actions the restart tool calls."
+    assert root_cause.affected_session_count == 1
+
+    sample = root_cause.sample_sessions[0]
+    assert sample.session_id == "ops-restart-denied-1"
+    assert sample.last_seen_at == _T1
+    finding = sample.findings[0]
+    assert finding.target_type == "SPAN_ID"
+    assert finding.target_id == "1a027c6a3f598862"
+    assert finding.description == "restart_service raised PermissionError."
+    assert finding.category == "execution-error-authentication"
+    assert finding.confidence == 0.9
+
+
+def test_run_parses_insight_sample_sessions_without_root_causes():
+    insight = _run_with_insight_results(_INSIGHT_RESULTS).insight_results[1]
+
+    assert insight.root_causes is None
+    assert insight.created_at == _T0
+    assert [sample.session_id for sample in insight.sample_sessions] == [
+        "ops-query-timeout-1",
+        "ops-query-timeout-2",
+    ]
+    assert insight.sample_sessions[0].findings[0].confidence == 0.75
+    # Every member is optional, so a session the service sends bare still parses.
+    assert insight.sample_sessions[1].last_seen_at is None
+    assert insight.sample_sessions[1].findings is None
+
+
+def test_insight_models_round_trip_to_wire_names():
+    insight = _run_with_insight_results(_INSIGHT_RESULTS).insight_results[0]
+
+    dumped = insight.model_dump(by_alias=True, exclude_none=True)
+    assert set(dumped) == set(_INSIGHT_RESULTS[0])
+    assert set(dumped["rootCauses"][0]) == set(_INSIGHT_RESULTS[0]["rootCauses"][0])
+    assert set(dumped["rootCauses"][0]["sampleSessions"][0]["findings"][0]) == set(
+        _INSIGHT_RESULTS[0]["rootCauses"][0]["sampleSessions"][0]["findings"][0]
+    )
+
+
+def test_run_keeps_empty_insight_results_distinct_from_absent():
+    # An empty list means the analysis ran and found no failures, while an absent
+    # field means no analysis evaluator ran or its results were unreadable.
+    assert _run_with_insight_results([]).insight_results == []
+    assert _run_with_insight_results(None).insight_results is None
 
 
 def test_run_start_batch_evaluation_failure_raises_runtime_error():

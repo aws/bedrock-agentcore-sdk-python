@@ -19,7 +19,11 @@ from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     EvaluatorStatistics,
     EvaluatorSummary,
     FailedScenario,
+    InsightResult,
+    InsightRootCause,
     OnlineEvaluationDataSourceConfig,
+    SampleSession,
+    SessionFinding,
 )
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_runner import (
     BatchEvaluationRunner,
@@ -81,6 +85,10 @@ __all__ = [
     "EvaluatorStatistics",
     "EvaluatorSummary",
     "FailedScenario",
+    "InsightResult",
+    "InsightRootCause",
+    "SampleSession",
+    "SessionFinding",
     "AgentInvokerInput",
     "AgentInvokerOutput",
     "CloudWatchAgentSpanCollector",
