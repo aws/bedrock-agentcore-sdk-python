@@ -219,9 +219,7 @@ class TestExploitScenario:
         """
         signed_requests = []
 
-        with patch(
-            "bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager"
-        ) as mock_pm_cls:
+        with patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager") as mock_pm_cls:
             mock_pm = mock_pm_cls.return_value
 
             def _sign(*args, **kwargs):

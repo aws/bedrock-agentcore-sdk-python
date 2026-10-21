@@ -10,9 +10,7 @@ from .handlers import PaymentResponseHandler
 logger = logging.getLogger(__name__)
 
 
-def resolve_authoritative_user_id(
-    configured_user_id: Optional[str], requested_user_id: Optional[str]
-) -> Optional[str]:
+def resolve_authoritative_user_id(configured_user_id: Optional[str], requested_user_id: Optional[str]) -> Optional[str]:
     """Resolve the effective user_id for a payment tool call, config-authoritative.
 
     Defense-in-depth: the Strands plugin and LangGraph tools expose
