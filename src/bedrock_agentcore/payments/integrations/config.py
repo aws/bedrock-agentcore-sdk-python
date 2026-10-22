@@ -1,10 +1,46 @@
 """Configuration for AgentCore Payments integrations (Strands and LangGraph)."""
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from .._validation import validate_permit2_allowance_limit
+from .._validation import is_async_callback, validate_permit2_allowance_limit
 from .handlers import PaymentResponseHandler
+
+logger = logging.getLogger(__name__)
+
+
+def resolve_authoritative_user_id(configured_user_id: Optional[str], requested_user_id: Optional[str]) -> Optional[str]:
+    """Resolve the effective user_id for a payment tool call, config-authoritative.
+
+    Defense-in-depth: the Strands plugin and LangGraph tools expose
+    ``user_id`` as an LLM-controllable argument. A prompt-injected agent could supply a
+    different ``user_id`` to attempt an identity override. The managed service already
+    scopes every read to the server-resolved identity, so this never crossed a tenant
+    boundary -- but the SDK should not let the model attempt it in the first place.
+
+    This helper makes the configured identity authoritative: a tool-supplied ``user_id``
+    that differs from the configured one is ignored (and logged). When no identity is
+    configured (bearer/JWT auth, where the server resolves the user from the token), the
+    requested value is passed through unchanged, since there is nothing to override.
+
+    Args:
+        configured_user_id: The identity from plugin/middleware config (authoritative).
+        requested_user_id: The user_id supplied on the tool call (LLM-controllable).
+
+    Returns:
+        The configured identity when set; otherwise the (stripped) requested value.
+    """
+    requested = requested_user_id.strip() if requested_user_id else None
+    if configured_user_id:
+        if requested and requested != configured_user_id:
+            logger.warning(
+                "Ignoring tool-supplied user_id %r that differs from the configured identity; "
+                "using the configured identity (defense-in-depth).",
+                requested,
+            )
+        return configured_user_id
+    return requested
 
 
 @dataclass
@@ -61,6 +97,31 @@ class AgentCorePaymentsPluginConfig:
             sponsors fees via methodDetails.feePayer; when the seller does not, the service
             signs only if this is True and otherwise fails validation. None (default) leaves
             the protocol default in place and the field unsent. Ignored for x402.
+        allow_unmarked_402_detection: Whether to infer an x402 payment challenge from raw
+            tool output that does NOT carry the trusted ``PAYMENT_REQUIRED:`` marker
+            (LangGraph only). Default True (current behavior). When False, a payment is
+            derived only from the integration's own payment-bearing tools via the marker,
+            so arbitrary tool content can never mint a signed authorization to an
+            actor-chosen recipient. CWE-863: set False to harden, or keep
+            True and enforce ``pre_sign_policy``.
+        pre_sign_policy: Optional synchronous callback invoked at the signing chokepoint of
+            BOTH integrations (Strands plugin and LangGraph middleware), on every detection
+            path (marked, unmarked, and error-retry), before any payment is signed. Receives
+            the payment-required request and must return ``True`` exactly to allow signing;
+            any other return value blocks (so a reason dict, a status string, or a missing
+            return all fail closed). Raising from the callback also blocks. Must be
+            synchronous: an async policy is rejected at construction, because it could not be
+            awaited here and an unawaited coroutine is truthy (fail-open). Use it to enforce a
+            recipient/amount allowlist regardless of the ``allow_unmarked_402_detection``
+            default. None (default) applies no extra gate.
+
+            The request is a dict of the shape ``{"statusCode", "headers", "body"}``. Where
+            ``payTo`` and amount live depends on the protocol/version, so a robust policy must
+            handle all four: x402 v1 dict body -> ``body["accepts"][i]["payTo"]``; x402 v1
+            string body -> inside the JSON string in ``body``; x402 v2 -> base64 in
+            ``headers["Payment-Required"]``; MPP -> base64url in the ``WWW-Authenticate``
+            challenge. A policy that only reads ``body["accepts"]`` fail-closes every v2 and
+            MPP payment.
     """
 
     payment_manager_arn: str
@@ -86,6 +147,8 @@ class AgentCorePaymentsPluginConfig:
     max_error_retries: int = 3
     buyer_pays_gas_fees: Optional[bool] = None
     permit2_allowance_limit: Optional[str] = None
+    allow_unmarked_402_detection: bool = True
+    pre_sign_policy: Optional[Callable[[Any], bool]] = None
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -150,6 +213,20 @@ class AgentCorePaymentsPluginConfig:
         if self.buyer_pays_gas_fees is not None and not isinstance(self.buyer_pays_gas_fees, bool):
             raise ValueError(
                 f"buyer_pays_gas_fees must be a boolean or None, got {type(self.buyer_pays_gas_fees).__name__}"
+            )
+
+        if not isinstance(self.allow_unmarked_402_detection, bool):
+            raise ValueError(
+                "allow_unmarked_402_detection must be a boolean, got "
+                f"{type(self.allow_unmarked_402_detection).__name__}"
+            )
+        if self.pre_sign_policy is not None and not callable(self.pre_sign_policy):
+            raise ValueError(f"pre_sign_policy must be callable, got {type(self.pre_sign_policy).__name__}")
+        if self.pre_sign_policy is not None and is_async_callback(self.pre_sign_policy):
+            raise TypeError(
+                "pre_sign_policy must be a synchronous callable. An async policy cannot be awaited at "
+                "the signing chokepoint, so it would fail open (the unawaited coroutine is truthy and the "
+                "payment would sign). Wrap any async work in a synchronous policy, or run it ahead of time."
             )
 
         validate_permit2_allowance_limit(self.permit2_allowance_limit)

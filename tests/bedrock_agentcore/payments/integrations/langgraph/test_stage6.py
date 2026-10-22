@@ -163,7 +163,7 @@ class TestPaymentQueryTools:
 
         result = tool.invoke({"payment_instrument_id": "instr-99", "user_id": "u2"})
         mock_pm.get_payment_instrument.assert_called_once_with(
-            user_id="u2",
+            user_id="user-1",
             payment_instrument_id="instr-99",
             payment_connector_id=None,
         )
@@ -194,7 +194,7 @@ class TestPaymentQueryTools:
 
         result = tool.invoke({"user_id": "u2"})
         mock_pm.list_payment_instruments.assert_called_once_with(
-            user_id="u2",
+            user_id="user-1",
             payment_connector_id=None,
             max_results=100,
             next_token=None,
@@ -229,7 +229,7 @@ class TestPaymentQueryTools:
 
         result = tool.invoke({"payment_session_id": "sess-99", "user_id": "u3"})
         mock_pm.get_payment_session.assert_called_once_with(
-            user_id="u3",
+            user_id="user-1",
             payment_session_id="sess-99",
         )
         assert result == {"paymentSessionId": "sess-1"}

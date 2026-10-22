@@ -1,8 +1,6 @@
 """AgentCorePaymentsMiddleware for LangGraph agents."""
 
 import asyncio
-import functools
-import inspect
 import json
 import logging
 import time
@@ -15,6 +13,11 @@ from langchain.messages import ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
+from bedrock_agentcore.payments._validation import (
+    PreSignPolicyRejected,
+    apply_pre_sign_policy,
+    is_async_callback,
+)
 from bedrock_agentcore.payments.integrations.error_messages import get_payment_error_message
 from bedrock_agentcore.payments.integrations.handlers import (
     GenericPaymentHandler,
@@ -240,7 +243,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
             status_code = detection_handler.extract_status_code(prepared)
 
         # Lenient fallback if marker detection didn't find 402
-        if status_code != 402 and not has_custom_handler:
+        if status_code != 402 and not has_custom_handler and self.config.allow_unmarked_402_detection:
             fallback = self._fallback_detect_402(result.content)
             if fallback is not None:
                 status_code = 402
@@ -336,6 +339,11 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
             _rh = GenericPaymentHandler()
             retry_status = _rh.extract_status_code(retry_prepared)
+            # Not gated by allow_unmarked_402_detection: this runs AFTER the payment is
+            # signed and sent, on the merchant's own response, so it closes no attack
+            # surface. Gating it would let an unmarked post-payment rejection be returned to
+            # the model as a successful tool result -- money moved, merchant refused, agent
+            # told it worked. The detection flag belongs only on the pre-payment sites.
             if retry_status != 402:
                 fallback = self._fallback_detect_402(retry_result.content)
                 if fallback is not None:
@@ -383,6 +391,23 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
         The payment protocol (x402 or MPP) is detected by PaymentManager from the 402
         response, so this method is protocol-agnostic.
         """
+        # An unresolved request must never reach the signer. If _extract_payment_request
+        # raised (e.g. a custom handler threw), the caller previously passed ``{}`` here,
+        # against which an allowlist like ``all(a["payTo"] == TRUSTED for a in accepts)``
+        # resolves ``accepts`` to ``[]`` and ``all([])`` is True -- the pre-sign gate would
+        # pass on empty input. Fail closed instead.
+        if not payment_required_request:
+            raise PaymentError("Cannot sign a payment from an unresolved payment-required request.")
+
+        # Defense-in-depth pre-sign gate. Runs on every signing path (marked, unmarked, and
+        # error-retry) before any value moves. Lets integrators enforce a payTo/amount
+        # allowlist regardless of the detection default. Fail-closed: the policy must return
+        # True exactly, or signing is blocked (a raise or any non-True value blocks).
+        try:
+            apply_pre_sign_policy(self.config.pre_sign_policy, payment_required_request)
+        except PreSignPolicyRejected as exc:
+            raise PaymentError(f"pre_sign_policy blocked the payment before signing ({exc}).") from exc
+
         if self.config.payment_instrument_id is None:
             raise PaymentInstrumentConfigurationRequired("payment_instrument_id is required for payments.")
         if self.config.payment_session_id is None:
@@ -422,18 +447,10 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
     def _is_async_callback(callback: Any) -> bool:
         """True if the callback ultimately resolves to an async coroutine function.
 
-        Covers the wrappings a plain ``inspect.iscoroutinefunction`` can miss: callable
-        objects with an ``async def __call__``, ``functools.partial`` (whose async-ness is
-        not reliably visible through the partial across Python versions), and partials of
-        either. (``callable()`` — ruff B004's suggestion — cannot distinguish sync from async.)
+        Delegates to the shared :func:`is_async_callback` so async-detection has one
+        source of truth across the config validation and the integrations.
         """
-        target = callback
-        while isinstance(target, functools.partial):
-            target = target.func
-        if inspect.iscoroutinefunction(target):
-            return True
-        call = getattr(target, "__call__", None)  # noqa: B004
-        return inspect.iscoroutinefunction(call)
+        return is_async_callback(callback)
 
     @staticmethod
     def _error_tool_message(request: ToolCallRequest, exception: Exception) -> ToolMessage:
@@ -590,7 +607,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
             try:
                 if payment_header is None:
-                    payment_header = self._generate_payment_header(payment_required_request or {})
+                    payment_header = self._generate_payment_header(payment_required_request)
 
                 inject_error = self._inject_for_error_retry(request, tool_name, tool_args, payment_header)
                 if inject_error is not None:
@@ -727,9 +744,7 @@ class AgentCorePaymentsMiddleware(AgentMiddleware):
 
             try:
                 if payment_header is None:
-                    payment_header = await asyncio.to_thread(
-                        self._generate_payment_header, payment_required_request or {}
-                    )
+                    payment_header = await asyncio.to_thread(self._generate_payment_header, payment_required_request)
 
                 inject_error = self._inject_for_error_retry(request, tool_name, tool_args, payment_header)
                 if inject_error is not None:

@@ -1619,10 +1619,10 @@ class TestErrorHandlingConsistency:
 
 
 class TestUserIdPrecedence:
-    """Test user_id resolution: explicit > config > None."""
+    """Test user_id resolution: config-authoritative, differing tool value ignored."""
 
-    def test_explicit_user_id_takes_precedence_over_config(self):
-        """Test that explicit user_id passed to tool takes precedence over config.user_id."""
+    def test_config_user_id_overrides_differing_tool_value(self):
+        """A differing tool-supplied user_id is ignored; the configured identity wins."""
         from bedrock_agentcore.payments.integrations.config import AgentCorePaymentsPluginConfig
         from bedrock_agentcore.payments.integrations.strands.plugin import AgentCorePaymentsPlugin
 
@@ -1647,7 +1647,7 @@ class TestUserIdPrecedence:
         )
 
         mock_payment_manager.get_payment_instrument.assert_called_once_with(
-            user_id="override-user",
+            user_id="config-user",
             payment_instrument_id="instr-123",
             payment_connector_id=None,
         )

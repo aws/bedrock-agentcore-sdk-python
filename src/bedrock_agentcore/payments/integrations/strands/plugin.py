@@ -11,6 +11,7 @@ from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent
 from strands.plugins import Plugin, hook
 from strands.tools import tool
 
+from bedrock_agentcore.payments._validation import PreSignPolicyRejected, apply_pre_sign_policy
 from bedrock_agentcore.payments.manager import (
     PaymentError,
     PaymentInstrumentConfigurationRequired,
@@ -18,7 +19,7 @@ from bedrock_agentcore.payments.manager import (
     PaymentSessionConfigurationRequired,
 )
 
-from ..config import AgentCorePaymentsPluginConfig
+from ..config import AgentCorePaymentsPluginConfig, resolve_authoritative_user_id
 from ..handlers import get_payment_handler
 from .tools import validate_required_params
 
@@ -486,6 +487,15 @@ class AgentCorePaymentsPlugin(Plugin):
                 "Tip: use 'agentcore invoke --payment-session-id <id>' or '--auto-session' from the CLI."
             )
 
+        # Defense-in-depth pre-sign gate, identical semantics to the LangGraph middleware:
+        # fail-closed, the policy must return True exactly, async policies are rejected at
+        # construction. Enforced here so a recipient/amount allowlist set on the shared config
+        # is honored on the Strands signing path too (not silently ignored).
+        try:
+            apply_pre_sign_policy(self.config.pre_sign_policy, payment_required_request)
+        except PreSignPolicyRejected as exc:
+            raise PaymentError(f"pre_sign_policy blocked the payment before signing ({exc}).") from exc
+
         # Generate payment header using PaymentManager
         payment_header_dict = self.payment_manager.generate_payment_header(
             user_id=self.config.user_id,
@@ -517,7 +527,7 @@ class AgentCorePaymentsPlugin(Plugin):
 
         Args:
             payment_instrument_id: Payment instrument identifier (optional, falls back to plugin config)
-            user_id: User identifier (optional, falls back to plugin config)
+            user_id: User identifier (optional). The configured identity is authoritative; a differing value is ignored.
             payment_connector_id: Payment connector identifier (optional)
 
         Returns:
@@ -549,7 +559,7 @@ class AgentCorePaymentsPlugin(Plugin):
                     "payment_instrument_id is not set. Provide it as a parameter or configure it in the plugin."
                 )
 
-            resolved_user_id = (user_id.strip() if user_id else None) or self.config.user_id
+            resolved_user_id = resolve_authoritative_user_id(self.config.user_id, user_id)
 
             # Call PaymentManager to get instrument details
             instrument_details = self.payment_manager.get_payment_instrument(
@@ -583,7 +593,7 @@ class AgentCorePaymentsPlugin(Plugin):
         enabling dynamic selection and management of payment methods.
 
         Args:
-            user_id: User identifier (optional, falls back to plugin config)
+            user_id: User identifier (optional). The configured identity is authoritative; a differing value is ignored.
             payment_connector_id: Filter by payment connector identifier (optional)
             max_results: Maximum number of results to return (default 100)
             next_token: Pagination token for retrieving next page (optional)
@@ -623,7 +633,7 @@ class AgentCorePaymentsPlugin(Plugin):
             if not self.payment_manager:
                 raise PaymentError("PaymentManager not initialized")
 
-            resolved_user_id = (user_id.strip() if user_id else None) or self.config.user_id
+            resolved_user_id = resolve_authoritative_user_id(self.config.user_id, user_id)
 
             # Call PaymentManager to list instruments
             instruments_list = self.payment_manager.list_payment_instruments(
@@ -664,7 +674,7 @@ class AgentCorePaymentsPlugin(Plugin):
             chain: Blockchain chain to query (e.g., BASE_SEPOLIA, SOLANA_DEVNET)
             token: Token to query balance for (e.g., USDC)
             payment_connector_id: Payment connector identifier (optional, falls back to plugin config)
-            user_id: User identifier (optional, falls back to plugin config)
+            user_id: User identifier (optional). The configured identity is authoritative; a differing value is ignored.
 
         Returns:
             Dictionary containing balance information:
@@ -679,7 +689,7 @@ class AgentCorePaymentsPlugin(Plugin):
                 }
             }
         """
-        resolved_user_id = (user_id.strip() if user_id else None) or self.config.user_id
+        resolved_user_id = resolve_authoritative_user_id(self.config.user_id, user_id)
         resolved_connector_id = payment_connector_id or self.config.payment_connector_id
 
         logger.info("Executing getPaymentInstrumentBalance for instrument %s on %s", payment_instrument_id, chain)
@@ -712,7 +722,7 @@ class AgentCorePaymentsPlugin(Plugin):
 
         Args:
             payment_session_id: Payment session identifier (optional, falls back to plugin config)
-            user_id: User identifier (optional, falls back to plugin config)
+            user_id: User identifier (optional). The configured identity is authoritative; a differing value is ignored.
 
         Returns:
             Dictionary containing payment session details with the following structure:
@@ -757,7 +767,7 @@ class AgentCorePaymentsPlugin(Plugin):
                     "payment_session_id is not set. Provide it as a parameter or configure it in the plugin."
                 )
 
-            resolved_user_id = (user_id.strip() if user_id else None) or self.config.user_id
+            resolved_user_id = resolve_authoritative_user_id(self.config.user_id, user_id)
 
             # Call PaymentManager to get session details
             session_details = self.payment_manager.get_payment_session(
