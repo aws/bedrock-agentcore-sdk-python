@@ -387,18 +387,39 @@ class BatchEvaluationRunner:
             for session in successful_sessions
         ]
 
+        return self._start_and_collect(
+            config,
+            data_source_config=config.data_source.to_data_source_config(
+                [s.session_id for s in successful_sessions],
+                min(s.start_time for s in successful_sessions),
+                max(s.end_time for s in successful_sessions),
+            ),
+            evaluation_metadata={"sessionMetadata": session_metadata_list},
+            agent_invocation_failures=failed_scenarios,
+        )
+
+    def _start_and_collect(
+        self,
+        config: BatchEvaluationRunConfig,
+        data_source_config: Dict[str, Any],
+        evaluation_metadata: Optional[Dict[str, Any]] = None,
+        agent_invocation_failures: Optional[List[FailedScenario]] = None,
+    ) -> BatchEvaluationResult:
+        """Start a batch evaluation, poll it to a terminal state, and build the result.
+
+        Shared by :py:meth:`run_dataset_evaluation` and
+        :py:meth:`run_session_evaluation`, which differ only in how they choose the
+        sessions to evaluate.
+        """
         logger.info("Calling StartBatchEvaluation (name=%s)", config.batch_evaluation_name)
         try:
             start_kwargs: Dict[str, Any] = dict(
                 batchEvaluationName=config.batch_evaluation_name,
                 evaluators=[{"evaluatorId": eid} for eid in config.evaluator_config.evaluator_ids],
-                dataSourceConfig=config.data_source.to_data_source_config(
-                    [s.session_id for s in successful_sessions],
-                    min(s.start_time for s in successful_sessions),
-                    max(s.end_time for s in successful_sessions),
-                ),
-                evaluationMetadata={"sessionMetadata": session_metadata_list},
+                dataSourceConfig=data_source_config,
             )
+            if evaluation_metadata is not None:
+                start_kwargs["evaluationMetadata"] = evaluation_metadata
             if config.description is not None:
                 start_kwargs["description"] = config.description
             if config.kms_key_arn is not None:
@@ -454,7 +475,7 @@ class BatchEvaluationRunner:
             created_at=response["createdAt"],
             updated_at=response.get("updatedAt"),
             description=response.get("description"),
-            agent_invocation_failures=failed_scenarios,
+            agent_invocation_failures=agent_invocation_failures or [],
             evaluation_results=evaluation_results,
             insight_results=insight_results,
             error_details=response.get("errorDetails"),
@@ -470,6 +491,63 @@ class BatchEvaluationRunner:
             result.evaluation_results.number_of_sessions_failed if result.evaluation_results else None,
         )
         return result
+
+    def run_session_evaluation(
+        self,
+        config: BatchEvaluationRunConfig,
+        start_time: datetime,
+        end_time: datetime,
+        session_ids: Optional[List[str]] = None,
+    ) -> BatchEvaluationResult:
+        """Run a batch evaluation on sessions that already exist.
+
+        Use this to evaluate production traffic or any previously recorded
+        sessions, for example to take a baseline before a change or to compare
+        before and after it. Unlike :py:meth:`run_dataset_evaluation`, nothing is
+        invoked: the service reads the sessions from ``config.data_source``.
+
+        Analysis evaluators such as ``Builtin.FailureAnalysis`` can run alongside
+        scoring evaluators in ``config.evaluator_config``; their patterns are
+        returned in ``result.insight_results``.
+
+        The data source's pre-run hook (for example the CloudWatch ingestion
+        delay) is not called, because there is no agent invocation to wait for.
+        Sessions must already be ingested.
+
+        Args:
+            config: Evaluation name, evaluator IDs, session source, and polling
+                timeouts. ``max_concurrent_scenarios`` is not used.
+            start_time: Start of the time window to read sessions from.
+            end_time: End of the time window.
+            session_ids: Optional session IDs to narrow the window to. When
+                omitted, every session in the window is evaluated.
+
+        Returns:
+            :class:`BatchEvaluationResult` with job IDs, status,
+            ``evaluation_results``, ``insight_results``, and
+            ``output_data_config``.
+
+        Raises:
+            ValueError: If ``start_time`` is not earlier than ``end_time``.
+            RuntimeError: If API calls fail.
+            TimeoutError: If the job exceeds ``config.polling_timeout_seconds``.
+        """
+        if start_time >= end_time:
+            raise ValueError("start_time must be earlier than end_time")
+        logger.info(
+            "Starting session batch evaluation: %s to %s, %s session IDs",
+            start_time,
+            end_time,
+            len(session_ids) if session_ids else "all",
+        )
+        return self._start_and_collect(
+            config,
+            data_source_config=config.data_source.to_data_source_config(
+                list(session_ids or []),
+                start_time,
+                end_time,
+            ),
+        )
 
     def fetch_evaluation_events(self, result: BatchEvaluationResult) -> List[Dict[str, Any]]:
         """Fetch per-turn evaluation events from CloudWatch.
