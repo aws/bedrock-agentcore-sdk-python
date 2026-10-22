@@ -9,6 +9,7 @@ from bedrock_agentcore.evaluation.custom_code_based_evaluators import (
     custom_code_based_evaluator,
 )
 from bedrock_agentcore.evaluation.dataset_client import DatasetClient
+from bedrock_agentcore.evaluation.recommendation_client import RecommendationClient
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     BatchEvaluationResult,
     BatchEvaluationRunConfig,
@@ -94,6 +95,7 @@ __all__ = [
     "CloudWatchAgentSpanCollector",
     "Dataset",
     "DatasetClient",
+    "RecommendationClient",
     "DatasetProvider",
     "EvaluationClient",
     "EvaluationResult",

@@ -2,7 +2,7 @@
 
 import logging
 import time
-from typing import Any, Callable, Dict, Optional, Set
+from typing import Any, Callable, Dict, Optional, Set, Union
 
 from .config import WaitConfig
 
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 def wait_until(
     poll_fn: Callable[[], Dict[str, Any]],
-    target: str,
+    target: Union[str, Set[str]],
     failed: Set[str],
     wait_config: Optional[WaitConfig] = None,
     error_field: str = "statusReasons",
@@ -20,7 +20,7 @@ def wait_until(
 
     Args:
         poll_fn: Zero-arg callable that returns the resource's current state.
-        target: The status to wait for (e.g. "ACTIVE", "READY").
+        target: The status to wait for (e.g. "ACTIVE", "READY"), or a set of them.
         failed: Statuses that indicate terminal failure.
         wait_config: Optional WaitConfig for polling behavior.
         error_field: Response field containing error details.
@@ -33,13 +33,14 @@ def wait_until(
         TimeoutError: If target status is not reached within max_wait.
     """
     wait = wait_config or WaitConfig()
+    targets = {target} if isinstance(target, str) else target
     start_time = time.time()
     while True:
         resp = poll_fn()
         status = resp.get("status")
         if status is None:
             logger.warning("Response missing 'status' field: %s", resp)
-        if status == target:
+        if status in targets:
             return resp
         if status in failed:
             reason = resp.get(error_field, "Unknown")

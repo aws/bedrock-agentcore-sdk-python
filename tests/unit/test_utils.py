@@ -193,3 +193,10 @@ class TestResolveNamespacePrefixDeprecation:
         # Caller is responsible for combining this with namespace_path; helper just
         # reports "no legacy/exact value was provided."
         assert resolve_namespace_prefix_deprecation() is None
+
+
+class TestWaitUntilTargetSet:
+    def test_any_status_in_target_set(self):
+        poll_fn = Mock(return_value={"status": "COMPLETED_WITH_ERRORS"})
+        result = wait_until(poll_fn, {"COMPLETED", "COMPLETED_WITH_ERRORS"}, {"FAILED"})
+        assert result["status"] == "COMPLETED_WITH_ERRORS"

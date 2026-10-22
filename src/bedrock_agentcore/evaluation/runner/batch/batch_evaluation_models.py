@@ -95,18 +95,19 @@ class CloudWatchDataSourceConfig(BaseModel, DataSourceConfig):
         start_time: datetime,
         end_time: datetime,
     ) -> Dict[str, Any]:
-        """Return a cloudWatchLogs dataSourceConfig dict for the evaluation API."""
+        """Return a cloudWatchLogs dataSourceConfig dict for the evaluation API.
+
+        ``sessionIds`` is omitted when empty, so that every session in the time
+        range is evaluated.
+        """
+        filter_config: Dict[str, Any] = {"timeRange": {"startTime": start_time, "endTime": end_time}}
+        if session_ids:
+            filter_config["sessionIds"] = session_ids
         return {
             "cloudWatchLogs": {
                 "serviceNames": self.service_names,
                 "logGroupNames": self.log_group_names,
-                "filterConfig": {
-                    "sessionIds": session_ids,
-                    "timeRange": {
-                        "startTime": start_time,
-                        "endTime": end_time,
-                    },
-                },
+                "filterConfig": filter_config,
             }
         }
 
