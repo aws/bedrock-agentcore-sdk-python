@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from .._validation import validate_permit2_allowance_limit
+from .._validation import is_async_callback, validate_permit2_allowance_limit
 from .handlers import PaymentResponseHandler
 
 logger = logging.getLogger(__name__)
@@ -104,12 +104,24 @@ class AgentCorePaymentsPluginConfig:
             so arbitrary tool content can never mint a signed authorization to an
             actor-chosen recipient. CWE-863: set False to harden, or keep
             True and enforce ``pre_sign_policy``.
-        pre_sign_policy: Optional callback invoked at the single signing chokepoint on every
-            detection path (marked, unmarked, and error-retry) before any payment is signed.
-            Receives the payment-required request (carrying ``payTo`` and amount) and returns
-            True to allow signing or False to block it. Raising from the callback also blocks
-            (fail-closed). Use it to enforce a recipient/amount allowlist regardless of the
-            ``allow_unmarked_402_detection`` default. None (default) applies no extra gate.
+        pre_sign_policy: Optional synchronous callback invoked at the signing chokepoint of
+            BOTH integrations (Strands plugin and LangGraph middleware), on every detection
+            path (marked, unmarked, and error-retry), before any payment is signed. Receives
+            the payment-required request and must return ``True`` exactly to allow signing;
+            any other return value blocks (so a reason dict, a status string, or a missing
+            return all fail closed). Raising from the callback also blocks. Must be
+            synchronous: an async policy is rejected at construction, because it could not be
+            awaited here and an unawaited coroutine is truthy (fail-open). Use it to enforce a
+            recipient/amount allowlist regardless of the ``allow_unmarked_402_detection``
+            default. None (default) applies no extra gate.
+
+            The request is a dict of the shape ``{"statusCode", "headers", "body"}``. Where
+            ``payTo`` and amount live depends on the protocol/version, so a robust policy must
+            handle all four: x402 v1 dict body -> ``body["accepts"][i]["payTo"]``; x402 v1
+            string body -> inside the JSON string in ``body``; x402 v2 -> base64 in
+            ``headers["Payment-Required"]``; MPP -> base64url in the ``WWW-Authenticate``
+            challenge. A policy that only reads ``body["accepts"]`` fail-closes every v2 and
+            MPP payment.
     """
 
     payment_manager_arn: str
@@ -210,6 +222,12 @@ class AgentCorePaymentsPluginConfig:
             )
         if self.pre_sign_policy is not None and not callable(self.pre_sign_policy):
             raise ValueError(f"pre_sign_policy must be callable, got {type(self.pre_sign_policy).__name__}")
+        if self.pre_sign_policy is not None and is_async_callback(self.pre_sign_policy):
+            raise TypeError(
+                "pre_sign_policy must be a synchronous callable. An async policy cannot be awaited at "
+                "the signing chokepoint, so it would fail open (the unawaited coroutine is truthy and the "
+                "payment would sign). Wrap any async work in a synchronous policy, or run it ahead of time."
+            )
 
         validate_permit2_allowance_limit(self.permit2_allowance_limit)
 

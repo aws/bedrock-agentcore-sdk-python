@@ -1968,3 +1968,69 @@ class TestPostPaymentRetryDelay:
                 user_id="test-user",
                 post_payment_retry_delay_seconds=True,  # type: ignore[arg-type]
             )
+
+
+class TestStrandsPreSignPolicy:
+    """The ``pre_sign_policy`` lives on the SHARED config and its docstring says it covers
+    both integrations. These tests prove the Strands signing path actually enforces it,
+    rather than accepting the policy and silently signing anyway (a control that reports
+    success and does nothing is worse on a money path than no control).
+    """
+
+    @staticmethod
+    def _config(**overrides):
+        base = {
+            "payment_manager_arn": "arn:aws:bedrock-agentcore:us-west-2:123456789012:payment-manager/test",
+            "user_id": "test-user",
+            "payment_instrument_id": "payment-instrument-123",
+            "payment_session_id": "payment-session-456",
+        }
+        base.update(overrides)
+        return AgentCorePaymentsPluginConfig(**base)
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager")
+    def test_deny_all_policy_blocks_signing(self, mock_pm_cls):
+        mock_pm = mock_pm_cls.return_value
+        mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "signed"}
+
+        plugin = AgentCorePaymentsPlugin(config=self._config(pre_sign_policy=lambda req: False))
+        plugin.payment_manager = mock_pm
+
+        x402 = {"statusCode": 402, "headers": {}, "body": {"accepts": [{"payTo": "0xATTACKER"}]}}
+        with pytest.raises(PaymentError, match="pre_sign_policy blocked the payment before signing"):
+            plugin._process_payment_required_request(x402)
+
+        mock_pm.generate_payment_header.assert_not_called()  # no authorization minted
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager")
+    def test_truthy_nonbool_return_blocks_signing(self, mock_pm_cls):
+        """Only an exact ``True`` allows; a truthy reason dict must still block."""
+        mock_pm = mock_pm_cls.return_value
+        mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "signed"}
+
+        plugin = AgentCorePaymentsPlugin(config=self._config(pre_sign_policy=lambda req: {"allowed": False}))
+        plugin.payment_manager = mock_pm
+
+        x402 = {"statusCode": 402, "headers": {}, "body": {"accepts": [{"payTo": "0xATTACKER"}]}}
+        with pytest.raises(PaymentError, match="pre_sign_policy blocked the payment before signing"):
+            plugin._process_payment_required_request(x402)
+        mock_pm.generate_payment_header.assert_not_called()
+
+    @patch("bedrock_agentcore.payments.integrations.strands.plugin.PaymentManager")
+    def test_allow_policy_signs(self, mock_pm_cls):
+        mock_pm = mock_pm_cls.return_value
+        mock_pm.generate_payment_header.return_value = {"X-PAYMENT": "signed"}
+
+        allowed = {"0xMERCHANT"}
+
+        def policy(req):
+            return req.get("body", {}).get("accepts", [{}])[0].get("payTo") in allowed
+
+        plugin = AgentCorePaymentsPlugin(config=self._config(pre_sign_policy=policy))
+        plugin.payment_manager = mock_pm
+
+        x402 = {"statusCode": 402, "headers": {}, "body": {"accepts": [{"payTo": "0xMERCHANT"}]}}
+        result = plugin._process_payment_required_request(x402)
+
+        assert result == {"X-PAYMENT": "signed"}
+        mock_pm.generate_payment_header.assert_called_once()

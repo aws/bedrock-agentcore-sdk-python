@@ -11,6 +11,7 @@ from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent
 from strands.plugins import Plugin, hook
 from strands.tools import tool
 
+from bedrock_agentcore.payments._validation import PreSignPolicyRejected, apply_pre_sign_policy
 from bedrock_agentcore.payments.manager import (
     PaymentError,
     PaymentInstrumentConfigurationRequired,
@@ -485,6 +486,15 @@ class AgentCorePaymentsPlugin(Plugin):
                 "Then pass session_id in invoke payload or plugin config.\n"
                 "Tip: use 'agentcore invoke --payment-session-id <id>' or '--auto-session' from the CLI."
             )
+
+        # Defense-in-depth pre-sign gate, identical semantics to the LangGraph middleware:
+        # fail-closed, the policy must return True exactly, async policies are rejected at
+        # construction. Enforced here so a recipient/amount allowlist set on the shared config
+        # is honored on the Strands signing path too (not silently ignored).
+        try:
+            apply_pre_sign_policy(self.config.pre_sign_policy, payment_required_request)
+        except PreSignPolicyRejected as exc:
+            raise PaymentError(f"pre_sign_policy blocked the payment before signing ({exc}).") from exc
 
         # Generate payment header using PaymentManager
         payment_header_dict = self.payment_manager.generate_payment_header(

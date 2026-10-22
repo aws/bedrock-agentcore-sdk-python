@@ -137,7 +137,7 @@ class TestPreSignPolicy:
         mock_pm = mock_pm_cls.return_value
 
         mw = AgentCorePaymentsMiddleware(_make_config(pre_sign_policy=lambda req: False))
-        with pytest.raises(PaymentError, match="pre_sign_policy rejected the payment before signing"):
+        with pytest.raises(PaymentError, match="pre_sign_policy blocked the payment before signing"):
             mw._generate_payment_header({"accepts": [{"payTo": "0xbad"}]})
 
         mock_pm.generate_payment_header.assert_not_called()  # no value moved
@@ -150,7 +150,7 @@ class TestPreSignPolicy:
             raise RuntimeError("policy backend down")
 
         mw = AgentCorePaymentsMiddleware(_make_config(pre_sign_policy=policy))
-        with pytest.raises(PaymentError, match="pre_sign_policy rejected the payment"):
+        with pytest.raises(PaymentError, match="pre_sign_policy blocked the payment before signing"):
             mw._generate_payment_header({"accepts": [{"payTo": "0xbad"}]})
 
         mock_pm.generate_payment_header.assert_not_called()
@@ -295,3 +295,92 @@ class TestExploitScenario:
         )
 
         assert len(signed_requests) == 1, "an approved recipient must still be signed"
+
+
+class TestPreSignPolicyFailOpenRegressions:
+    """Regressions for ways the pre-sign gate could silently fail OPEN and sign anyway.
+
+    Each test reproduces a specific bypass found in review, then asserts the hardened
+    behavior: the gate fails closed and the signer is never reached.
+    """
+
+    def test_async_policy_rejected_at_construction(self):
+        """An async policy cannot be awaited at the sync signing chokepoint, so calling it
+        returns a truthy coroutine object and the payment would sign. Reject it up front."""
+
+        async def async_policy(req):  # noqa: RUF029 - deliberately async for the test
+            return False
+
+        with pytest.raises(TypeError, match="pre_sign_policy must be a synchronous callable"):
+            _make_config(pre_sign_policy=async_policy)
+
+    def test_async_callable_object_rejected(self):
+        """A callable object with ``async def __call__`` is the same fail-open hazard."""
+
+        class AsyncCallable:
+            async def __call__(self, req):
+                return False
+
+        with pytest.raises(TypeError, match="pre_sign_policy must be a synchronous callable"):
+            _make_config(pre_sign_policy=AsyncCallable())
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_truthy_nonbool_return_blocks(self, mock_pm_cls):
+        """A policy that returns a reason dict (e.g. ``{"allowed": False, ...}``) or the
+        string ``"deny"`` is truthy. Only an exact ``True`` may allow; anything else blocks."""
+        mock_pm = mock_pm_cls.return_value
+
+        for ret in ({"allowed": False, "reason": "payTo not in allowlist"}, "deny", 1, [1]):
+            mw = AgentCorePaymentsMiddleware(_make_config(pre_sign_policy=lambda req, r=ret: r))
+            with pytest.raises(PaymentError, match="pre_sign_policy blocked the payment before signing"):
+                mw._generate_payment_header({"body": {"accepts": [{"payTo": "0xbad"}]}})
+        mock_pm.generate_payment_header.assert_not_called()
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_missing_return_blocks(self, mock_pm_cls):
+        """A policy that forgets to return (implicit ``None``) must block, not allow."""
+        mock_pm = mock_pm_cls.return_value
+
+        def policy(req):
+            pass  # no return → None
+
+        mw = AgentCorePaymentsMiddleware(_make_config(pre_sign_policy=policy))
+        with pytest.raises(PaymentError, match="pre_sign_policy blocked the payment before signing"):
+            mw._generate_payment_header({"body": {"accepts": [{"payTo": "0xbad"}]}})
+        mock_pm.generate_payment_header.assert_not_called()
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_empty_request_fails_closed(self, mock_pm_cls):
+        """When ``_extract_payment_request`` raised, the retry path previously passed ``{}``
+        to the signer. An allowlist like ``all(a["payTo"] == T for a in accepts)`` resolves
+        ``accepts`` to ``[]`` and ``all([])`` is True — the gate passes on empty input.
+        The signer must refuse an unresolved request outright, before the policy runs."""
+        mock_pm = mock_pm_cls.return_value
+
+        def strict_allowlist(payment_required_request):
+            accepts = payment_required_request.get("body", {}).get("accepts", [])
+            return all(a.get("payTo") == "0xTRUSTED" for a in accepts)
+
+        mw = AgentCorePaymentsMiddleware(_make_config(pre_sign_policy=strict_allowlist))
+        # Both the None (extract raised) and {} (empty) shapes must fail closed.
+        for bad in (None, {}):
+            with pytest.raises(PaymentError, match="unresolved payment-required request"):
+                mw._generate_payment_header(bad)
+        mock_pm.generate_payment_header.assert_not_called()
+
+
+class TestPostPaymentRejectionNotGated:
+    """The post-payment rejection check must NOT be gated by ``allow_unmarked_402_detection``.
+
+    ``_check_retry_rejection`` runs after a payment is signed and sent, on the merchant's
+    own response. Gating it would let an unmarked post-payment rejection be returned to the
+    model as a successful result — money moved, merchant refused, agent told it worked.
+    """
+
+    @patch("bedrock_agentcore.payments.integrations.langgraph.middleware.PaymentManager")
+    def test_unmarked_rejection_detected_even_with_flag_false(self, _mock_pm):
+        mw = AgentCorePaymentsMiddleware(_make_config(allow_unmarked_402_detection=False))
+        # An unmarked 402 body arriving AFTER payment (the merchant's rejection).
+        rejection = ToolMessage(content=_unmarked_x402_content(), tool_call_id="tc-1")
+        result = mw._check_retry_rejection(_make_request(tool_id="tc-1"), rejection)
+        assert result is not None, "a post-payment rejection must be recognized regardless of the detection flag"
