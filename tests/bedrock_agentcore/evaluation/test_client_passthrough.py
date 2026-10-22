@@ -59,7 +59,14 @@ class TestEvaluationClientPassthrough:
         assert expected == EvaluationClient._ALLOWED_CP_METHODS
 
     def test_all_dp_methods_in_allowlist(self):
-        expected = {"evaluate"}
+        expected = {
+            "evaluate",
+            "start_batch_evaluation",
+            "get_batch_evaluation",
+            "list_batch_evaluations",
+            "stop_batch_evaluation",
+            "delete_batch_evaluation",
+        }
         assert expected == EvaluationClient._ALLOWED_DP_METHODS
 
 
@@ -153,3 +160,57 @@ class TestEvaluationAndWait:
             onlineEvaluationConfigId="c-123",
         )
         client._cp_client.delete_online_evaluation_config.assert_called_once()
+
+
+class TestBatchEvaluationAndWait:
+    """Tests for batch evaluation passthrough and start_batch_evaluation_and_wait."""
+
+    def _make_client(self):
+        with patch("boto3.client"):
+            client = EvaluationClient(region_name="us-west-2")
+        client._cp_client = Mock()
+        client._dp_client = Mock()
+        return client
+
+    @pytest.mark.parametrize(
+        "method",
+        [
+            "start_batch_evaluation",
+            "get_batch_evaluation",
+            "list_batch_evaluations",
+            "stop_batch_evaluation",
+            "delete_batch_evaluation",
+        ],
+    )
+    def test_batch_methods_forwarded(self, method):
+        client = self._make_client()
+        getattr(client, method)(batch_evaluation_id="b-1")
+        getattr(client._dp_client, method).assert_called_once_with(batchEvaluationId="b-1")
+
+    @pytest.mark.parametrize("done", ["COMPLETED", "COMPLETED_WITH_ERRORS"])
+    @patch("bedrock_agentcore._utils.polling.time.sleep")
+    def test_returns_when_done(self, _mock_sleep, done):
+        client = self._make_client()
+        client._dp_client.start_batch_evaluation.return_value = {"batchEvaluationId": "b-1"}
+        client._dp_client.get_batch_evaluation.side_effect = [
+            {"status": "IN_PROGRESS"},
+            {"status": done, "insightResults": [{"name": "Timeouts"}]},
+        ]
+        result = client.start_batch_evaluation_and_wait(
+            batch_evaluation_name="run",
+            evaluators=[{"evaluatorId": "Builtin.FailureAnalysis"}],
+        )
+        assert result["status"] == done
+        assert result["insightResults"] == [{"name": "Timeouts"}]
+        client._dp_client.start_batch_evaluation.assert_called_once_with(
+            batchEvaluationName="run", evaluators=[{"evaluatorId": "Builtin.FailureAnalysis"}]
+        )
+        client._dp_client.get_batch_evaluation.assert_called_with(batchEvaluationId="b-1")
+
+    @pytest.mark.parametrize("failed", ["FAILED", "STOPPED"])
+    def test_raises_on_failure(self, failed):
+        client = self._make_client()
+        client._dp_client.start_batch_evaluation.return_value = {"batchEvaluationId": "b-1"}
+        client._dp_client.get_batch_evaluation.return_value = {"status": failed, "errorDetails": ["no spans"]}
+        with pytest.raises(RuntimeError, match="no spans"):
+            client.start_batch_evaluation_and_wait(batch_evaluation_name="run")

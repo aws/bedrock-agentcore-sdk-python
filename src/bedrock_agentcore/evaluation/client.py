@@ -22,6 +22,8 @@ QUERY_TIMEOUT_SECONDS = 60
 POLL_INTERVAL_SECONDS = 2
 
 _EVALUATOR_FAILED_STATUSES = {"CREATE_FAILED", "UPDATE_FAILED"}
+_BATCH_EVALUATION_DONE_STATUSES = {"COMPLETED", "COMPLETED_WITH_ERRORS"}
+_BATCH_EVALUATION_FAILED_STATUSES = {"FAILED", "STOPPED"}
 
 
 class ReferenceInputs(BaseModel):
@@ -102,6 +104,12 @@ class EvaluationClient:
     # -------------------------------------------------------------------------
     _ALLOWED_DP_METHODS = {
         "evaluate",
+        # Batch evaluation
+        "start_batch_evaluation",
+        "get_batch_evaluation",
+        "list_batch_evaluations",
+        "stop_batch_evaluation",
+        "delete_batch_evaluation",
     }
 
     _ALLOWED_CP_METHODS = {
@@ -372,6 +380,41 @@ class EvaluationClient:
 
     # *_and_wait methods
     # -------------------------------------------------------------------------
+    def start_batch_evaluation_and_wait(
+        self,
+        wait_config: Optional[WaitConfig] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Start a batch evaluation and wait for it to finish.
+
+        Scores sessions that already exist in CloudWatch, without invoking the
+        agent. To run a dataset against an agent, use ``BatchEvaluationRunner``.
+        Batch evaluations typically take several minutes, so pass a ``max_wait``
+        longer than the default 5 minutes.
+
+        Args:
+            wait_config: Optional WaitConfig for polling behavior.
+            **kwargs: Arguments forwarded to the start_batch_evaluation API.
+
+        Returns:
+            The GetBatchEvaluation response when COMPLETED or COMPLETED_WITH_ERRORS.
+            Scores are under ``evaluationResults``, and insights from analysis
+            evaluators such as ``Builtin.FailureAnalysis`` under ``insightResults``.
+
+        Raises:
+            RuntimeError: If the batch evaluation reaches FAILED or STOPPED status.
+            TimeoutError: If the batch evaluation doesn't finish within max_wait.
+        """
+        response = self._dp_client.start_batch_evaluation(**convert_kwargs(kwargs))
+        batch_id = response["batchEvaluationId"]
+        return wait_until(
+            lambda: self._dp_client.get_batch_evaluation(batchEvaluationId=batch_id),
+            _BATCH_EVALUATION_DONE_STATUSES,
+            _BATCH_EVALUATION_FAILED_STATUSES,
+            wait_config,
+            error_field="errorDetails",
+        )
+
     def create_evaluator_and_wait(
         self,
         wait_config: Optional[WaitConfig] = None,
