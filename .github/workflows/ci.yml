@@ -16,7 +16,10 @@ permissions:
 jobs:
   lint:
     name: Lint and Format
-    runs-on: ubuntu-latest
+    # Distinct job labels keep each ephemeral runner assigned to its intended job.
+    runs-on:
+      - codebuild-agentcore-sdk-python-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      - ci-lint
     steps:
       - uses: actions/checkout@v6
 
@@ -43,7 +46,11 @@ jobs:
 
   test:
     name: Test Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    runs-on:
+      - codebuild-agentcore-sdk-python-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      - ci-test-${{ matrix.python-version }}
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13']
@@ -83,7 +90,9 @@ jobs:
 
   build:
     name: Build Distribution
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-agentcore-sdk-python-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      - ci-build
     needs: [lint, test]
     steps:
       - uses: actions/checkout@v6
@@ -118,7 +127,9 @@ jobs:
 
   test-install:
     name: Test Package Installation
-    runs-on: ubuntu-latest
+    runs-on:
+      - codebuild-agentcore-sdk-python-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      - ci-install-${{ matrix.python-version }}
     needs: build
     strategy:
       matrix:

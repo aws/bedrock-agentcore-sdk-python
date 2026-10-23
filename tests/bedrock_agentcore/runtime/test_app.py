@@ -231,8 +231,10 @@ class TestBedrockAgentCoreApp:
             bedrock_agentcore, host="0.0.0.0", port=8080, access_log=False, log_level="warning"
         )
 
+    @patch.dict(os.environ, {"DOCKER_CONTAINER": ""})
+    @patch("os.path.exists", return_value=False)
     @patch("uvicorn.run")
-    def test_serve_localhost(self, mock_uvicorn):
+    def test_serve_localhost(self, mock_uvicorn, mock_exists):
         """Test serve method uses localhost when not in Docker."""
         bedrock_agentcore = BedrockAgentCoreApp()
         bedrock_agentcore.run(port=8080)

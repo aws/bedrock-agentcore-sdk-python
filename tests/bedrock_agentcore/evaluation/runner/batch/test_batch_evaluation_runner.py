@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
+from bedrock_agentcore._utils.endpoints import DEFAULT_REGION
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
     BatchEvaluationRunConfig,
     BatchEvaluatorConfig,
@@ -39,7 +40,7 @@ class TestRegionName:
             ({"region": "us-west-2", "region_name": "eu-west-1"}, "us-east-1", "us-west-2"),
             ({"region": "", "region_name": "eu-west-1"}, "us-east-1", "eu-west-1"),
             ({}, "us-east-1", "us-east-1"),
-            ({}, None, "us-west-2"),
+            ({}, None, DEFAULT_REGION),
         ],
     )
     def test_region_precedence(self, kwargs, session_region, expected):
