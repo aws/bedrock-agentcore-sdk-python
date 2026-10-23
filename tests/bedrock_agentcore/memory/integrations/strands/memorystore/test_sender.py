@@ -86,7 +86,8 @@ async def test_chunks_batch_at_max_turns() -> None:
     client.create_event.return_value = {}
     await make_sender(client, max_turns_per_event=2).send_batch([user_message(value) for value in "abcde"])
     assert client.create_event.call_count == 3
-    assert [[turn["text"] for turn in turns(call)] for call in client.create_event.call_args_list] == [
+    # Events are sent concurrently, but turns within each event retain their order.
+    assert sorted([turn["text"] for turn in turns(call)] for call in client.create_event.call_args_list) == [
         ["a", "b"],
         ["c", "d"],
         ["e"],
@@ -133,13 +134,14 @@ async def test_sequence_range_token_is_stable_and_chunk_specific() -> None:
     sender = make_sender(client, max_turns_per_event=2)
     batch = [user_message("a"), user_message("b"), user_message("c")]
     await sender.send_batch(batch, [1, 2, 3])
-    assert [call.kwargs["clientToken"] for call in client.create_event.call_args_list] == [
+    expected_tokens = [
         "mem-1-actor-1-run-1-1-2",
         "mem-1-actor-1-run-1-3-3",
     ]
+    assert sorted(call.kwargs["clientToken"] for call in client.create_event.call_args_list) == expected_tokens
     client.reset_mock()
     await sender.send_batch(batch, [1, 2, 3])
-    assert client.create_event.call_args_list[0].kwargs["clientToken"] == "mem-1-actor-1-run-1-1-2"
+    assert sorted(call.kwargs["clientToken"] for call in client.create_event.call_args_list) == expected_tokens
 
 
 async def test_explicit_empty_run_id_is_preserved() -> None:
@@ -179,13 +181,14 @@ async def test_metadata_changes_split_only_consecutive_runs() -> None:
         [user_message(value) for value in ["A", "A", "B", "C", "B"]]
     )
     assert client.create_event.call_count == 4
-    assert [[turn["text"] for turn in turns(call)] for call in client.create_event.call_args_list] == [
+    assert sorted([turn["text"] for turn in turns(call)] for call in client.create_event.call_args_list) == [
         ["A", "A"],
         ["B"],
-        ["C"],
         ["B"],
+        ["C"],
     ]
-    assert client.create_event.call_args_list[0].kwargs["metadata"] == {"topic": {"stringValue": "A"}}
+    for call in client.create_event.call_args_list:
+        assert call.kwargs["metadata"] == {"topic": {"stringValue": turns(call)[0]["text"]}}
 
 
 async def test_constant_metadata_is_mapped_and_empty_bag_omitted() -> None:

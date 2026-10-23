@@ -8,8 +8,19 @@ FIXTURES = Path(__file__).with_name("typing_fixtures")
 
 
 def _run_mypy(fixture: str) -> subprocess.CompletedProcess[str]:
+    # Installed dependency stubs target this interpreter; Python 3.10 is
+    # checked by its own CI matrix entry.
     return subprocess.run(
-        [sys.executable, "-m", "mypy", "--no-incremental", "--show-error-codes", str(FIXTURES / fixture)],
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--python-version",
+            f"{sys.version_info.major}.{sys.version_info.minor}",
+            "--no-incremental",
+            "--show-error-codes",
+            str(FIXTURES / fixture),
+        ],
         check=False,
         capture_output=True,
         text=True,

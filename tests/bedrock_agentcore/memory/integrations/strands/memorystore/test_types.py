@@ -28,7 +28,9 @@ def test_connection_config_runtime_typed_dict_keys_and_hints() -> None:
             "client",
         }
     )
-    assert get_args(get_type_hints(_AgentCoreMemoryConnectionConfig)["boto3_session"]) == (boto3.Session,)
+    assert get_args(get_type_hints(_AgentCoreMemoryConnectionConfig, include_extras=True)["boto3_session"]) == (
+        boto3.Session,
+    )
 
 
 def test_public_factory_typed_dict_keys_are_correct_at_runtime() -> None:
@@ -39,7 +41,7 @@ def test_public_factory_typed_dict_keys_are_correct_at_runtime() -> None:
     assert CreateAgentCoreMemoryStoresInput.__optional_keys__ == frozenset(
         {"extraction", "metadata_provider", "max_turns_per_event", "region_name", "boto3_session", "client"}
     )
-    hints = get_type_hints(CreateAgentCoreMemoryStoresInput)
+    hints = get_type_hints(CreateAgentCoreMemoryStoresInput, include_extras=True)
     assert get_args(hints["boto3_session"]) == (boto3.Session,)
     assert "extraction_mode" not in hints
 
