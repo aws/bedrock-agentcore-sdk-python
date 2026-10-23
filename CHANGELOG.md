@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.25.0] - 2026-10-23
+
+### Other Changes
+- fix(ci): install supported evaluation adapter extras (#711) (4bb326e)
+- Payments security hardening (#706) (9550e30)
+- feat(evaluation): evaluate existing sessions and add RecommendationClient (#708) (fd7d15d)
+- feat(evaluation): surface batch evaluation insight results (#704) (147c5b3)
+
 ## [1.24.2] - 2026-10-19
 
 ### Other Changes
