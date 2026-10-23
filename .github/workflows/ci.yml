@@ -68,7 +68,7 @@ jobs:
 
       # Add virtual environment creation
       - name: Create virtual environment
-        run: uv venv
+        run: uv venv --python "${{ matrix.python-version }}"
 
       - name: Install dependencies with uv
         run: |
