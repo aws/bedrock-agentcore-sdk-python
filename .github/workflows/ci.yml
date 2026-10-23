@@ -46,6 +46,8 @@ jobs:
 
   test:
     name: Test Python ${{ matrix.python-version }}
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     runs-on:
       - codebuild-agentcore-sdk-python-ci-${{ github.run_id }}-${{ github.run_attempt }}
       - ci-test-${{ matrix.python-version }}
@@ -68,7 +70,7 @@ jobs:
 
       # Add virtual environment creation
       - name: Create virtual environment
-        run: uv venv --python "${{ matrix.python-version }}"
+        run: uv venv
 
       - name: Install dependencies with uv
         run: |
