@@ -120,7 +120,9 @@ jobs:
           - group: evaluation
             path: tests_integ/evaluation
             timeout: 15
-            extra-deps: "strands-agents-evals deepeval autoevals ragas langchain-community<0.4.2"
+            # Use the supported adapter versions declared in pyproject.toml.
+            sdk-package: ".[deepeval,autoevals,ragas]"
+            extra-deps: ""
             ignore: ""
           - group: services
             path: tests_integ/services
@@ -183,10 +185,10 @@ jobs:
 
       - name: Install dependencies
         env:
+          SDK_PACKAGE: ${{ matrix.sdk-package || '.' }}
           EXTRA_DEPS: ${{ matrix.extra-deps }}
         run: |
-          pip install -e .
-          pip install --no-cache-dir pytest pytest-xdist pytest-order pytest-rerunfailures requests strands-agents uvicorn httpx starlette websockets $EXTRA_DEPS
+          pip install --no-cache-dir -e "$SDK_PACKAGE" pytest pytest-xdist pytest-order pytest-rerunfailures requests strands-agents uvicorn httpx starlette websockets $EXTRA_DEPS
 
       - name: Run integration tests
         env:
