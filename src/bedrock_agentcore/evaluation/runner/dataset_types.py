@@ -121,7 +121,8 @@ class SimulationConfig(BaseModel):
             default model when None.
         system_prompt_template: Jinja2 system prompt template for the actor.
             Must contain an ``{{ actor_profile }}`` placeholder. When None, the built-in
-            ``structured_user_simulator.j2`` template is used.
+            ``structured_user_simulator.j2`` template is used. The template is rendered
+            in an isolated Jinja2 environment.
         input_type: Pydantic model class describing the agent's expected input.
             When set, ``input`` values in SimulatedScenario are validated into
             this type for the first agent call. For subsequent turns the actor is

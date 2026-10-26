@@ -415,6 +415,40 @@ class TestPromptTemplates:
         result = render_template_string(template, schema=schema)
         assert schema in result
 
+    def test_render_template_string_supports_control_flow(self):
+        template = "{% if scenario_description %}Scenario: {{ scenario_description }}{% endif %}"
+        template += "|{{ actor_profile.goal }}"
+        result = render_template_string(template, scenario_description="pizza", actor_profile={"goal": "order"})
+        assert result == "Scenario: pizza|order"
+
+    def test_render_template_string_restricts_private_attribute_access(self):
+        from jinja2.exceptions import SecurityError
+
+        with pytest.raises(SecurityError):
+            render_template_string("{{ self.__init__.__globals__ }}")
+
+    def test_render_template_string_requires_supported_jinja2(self, monkeypatch):
+        import jinja2
+
+        import bedrock_agentcore.evaluation.runner.prompts as prompts
+
+        monkeypatch.setattr(prompts, "_string_environment", None)
+        monkeypatch.setattr(jinja2, "__version__", "3.1.5")
+        with pytest.raises(ImportError, match=r"jinja2>=3\.1\.6"):
+            render_template_string("{{ x }}", x=1)
+
+    def test_render_template_string_blocks_mutation_of_inputs(self):
+        from jinja2.exceptions import SecurityError
+
+        profile = {"traits": ["calm"]}
+        with pytest.raises(SecurityError):
+            render_template_string("{{ actor_profile.traits.append('focused') }}", actor_profile=profile)
+        assert profile == {"traits": ["calm"]}
+
+    def test_render_template_string_cannot_include_files(self):
+        with pytest.raises(TypeError):
+            render_template_string("{% include 'structured_user_simulator.j2' %}")
+
     def test_render_system_prompt_output_type_injected(self, mock_strands):
         """output_type schema must appear in the rendered prompt."""
         _, _, mock_profile_cls = mock_strands
