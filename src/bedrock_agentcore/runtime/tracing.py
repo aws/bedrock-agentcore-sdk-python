@@ -22,6 +22,7 @@ last seen — which handles the case where a framework replaces the global
 provider after the app is constructed.
 """
 
+import asyncio
 import logging
 import threading
 from typing import Optional
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 # Module-level state for provider-tracking auto-registration.
 _registration_lock = threading.Lock()
 _registered_on: Optional[object] = None  # the TracerProvider instance we last registered on
+_flush_lock = threading.Lock()
 
 
 def _ensure_baggage_processor_registered() -> None:
@@ -61,6 +63,35 @@ def _ensure_baggage_processor_registered() -> None:
         logger.debug("opentelemetry-api not installed; BaggageSpanProcessor registration skipped")
     except Exception:
         logger.debug("Could not register BaggageSpanProcessor", exc_info=True)
+
+
+def _flush_tracer_provider(timeout_millis: int = 30000) -> None:
+    """Flush buffered spans before AgentCore Runtime freezes the microVM."""
+    if not _flush_lock.acquire(blocking=False):
+        logger.debug("Tracer provider flush already in progress; skipping duplicate flush")
+        return
+
+    try:
+        from opentelemetry import trace
+
+        trace.get_tracer_provider().force_flush(timeout_millis=timeout_millis)
+    except ImportError:
+        logger.debug("opentelemetry-api not installed; tracer provider flush skipped")
+    except Exception:
+        logger.debug("Could not flush tracer provider", exc_info=True)
+    finally:
+        _flush_lock.release()
+
+
+async def _flush_tracer_provider_async(timeout_millis: int = 30000) -> None:
+    """Flush buffered spans without blocking the event loop or response indefinitely."""
+    try:
+        await asyncio.wait_for(
+            asyncio.to_thread(_flush_tracer_provider, timeout_millis),
+            timeout=timeout_millis / 1000,
+        )
+    except asyncio.TimeoutError:
+        logger.debug("Timed out waiting for tracer provider flush after %d ms", timeout_millis)
 
 
 def _get_base_class() -> type:

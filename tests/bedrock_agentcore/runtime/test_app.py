@@ -8,7 +8,7 @@ import threading
 import time
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from starlette.testclient import TestClient
@@ -150,6 +150,60 @@ class TestBedrockAgentCoreApp:
 
         assert response.status_code == 500
         assert response.json() == {"error": "Test error"}
+
+    def test_invocation_flushes_tracer_provider(self):
+        """Buffered spans are flushed before a non-streaming response returns."""
+        bedrock_agentcore = BedrockAgentCoreApp()
+
+        @bedrock_agentcore.entrypoint
+        def handler(payload):
+            return {"ok": True}
+
+        with patch("bedrock_agentcore.runtime.app._flush_tracer_provider_async", new_callable=AsyncMock) as mock_flush:
+            response = TestClient(bedrock_agentcore).post("/invocations", json={})
+
+        assert response.status_code == 200
+        mock_flush.assert_called_once_with()
+
+    def test_sync_stream_flushes_after_generator_finishes(self):
+        """Sync streams flush once when prepared and again after their final chunk."""
+        bedrock_agentcore = BedrockAgentCoreApp()
+
+        @bedrock_agentcore.entrypoint
+        def handler(payload):
+            yield {"ok": True}
+
+        with (
+            patch(
+                "bedrock_agentcore.runtime.app._flush_tracer_provider_async", new_callable=AsyncMock
+            ) as mock_async_flush,
+            patch("bedrock_agentcore.runtime.app._flush_tracer_provider") as mock_sync_flush,
+        ):
+            response = TestClient(bedrock_agentcore).post("/invocations", json={})
+
+        assert response.status_code == 200
+        mock_async_flush.assert_awaited_once_with()
+        mock_sync_flush.assert_called_once_with()
+
+    def test_async_stream_flushes_after_generator_finishes(self):
+        """Async streams flush once when prepared and again after their final chunk."""
+        bedrock_agentcore = BedrockAgentCoreApp()
+
+        @bedrock_agentcore.entrypoint
+        async def handler(payload):
+            yield {"ok": True}
+
+        with (
+            patch(
+                "bedrock_agentcore.runtime.app._flush_tracer_provider_async", new_callable=AsyncMock
+            ) as mock_async_flush,
+            patch("bedrock_agentcore.runtime.app._flush_tracer_provider") as mock_sync_flush,
+        ):
+            response = TestClient(bedrock_agentcore).post("/invocations", json={})
+
+        assert response.status_code == 200
+        mock_async_flush.assert_awaited_once_with()
+        mock_sync_flush.assert_called_once_with()
 
     def test_async_handler_without_context(self):
         """Test async handler without context parameter."""

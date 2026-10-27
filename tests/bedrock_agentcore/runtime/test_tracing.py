@@ -5,7 +5,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bedrock_agentcore.runtime.tracing import BaggageSpanProcessor, _ensure_baggage_processor_registered
+from bedrock_agentcore.runtime.tracing import (
+    BaggageSpanProcessor,
+    _ensure_baggage_processor_registered,
+    _flush_tracer_provider,
+    _flush_tracer_provider_async,
+)
 
 # ---------------------------------------------------------------------------
 # BaggageSpanProcessor.on_start
@@ -252,6 +257,87 @@ class TestEnsureBaggageProcessorRegistered:
             t.join()
 
         assert mock_provider.add_span_processor.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# _flush_tracer_provider
+# ---------------------------------------------------------------------------
+
+
+class TestFlushTracerProvider:
+    def test_flushes_current_provider(self):
+        mock_provider = MagicMock()
+
+        with patch("opentelemetry.trace.get_tracer_provider", return_value=mock_provider):
+            _flush_tracer_provider(timeout_millis=123)
+
+        mock_provider.force_flush.assert_called_once_with(timeout_millis=123)
+
+    def test_provider_error_is_swallowed(self):
+        mock_provider = MagicMock()
+        mock_provider.force_flush.side_effect = RuntimeError("exporter unavailable")
+
+        with patch("opentelemetry.trace.get_tracer_provider", return_value=mock_provider):
+            _flush_tracer_provider()
+
+    def test_duplicate_flush_is_skipped_while_one_is_in_progress(self):
+        started = threading.Event()
+        release = threading.Event()
+        mock_provider = MagicMock()
+
+        def blocking_flush(**_):
+            started.set()
+            release.wait(timeout=1)
+
+        mock_provider.force_flush.side_effect = blocking_flush
+
+        with patch("opentelemetry.trace.get_tracer_provider", return_value=mock_provider):
+            flush_thread = threading.Thread(target=_flush_tracer_provider)
+            flush_thread.start()
+            try:
+                assert started.wait(timeout=1)
+                _flush_tracer_provider()
+            finally:
+                release.set()
+                flush_thread.join(timeout=1)
+
+        mock_provider.force_flush.assert_called_once()
+
+    async def test_async_flush_runs_on_worker_thread(self):
+        event_loop_thread = threading.get_ident()
+        worker_threads = []
+        mock_provider = MagicMock()
+        mock_provider.force_flush.side_effect = lambda **_: worker_threads.append(threading.get_ident())
+
+        with patch("opentelemetry.trace.get_tracer_provider", return_value=mock_provider):
+            await _flush_tracer_provider_async(timeout_millis=1000)
+
+        assert worker_threads
+        assert worker_threads[0] != event_loop_thread
+
+    async def test_async_flush_bounds_response_wait(self):
+        started = threading.Event()
+        release = threading.Event()
+        finished = threading.Event()
+        mock_provider = MagicMock()
+
+        def blocking_flush(**_):
+            started.set()
+            try:
+                release.wait(timeout=1)
+            finally:
+                finished.set()
+
+        mock_provider.force_flush.side_effect = blocking_flush
+
+        try:
+            with patch("opentelemetry.trace.get_tracer_provider", return_value=mock_provider):
+                await _flush_tracer_provider_async(timeout_millis=20)
+            assert started.is_set()
+            assert not finished.is_set()
+        finally:
+            release.set()
+            finished.wait(timeout=1)
 
 
 # ---------------------------------------------------------------------------
