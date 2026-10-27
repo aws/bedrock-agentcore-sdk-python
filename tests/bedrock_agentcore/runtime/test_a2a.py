@@ -1,7 +1,8 @@
 import contextvars
 import logging
 import uuid
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -25,6 +26,7 @@ else:
 
 from bedrock_agentcore.runtime.a2a import (
     BedrockCallContextBuilder,
+    _PerMessageContextvarsExecutor,
     build_a2a_app,
     build_runtime_url,
     serve_a2a,
@@ -48,6 +50,43 @@ class _EchoExecutor(AgentExecutor):
         user_text = context.get_user_input()
         await updater.add_artifact([_text_part(f"echo: {user_text}")])
         await updater.complete()
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
+        pass
+
+
+_REQUEST_TAG: contextvars.ContextVar[str] = contextvars.ContextVar("request_tag", default="unset")
+
+
+class _RequestTagMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        token = _REQUEST_TAG.set(dict(scope.get("headers", [])).get(b"x-request-tag", b"unset").decode())
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _REQUEST_TAG.reset(token)
+
+
+class _InputRequiredExecutor(AgentExecutor):
+    """Asks for input on the first message of a task and completes on the follow-up."""
+
+    def __init__(self):
+        self.seen = []
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        assert not hasattr(context, "_bedrock_agentcore_contextvars")
+        token = BedrockAgentCoreContext.get_workload_access_token()
+        self.seen.append((context.task_id, context.context_id, _REQUEST_TAG.get(), token))
+        task = context.current_task or _new_task(context.message)
+        updater = TaskUpdater(event_queue, task.id, task.context_id)
+        if context.current_task:
+            await updater.complete()
+        else:
+            await event_queue.enqueue_event(task)
+            await updater.requires_input()
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         pass
@@ -116,25 +155,37 @@ def _jsonrpc_request(method: str, params: dict | None = None) -> dict:
     return body
 
 
-def _send_message_params(text: str = "hello") -> dict:
+def _send_message_params(text: str = "hello", task_id: str | None = None, context_id: str | None = None) -> dict:
     if not IS_A2A_V1:
-        return {
-            "message": {
-                "message_id": str(uuid.uuid4()),
-                "role": "user",
-                "parts": [{"kind": "text", "text": text}],
-            }
+        message = {
+            "message_id": str(uuid.uuid4()),
+            "role": "user",
+            "parts": [{"kind": "text", "text": text}],
         }
-    return {
-        "message": {
+    else:
+        message = {
             "messageId": str(uuid.uuid4()),
             "role": "ROLE_USER",
             "parts": [{"text": text}],
         }
-    }
+    if task_id:
+        message["taskId"] = task_id
+        message["contextId"] = context_id
+    return {"message": message}
 
 
 class TestBuildA2AApp:
+    @pytest.mark.asyncio
+    async def test_contextvars_executor_falls_back_without_snapshot(self):
+        inner = _EchoExecutor()
+        inner.execute = AsyncMock()
+        context = SimpleNamespace()
+        event_queue = object()
+
+        await _PerMessageContextvarsExecutor(inner).execute(context, event_queue)
+
+        inner.execute.assert_awaited_once_with(context, event_queue)
+
     def test_ping_returns_healthy_without_timestamp(self):
         app = build_a2a_app(_EchoExecutor(), _make_agent_card())
         client = TestClient(app)
@@ -193,6 +244,31 @@ class TestBuildA2AApp:
         task = _task_result(body)
         assert task["status"]["state"] == _completed_state()
         assert task["artifacts"][0]["parts"][0]["text"] == "echo: unit-test"
+
+    @pytest.mark.parametrize(
+        "method",
+        [_method("SendMessage", "message/send"), _method("SendStreamingMessage", "message/stream")],
+    )
+    def test_follow_up_message_runs_in_its_own_request_contextvars(self, method):
+        """Regression for #690: a2a-sdk 1.x reuses the first request's producer task for every message of a task."""
+        executor = _InputRequiredExecutor()
+        app = build_a2a_app(executor, _make_agent_card())
+        app.add_middleware(_RequestTagMiddleware)
+
+        def send(tag, **ids):
+            resp = client.post(
+                "/",
+                json=_jsonrpc_request(method, _send_message_params(tag, **ids)),
+                headers={"x-request-tag": tag, "WorkloadAccessToken": f"wat-{tag}"},
+            )
+            assert resp.status_code == 200
+
+        with _test_client(app) as client:
+            send("turn-1")
+            task_id, context_id = executor.seen[0][:2]
+            send("turn-2", task_id=task_id, context_id=context_id)
+
+        assert [row[2:] for row in executor.seen] == [("turn-1", "wat-turn-1"), ("turn-2", "wat-turn-2")]
 
     @pytest.mark.skipif(not IS_A2A_V1, reason="v0.3 compatibility routes are provided by a2a-sdk v1")
     def test_v03_message_send_remains_compatible(self):
