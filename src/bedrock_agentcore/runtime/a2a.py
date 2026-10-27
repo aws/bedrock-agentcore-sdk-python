@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 A2A_CONTRACT_PORT = 9000
 A2A_PORT_ENV = "A2A_PORT"
 
-_CONTEXTVARS_STATE_KEY = "_bedrock_agentcore_contextvars"
+_CONTEXTVARS_ATTR = "_bedrock_agentcore_contextvars"
 
 
 def _check_a2a_sdk() -> None:
@@ -252,7 +252,7 @@ except Exception:  # pragma: no cover
 
 
 class _ContextvarsSnapshotRequestContextBuilder:
-    """Stores a copy of the sending request's contextvars on each RequestContext.
+    """Stores the sending request's contextvars privately on each RequestContext.
 
     a2a-sdk 1.x runs every message of a task in one producer task created by the
     first request, so the executor would otherwise see that request's contextvars.
@@ -264,7 +264,7 @@ class _ContextvarsSnapshotRequestContextBuilder:
 
     async def build(self, *args: Any, **kwargs: Any) -> Any:
         request_context = await self._inner.build(*args, **kwargs)
-        request_context.call_context.state[_CONTEXTVARS_STATE_KEY] = contextvars.copy_context()
+        setattr(request_context, _CONTEXTVARS_ATTR, contextvars.copy_context())
         return request_context
 
 
@@ -275,7 +275,11 @@ class _PerMessageContextvarsExecutor:
         self._inner = inner
 
     async def execute(self, context: Any, event_queue: Any) -> None:
-        snapshot = context.call_context.state[_CONTEXTVARS_STATE_KEY]
+        snapshot = getattr(context, _CONTEXTVARS_ATTR, None)
+        if snapshot is None:
+            await self._inner.execute(context, event_queue)
+            return
+        delattr(context, _CONTEXTVARS_ATTR)
         await snapshot.run(asyncio.create_task, self._inner.execute(context, event_queue))
 
     async def cancel(self, context: Any, event_queue: Any) -> None:

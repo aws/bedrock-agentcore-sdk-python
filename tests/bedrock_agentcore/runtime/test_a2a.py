@@ -1,7 +1,8 @@
 import contextvars
 import logging
 import uuid
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -25,6 +26,7 @@ else:
 
 from bedrock_agentcore.runtime.a2a import (
     BedrockCallContextBuilder,
+    _PerMessageContextvarsExecutor,
     build_a2a_app,
     build_runtime_url,
     serve_a2a,
@@ -75,6 +77,7 @@ class _InputRequiredExecutor(AgentExecutor):
         self.seen = []
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        assert not hasattr(context, "_bedrock_agentcore_contextvars")
         token = BedrockAgentCoreContext.get_workload_access_token()
         self.seen.append((context.task_id, context.context_id, _REQUEST_TAG.get(), token))
         task = context.current_task or _new_task(context.message)
@@ -172,6 +175,17 @@ def _send_message_params(text: str = "hello", task_id: str | None = None, contex
 
 
 class TestBuildA2AApp:
+    @pytest.mark.asyncio
+    async def test_contextvars_executor_falls_back_without_snapshot(self):
+        inner = _EchoExecutor()
+        inner.execute = AsyncMock()
+        context = SimpleNamespace()
+        event_queue = object()
+
+        await _PerMessageContextvarsExecutor(inner).execute(context, event_queue)
+
+        inner.execute.assert_awaited_once_with(context, event_queue)
+
     def test_ping_returns_healthy_without_timestamp(self):
         app = build_a2a_app(_EchoExecutor(), _make_agent_card())
         client = TestClient(app)
