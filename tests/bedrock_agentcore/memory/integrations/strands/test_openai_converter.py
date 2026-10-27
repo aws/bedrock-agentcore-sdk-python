@@ -90,6 +90,28 @@ def test_reasoning_content_round_trips_in_openai_converter():
     assert any("reasoningContent" in block for block in restored_content)
 
 
+def test_redacted_reasoning_bytes_round_trip_in_openai_converter():
+    msg = SessionMessage(
+        message={
+            "role": "assistant",
+            "content": [
+                {"reasoningContent": {"redactedContent": b"rsn_abc"}},
+                {"text": "208"},
+            ],
+        },
+        message_id=8,
+    )
+
+    payload_json, _ = OpenAIConverseConverter.message_to_payload(msg)[0]
+    events = [{"payload": [{"conversational": {"content": {"text": payload_json}}}]}]
+    restored = OpenAIConverseConverter.events_to_messages(events)
+
+    assert restored[0].message["content"] == [
+        {"reasoningContent": {"redactedContent": b"rsn_abc"}},
+        {"text": "208"},
+    ]
+
+
 def test_openai_converter_round_trips_from_blob_payload():
     msg = SessionMessage(
         message={
