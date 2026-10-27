@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.25.1] - 2026-10-27
+
+### Other Changes
+- fix(evaluation): isolate custom simulation template rendering (#714) (813ab45)
+- ci: run Python SDK CI on CodeBuild runners (#712) (969d9eb)
+
 ## [1.25.0] - 2026-10-23
 
 ### Other Changes
