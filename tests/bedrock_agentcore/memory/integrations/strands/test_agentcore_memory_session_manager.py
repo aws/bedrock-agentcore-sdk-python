@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError
+from strands import hooks as strands_hooks
 from strands.agent.agent import Agent
 from strands.experimental.bidi import BidiAgent
 from strands.experimental.bidi.hooks import BidiAgentStopEvent
@@ -33,6 +34,8 @@ from bedrock_agentcore.memory.integrations.strands.session_manager import (
     AgentCoreMemorySessionManager,
     BufferedMessage,
 )
+
+MessageUpdatedEvent = getattr(strands_hooks, "MessageUpdatedEvent", None)
 
 
 @pytest.fixture
@@ -2844,6 +2847,86 @@ class TestSessionHooks:
         assert manager.pending_agent_state_count() == 0
         state_payloads = manager.memory_client.gmdp_client.create_event.call_args.kwargs["payload"]
         assert [json.loads(payload["blob"])["state"] for payload in state_payloads] == [{}, {"status": "stopped"}]
+
+
+def _bidi_message(role, text, status):
+    content = [] if text is None else [{"text": text}]
+    return {
+        "role": role,
+        "content": content,
+        "tracking_id": f"{role}-1",
+        "metadata": {"custom": {"bidi": {"kind": "transcript", "status": status}}},
+    }
+
+
+class TestBidiTranscripts:
+    """BidiAgent transcripts are stored once they are complete."""
+
+    @pytest.fixture(params=[False, True], ids=["sync", "async"])
+    def bidi_manager(self, request, agentcore_config, mock_memory_client):
+        agentcore_config.async_mode = request.param
+        manager = _create_session_manager(agentcore_config, mock_memory_client)
+        manager._latest_agent_message = {}
+        manager.sync_agent = Mock()
+        registry = HookRegistry()
+        manager.register_hooks(registry)
+        return registry, Mock(spec=BidiAgent, agent_id="test-agent")
+
+    async def test_pending_placeholder_is_not_stored(self, bidi_manager, mock_memory_client):
+        registry, agent = bidi_manager
+
+        await registry.invoke_callbacks_async(
+            MessageAddedEvent(agent=agent, message=_bidi_message("user", None, "pending"))
+        )
+
+        mock_memory_client.create_event.assert_not_called()
+
+    @pytest.mark.parametrize("metadata", [None, {}, {"custom": None}, {"custom": {"bidi": {"kind": "tool_result"}}}])
+    async def test_message_without_bidi_status_is_stored(self, bidi_manager, mock_memory_client, metadata):
+        registry, agent = bidi_manager
+        message = {"role": "user", "content": [{"text": "Hello"}], "metadata": metadata}
+
+        await registry.invoke_callbacks_async(MessageAddedEvent(agent=agent, message=message))
+
+        mock_memory_client.create_event.assert_called_once()
+
+    @pytest.mark.skipif(MessageUpdatedEvent is None, reason="strands-agents has no MessageUpdatedEvent")
+    @pytest.mark.parametrize(("role", "memory_role"), [("user", "USER"), ("assistant", "ASSISTANT")])
+    async def test_complete_transcript_is_stored_once(self, bidi_manager, mock_memory_client, role, memory_role):
+        registry, agent = bidi_manager
+        final = _bidi_message(role, "I need a hotel in London.", "complete")
+
+        await registry.invoke_callbacks_async(
+            MessageAddedEvent(agent=agent, message=_bidi_message(role, None, "pending"))
+        )
+        await registry.invoke_callbacks_async(MessageUpdatedEvent(agent, final["tracking_id"], final))
+
+        mock_memory_client.create_event.assert_called_once()
+        [(payload, stored_role)] = mock_memory_client.create_event.call_args.kwargs["messages"]
+        assert stored_role.upper() == memory_role
+        assert json.loads(payload)["message"]["content"] == [{"text": "I need a hotel in London."}]
+
+    @pytest.mark.skipif(MessageUpdatedEvent is None, reason="strands-agents has no MessageUpdatedEvent")
+    @pytest.mark.parametrize(
+        ("text", "status"),
+        [("[Transcript unavailable.]", "incomplete"), ("", "complete"), ("   ", "complete"), ("partial", "pending")],
+    )
+    async def test_unfinished_or_empty_transcript_is_not_stored(self, bidi_manager, mock_memory_client, text, status):
+        registry, agent = bidi_manager
+        update = _bidi_message("assistant", text, status)
+
+        await registry.invoke_callbacks_async(MessageUpdatedEvent(agent, update["tracking_id"], update))
+
+        mock_memory_client.create_event.assert_not_called()
+
+    @pytest.mark.skipif(MessageUpdatedEvent is None, reason="strands-agents has no MessageUpdatedEvent")
+    async def test_update_without_bidi_status_is_not_stored(self, bidi_manager, mock_memory_client):
+        registry, agent = bidi_manager
+        message = {"role": "assistant", "content": [{"text": "redacted"}], "tracking_id": "x"}
+
+        await registry.invoke_callbacks_async(MessageUpdatedEvent(agent, "x", message))
+
+        mock_memory_client.create_event.assert_not_called()
 
 
 class TestIntervalFlush:

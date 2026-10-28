@@ -7,9 +7,10 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional
+from typing import TYPE_CHECKING, Any, Dict, Mapping, NamedTuple, Optional
 
 import boto3
+import strands.hooks
 from botocore.config import Config as BotocoreConfig
 from strands.experimental.bidi import BidiAgent
 from strands.experimental.bidi.hooks import BidiAgentStopEvent
@@ -46,6 +47,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+MessageUpdatedEvent = getattr(strands.hooks, "MessageUpdatedEvent", None)
+
 MAX_FETCH_ALL_RESULTS = 10000
 
 # Legacy prefixes for backwards compatibility with old events
@@ -61,6 +64,13 @@ MAX_METADATA_KEYS = 15
 
 # Reserved internal metadata keys that users cannot override
 RESERVED_METADATA_KEYS = frozenset({STATE_TYPE_KEY, AGENT_ID_KEY})
+
+
+def _bidi_status(message: Mapping[str, Any]) -> Optional[str]:
+    metadata = message.get("metadata") or {}
+    bidi = (metadata.get("custom") or {}).get("bidi") or {}
+    status: Optional[str] = bidi.get("status")
+    return status
 
 
 class BufferedMessage(NamedTuple):
@@ -841,11 +851,17 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             agent: Agent to append the message to
             **kwargs: Additional keyword arguments for future extensibility.
         """
+        if _bidi_status(message) == "pending":
+            return
         created_message = self.create_message(self.session_id, agent.agent_id, SessionMessage.from_message(message, 0))
         if created_message is None:
             return
         session_message = SessionMessage.from_message(message, created_message.get("eventId"))
         self._latest_agent_message[agent.agent_id] = session_message
+
+    def _append_completed_message(self, event: Any) -> None:
+        if _bidi_status(event.message) == "complete":
+            self.append_message(event.message, event.agent)
 
     def retrieve_customer_context(self, event: MessageAddedEvent) -> None:
         """Retrieve customer LTM context for regular Agent invocations.
@@ -955,6 +971,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
             RepositorySessionManager.register_hooks(self, registry, **kwargs)
             registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
+            if MessageUpdatedEvent is not None:
+                registry.add_callback(MessageUpdatedEvent, self._append_completed_message)
             return
 
         # Async mode: register async callbacks that offload the existing sync
@@ -990,6 +1008,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             await asyncio.to_thread(self.sync_agent, event.agent)
 
         registry.add_callback(MessageAddedEvent, _on_message_added_persist)
+        if MessageUpdatedEvent is not None:
+            registry.add_callback(MessageUpdatedEvent, _offload(self._append_completed_message, lambda e: e))
         registry.add_callback(AfterInvocationEvent, _offload(self.sync_agent, lambda e: e.agent))
         registry.add_callback(MessageAddedEvent, _offload(self.retrieve_customer_context, lambda e: e))
 
