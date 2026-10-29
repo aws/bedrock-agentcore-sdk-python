@@ -2981,6 +2981,64 @@ class TestBidiTranscripts:
 
         assert _stored_texts(mock_memory_client) == [("ASSISTANT", {"text": "Yes, two rooms."})]
 
+    async def test_update_without_bidi_status_keeps_transcript_waiting(self, bidi_manager, mock_memory_client):
+        manager, registry, agent = bidi_manager
+        redacted = {"role": "user", "content": [{"text": "redacted"}], "tracking_id": "user-1"}
+        question = _bidi_message("user", "Any rooms in London?", "complete")
+        follow_up = {"role": "assistant", "content": [{"text": "Yes, two rooms."}]}
+
+        await registry.invoke_callbacks_async(
+            MessageAddedEvent(agent=agent, message=_bidi_message("user", None, "pending"))
+        )
+        await registry.invoke_callbacks_async(MessageUpdatedEvent(agent, "user-1", redacted))
+        await registry.invoke_callbacks_async(MessageAddedEvent(agent=agent, message=follow_up))
+        mock_memory_client.create_event.assert_not_called()
+        await registry.invoke_callbacks_async(MessageUpdatedEvent(agent, question["tracking_id"], question))
+
+        assert _stored_texts(mock_memory_client) == [
+            ("USER", {"text": "Any rooms in London?"}),
+            ("ASSISTANT", {"text": "Yes, two rooms."}),
+        ]
+
+    @pytest.mark.parametrize("async_mode", [False, True], ids=["sync", "async"])
+    async def test_batched_messages_keep_history_order(self, agentcore_config, mock_memory_client, async_mode):
+        agentcore_config.async_mode = async_mode
+        agentcore_config.batch_size = 10
+        manager = _create_session_manager(agentcore_config, mock_memory_client)
+        manager._latest_agent_message = {}
+        manager.sync_agent = Mock()
+        registry = HookRegistry()
+        manager.register_hooks(registry)
+        agent = Mock(spec=BidiAgent, agent_id="test-agent")
+        question = _bidi_message("user", "Any rooms in London?", "complete")
+        reply = _bidi_message("assistant", "Yes, two rooms.", "complete")
+        follow_up = {"role": "user", "content": [{"text": "Book one."}]}
+        confirmation = {"role": "assistant", "content": [{"text": "Booked."}]}
+
+        await registry.invoke_callbacks_async(
+            MessageAddedEvent(agent=agent, message=_bidi_message("user", None, "pending"))
+        )
+        await registry.invoke_callbacks_async(
+            MessageAddedEvent(agent=agent, message=_bidi_message("assistant", None, "pending"))
+        )
+        await registry.invoke_callbacks_async(MessageUpdatedEvent(agent, reply["tracking_id"], reply))
+        await registry.invoke_callbacks_async(MessageAddedEvent(agent=agent, message=follow_up))
+        await registry.invoke_callbacks_async(MessageUpdatedEvent(agent, question["tracking_id"], question))
+        await registry.invoke_callbacks_async(
+            MessageAddedEvent(agent=agent, message=_bidi_message("user", None, "pending", tracking_id="user-2"))
+        )
+        await registry.invoke_callbacks_async(MessageAddedEvent(agent=agent, message=confirmation))
+        assert manager.pending_message_count() == 3
+        await registry.invoke_callbacks_async(BidiAgentStopEvent(agent=agent))
+
+        payload = mock_memory_client.gmdp_client.create_event.call_args.kwargs["payload"]
+        assert [json.loads(item["conversational"]["content"]["text"])["message"]["content"][0] for item in payload] == [
+            {"text": "Any rooms in London?"},
+            {"text": "Yes, two rooms."},
+            {"text": "Book one."},
+            {"text": "Booked."},
+        ]
+
     @pytest.mark.parametrize("finish", ["stop", "close"])
     async def test_finishing_writes_messages_held_behind_open_transcript(
         self, bidi_manager, mock_memory_client, finish

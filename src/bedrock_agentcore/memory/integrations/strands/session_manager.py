@@ -897,7 +897,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 return
             if status == "complete":
                 self._held_messages[index] = _HeldMessage(event.message, event.agent, True)
-            else:
+            elif status == "incomplete":
                 del self._held_messages[index]
             self._write_ready_messages()
 
