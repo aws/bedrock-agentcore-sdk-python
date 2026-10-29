@@ -10,7 +10,6 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Mapping, NamedTuple, Optional
 
 import boto3
-import strands.hooks
 from botocore.config import Config as BotocoreConfig
 from strands.experimental.bidi import BidiAgent
 from strands.experimental.bidi.hooks import BidiAgentStopEvent
@@ -19,7 +18,7 @@ from strands.experimental.hooks.multiagent.events import (
     AfterNodeCallEvent,
     MultiAgentInitializedEvent,
 )
-from strands.hooks import AfterInvocationEvent, MessageAddedEvent
+from strands.hooks import AfterInvocationEvent, MessageAddedEvent, MessageUpdatedEvent
 from strands.hooks.events import AgentInitializedEvent
 from strands.hooks.registry import HookRegistry
 from strands.session.repository_session_manager import RepositorySessionManager
@@ -47,8 +46,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-MessageUpdatedEvent = getattr(strands.hooks, "MessageUpdatedEvent", None)
-
 MAX_FETCH_ALL_RESULTS = 10000
 
 # Legacy prefixes for backwards compatibility with old events
@@ -71,6 +68,12 @@ def _bidi_status(message: Mapping[str, Any]) -> Optional[str]:
     bidi = (metadata.get("custom") or {}).get("bidi") or {}
     status: Optional[str] = bidi.get("status")
     return status
+
+
+class _HeldMessage(NamedTuple):
+    message: Message
+    agent: "LocalAgent"
+    ready: bool
 
 
 class BufferedMessage(NamedTuple):
@@ -175,6 +178,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         # Agent state buffering - stores all agent state updates: (session_id, agent)
         self._agent_state_buffer: list[tuple[str, SessionAgent]] = []
         self._agent_state_lock = threading.Lock()
+
+        self._held_messages: list[_HeldMessage] = []
+        self._held_lock = threading.Lock()
 
         # Cache for agent created_at timestamps to avoid fetching on every update
         self._agent_created_at_cache: dict[str, datetime] = {}
@@ -846,22 +852,64 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def append_message(self, message: Message, agent: "LocalAgent", **kwargs: Any) -> None:
         """Append a message to the agent's session using AgentCore's eventId as message_id.
 
+        A BidiAgent message that is still being streamed is written when it completes, and
+        messages added after it wait for it, so memory keeps the order of the agent's history.
+
         Args:
             message: Message to add to the agent in the session
             agent: Agent to append the message to
             **kwargs: Additional keyword arguments for future extensibility.
         """
-        if _bidi_status(message) == "pending":
+        with self._held_lock:
+            self._hold_or_write(message, agent)
+
+    def _hold_or_write(self, message: Message, agent: "LocalAgent") -> None:
+        ready = _bidi_status(message) != "pending"
+        if ready and not self._held_messages:
+            self._write_message(message, agent)
             return
+        self._held_messages.append(_HeldMessage(message, agent, ready))
+        self._write_ready_messages()
+
+    def _write_message(self, message: Message, agent: "LocalAgent") -> None:
         created_message = self.create_message(self.session_id, agent.agent_id, SessionMessage.from_message(message, 0))
         if created_message is None:
             return
         session_message = SessionMessage.from_message(message, created_message.get("eventId"))
         self._latest_agent_message[agent.agent_id] = session_message
 
-    def _append_completed_message(self, event: Any) -> None:
-        if _bidi_status(event.message) == "complete":
-            self.append_message(event.message, event.agent)
+    def _complete_message(self, event: MessageUpdatedEvent) -> None:
+        status = _bidi_status(event.message)
+        if status == "pending":
+            return
+        with self._held_lock:
+            index = next(
+                (
+                    i
+                    for i, held in enumerate(self._held_messages)
+                    if not held.ready and held.message.get("tracking_id") == event.tracking_id
+                ),
+                None,
+            )
+            if index is None:
+                if status == "complete":
+                    self._hold_or_write(event.message, event.agent)
+                return
+            if status == "complete":
+                self._held_messages[index] = _HeldMessage(event.message, event.agent, True)
+            else:
+                del self._held_messages[index]
+            self._write_ready_messages()
+
+    def _write_ready_messages(self) -> None:
+        while self._held_messages and self._held_messages[0].ready:
+            held = self._held_messages.pop(0)
+            self._write_message(held.message, held.agent)
+
+    def _release_held_messages(self) -> None:
+        with self._held_lock:
+            self._held_messages = [held for held in self._held_messages if held.ready]
+            self._write_ready_messages()
 
     def retrieve_customer_context(self, event: MessageAddedEvent) -> None:
         """Retrieve customer LTM context for regular Agent invocations.
@@ -971,8 +1019,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
             RepositorySessionManager.register_hooks(self, registry, **kwargs)
             registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
-            if MessageUpdatedEvent is not None:
-                registry.add_callback(MessageUpdatedEvent, self._append_completed_message)
+            registry.add_callback(MessageUpdatedEvent, self._complete_message)
+            registry.add_callback(BidiAgentStopEvent, lambda event: self._release_held_messages())
             return
 
         # Async mode: register async callbacks that offload the existing sync
@@ -1008,8 +1056,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             await asyncio.to_thread(self.sync_agent, event.agent)
 
         registry.add_callback(MessageAddedEvent, _on_message_added_persist)
-        if MessageUpdatedEvent is not None:
-            registry.add_callback(MessageUpdatedEvent, _offload(self._append_completed_message, lambda e: e))
+        registry.add_callback(MessageUpdatedEvent, _offload(self._complete_message, lambda e: e))
         registry.add_callback(AfterInvocationEvent, _offload(self.sync_agent, lambda e: e.agent))
         registry.add_callback(MessageAddedEvent, _offload(self.retrieve_customer_context, lambda e: e))
 
@@ -1019,6 +1066,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         registry.add_callback(AfterMultiAgentInvocationEvent, _offload(self.sync_multi_agent, lambda e: e.source))
 
         registry.add_callback(BidiAgentStopEvent, _offload(self.sync_agent, lambda e: e.agent))
+        registry.add_callback(BidiAgentStopEvent, _offload(self._release_held_messages))
 
     @override
     def initialize(self, agent: "LocalAgent", **kwargs: Any) -> None:
@@ -1258,6 +1306,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         manager protocol (with statement) for automatic cleanup.
         """
         self._stop_flush_timer()
+        self._release_held_messages()
         self._flush_messages()
 
     def __enter__(self) -> "AgentCoreMemorySessionManager":
