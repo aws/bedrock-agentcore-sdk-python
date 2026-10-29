@@ -89,6 +89,7 @@ def _create_session_manager(config, mock_memory_client):
         manager = AgentCoreMemorySessionManager(config)
         manager.session_id = config.session_id
         manager.session = Session(session_id=config.session_id, session_type=SessionType.AGENT)
+        manager._held_records = {}
         return manager
 
 
@@ -2788,7 +2789,7 @@ class TestSessionHooks:
         batching_session_manager.register_hooks(registry)
 
         # Create mock event with mock agent
-        mock_agent = Mock()
+        mock_agent = Mock(messages=[])
         mock_event = AfterInvocationEvent(agent=mock_agent)
         registry.invoke_callbacks(mock_event)
 
@@ -2828,7 +2829,7 @@ class TestSessionHooks:
         batching_config.async_mode = async_mode
         manager = _create_session_manager(batching_config, mock_memory_client)
         manager.session_repository = manager
-        agent = Mock(agent_id="test-agent")
+        agent = Mock(agent_id="test-agent", messages=[])
         agent.state.get.return_value = {}
         manager.create_agent(manager.session_id, SessionAgent.from_agent(agent))
         manager.create_message(
