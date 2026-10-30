@@ -257,6 +257,17 @@ class TestParseWwwAuthenticate:
 
         assert [challenge["id"] for challenge in parse_www_authenticate(f"{invalid}, {valid}")] == ["valid"]
 
+    def test_payment_authorization_header_param_is_accepted(self):
+        header = challenge_header("x", "evm", evm_request()) + ', header="Payment-Authorization"'
+
+        assert parse_www_authenticate(header)[0]["header"] == "Payment-Authorization"
+
+    @pytest.mark.parametrize("value", ["Authorization", "X-Payment", "payment-authorization", ""])
+    def test_unrecognized_header_param_is_rejected(self, value):
+        header = challenge_header("x", "evm", evm_request()) + f', header="{value}"'
+
+        assert parse_www_authenticate(header) == []
+
 
 class TestExtractChallenges:
     """Tests for pulling challenges out of a 402 payment required request."""

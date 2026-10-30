@@ -17,7 +17,7 @@ from bedrock_agentcore._utils.endpoints import DP_ENDPOINT_OVERRIDE
 from bedrock_agentcore._utils.user_agent import build_user_agent_suffix
 
 from ._validation import validate_permit2_allowance_limit
-from .constants import MPP_AUTH_SCHEME, MPP_DEFAULT_VERSION
+from .constants import MPP_AUTH_SCHEME, MPP_DEFAULT_VERSION, MPP_PAYMENT_AUTHORIZATION_HEADER
 from .mpp import (
     MppChallengeSelectionError,
     extract_challenges,
@@ -1241,8 +1241,9 @@ class PaymentManager:
                 omitting it preserves the service-side protocol default.
 
         Returns:
-            Dictionary with the ready-to-send Authorization header,
-            e.g. {"Authorization": "Payment eyJ..."}
+            Dictionary with the ready-to-send credential header, e.g.
+            {"Authorization": "Payment eyJ..."}, or {"Payment-Authorization": "Payment eyJ..."}
+            when the selected challenge carries header="Payment-Authorization"
 
         Raises:
             PaymentError: If no challenge can be satisfied or payment processing fails
@@ -1345,8 +1346,9 @@ class PaymentManager:
         else:
             header_value = f"{scheme_prefix}{credential}"
 
+        header_name = MPP_PAYMENT_AUTHORIZATION_HEADER if "header" in selected else "Authorization"
         logger.info("Successfully generated MPP payment header for challenge %s", selected_id)
-        return {"Authorization": header_value}
+        return {header_name: header_value}
 
     def __getattr__(self, name: str):
         """Dynamically forward method calls to the PaymentClient.

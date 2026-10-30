@@ -101,6 +101,35 @@ class TestMppRouting:
 
         assert header == {"Authorization": "Payment eyJhIjoxfQ"}
 
+    def test_payment_authorization_challenge_returns_payment_authorization_header(self, manager):
+        set_instrument_network(manager, "ETHEREUM")
+        set_mpp_result(manager, credential="eyJhIjoxfQ")
+        challenge = challenge_header("evm-1", "evm", evm_request()) + ', header="Payment-Authorization"'
+
+        header = manager.generate_payment_header(
+            payment_instrument_id="pi-1",
+            payment_session_id="ps-1",
+            user_id="user-1",
+            payment_required_request=mpp_402(challenge),
+        )
+
+        assert header == {"Payment-Authorization": "Payment eyJhIjoxfQ"}
+
+    def test_unrecognized_header_challenge_is_not_paid(self, manager):
+        set_instrument_network(manager, "ETHEREUM")
+        set_mpp_result(manager)
+        challenge = challenge_header("evm-1", "evm", evm_request()) + ', header="X-Payment"'
+
+        with pytest.raises(PaymentError):
+            manager.generate_payment_header(
+                payment_instrument_id="pi-1",
+                payment_session_id="ps-1",
+                user_id="user-1",
+                payment_required_request=mpp_402(challenge),
+            )
+
+        manager._payment_client.process_payment.assert_not_called()
+
     def test_mpp_sends_payment_type_mpp(self, manager):
         set_instrument_network(manager, "ETHEREUM")
         set_mpp_result(manager)
