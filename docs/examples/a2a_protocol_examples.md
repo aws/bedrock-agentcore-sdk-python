@@ -31,7 +31,7 @@ from strands.a2a import StrandsA2AExecutor
 from bedrock_agentcore.runtime import serve_a2a
 
 agent = Agent(
-    model="us.anthropic.claude-sonnet-4-20250514",
+    model="global.anthropic.claude-sonnet-4-6",
     system_prompt="You are a helpful calculator.",
 )
 
@@ -54,7 +54,7 @@ from a2a.types import AgentCapabilities, AgentCard, AgentSkill, Part, TextPart
 from a2a.utils import new_task
 from bedrock_agentcore.runtime import serve_a2a
 
-llm = ChatBedrockConverse(model="us.anthropic.claude-sonnet-4-20250514")
+llm = ChatBedrockConverse(model="global.anthropic.claude-sonnet-4-6")
 graph = create_react_agent(llm, tools=[], prompt="You are a helpful calculator.")
 
 
