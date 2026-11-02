@@ -1642,6 +1642,108 @@ class TestBatchingBufferManagement:
         assert stored[1]["content"] == tool_use["content"]
         assert stored[2]["content"] == tool_result["content"]
 
+    @pytest.mark.parametrize("flush_trigger,batch_size", [("batch_size", 2), ("interval", 10)])
+    def test_latest_redaction_survives_early_flush(self, flush_trigger, batch_size, mock_memory_client):
+        """Early flushes may send older messages but must retain the redaction target."""
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            batch_size=batch_size,
+        )
+        manager = _create_session_manager(config, mock_memory_client)
+        manager._latest_agent_message = {}
+        manager.session_repository = manager
+        agent = Mock(agent_id="test-agent-123")
+        question = {"role": "user", "content": [{"text": "Summarise the report."}]}
+        tool_use = {
+            "role": "assistant",
+            "content": [{"toolUse": {"toolUseId": "t1", "name": "get_report", "input": {}}}],
+        }
+        tool_result = {
+            "role": "user",
+            "content": [
+                {"toolResult": {"toolUseId": "t1", "content": [{"text": "x" * (CONVERSATIONAL_MAX_SIZE + 100)}]}}
+            ],
+        }
+
+        for message in (question, tool_use, tool_result):
+            manager.append_message(message, agent)
+        if flush_trigger == "interval":
+            manager._interval_flush_callback()
+
+        assert mock_memory_client.gmdp_client.create_event.call_count == 1
+        early_payload = mock_memory_client.gmdp_client.create_event.call_args.kwargs["payload"]
+        assert len(early_payload) == 2
+        assert manager.pending_message_count() == 1
+        assert manager._message_buffer[0].protected
+
+        tool_result["content"][0]["toolResult"]["content"] = [{"text": "[User input redacted.]"}]
+        manager.redact_latest_message(tool_result, agent)
+        manager.close()
+
+        final_payload = mock_memory_client.gmdp_client.create_event.call_args.kwargs["payload"]
+        assert len(final_payload) == 1
+        stored = json.loads(final_payload[0]["conversational"]["content"]["text"])
+        assert stored["message"]["content"] == tool_result["content"]
+        assert manager.pending_message_count() == 0
+
+    def test_agent_state_auto_flush_defers_latest_message(self, mock_memory_client):
+        """An agent-state threshold must not flush a message awaiting redaction."""
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            batch_size=2,
+        )
+        manager = _create_session_manager(config, mock_memory_client)
+        manager._latest_agent_message = {}
+        manager.session_repository = manager
+        agent = Mock(agent_id="test-agent-123")
+        question = {"role": "user", "content": [{"text": "x" * (CONVERSATIONAL_MAX_SIZE + 100)}]}
+        manager.append_message(question, agent)
+
+        for i in range(2):
+            state = SessionAgent(agent_id=agent.agent_id, state={"turn": i}, conversation_manager_state={})
+            manager.create_agent(config.session_id, state)
+
+        assert manager.pending_message_count() == 1
+        assert manager.pending_agent_state_count() == 2
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+
+        question["content"] = [{"text": "[User input redacted.]"}]
+        manager.redact_latest_message(question, agent)
+        manager.close()
+
+        first_payload = mock_memory_client.gmdp_client.create_event.call_args_list[0].kwargs["payload"]
+        stored = json.loads(first_payload[0]["conversational"]["content"]["text"])
+        assert stored["message"]["content"] == question["content"]
+        assert manager.pending_agent_state_count() == 0
+
+    def test_failed_early_flush_preserves_latest_redaction_target(self, batching_session_manager, mock_memory_client):
+        """Restoring a failed flush must keep older messages before the protected latest one."""
+        batching_session_manager._latest_agent_message = {}
+        batching_session_manager.session_repository = batching_session_manager
+        agent = Mock(agent_id="test-agent-123")
+        earlier = {"role": "user", "content": [{"text": "Earlier question"}]}
+        latest = {"role": "user", "content": [{"text": "x" * (CONVERSATIONAL_MAX_SIZE + 100)}]}
+        batching_session_manager.append_message(earlier, agent)
+        batching_session_manager.append_message(latest, agent)
+
+        mock_memory_client.gmdp_client.create_event.side_effect = Exception("temporary failure")
+        batching_session_manager._interval_flush_callback()
+        assert batching_session_manager.pending_message_count() == 2
+        assert [buf.protected for buf in batching_session_manager._message_buffer] == [False, True]
+
+        mock_memory_client.gmdp_client.create_event.side_effect = None
+        latest["content"] = [{"text": "[User input redacted.]"}]
+        batching_session_manager.redact_latest_message(latest, agent)
+        batching_session_manager.close()
+
+        payload = mock_memory_client.gmdp_client.create_event.call_args.kwargs["payload"]
+        stored = [json.loads(item["conversational"]["content"]["text"])["message"] for item in payload]
+        assert [message["content"] for message in stored] == [earlier["content"], latest["content"]]
+
     def test_buffer_auto_flushes_at_batch_size(self, batching_session_manager, mock_memory_client):
         """Test buffer automatically flushes when reaching batch_size."""
         mock_memory_client.gmdp_client.create_event.return_value = {"eventId": "event_123"}

@@ -64,13 +64,17 @@ RESERVED_METADATA_KEYS = frozenset({STATE_TYPE_KEY, AGENT_ID_KEY})
 
 
 class BufferedMessage(NamedTuple):
-    """A pre-processed message waiting to be flushed to AgentCore Memory."""
+    """A pre-processed message waiting to be flushed to AgentCore Memory.
+
+    A protected message is Strands' latest message, which it may still redact.
+    """
 
     session_id: str
     messages: list[tuple[str, str]]
     is_blob: bool
     timestamp: datetime
     metadata: Optional[Dict[str, MetadataValue]] = None
+    protected: bool = False
 
 
 class StateType(Enum):
@@ -403,7 +407,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             # Flush outside the lock to prevent deadlock. Flush messages too, not just agent states: agent state
             # depends on the messages (removed_message_count indexes into them), so they must be persisted together.
             if should_flush:
-                self._flush_messages()
+                self._flush_messages(include_protected=False)
 
             logger.info(
                 "Buffered agent creation: %s in session: %s",
@@ -540,7 +544,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     ) -> Optional[dict[str, Any]]:
         """Create a new message in AgentCore Memory.
 
-        If batch_size > 1, the message is buffered and sent when the buffer reaches batch_size.
+        If batch_size > 1, the message is buffered and sendable messages are flushed
+        when they reach batch_size. Strands' latest message stays buffered until
+        invocation completion so a guardrail can still redact it.
         Use _flush_messages() or close() to send any remaining buffered messages.
 
         Args:
@@ -594,6 +600,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             # Buffer the pre-processed message
             should_flush = False
             with self._message_lock:
+                if kwargs.get("_protect_latest"):
+                    # Strands can still redact its latest message. Older messages can be flushed.
+                    self._message_buffer = [buf._replace(protected=False) for buf in self._message_buffer]
                 self._message_buffer.append(
                     BufferedMessage(
                         session_id=session_id,
@@ -601,13 +610,14 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                         is_blob=is_blob,
                         timestamp=monotonic_timestamp,
                         metadata=merged_metadata,
+                        protected=bool(kwargs.get("_protect_latest")),
                     )
                 )
-                should_flush = len(self._message_buffer) >= self.config.batch_size
+                should_flush = sum(not buf.protected for buf in self._message_buffer) >= self.config.batch_size
 
             # Flush only messages outside the lock to prevent deadlock
             if should_flush:
-                self._flush_messages_only()
+                self._flush_messages_only(include_protected=False)
 
             return {}  # No eventId yet
 
@@ -836,12 +846,17 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def append_message(self, message: Message, agent: "LocalAgent", **kwargs: Any) -> None:
         """Append a message to the agent's session using AgentCore's eventId as message_id.
 
+        With batching, hold this message through early flushes because Strands may
+        still request redaction of its latest message.
+
         Args:
             message: Message to add to the agent in the session
             agent: Agent to append the message to
             **kwargs: Additional keyword arguments for future extensibility.
         """
-        created_message = self.create_message(self.session_id, agent.agent_id, SessionMessage.from_message(message, 0))
+        created_message = self.create_message(
+            self.session_id, agent.agent_id, SessionMessage.from_message(message, 0), _protect_latest=True
+        )
         if created_message is None:
             return
         session_message = SessionMessage.from_message(message, created_message.get("eventId"))
@@ -1034,8 +1049,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         is_blob = self.converter.exceeds_conversational_limit(updated_messages[0])
 
         with self._message_lock:
-            # Search from the end (most recent) to find the message to update
-            for i in range(len(self._message_buffer) - 1, -1, -1):
+            # Strands redacts its latest message. Prefer the protected entry when present;
+            # direct create_message() callers can still use the role-based fallback.
+            protected_indices = [i for i, buf in enumerate(self._message_buffer) if buf.protected]
+            indices = reversed(protected_indices) if protected_indices else range(len(self._message_buffer) - 1, -1, -1)
+            for i in indices:
                 buf = self._message_buffer[i]
                 if buf.session_id == self.config.session_id and buf.messages:
                     # Match by role - the most recent message with the same role
@@ -1046,11 +1064,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                             is_blob=is_blob,
                             timestamp=buf.timestamp,
                             metadata=buf.metadata,
+                            protected=buf.protected,
                         )
                         return True
         return False
 
-    def _flush_messages_only(self) -> list[dict[str, Any]]:
+    def _flush_messages_only(self, include_protected: bool = True) -> list[dict[str, Any]]:
         """Flush only buffered messages to AgentCore Memory.
 
         Call this method to send any remaining buffered messages when batch_size > 1.
@@ -1059,6 +1078,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         session are combined into a single create_event() call to reduce API calls.
         Messages that exceed the conversational payload limit are sent as blob events individually
         as they require a different API path.
+        Early flushes pass include_protected=False to keep Strands' latest message
+        available for redaction.
 
         Returns:
             list[dict[str, Any]]: List of created event responses from AgentCore Memory.
@@ -1070,8 +1091,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             return []
 
         with self._message_lock:
-            messages_to_send = list(self._message_buffer)
-            self._message_buffer.clear()
+            if include_protected:
+                messages_to_send = list(self._message_buffer)
+                self._message_buffer.clear()
+            else:
+                messages_to_send = [buf for buf in self._message_buffer if not buf.protected]
+                self._message_buffer = [buf for buf in self._message_buffer if buf.protected]
 
         if not messages_to_send:
             return []
@@ -1127,7 +1152,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         except Exception as e:
             # Restore messages to buffer so they aren't lost
             with self._message_lock:
-                self._message_buffer.extend(messages_to_send)
+                self._message_buffer[:0] = messages_to_send
             logger.error("Failed to flush messages to AgentCore Memory: %s", e)
             raise SessionException(f"Failed to flush messages: {e}") from e
 
@@ -1193,11 +1218,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         logger.info("Flushed %d agent state events to AgentCore Memory", len(results))
         return results
 
-    def _flush_messages(self) -> list[dict[str, Any]]:
+    def _flush_messages(self, include_protected: bool = True) -> list[dict[str, Any]]:
         """Flush all buffered messages and agent state to AgentCore Memory.
 
         Call this method to send any remaining buffered messages and agent state messages.
         This is automatically called when the session is complete (via close() or context manager).
+        Early flushes retain Strands' latest message and defer agent state until it is sent.
 
         Returns:
             list[dict[str, Any]]: List of created event responses from AgentCore Memory.
@@ -1206,8 +1232,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             SessionException: If any message or agent state creation fails.
         """
         results = []
-        results.extend(self._flush_messages_only())
-        results.extend(self._flush_agent_states_only())
+        results.extend(self._flush_messages_only(include_protected=include_protected))
+        with self._message_lock:
+            has_protected_message = any(buf.protected for buf in self._message_buffer)
+        if not has_protected_message:
+            results.extend(self._flush_agent_states_only())
         return results
 
     def pending_message_count(self) -> int:
@@ -1308,7 +1337,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                     pending_messages,
                     pending_agent_states,
                 )
-                self._flush_messages()
+                self._flush_messages(include_protected=False)
             else:
                 logger.debug("Interval flush skipped: buffers are empty")
 
