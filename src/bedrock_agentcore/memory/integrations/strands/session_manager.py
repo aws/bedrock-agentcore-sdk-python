@@ -632,7 +632,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 }
                 if merged_metadata:
                     create_event_kwargs["metadata"] = merged_metadata
-                event = self.memory_client.gmdp_client.create_event(**create_event_kwargs)
+                event = self.memory_client.gmdp_client.create_event(**create_event_kwargs)["event"]
             logger.debug("Created event: %s for message: %s", event.get("eventId"), session_message.message_id)
             return event
         except Exception as e:
@@ -689,7 +689,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             if self._update_buffered_message(session_message):
                 logger.debug("Updated buffered message (not yet persisted to AgentCore Memory)")
                 return
-            logger.debug("Message has no event ID and was not found in buffer - skipping update")
+            logger.warning("Message has no event ID and was not found in buffer - skipping update")
             return
 
         # Create a new event with the updated message content
@@ -1039,9 +1039,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 buf = self._message_buffer[i]
                 if buf.session_id == self.config.session_id and buf.messages:
                     # Match by role - the most recent message with the same role
-                    existing_role = buf.messages[0][1] if not buf.is_blob else None
-                    new_role = updated_messages[0][1] if not is_blob else None
-                    if existing_role == new_role:
+                    if buf.messages[0][1] == updated_messages[0][1]:
                         self._message_buffer[i] = BufferedMessage(
                             session_id=buf.session_id,
                             messages=updated_messages,

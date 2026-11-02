@@ -599,6 +599,25 @@ class TestAgentCoreMemorySessionManager:
 
         assert session_manager._latest_agent_message["test-agent-123"].message_id == "new_event_456"
 
+    def test_redact_persisted_blob_message(self, session_manager, mock_memory_client):
+        """A blob event must retain its event ID so redaction can replace it."""
+        session_manager._latest_agent_message = {}
+        session_manager.session_repository = session_manager
+        mock_memory_client.gmdp_client.create_event.return_value = {"event": {"eventId": "blob_event_123"}}
+        mock_memory_client.create_event.return_value = {"eventId": "redacted_event_456"}
+        agent = Mock(agent_id="test-agent-123")
+        message = {"role": "user", "content": [{"text": "x" * (CONVERSATIONAL_MAX_SIZE + 100)}]}
+
+        session_manager.append_message(message, agent)
+        assert session_manager._latest_agent_message[agent.agent_id].message_id == "blob_event_123"
+
+        message["content"] = [{"text": "[User input redacted.]"}]
+        session_manager.redact_latest_message(message, agent)
+
+        assert "[User input redacted.]" in mock_memory_client.create_event.call_args.kwargs["messages"][0][0]
+        assert mock_memory_client.gmdp_client.delete_event.call_args.kwargs["eventId"] == "blob_event_123"
+        assert session_manager._latest_agent_message[agent.agent_id].message_id == "redacted_event_456"
+
     def test_update_message_wrong_session(self, session_manager):
         """Test updating a message with wrong session ID."""
         message = SessionMessage(message={"role": "user", "content": [{"text": "Hello"}]}, message_id=1)
@@ -606,16 +625,18 @@ class TestAgentCoreMemorySessionManager:
         with pytest.raises(SessionException, match="Session ID mismatch"):
             session_manager.update_message("wrong-session-id", "test-agent-123", message)
 
-    def test_update_message_no_message_id(self, session_manager):
-        """Test updating a message with no message_id (not yet persisted) skips gracefully."""
+    def test_update_message_no_message_id(self, session_manager, caplog):
+        """A missing event ID and buffer entry must be visible when redaction is skipped."""
         message = SessionMessage(
             message={"role": "user", "content": [{"text": "redacted"}]},
             message_id=None,
             created_at="2024-01-01T12:00:00Z",
         )
 
-        # Should not raise - just skips since message isn't persisted and buffer is empty
-        session_manager.update_message("test-session-456", "test-agent-123", message)
+        with caplog.at_level(logging.WARNING):
+            session_manager.update_message("test-session-456", "test-agent-123", message)
+
+        assert "Message has no event ID and was not found in buffer" in caplog.text
 
     def test_update_message_create_fails(self, session_manager, mock_memory_client):
         """Test update_message raises SessionException when create fails and does not delete."""
@@ -1571,6 +1592,55 @@ class TestBatchingBufferManagement:
         # No API calls should have been made (still buffered)
         mock_memory_client.create_event.assert_not_called()
         mock_memory_client.gmdp_client.delete_event.assert_not_called()
+
+    def test_redact_buffered_blob_question(self, batching_session_manager, mock_memory_client):
+        """A redacted conversational message must replace its buffered blob."""
+        batching_session_manager._latest_agent_message = {}
+        batching_session_manager.session_repository = batching_session_manager
+        agent = Mock(agent_id="test-agent-123")
+        question = {"role": "user", "content": [{"text": "x" * (CONVERSATIONAL_MAX_SIZE + 100)}]}
+
+        batching_session_manager.append_message(question, agent)
+        assert batching_session_manager._message_buffer[0].is_blob
+
+        question["content"] = [{"text": "[User input redacted.]"}]
+        batching_session_manager.redact_latest_message(question, agent)
+        batching_session_manager._flush_messages_only()
+
+        payload = mock_memory_client.gmdp_client.create_event.call_args.kwargs["payload"]
+        assert len(payload) == 1
+        stored = json.loads(payload[0]["conversational"]["content"]["text"])
+        assert stored["message"]["content"] == [{"text": "[User input redacted.]"}]
+
+    def test_redact_buffered_blob_tool_result(self, batching_session_manager, mock_memory_client):
+        """Redacting a blob tool result must leave the earlier question intact."""
+        batching_session_manager._latest_agent_message = {}
+        batching_session_manager.session_repository = batching_session_manager
+        agent = Mock(agent_id="test-agent-123")
+        question = {"role": "user", "content": [{"text": "Summarise the report."}]}
+        tool_use = {
+            "role": "assistant",
+            "content": [{"toolUse": {"toolUseId": "t1", "name": "get_report", "input": {}}}],
+        }
+        tool_result = {
+            "role": "user",
+            "content": [
+                {"toolResult": {"toolUseId": "t1", "content": [{"text": "x" * (CONVERSATIONAL_MAX_SIZE + 100)}]}}
+            ],
+        }
+        for message in (question, tool_use, tool_result):
+            batching_session_manager.append_message(message, agent)
+        assert batching_session_manager._message_buffer[-1].is_blob
+
+        tool_result["content"][0]["toolResult"]["content"] = [{"text": "[User input redacted.]"}]
+        batching_session_manager.redact_latest_message(tool_result, agent)
+        batching_session_manager._flush_messages_only()
+
+        payload = mock_memory_client.gmdp_client.create_event.call_args.kwargs["payload"]
+        stored = [json.loads(item["conversational"]["content"]["text"])["message"] for item in payload]
+        assert stored[0]["content"] == question["content"]
+        assert stored[1]["content"] == tool_use["content"]
+        assert stored[2]["content"] == tool_result["content"]
 
     def test_buffer_auto_flushes_at_batch_size(self, batching_session_manager, mock_memory_client):
         """Test buffer automatically flushes when reaching batch_size."""
