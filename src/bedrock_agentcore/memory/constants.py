@@ -157,7 +157,7 @@ class RetrievalConfig(BaseModel):
         retrieval_query: Optional custom query for semantic search (default: None)
     """
 
-    top_k: int = Field(default=10, gt=1, le=100)
+    top_k: int = Field(default=10, ge=1, le=100)
     relevance_score: float = Field(default=0.0, ge=0.0, le=1.0)
     strategy_id: Optional[str] = None
     retrieval_query: Optional[str] = None
