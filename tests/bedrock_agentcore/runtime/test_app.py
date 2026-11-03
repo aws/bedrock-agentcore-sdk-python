@@ -2,6 +2,7 @@ import asyncio
 import concurrent.futures
 import contextlib
 import contextvars
+import functools
 import json
 import os
 import threading
@@ -14,11 +15,31 @@ import pytest
 from starlette.testclient import TestClient
 
 import bedrock_agentcore.runtime.app as _app_module
+import bedrock_agentcore.runtime.tracing as _tracing_module
 from bedrock_agentcore.config_bundle.bundle import ConfigBundleRef
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from bedrock_agentcore.runtime.app import _parse_runtime_arn
 from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
 from bedrock_agentcore.runtime.models import is_forwardable_header
+
+
+class _TimeoutIgnoringTracerProvider:
+    """Tracer provider whose ``force_flush`` ignores ``timeout_millis``, like OTel SDK 1.45's BatchProcessor.
+
+    With nothing queued, a flush returns at once. Once the handler has produced spans, a flush blocks the way
+    an export to an unreachable OTLP endpoint does, until ``release`` is set.
+    """
+
+    def __init__(self):
+        self.spans_pending = False
+        self.blocked_flushes = 0
+        self.release = threading.Event()
+
+    def force_flush(self, timeout_millis=30000):
+        if self.spans_pending:
+            self.blocked_flushes += 1
+            self.release.wait(timeout=10)
+        return True
 
 
 class TestBedrockAgentCoreApp:
@@ -166,7 +187,7 @@ class TestBedrockAgentCoreApp:
         mock_flush.assert_called_once_with()
 
     def test_sync_stream_flushes_after_generator_finishes(self):
-        """Sync streams flush once when prepared and again after their final chunk."""
+        """Sync streams flush only after their final chunk, not before the response starts."""
         bedrock_agentcore = BedrockAgentCoreApp()
 
         @bedrock_agentcore.entrypoint
@@ -182,11 +203,11 @@ class TestBedrockAgentCoreApp:
             response = TestClient(bedrock_agentcore).post("/invocations", json={})
 
         assert response.status_code == 200
-        mock_async_flush.assert_awaited_once_with()
+        mock_async_flush.assert_not_awaited()
         mock_sync_flush.assert_called_once_with()
 
-    def test_async_stream_flushes_after_generator_finishes(self):
-        """Async streams flush once when prepared and again after their final chunk."""
+    def test_async_generator_entrypoint_flushes_after_stream_finishes(self):
+        """Async-generator entrypoints are bridged to a sync stream, which flushes once at the end."""
         bedrock_agentcore = BedrockAgentCoreApp()
 
         @bedrock_agentcore.entrypoint
@@ -202,8 +223,118 @@ class TestBedrockAgentCoreApp:
             response = TestClient(bedrock_agentcore).post("/invocations", json={})
 
         assert response.status_code == 200
-        mock_async_flush.assert_awaited_once_with()
+        mock_async_flush.assert_not_awaited()
         mock_sync_flush.assert_called_once_with()
+
+    def test_returned_async_generator_flushes_after_stream_finishes(self):
+        """A handler that returns an async generator streams on the async path, which flushes once at the end."""
+        bedrock_agentcore = BedrockAgentCoreApp()
+
+        async def stream():
+            yield {"ok": True}
+
+        @bedrock_agentcore.entrypoint
+        def handler(payload):
+            return stream()
+
+        with (
+            patch(
+                "bedrock_agentcore.runtime.app._flush_tracer_provider_async", new_callable=AsyncMock
+            ) as mock_async_flush,
+            patch("bedrock_agentcore.runtime.app._flush_tracer_provider") as mock_sync_flush,
+        ):
+            response = TestClient(bedrock_agentcore).post("/invocations", json={})
+
+        assert response.status_code == 200
+        assert 'data: {"ok": true}' in response.text
+        mock_async_flush.assert_awaited_once_with()
+        mock_sync_flush.assert_not_called()
+
+    def test_stream_headers_not_delayed_by_flush_of_earlier_spans(self):
+        """Spans queued before a streaming request must not hold back the response headers."""
+        provider = _TimeoutIgnoringTracerProvider()
+        provider.spans_pending = True
+        bedrock_agentcore = BedrockAgentCoreApp()
+
+        @bedrock_agentcore.entrypoint
+        def handler(payload):
+            yield {"ok": True}
+
+        try:
+            with (
+                patch("opentelemetry.trace.get_tracer_provider", return_value=provider),
+                patch(
+                    "bedrock_agentcore.runtime.app._flush_tracer_provider_async",
+                    functools.partial(_tracing_module._flush_tracer_provider_async, timeout_millis=3000),
+                ),
+                patch(
+                    "bedrock_agentcore.runtime.app._flush_tracer_provider",
+                    functools.partial(_tracing_module._flush_tracer_provider, timeout_millis=100),
+                ),
+            ):
+                begin = time.monotonic()
+                response = TestClient(bedrock_agentcore).post("/invocations", json={})
+                elapsed = time.monotonic() - begin
+        finally:
+            provider.release.set()
+            assert _tracing_module._flush_lock.acquire(timeout=5)
+            _tracing_module._flush_lock.release()
+
+        assert response.status_code == 200
+        assert elapsed < 2, f"response took {elapsed:.2f}s; a pre-stream flush held it back"
+        assert provider.blocked_flushes == 1
+
+    @pytest.mark.parametrize("handler_kind", ["sync_generator", "async_generator"])
+    def test_stream_closes_when_force_flush_ignores_timeout(self, handler_kind):
+        """A stuck exporter must not hold the stream open (OTel SDK 1.45 ignores ``timeout_millis``).
+
+        Async-generator entrypoints are bridged to a sync generator, so both kinds end in
+        ``_sync_stream_with_error_handling``.
+        """
+        provider = _TimeoutIgnoringTracerProvider()
+        bedrock_agentcore = BedrockAgentCoreApp()
+
+        if handler_kind == "sync_generator":
+
+            @bedrock_agentcore.entrypoint
+            def handler(payload):
+                provider.spans_pending = True
+                yield {"ok": True}
+
+        else:
+
+            @bedrock_agentcore.entrypoint
+            async def handler(payload):
+                provider.spans_pending = True
+                yield {"ok": True}
+
+        result = {}
+
+        def post():
+            result["response"] = TestClient(bedrock_agentcore).post("/invocations", json={})
+
+        client_thread = threading.Thread(target=post, daemon=True)
+        try:
+            with (
+                patch("opentelemetry.trace.get_tracer_provider", return_value=provider),
+                patch(
+                    "bedrock_agentcore.runtime.app._flush_tracer_provider",
+                    functools.partial(_tracing_module._flush_tracer_provider, timeout_millis=100),
+                ),
+            ):
+                client_thread.start()
+                client_thread.join(timeout=5)
+                assert not client_thread.is_alive(), "stream stayed open while force_flush was blocked"
+        finally:
+            provider.release.set()
+            client_thread.join(timeout=5)
+            # Let the abandoned flush finish so it does not hold the module-level lock for later tests.
+            assert _tracing_module._flush_lock.acquire(timeout=5)
+            _tracing_module._flush_lock.release()
+
+        assert provider.blocked_flushes == 1
+        assert result["response"].status_code == 200
+        assert 'data: {"ok": true}' in result["response"].text
 
     def test_async_handler_without_context(self):
         """Test async handler without context parameter."""

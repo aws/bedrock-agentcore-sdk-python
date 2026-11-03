@@ -35,6 +35,11 @@ logger = logging.getLogger(__name__)
 _registration_lock = threading.Lock()
 _registered_on: Optional[object] = None  # the TracerProvider instance we last registered on
 _flush_lock = threading.Lock()
+# How long a response waits for buffered spans to export. A healthy OTLP export takes tens of milliseconds;
+# 5 s leaves wide headroom, matches the export timeout AgentCore Runtime intends to set
+# (OTEL_EXPORTER_OTLP_TIMEOUT=5000 ms), and keeps a stuck exporter from delaying the end of a response
+# by more than a few seconds. Spans the flush misses stay queued for the background exporter.
+_FLUSH_TIMEOUT_MILLIS = 5000
 
 
 def _ensure_baggage_processor_registered() -> None:
@@ -65,12 +70,36 @@ def _ensure_baggage_processor_registered() -> None:
         logger.debug("Could not register BaggageSpanProcessor", exc_info=True)
 
 
-def _flush_tracer_provider(timeout_millis: int = 30000) -> None:
-    """Flush buffered spans before AgentCore Runtime freezes the microVM."""
+def _flush_tracer_provider(timeout_millis: int = _FLUSH_TIMEOUT_MILLIS) -> None:
+    """Flush buffered spans before AgentCore Runtime freezes the microVM, waiting at most ``timeout_millis``.
+
+    ``force_flush`` cannot be trusted to honor its timeout (OTel SDK 1.45's ``BatchProcessor`` ignores it and
+    exports until the queue drains, which never ends if the OTLP endpoint is unreachable), so it runs on a
+    daemon thread that the caller stops waiting for. A flush that overruns keeps ``_flush_lock`` until it
+    returns, so later calls skip instead of piling up threads behind it.
+    """
     if not _flush_lock.acquire(blocking=False):
         logger.debug("Tracer provider flush already in progress; skipping duplicate flush")
         return
 
+    try:
+        flush_thread = threading.Thread(
+            target=_force_flush_and_release, args=(timeout_millis,), name="agentcore-trace-flush", daemon=True
+        )
+        flush_thread.start()
+    except Exception:
+        _flush_lock.release()
+        logger.debug("Could not start tracer provider flush", exc_info=True)
+        return
+
+    flush_thread.join(timeout_millis / 1000)
+    if flush_thread.is_alive():
+        logger.warning(
+            "Tracer provider flush did not finish within %d ms; continuing without waiting for it", timeout_millis
+        )
+
+
+def _force_flush_and_release(timeout_millis: int) -> None:
     try:
         from opentelemetry import trace
 
@@ -83,7 +112,7 @@ def _flush_tracer_provider(timeout_millis: int = 30000) -> None:
         _flush_lock.release()
 
 
-async def _flush_tracer_provider_async(timeout_millis: int = 30000) -> None:
+async def _flush_tracer_provider_async(timeout_millis: int = _FLUSH_TIMEOUT_MILLIS) -> None:
     """Flush buffered spans without blocking the event loop or response indefinitely."""
     try:
         await asyncio.wait_for(

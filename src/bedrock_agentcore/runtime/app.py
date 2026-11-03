@@ -542,6 +542,8 @@ class BedrockAgentCoreApp(Starlette):
         request_context = self._build_request_context(request)
 
         start_time = time.time()
+        # Streaming responses flush when the stream ends; flushing here as well would only delay the headers.
+        streaming = False
 
         try:
             payload = await request.json()
@@ -578,9 +580,11 @@ class BedrockAgentCoreApp(Starlette):
             duration = time.time() - start_time
             if inspect.isgenerator(result):
                 self.logger.info("Returning streaming response (generator) (%.3fs)", duration)
+                streaming = True
                 return StreamingResponse(self._sync_stream_with_error_handling(result), media_type="text/event-stream")
             elif inspect.isasyncgen(result):
                 self.logger.info("Returning streaming response (async generator) (%.3fs)", duration)
+                streaming = True
                 return StreamingResponse(self._stream_with_error_handling(result), media_type="text/event-stream")
 
             # If handler returned a Starlette Response directly, pass it through.
@@ -614,7 +618,8 @@ class BedrockAgentCoreApp(Starlette):
             self.logger.exception("Invocation failed (%.3fs)", duration)
             return JSONResponse({"error": str(e)}, status_code=500)
         finally:
-            await _flush_tracer_provider_async()
+            if not streaming:
+                await _flush_tracer_provider_async()
 
     def _handle_ping(self, request):
         try:

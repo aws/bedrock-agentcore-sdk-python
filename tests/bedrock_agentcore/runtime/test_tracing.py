@@ -1,6 +1,7 @@
 """Tests for BaggageSpanProcessor and auto-registration helper."""
 
 import threading
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from bedrock_agentcore.runtime.tracing import (
     BaggageSpanProcessor,
     _ensure_baggage_processor_registered,
+    _flush_lock,
     _flush_tracer_provider,
     _flush_tracer_provider_async,
 )
@@ -302,6 +304,51 @@ class TestFlushTracerProvider:
                 flush_thread.join(timeout=1)
 
         mock_provider.force_flush.assert_called_once()
+
+    def test_flush_wait_is_bounded_when_provider_ignores_timeout(self):
+        """OTel SDK 1.45 ``force_flush`` ignores ``timeout_millis``; the caller must still get control back."""
+        started = threading.Event()
+        release = threading.Event()
+        mock_provider = MagicMock()
+
+        def blocking_flush(**_):
+            started.set()
+            release.wait(timeout=5)
+
+        mock_provider.force_flush.side_effect = blocking_flush
+
+        try:
+            with patch("opentelemetry.trace.get_tracer_provider", return_value=mock_provider):
+                begin = time.monotonic()
+                _flush_tracer_provider(timeout_millis=50)
+                assert time.monotonic() - begin < 2
+                assert started.is_set()
+
+                # The abandoned flush still holds the lock, so later flushes skip instead of stacking threads.
+                _flush_tracer_provider(timeout_millis=50)
+                assert mock_provider.force_flush.call_count == 1
+        finally:
+            release.set()
+
+        # Once the abandoned flush returns it releases the lock, and the next flush runs normally.
+        assert _flush_lock.acquire(timeout=5)
+        _flush_lock.release()
+        mock_provider.force_flush.side_effect = None
+        with patch("opentelemetry.trace.get_tracer_provider", return_value=mock_provider):
+            _flush_tracer_provider(timeout_millis=50)
+        assert mock_provider.force_flush.call_count == 2
+
+    def test_lock_is_released_when_flush_thread_cannot_start(self):
+        mock_provider = MagicMock()
+
+        with (
+            patch("opentelemetry.trace.get_tracer_provider", return_value=mock_provider),
+            patch("threading.Thread.start", side_effect=RuntimeError("can't start new thread")),
+        ):
+            _flush_tracer_provider()
+
+        mock_provider.force_flush.assert_not_called()
+        assert not _flush_lock.locked()
 
     async def test_async_flush_runs_on_worker_thread(self):
         event_loop_thread = threading.get_ident()
