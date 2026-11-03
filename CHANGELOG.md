@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.25.3] - 2026-11-03
+
+### Other Changes
+- revert(runtime): flush tracing spans after invocations (#721) (#731) (62c3c73)
+
 ## [1.25.2] - 2026-10-30
 
 ### Other Changes
