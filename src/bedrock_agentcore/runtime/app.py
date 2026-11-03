@@ -49,7 +49,7 @@ from .models import (
     PingStatus,
     is_forwardable_header,
 )
-from .tracing import _ensure_baggage_processor_registered, _flush_tracer_provider, _flush_tracer_provider_async
+from .tracing import _ensure_baggage_processor_registered
 from .utils import convert_complex_objects
 
 # Sentinel so we only parse OTEL_RESOURCE_ATTRIBUTES once per process.
@@ -613,8 +613,6 @@ class BedrockAgentCoreApp(Starlette):
             duration = time.time() - start_time
             self.logger.exception("Invocation failed (%.3fs)", duration)
             return JSONResponse({"error": str(e)}, status_code=500)
-        finally:
-            await _flush_tracer_provider_async()
 
     def _handle_ping(self, request):
         try:
@@ -896,8 +894,6 @@ class BedrockAgentCoreApp(Starlette):
                 "message": "An error occurred during streaming",
             }
             yield self._convert_to_sse(error_event)
-        finally:
-            await _flush_tracer_provider_async()
 
     def _safe_serialize_to_json_string(self, obj):
         """Safely serialize object directly to JSON string with progressive fallback handling.
@@ -953,5 +949,3 @@ class BedrockAgentCoreApp(Starlette):
                 "message": "An error occurred during streaming",
             }
             yield self._convert_to_sse(error_event)
-        finally:
-            _flush_tracer_provider()
