@@ -15,14 +15,20 @@ from .dataset_types import (
     Turn,
 )
 
-SUPPORTED_SCHEMA_TYPES = {
-    "AGENTCORE_EVALUATION_PREDEFINED_V1",
-    "AGENTCORE_EVALUATION_SIMULATED_V1",
-}
-
 
 def _parse_scenario(raw: Dict[str, Any]) -> PredefinedScenario | SimulatedScenario:
-    """Parse a raw dict into a PredefinedScenario or SimulatedScenario."""
+    """Parse a raw dict into a PredefinedScenario or SimulatedScenario.
+
+    The type is inferred from the fields present, matching the service: ``actor_profile`` makes a
+    scenario simulated, otherwise ``turns`` makes it predefined. Fields the SDK does not know are ignored.
+    """
+    scenario_id = raw.get("scenario_id", "?")
+    # Datasets no longer declare a type, so this is the only guard against a mislabeled example
+    # being run as the wrong kind of scenario.
+    if "actor_profile" in raw and "turns" in raw:
+        raise ValueError(f"Scenario '{scenario_id}' has both 'turns' and 'actor_profile'; a scenario must have one")
+    if "actor_profile" not in raw and "turns" not in raw:
+        raise ValueError(f"Scenario '{scenario_id}' has neither 'turns' nor 'actor_profile'")
     if "turns" in raw:
         return PredefinedScenario(
             scenario_id=raw["scenario_id"],
@@ -107,7 +113,7 @@ class DatasetManagementServiceProvider(DatasetProvider):
         The URL points to a JSONL file where each line is one example.
 
         Raises:
-            ValueError: If the dataset has no downloadUrl or has an unsupported schemaType.
+            ValueError: If the dataset has no downloadUrl.
             RuntimeError: If the dataset content cannot be downloaded.
         """
         kwargs: Dict[str, Any] = {"datasetId": self._dataset_id}
@@ -115,13 +121,6 @@ class DatasetManagementServiceProvider(DatasetProvider):
             kwargs["datasetVersion"] = self._version_id
 
         response = self._client.get_dataset(**kwargs)
-
-        schema_type = response.get("schemaType")
-        if schema_type and schema_type not in SUPPORTED_SCHEMA_TYPES:
-            raise ValueError(
-                f"Dataset schema type '{schema_type}' is not supported by the "
-                f"evaluation runners. Supported types: {sorted(SUPPORTED_SCHEMA_TYPES)}"
-            )
 
         download_url = response.get("downloadUrl")
         if not download_url:

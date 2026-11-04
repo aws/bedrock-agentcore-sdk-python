@@ -156,18 +156,37 @@ class TestDatasetManagementServiceProvider:
             with pytest.raises(ValueError, match="scenarios must not be empty"):
                 provider.get_dataset()
 
-    def test_unsupported_schema_type_raises(self):
-        mock_client = MagicMock()
-        mock_client.get_dataset.return_value = {
-            "datasetId": "ds-123",
-            "status": "ACTIVE",
-            "schemaType": "RAGAS_V1",
-            "downloadUrl": "https://example.com/dataset.jsonl",
-        }
+    @pytest.mark.parametrize("schema_type", [None, "AGENTCORE_EVALUATION_V1", "THIRD_PARTY_EVALUATION_V1"])
+    def test_schema_type_does_not_gate_loading(self, schema_type):
+        content = _jsonl({"scenario_id": "s1", "turns": [{"input": "Hi"}]})
+        dataset, _, _ = self._run_provider(content, schema_type=schema_type)
+        assert isinstance(dataset.scenarios[0], PredefinedScenario)
 
-        provider = DatasetManagementServiceProvider(dataset_id="ds-123", client=mock_client)
-        with pytest.raises(ValueError, match="not supported by the evaluation runners"):
-            provider.get_dataset()
+    def test_type_inferred_from_fields_and_extra_fields_ignored(self):
+        content = _jsonl(
+            {"scenario_id": "fixed", "turns": [{"input": "Hi"}], "braintrust_tags": ["refunds"]},
+            {
+                "scenario_id": "dynamic",
+                "actor_profile": {"context": "c", "goal": "g"},
+                "input": "Where is my refund?",
+            },
+        )
+        dataset, _, _ = self._run_provider(content)
+        assert [type(s) for s in dataset.scenarios] == [PredefinedScenario, SimulatedScenario]
+
+    @pytest.mark.parametrize(
+        "example, match",
+        [
+            (
+                {"scenario_id": "s1", "turns": [{"input": "Hi"}], "actor_profile": {"context": "c", "goal": "g"}},
+                "both 'turns' and 'actor_profile'",
+            ),
+            ({"scenario_id": "s1", "input": "Hi"}, "neither 'turns' nor 'actor_profile'"),
+        ],
+    )
+    def test_ambiguous_example_raises(self, example, match):
+        with pytest.raises(ValueError, match=match):
+            self._run_provider(_jsonl(example))
 
     def test_missing_requests_raises_helpful_import_error(self):
         import sys

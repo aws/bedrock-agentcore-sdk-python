@@ -112,6 +112,10 @@ class EvaluationClient:
         "list_batch_evaluations",
         "stop_batch_evaluation",
         "delete_batch_evaluation",
+        # Dataset generation
+        "start_dataset_generation",
+        "get_dataset_generation",
+        "list_dataset_generations",
     }
 
     _ALLOWED_CP_METHODS = {
@@ -390,7 +394,10 @@ class EvaluationClient:
         """Start a batch evaluation and wait for it to finish.
 
         Scores sessions that already exist in CloudWatch, without invoking the
-        agent. To run a dataset against an agent, use ``BatchEvaluationRunner``.
+        agent. Pass ``sessionGenerationConfig`` to have the service run a published
+        dataset against an AgentCore Runtime agent first and score only the sessions
+        it produced. To run a dataset from this process instead, use
+        ``BatchEvaluationRunner``.
         Batch evaluations typically take several minutes, so pass a ``max_wait``
         longer than the default 5 minutes.
 
