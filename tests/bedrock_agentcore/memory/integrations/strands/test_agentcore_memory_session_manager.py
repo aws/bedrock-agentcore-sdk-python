@@ -1720,6 +1720,47 @@ class TestBatchingBufferManagement:
         assert stored["message"]["content"] == question["content"]
         assert manager.pending_agent_state_count() == 0
 
+    def test_deferred_agent_states_respect_event_payload_limit(self, mock_memory_client):
+        """A long invocation sends deferred states in events of at most 100 items."""
+        config = AgentCoreMemoryConfig(
+            memory_id="test-memory-123",
+            session_id="test-session-456",
+            actor_id="test-actor-789",
+            batch_size=2,
+        )
+        manager = _create_session_manager(config, mock_memory_client)
+        manager._latest_agent_message = {}
+        manager.session_repository = manager
+        agent = Mock(agent_id="test-agent-123")
+        question = {"role": "user", "content": [{"text": "x" * (CONVERSATIONAL_MAX_SIZE + 100)}]}
+        manager.append_message(question, agent)
+
+        for turn in range(101):
+            manager.create_agent(
+                config.session_id,
+                SessionAgent(agent_id=agent.agent_id, state={"turn": turn}, conversation_manager_state={}),
+            )
+
+        mock_memory_client.gmdp_client.create_event.assert_not_called()
+        question["content"] = [{"text": "[User input redacted.]"}]
+        manager.redact_latest_message(question, agent)
+        manager.close()
+
+        calls = mock_memory_client.gmdp_client.create_event.call_args_list
+        assert [len(call.kwargs["payload"]) for call in calls] == [1, 100, 1]
+        stored_question = json.loads(calls[0].kwargs["payload"][0]["conversational"]["content"]["text"])
+        assert stored_question["message"]["content"] == question["content"]
+        stored_states = [
+            json.loads(item["blob"])["state"]["turn"] for call in calls[1:] for item in call.kwargs["payload"]
+        ]
+        assert stored_states == list(range(101))
+        assert manager.pending_agent_state_count() == 0
+
+        # read_agent fetches the newest event and its last payload item.
+        mock_memory_client.list_events.return_value = [{"payload": calls[-1].kwargs["payload"]}]
+        restored_agent = manager.read_agent(config.session_id, agent.agent_id)
+        assert restored_agent.state == {"turn": 100}
+
     def test_failed_early_flush_preserves_latest_redaction_target(self, batching_session_manager, mock_memory_client):
         """Restoring a failed flush must keep older messages before the protected latest one."""
         batching_session_manager._latest_agent_message = {}
@@ -4106,6 +4147,30 @@ class TestFlushAgentStatesRaceCondition:
             batching_session_manager._flush_agent_states_only()
 
         assert [a.state for _, a in batching_session_manager._agent_state_buffer] == [{"v": 1}, {"v": 2}]
+
+    def test_flush_agent_states_failure_retries_only_unsent_chunk(self, batching_session_manager, mock_memory_client):
+        """A failed later chunk must not replay states already persisted."""
+        with batching_session_manager._agent_state_lock:
+            batching_session_manager._agent_state_buffer = [
+                (
+                    "test-session-456",
+                    SessionAgent(agent_id="agent-1", state={"turn": turn}, conversation_manager_state={}),
+                )
+                for turn in range(101)
+            ]
+        mock_memory_client.gmdp_client.create_event.side_effect = [
+            {"eventId": "first-chunk"},
+            Exception("second chunk failed"),
+        ]
+
+        with pytest.raises(SessionException, match="Failed to flush agent states"):
+            batching_session_manager._flush_agent_states_only()
+
+        assert [agent.state["turn"] for _, agent in batching_session_manager._agent_state_buffer] == [100]
+        mock_memory_client.gmdp_client.create_event.side_effect = None
+        batching_session_manager._flush_agent_states_only()
+        assert len(mock_memory_client.gmdp_client.create_event.call_args.kwargs["payload"]) == 1
+        assert batching_session_manager.pending_agent_state_count() == 0
 
     def test_agent_state_auto_flush_persists_buffered_messages_first(
         self, batching_session_manager, mock_memory_client

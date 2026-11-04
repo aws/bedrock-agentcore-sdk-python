@@ -58,6 +58,7 @@ AGENT_ID_KEY = "agentId"
 
 # Maximum metadata key-value pairs per event (API limit)
 MAX_METADATA_KEYS = 15
+MAX_EVENT_PAYLOAD_ITEMS = 100
 
 # Reserved internal metadata keys that users cannot override
 RESERVED_METADATA_KEYS = frozenset({STATE_TYPE_KEY, AGENT_ID_KEY})
@@ -1163,8 +1164,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         """Flush only buffered agent states to AgentCore Memory.
 
         Call this method to send any remaining agent state when batch_size > 1.
-        Agent states are grouped by agent_id and sent as separate events so that
-        each event carries the correct agentId metadata for read_agent() lookups.
+        Agent states are grouped by agent_id and sent in events of at most 100
+        payload items so each event carries the correct agentId metadata for
+        read_agent() lookups.
 
         Returns:
             list[dict[str, Any]]: List of created event responses from AgentCore Memory.
@@ -1183,35 +1185,45 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             return []
 
         results = []
+        sent_indices: set[int] = set()
         try:
             # Group agent states by agent_id
-            agent_groups: dict[str, list[dict]] = {}
-            for _session_id, session_agent in agent_states_to_send:
+            agent_groups: dict[str, list[tuple[int, SessionAgent]]] = {}
+            for index, (_session_id, session_agent) in enumerate(agent_states_to_send):
                 agent_id = session_agent.agent_id
                 if agent_id not in agent_groups:
                     agent_groups[agent_id] = []
-                agent_groups[agent_id].append({"blob": json.dumps(session_agent.to_dict())})
+                agent_groups[agent_id].append((index, session_agent))
 
-            # Send one event per agent_id with correct metadata
-            for agent_id, payloads in agent_groups.items():
-                event = self.memory_client.gmdp_client.create_event(
-                    memoryId=self.config.memory_id,
-                    actorId=self.config.actor_id,
-                    sessionId=self.config.session_id,
-                    payload=payloads,
-                    eventTimestamp=self._get_monotonic_timestamp(),
-                    metadata={
-                        STATE_TYPE_KEY: {"stringValue": StateType.AGENT.value},
-                        AGENT_ID_KEY: {"stringValue": agent_id},
-                    },
-                )
-                results.append(event)
-                logger.debug("Flushed %d agent states for agent %s: %s", len(payloads), agent_id, event.get("eventId"))
+            # Send each agent's states in order, respecting the CreateEvent payload limit.
+            for agent_id, states in agent_groups.items():
+                for start in range(0, len(states), MAX_EVENT_PAYLOAD_ITEMS):
+                    chunk = states[start : start + MAX_EVENT_PAYLOAD_ITEMS]
+                    payloads = [{"blob": json.dumps(agent.to_dict())} for _, agent in chunk]
+                    event = self.memory_client.gmdp_client.create_event(
+                        memoryId=self.config.memory_id,
+                        actorId=self.config.actor_id,
+                        sessionId=self.config.session_id,
+                        payload=payloads,
+                        eventTimestamp=self._get_monotonic_timestamp(),
+                        metadata={
+                            STATE_TYPE_KEY: {"stringValue": StateType.AGENT.value},
+                            AGENT_ID_KEY: {"stringValue": agent_id},
+                        },
+                    )
+                    results.append(event)
+                    sent_indices.update(index for index, _ in chunk)
+                    logger.debug(
+                        "Flushed %d agent states for agent %s: %s", len(payloads), agent_id, event.get("eventId")
+                    )
 
         except Exception as e:
-            # Prepend so they aren't lost: states buffered during the send are newer, and read_agent restores the last
+            # Prepend only unsent states. States buffered during the send are newer,
+            # and read_agent restores the last state.
             with self._agent_state_lock:
-                self._agent_state_buffer[:0] = agent_states_to_send
+                self._agent_state_buffer[:0] = [
+                    state for index, state in enumerate(agent_states_to_send) if index not in sent_indices
+                ]
             logger.error("Failed to flush agent states to AgentCore Memory: %s", e)
             raise SessionException(f"Failed to flush agent states: {e}") from e
 
