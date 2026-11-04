@@ -3940,3 +3940,17 @@ class TestAddTurnsWithDataClasses:
             manager.get_last_k_turns(actor_id="user-123", session_id="session-456", k=200, max_results=50)
             call_kwargs = manager._data_plane_client.list_events.call_args[1]
             assert call_kwargs["maxResults"] == 50
+
+
+def test_retrieval_config_top_k_allows_one():
+    """top_k=1 (single best-scoring record) is valid; the SDK itself calls
+    retrieve_memories(top_k=1). The lower bound must be inclusive (ge=1)."""
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    assert RetrievalConfig(top_k=1).top_k == 1  # must not raise
+    # bounds still enforced on either side
+    with _pytest.raises(ValidationError):
+        RetrievalConfig(top_k=0)
+    with _pytest.raises(ValidationError):
+        RetrievalConfig(top_k=101)
