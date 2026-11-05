@@ -27,7 +27,6 @@ class DatasetClient:
         # Create a dataset and wait for ACTIVE
         dataset = client.create_dataset_and_wait(
             datasetName="my-dataset",
-            schemaType="AGENTCORE_EVALUATION_PREDEFINED_V1",
             source={"inlineExamples": {"examples": [...]}},
         )
 

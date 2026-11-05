@@ -80,7 +80,6 @@ class TestDatasetClientCreateAndWait:
         result = client.create_dataset_and_wait(
             wait_config=WaitConfig(max_wait=10, poll_interval=1),
             datasetName="test",
-            schemaType="AGENTCORE_EVALUATION_PREDEFINED_V1",
         )
 
         assert result["status"] == "ACTIVE"

@@ -68,7 +68,6 @@ class TestDatasetCrud:
         """Create a dataset with inline examples and wait for ACTIVE."""
         dataset = self.client.create_dataset_and_wait(
             datasetName=f"{self.test_prefix}_predefined",
-            schemaType="AGENTCORE_EVALUATION_PREDEFINED_V1",
             source={
                 "inlineExamples": {
                     "examples": [

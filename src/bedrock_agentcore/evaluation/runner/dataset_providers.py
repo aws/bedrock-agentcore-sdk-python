@@ -20,19 +20,21 @@ def _parse_scenario(raw: Dict[str, Any]) -> PredefinedScenario | SimulatedScenar
     """Parse a raw dict into a PredefinedScenario or SimulatedScenario.
 
     The type is inferred from the fields present, matching the service: ``actor_profile`` makes a
-    scenario simulated, otherwise ``turns`` makes it predefined. Fields the SDK does not know are ignored.
+    scenario simulated, ``turns`` makes it predefined, and a bare ``input`` is a single-turn predefined
+    scenario. Fields the SDK does not know are ignored.
     """
     scenario_id = raw.get("scenario_id", "?")
     # Datasets no longer declare a type, so this is the only guard against a mislabeled example
     # being run as the wrong kind of scenario.
     if "actor_profile" in raw and "turns" in raw:
         raise ValueError(f"Scenario '{scenario_id}' has both 'turns' and 'actor_profile'; a scenario must have one")
-    if "actor_profile" not in raw and "turns" not in raw:
-        raise ValueError(f"Scenario '{scenario_id}' has neither 'turns' nor 'actor_profile'")
-    if "turns" in raw:
+    if not any(k in raw for k in ("turns", "actor_profile", "input")):
+        raise ValueError(f"Scenario '{scenario_id}' has none of 'turns', 'actor_profile' or 'input'")
+    if "actor_profile" not in raw:
+        turns = raw.get("turns", [{"input": raw.get("input")}])
         return PredefinedScenario(
             scenario_id=raw["scenario_id"],
-            turns=[Turn(input=t["input"], expected_response=t.get("expected_response")) for t in raw["turns"]],
+            turns=[Turn(input=t["input"], expected_response=t.get("expected_response")) for t in turns],
             expected_trajectory=raw.get("expected_trajectory"),
             assertions=raw.get("assertions"),
             metadata=raw.get("metadata"),
