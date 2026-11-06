@@ -469,7 +469,7 @@ USER_ID=<user-id>
 PAYMENT_INSTRUMENT_ID=<instrument-id>
 PAYMENT_SESSION_ID=<session-id>
 AWS_REGION=us-west-2
-MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
+MODEL_ID=global.anthropic.claude-sonnet-4-6
 ```
 
 **Agent Code:**
@@ -489,7 +489,7 @@ from bedrock_agentcore.payments.integrations.strands import (
     AgentCorePaymentsPluginConfig,
 )
 
-MODEL_ID              = os.environ.get("MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+MODEL_ID              = os.environ.get("MODEL_ID", "global.anthropic.claude-sonnet-4-6")
 PAYMENT_MANAGER_ARN   = os.environ["PAYMENT_MANAGER_ARN"]
 USER_ID               = os.environ["USER_ID"]
 PAYMENT_INSTRUMENT_ID = os.environ["PAYMENT_INSTRUMENT_ID"]
@@ -546,7 +546,7 @@ USER_ID=<user-id>
 PAYMENT_INSTRUMENT_ID=<instrument-id>
 PAYMENT_SESSION_ID=<session-id>
 AWS_REGION=us-west-2
-MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
+MODEL_ID=global.anthropic.claude-sonnet-4-6
 ```
 
 **Agent Code:**
@@ -571,7 +571,7 @@ GATEWAY_URL           = os.environ["GATEWAY_URL"]
 CLIENT_ID             = os.environ["CLIENT_ID"]
 CLIENT_SECRET         = os.environ["CLIENT_SECRET"]
 TOKEN_URL             = os.environ["TOKEN_URL"]
-MODEL_ID              = os.environ.get("MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+MODEL_ID              = os.environ.get("MODEL_ID", "global.anthropic.claude-sonnet-4-6")
 PAYMENT_MANAGER_ARN   = os.environ["PAYMENT_MANAGER_ARN"]
 USER_ID               = os.environ["USER_ID"]
 PAYMENT_INSTRUMENT_ID = os.environ["PAYMENT_INSTRUMENT_ID"]
