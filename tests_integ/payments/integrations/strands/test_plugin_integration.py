@@ -13,7 +13,6 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 from strands import Agent
-from strands_tools import http_request
 
 from bedrock_agentcore.payments.integrations.config import AgentCorePaymentsPluginConfig
 from bedrock_agentcore.payments.integrations.handlers import get_payment_handler
@@ -214,7 +213,7 @@ class TestAgentCorePaymentsPlugin:
             "You are a helpful assistant. If you encounter 405, change the http "
             "method and try again. Print the tool input/output."
         )
-        agent = Agent(system_prompt=SYSTME_PROMPT, tools=[http_request], plugins=[plugin])
+        agent = Agent(system_prompt=SYSTME_PROMPT, plugins=[plugin])
 
         # Use the wrapper method to handle payment interrupts
         result = self.invoke_agent_with_payment_handling(
