@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.25.4] - 2026-11-06
+
+### Other Changes
+- fix(memory): preserve guardrail redactions (#735) (1da7aab)
+
+## [1.25.3] - 2026-11-03
+
+### Other Changes
+- revert(runtime): flush tracing spans after invocations (#721) (#731) (62c3c73)
+
+## [1.25.2] - 2026-10-30
+
+### Other Changes
+- feat(runtime): add session endpoint client and local endpoint (#724) (f885dc8)
+- fix(a2a): run follow-up task messages in their own request contextvars (#693) (dcca518)
+- fix(runtime): flush tracing spans after invocations (#721) (343da26)
+- fix(memory): encode bytes in OpenAI converter reasoning blocks (#718) (a6baec6)
+
 ## [1.25.1] - 2026-10-27
 
 ### Other Changes

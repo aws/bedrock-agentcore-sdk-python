@@ -27,6 +27,7 @@ from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 
 from bedrock_agentcore._utils.endpoints import _validate_endpoint_url, get_gateway_mcp_endpoint
+from bedrock_agentcore._utils.sse import iter_sse_data
 from bedrock_agentcore._utils.user_agent import SDK_VERSION, build_user_agent_suffix
 
 logger = logging.getLogger(__name__)
@@ -521,34 +522,13 @@ def _iter_sse_messages(text: str) -> Iterator[Dict[str, Any]]:
     the SSE specification requires, so a message split across lines is decoded rather
     than dropped. A blank line ends an event.
     """
-    buffer: List[str] = []
-
-    def flush() -> Optional[Dict[str, Any]]:
-        if not buffer:
-            return None
-        joined = "\n".join(buffer)
-        buffer.clear()
+    for data in iter_sse_data([text]):
         try:
-            message = json.loads(joined)
+            message = json.loads(data)
         except json.JSONDecodeError:
-            return None
-        return message if isinstance(message, dict) else None
-
-    for line in text.splitlines():
-        if line.startswith("data:"):
-            value = line[len("data:") :]
-            buffer.append(value[1:] if value.startswith(" ") else value)
             continue
-        if line.strip():
-            # Any other SSE field (event:, id:, retry:) or a comment line.
-            continue
-        message = flush()
-        if message is not None:
+        if isinstance(message, dict):
             yield message
-
-    message = flush()
-    if message is not None:
-        yield message
 
 
 class WebSearchClient:

@@ -4,6 +4,7 @@ import functools
 import logging
 import os
 import re
+from typing import Tuple
 from urllib.parse import urlparse
 
 from botocore.exceptions import UnknownRegionError
@@ -123,12 +124,34 @@ def _validate_endpoint_url(url: str) -> str:
     Raises:
         InvalidRegionError: If the URL hostname does not end with an AWS domain.
     """
-    parsed = urlparse(url)
-    hostname = parsed.hostname or ""
-    _AWS_DOMAINS = (".amazonaws.com", ".amazonaws.com.cn", ".api.aws")
-    if not any(hostname.endswith(d) for d in _AWS_DOMAINS):
-        raise InvalidRegionError(f"Constructed endpoint resolves to non-AWS host: {hostname!r}")
+    validate_aws_hostname(url)
     return url
+
+
+#: Domains of AWS service endpoints.
+AWS_ENDPOINT_DOMAINS = (".amazonaws.com", ".amazonaws.com.cn", ".api.aws")
+
+#: Domains that runtime session endpoint URLs use, in addition to the service domains.
+SESSION_ENDPOINT_DOMAINS = AWS_ENDPOINT_DOMAINS + (".on.aws",)
+
+
+def validate_aws_hostname(url: str, domains: Tuple[str, ...] = AWS_ENDPOINT_DOMAINS) -> str:
+    """Return the hostname of ``url`` if it ends with one of ``domains``.
+
+    Args:
+        url: The URL to check.
+        domains: Accepted hostname suffixes. Defaults to the AWS service endpoint domains.
+
+    Returns:
+        The URL's hostname.
+
+    Raises:
+        InvalidRegionError: If the hostname does not end with an accepted domain.
+    """
+    hostname = urlparse(url).hostname or ""
+    if not any(hostname.endswith(d) for d in domains):
+        raise InvalidRegionError(f"Constructed endpoint resolves to non-AWS host: {hostname!r}")
+    return hostname
 
 
 def get_data_plane_endpoint(region: str = DEFAULT_REGION) -> str:
