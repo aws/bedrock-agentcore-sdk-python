@@ -118,6 +118,8 @@ MPP_DEFAULT_VERSION = "1"
 # The `Payment` auth-scheme name used in `WWW-Authenticate` / `Authorization` headers.
 MPP_AUTH_SCHEME = "Payment"
 
+MPP_PAYMENT_AUTHORIZATION_HEADER = "Payment-Authorization"
+
 # Only the `charge` intent is implemented. Challenges advertising `session` or
 # `subscription` are filtered out during selection.
 MPP_SUPPORTED_INTENT = "charge"
