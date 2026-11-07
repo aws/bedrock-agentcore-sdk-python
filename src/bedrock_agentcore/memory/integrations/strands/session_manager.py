@@ -872,16 +872,12 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             agent: Agent to append the message to
             **kwargs: Additional keyword arguments for future extensibility.
         """
-        with self._held_lock:
-            self._hold_or_write(message, agent)
-
-    def _hold_or_write(self, message: Message, agent: "LocalAgent") -> None:
         ready = _bidi_status(message) != "pending"
-        if ready and not self._held_messages:
-            self._write_message(message, agent)
-            return
-        self._held_messages.append(_HeldMessage(message, agent, ready))
-        self._write_ready_messages()
+        with self._held_lock:
+            if ready and not self._held_messages:
+                self._write_message(message, agent)
+            else:
+                self._held_messages.append(_HeldMessage(message, agent, ready))
 
     def _write_message(self, message: Message, agent: "LocalAgent") -> None:
         created_message = self.create_message(
@@ -906,6 +902,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 None,
             )
             if index is None:
+                logger.debug("tracking_id=<%s> | no waiting message for transcript update, ignoring", event.tracking_id)
                 return
             if status == "complete":
                 self._held_messages[index] = _HeldMessage(event.message, event.agent, True)
@@ -931,6 +928,13 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         with self._held_lock:
             self._held_messages = deque(held for held in self._held_messages if held.ready)
             self._write_ready_messages()
+
+    def _release_and_flush(self) -> None:
+        try:
+            self._release_held_messages()
+        finally:
+            if self.config.batch_size > 1:
+                self._flush_messages()
 
     def retrieve_customer_context(self, event: MessageAddedEvent) -> None:
         """Retrieve customer LTM context for regular Agent invocations.
@@ -1036,12 +1040,11 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
             if self.config.batch_size > 1:
                 # Completion callbacks run in reverse order, so register flushes before state syncs.
                 registry.add_callback(AfterInvocationEvent, lambda event: self._flush_messages())
-                registry.add_callback(BidiAgentStopEvent, lambda event: self._flush_messages())
+            registry.add_callback(BidiAgentStopEvent, lambda event: self._release_and_flush())
 
             RepositorySessionManager.register_hooks(self, registry, **kwargs)
             registry.add_callback(MessageAddedEvent, lambda event: self.retrieve_customer_context(event))
             registry.add_callback(MessageUpdatedEvent, self._complete_message)
-            registry.add_callback(BidiAgentStopEvent, lambda event: self._release_held_messages())
             return
 
         # Async mode: register async callbacks that offload the existing sync
@@ -1068,7 +1071,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         if self.config.batch_size > 1:
             # Completion callbacks run in reverse order, so register flushes before state syncs.
             registry.add_callback(AfterInvocationEvent, _offload(self._flush_messages))
-            registry.add_callback(BidiAgentStopEvent, _offload(self._flush_messages))
+        registry.add_callback(BidiAgentStopEvent, _offload(self._release_and_flush))
 
         registry.add_callback(AgentInitializedEvent, lambda event: self.initialize(event.agent))
 
@@ -1087,7 +1090,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         registry.add_callback(AfterMultiAgentInvocationEvent, _offload(self.sync_multi_agent, lambda e: e.source))
 
         registry.add_callback(BidiAgentStopEvent, _offload(self.sync_agent, lambda e: e.agent))
-        registry.add_callback(BidiAgentStopEvent, _offload(self._release_held_messages))
 
     @override
     def initialize(self, agent: "LocalAgent", **kwargs: Any) -> None:

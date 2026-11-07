@@ -3336,6 +3336,29 @@ class TestBidiTranscripts:
             ("ASSISTANT", {"text": "Yes, two rooms."}),
         ]
 
+    async def test_incomplete_transcript_in_middle_is_skipped(self, bidi_manager, mock_memory_client):
+        manager, registry, agent = bidi_manager
+        question = _bidi_message("user", "Any rooms in London?", "complete")
+        cut_off = _bidi_message("assistant", "[Transcript unavailable.]", "incomplete")
+        follow_up = {"role": "user", "content": [{"text": "Book one."}]}
+
+        await registry.invoke_callbacks_async(
+            MessageAddedEvent(agent=agent, message=_bidi_message("user", None, "pending"))
+        )
+        await registry.invoke_callbacks_async(
+            MessageAddedEvent(agent=agent, message=_bidi_message("assistant", None, "pending"))
+        )
+        await registry.invoke_callbacks_async(MessageAddedEvent(agent=agent, message=follow_up))
+        await registry.invoke_callbacks_async(MessageUpdatedEvent(agent, cut_off["tracking_id"], cut_off))
+        mock_memory_client.create_event.assert_not_called()
+        await registry.invoke_callbacks_async(MessageUpdatedEvent(agent, question["tracking_id"], question))
+
+        assert _stored_texts(mock_memory_client) == [
+            ("USER", {"text": "Any rooms in London?"}),
+            ("USER", {"text": "Book one."}),
+        ]
+        assert not manager._held_messages
+
     async def test_close_writes_and_flushes_after_failed_held_write(self, bidi_manager, mock_memory_client):
         manager, registry, agent = bidi_manager
         reply = _bidi_message("assistant", "Yes, two rooms.", "complete")
@@ -3357,6 +3380,36 @@ class TestBidiTranscripts:
         ]
         assert not manager._held_messages
         manager._flush_messages.assert_called_once()
+
+
+@pytest.mark.parametrize("async_mode", [False, True])
+async def test_stop_syncs_and_flushes_after_failed_held_write(agentcore_config, mock_memory_client, async_mode):
+    agentcore_config.async_mode = async_mode
+    agentcore_config.batch_size = 10
+    manager = _create_session_manager(agentcore_config, mock_memory_client)
+    manager._latest_agent_message = {}
+    manager.sync_agent = Mock()
+    registry = HookRegistry()
+    manager.register_hooks(registry)
+    agent = Mock(spec=BidiAgent, agent_id="test-agent")
+    reply = _bidi_message("assistant", "Yes, two rooms.", "complete")
+    follow_up = {"role": "user", "content": [{"text": "Book one."}]}
+
+    await registry.invoke_callbacks_async(
+        MessageAddedEvent(agent=agent, message=_bidi_message("user", None, "pending"))
+    )
+    await registry.invoke_callbacks_async(MessageAddedEvent(agent=agent, message=reply))
+    await registry.invoke_callbacks_async(MessageAddedEvent(agent=agent, message=follow_up))
+    manager.sync_agent.reset_mock()
+    manager.create_message = Mock(side_effect=[SessionException("write failed"), {"eventId": "e1"}])
+    manager._flush_messages = Mock()
+    with pytest.raises(SessionException):
+        await registry.invoke_callbacks_async(BidiAgentStopEvent(agent=agent))
+
+    manager.sync_agent.assert_called_once_with(agent)
+    assert manager.create_message.call_count == 2
+    manager._flush_messages.assert_called_once()
+    assert not manager._held_messages
 
 
 class TestIntervalFlush:
