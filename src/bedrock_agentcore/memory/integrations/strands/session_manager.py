@@ -185,6 +185,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self._agent_state_lock = threading.Lock()
 
         self._held_messages: list[_HeldMessage] = []
+        self._completed_tracking_ids: set[str] = set()
         self._held_lock = threading.Lock()
 
         # Cache for agent created_at timestamps to avoid fetching on every update
@@ -879,6 +880,9 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
     def _hold_or_write(self, message: Message, agent: "LocalAgent") -> None:
         ready = _bidi_status(message) != "pending"
+        tracking_id = message.get("tracking_id")
+        if ready and tracking_id:
+            self._completed_tracking_ids.add(tracking_id)
         if ready and not self._held_messages:
             self._write_message(message, agent)
             return
@@ -908,19 +912,29 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 None,
             )
             if index is None:
-                if status == "complete":
+                if status == "complete" and event.tracking_id not in self._completed_tracking_ids:
                     self._hold_or_write(event.message, event.agent)
                 return
             if status == "complete":
+                self._completed_tracking_ids.add(event.tracking_id)
                 self._held_messages[index] = _HeldMessage(event.message, event.agent, True)
             elif status == "incomplete":
                 del self._held_messages[index]
             self._write_ready_messages()
 
     def _write_ready_messages(self) -> None:
+        first_error: Optional[Exception] = None
         while self._held_messages and self._held_messages[0].ready:
             held = self._held_messages.pop(0)
-            self._write_message(held.message, held.agent)
+            try:
+                self._write_message(held.message, held.agent)
+            except Exception as error:
+                if first_error is not None:
+                    logger.error("Failed to write held message: %s", error)
+                else:
+                    first_error = error
+        if first_error is not None:
+            raise first_error
 
     def _release_held_messages(self) -> None:
         with self._held_lock:
@@ -1345,8 +1359,10 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         manager protocol (with statement) for automatic cleanup.
         """
         self._stop_flush_timer()
-        self._release_held_messages()
-        self._flush_messages()
+        try:
+            self._release_held_messages()
+        finally:
+            self._flush_messages()
 
     def __enter__(self) -> "AgentCoreMemorySessionManager":
         """Enter the context manager.

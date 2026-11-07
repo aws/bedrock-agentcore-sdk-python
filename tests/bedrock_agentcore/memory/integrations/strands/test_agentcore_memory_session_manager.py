@@ -3303,6 +3303,42 @@ class TestBidiTranscripts:
 
         assert _stored_texts(mock_memory_client) == [("ASSISTANT", {"text": "Restored reply."})]
 
+    @pytest.mark.parametrize("placeholder", [False, True], ids=["orphan", "placeholder"])
+    async def test_repeated_complete_is_stored_once(self, bidi_manager, mock_memory_client, placeholder):
+        manager, registry, agent = bidi_manager
+        final = _bidi_message("assistant", "Yes, two rooms.", "complete")
+        if placeholder:
+            await registry.invoke_callbacks_async(
+                MessageAddedEvent(agent=agent, message=_bidi_message("assistant", None, "pending"))
+            )
+
+        await registry.invoke_callbacks_async(MessageUpdatedEvent(agent, final["tracking_id"], final))
+        await registry.invoke_callbacks_async(MessageUpdatedEvent(agent, final["tracking_id"], final))
+
+        assert _stored_texts(mock_memory_client) == [("ASSISTANT", {"text": "Yes, two rooms."})]
+
+    async def test_close_writes_and_flushes_after_failed_held_write(self, bidi_manager, mock_memory_client):
+        manager, registry, agent = bidi_manager
+        reply = _bidi_message("assistant", "Yes, two rooms.", "complete")
+        follow_up = {"role": "user", "content": [{"text": "Book one."}]}
+        mock_memory_client.create_event.side_effect = [ClientError({"Error": {"Code": "500"}}, "CreateEvent"), {}]
+        manager._flush_messages = Mock(wraps=manager._flush_messages)
+
+        await registry.invoke_callbacks_async(
+            MessageAddedEvent(agent=agent, message=_bidi_message("user", None, "pending"))
+        )
+        await registry.invoke_callbacks_async(MessageAddedEvent(agent=agent, message=reply))
+        await registry.invoke_callbacks_async(MessageAddedEvent(agent=agent, message=follow_up))
+        with pytest.raises(SessionException):
+            manager.close()
+
+        assert _stored_texts(mock_memory_client) == [
+            ("ASSISTANT", {"text": "Yes, two rooms."}),
+            ("USER", {"text": "Book one."}),
+        ]
+        assert manager._held_messages == []
+        manager._flush_messages.assert_called_once()
+
 
 class TestIntervalFlush:
     """Test interval-based flush mechanism for long-running agents."""
