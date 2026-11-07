@@ -27,6 +27,9 @@ from .mpp import (
 
 logger = logging.getLogger(__name__)
 
+_PAYMENT_REQUIRED_FIELDS = frozenset({"statusCode", "headers", "body"})
+_X402_PAYLOAD_REQUIRED_FIELDS = frozenset({"x402Version", "accepts"})
+
 
 class PaymentError(Exception):
     """Base exception for payment operations."""
@@ -1454,8 +1457,7 @@ class PaymentManager:
             )
 
         # Validate required fields in payment_required_request
-        required_fields = {"statusCode", "headers", "body"}
-        if not all(field in payment_required_request for field in required_fields):
+        if not all(field in payment_required_request for field in _PAYMENT_REQUIRED_FIELDS):
             raise PaymentError(
                 "Input Validation: 402 payment required request is missing required fields - "
                 "402 payment required request must contain statusCode, headers, and body"
@@ -1553,12 +1555,11 @@ class PaymentManager:
                     ) from ve
 
             # Validate required fields
-            required_fields = {"x402Version", "accepts"}
-            missing_fields = required_fields - set(x402_payload.keys())
+            missing_fields = _X402_PAYLOAD_REQUIRED_FIELDS - set(x402_payload.keys())
             if missing_fields:
                 raise PaymentError(
                     f"X.402 Validation: Missing required fields - "
-                    f"x402Payload must contain {', '.join(sorted(required_fields))}, "
+                    f"x402Payload must contain {', '.join(sorted(_X402_PAYLOAD_REQUIRED_FIELDS))}, "
                     f"but missing: {', '.join(sorted(missing_fields))}"
                 )
 
