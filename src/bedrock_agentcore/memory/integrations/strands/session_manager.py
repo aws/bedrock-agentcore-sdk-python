@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import threading
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -184,8 +185,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
         self._agent_state_buffer: list[tuple[str, SessionAgent]] = []
         self._agent_state_lock = threading.Lock()
 
-        self._held_messages: list[_HeldMessage] = []
-        self._completed_tracking_ids: set[str] = set()
+        self._held_messages: deque[_HeldMessage] = deque()
         self._held_lock = threading.Lock()
 
         # Cache for agent created_at timestamps to avoid fetching on every update
@@ -864,9 +864,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def append_message(self, message: Message, agent: "LocalAgent", **kwargs: Any) -> None:
         """Append a message to the agent's session using AgentCore's eventId as message_id.
 
-        A BidiAgent message that is still being streamed is written when it completes, and
-        messages added after it wait for it, so memory keeps the order of the agent's history.
-
         With batching, hold this message through early flushes because Strands may
         still request redaction of its latest message.
 
@@ -880,9 +877,6 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
     def _hold_or_write(self, message: Message, agent: "LocalAgent") -> None:
         ready = _bidi_status(message) != "pending"
-        tracking_id = message.get("tracking_id")
-        if ready and tracking_id:
-            self._completed_tracking_ids.add(tracking_id)
         if ready and not self._held_messages:
             self._write_message(message, agent)
             return
@@ -912,11 +906,8 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
                 None,
             )
             if index is None:
-                if status == "complete" and event.tracking_id not in self._completed_tracking_ids:
-                    self._hold_or_write(event.message, event.agent)
                 return
             if status == "complete":
-                self._completed_tracking_ids.add(event.tracking_id)
                 self._held_messages[index] = _HeldMessage(event.message, event.agent, True)
             elif status == "incomplete":
                 del self._held_messages[index]
@@ -925,7 +916,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
     def _write_ready_messages(self) -> None:
         first_error: Optional[Exception] = None
         while self._held_messages and self._held_messages[0].ready:
-            held = self._held_messages.pop(0)
+            held = self._held_messages.popleft()
             try:
                 self._write_message(held.message, held.agent)
             except Exception as error:
@@ -938,7 +929,7 @@ class AgentCoreMemorySessionManager(RepositorySessionManager, SessionRepository)
 
     def _release_held_messages(self) -> None:
         with self._held_lock:
-            self._held_messages = [held for held in self._held_messages if held.ready]
+            self._held_messages = deque(held for held in self._held_messages if held.ready)
             self._write_ready_messages()
 
     def retrieve_customer_context(self, event: MessageAddedEvent) -> None:
