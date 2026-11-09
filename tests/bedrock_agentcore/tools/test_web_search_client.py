@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import urllib3
+from botocore.exceptions import ClientError
 
 from bedrock_agentcore._utils.endpoints import InvalidGatewayIdentifierError, InvalidRegionError
 from bedrock_agentcore.tools.web_search_client import (
@@ -19,6 +20,7 @@ from bedrock_agentcore.tools.web_search_client import (
     WebSearchResult,
     _build_arguments,
     _decode_jsonrpc,
+    _format_timestamp,
     _parse_gateway_arn,
     _parse_timestamp,
 )
@@ -905,8 +907,46 @@ class TestParseTimestamp:
     def test_naive_datetime_is_taken_as_utc(self):
         assert _parse_timestamp(datetime(2026, 1, 1)) == datetime(2026, 1, 1, tzinfo=timezone.utc)
 
+    def test_any_number_of_fractional_digits(self):
+        assert _parse_timestamp("2026-11-01T00:00:00.5Z") == datetime(2026, 11, 1, 0, 0, 0, 500000, tzinfo=timezone.utc)
+
+    def test_gateway_format_with_a_non_us_zone(self):
+        assert _parse_timestamp("12:30AM, Monday, January 05 2026, JST") == datetime(
+            2026, 1, 4, 15, 30, tzinfo=timezone.utc
+        )
+
+    def test_gateway_format_ignores_the_process_locale(self):
+        import locale
+
+        previous = locale.setlocale(locale.LC_TIME)
+        try:
+            locale.setlocale(locale.LC_TIME, "de_DE.UTF-8")
+        except locale.Error:
+            pytest.skip("de_DE.UTF-8 locale not installed")
+        try:
+            assert _parse_timestamp("05:00PM, Wednesday, October 28 2026, PDT") == datetime(
+                2026, 10, 29, 0, 0, tzinfo=timezone.utc
+            )
+        finally:
+            locale.setlocale(locale.LC_TIME, previous)
+
+    def test_format_keeps_fractional_seconds(self):
+        assert _format_timestamp(datetime(2026, 11, 1, 12, 0, 0, 900000, tzinfo=timezone.utc)) == (
+            "2026-11-01T12:00:00.900000Z"
+        )
+
     @pytest.mark.parametrize(
-        "value", [None, "", "unknown", "05:00PM, Wednesday, October 28 2026, XYZ", "not a date, PDT", 42]
+        "value",
+        [
+            None,
+            "",
+            "unknown",
+            "05:00PM, Wednesday, October 28 2026, XYZ",
+            "not a date, PDT",
+            "13:00PM, Wednesday, October 28 2026, PDT",
+            "05:00PM, Someday, October 28 2026, PDT",
+            42,
+        ],
     )
     def test_unparseable_values_become_none(self, value):
         assert _parse_timestamp(value) is None
@@ -1001,28 +1041,6 @@ class TestWebSearchApiBackend:
             ]
         }
 
-    def test_pre_release_model_with_query_field_is_followed(self):
-        boto_client = _api_client()
-        boto_client.meta.service_model.operation_model.return_value.input_shape.members = {
-            "webSearchId": 1,
-            "query": 1,
-            "maxResults": 1,
-            "filters": 1,
-        }
-        WebSearchApiBackend("us-east-1", client=boto_client).search({"query": "q"})
-
-        boto_client.invoke_web_search.assert_called_once_with(webSearchId=DEFAULT_WEB_SEARCH_ID, query="q")
-
-    def test_released_model_with_search_query_field_is_followed(self):
-        boto_client = _api_client()
-        boto_client.meta.service_model.operation_model.return_value.input_shape.members = {
-            "webSearchId": 1,
-            "searchQuery": 1,
-        }
-        WebSearchApiBackend("us-east-1", client=boto_client).search({"query": "q"})
-
-        assert boto_client.invoke_web_search.call_args.kwargs["searchQuery"] == "q"
-
     def test_date_bounds_with_an_offset_are_sent_as_utc(self):
         boto_client = _api_client()
         WebSearchApiBackend("us-east-1", client=boto_client).search(
@@ -1033,16 +1051,47 @@ class TestWebSearchApiBackend:
             "publishedDateFilter": {"publishedAfter": "2026-01-01T00:00:00Z"}
         }
 
-    def test_client_error_becomes_a_web_search_error(self):
+    def test_client_error_is_not_wrapped(self):
         boto_client = _api_client()
-        boto_client.invoke_web_search.side_effect = RuntimeError("AccessDeniedException")
+        error = ClientError({"Error": {"Code": "ThrottlingException", "Message": "slow down"}}, "InvokeWebSearch")
+        boto_client.invoke_web_search.side_effect = error
 
-        with pytest.raises(WebSearchError, match="AccessDeniedException"):
+        with pytest.raises(ClientError) as raised:
             WebSearchApiBackend("us-east-1", client=boto_client).search({"query": "q"})
+        assert raised.value is error
 
-    def test_boto3_without_the_operation_says_to_upgrade(self):
-        with pytest.raises(WebSearchError, match="Upgrade boto3"):
-            WebSearchApiBackend("us-east-1", client=object()).search({"query": "q"})
+    def test_date_only_upper_bound_covers_that_whole_day(self):
+        boto_client = _api_client()
+        WebSearchApiBackend("us-east-1", client=boto_client).search(
+            {"query": "q", "filters": {"publishedDateFilter": {"from": "2026-11-01", "to": "2026-11-01"}}}
+        )
+
+        assert boto_client.invoke_web_search.call_args.kwargs["filters"] == {
+            "publishedDateFilter": {"publishedAfter": "2026-11-01T00:00:00Z", "publishedBefore": "2026-11-02T00:00:00Z"}
+        }
+
+    def test_fractional_seconds_are_kept(self):
+        boto_client = _api_client()
+        WebSearchApiBackend("us-east-1", client=boto_client).search(
+            {"query": "q", "filters": {"publishedDateFilter": {"from": "2026-11-01T12:00:00.900Z"}}}
+        )
+
+        assert boto_client.invoke_web_search.call_args.kwargs["filters"] == {
+            "publishedDateFilter": {"publishedAfter": "2026-11-01T12:00:00.900000Z"}
+        }
+
+    def test_timeout_reaches_the_boto3_client(self):
+        session = MagicMock()
+        WebSearchApiBackend("us-east-1", boto3_session=session, timeout=5)
+
+        config = session.client.call_args.kwargs["config"]
+        assert (config.connect_timeout, config.read_timeout) == (5, 5)
+
+    def test_client_timeout_is_passed_to_the_api_backend(self):
+        session = MagicMock()
+        WebSearchClient(region="us-east-1", boto3_session=session, timeout=7)
+
+        assert session.client.call_args.kwargs["config"].read_timeout == 7
 
     def test_builds_a_client_with_the_sdk_user_agent(self):
         session = MagicMock()
@@ -1159,3 +1208,48 @@ class TestFixedFilters:
             WebSearchClient(
                 region="us-east-1", backend=_RecordingBackend(), exclude_domains=[f"d{i}.example" for i in range(101)]
             )
+
+    def test_a_subdomain_of_a_fixed_include_is_kept(self):
+        backend = _RecordingBackend()
+        client = WebSearchClient(region="us-east-1", backend=backend, include_domains=["example.com"])
+
+        client.search("q", include_domains=["docs.example.com", "Example.com", "notexample.com"])
+
+        assert backend.arguments["filters"]["domainFilter"]["include"] == ["docs.example.com", "Example.com"]
+
+    def test_bad_input_raises_even_when_nothing_is_allowed(self):
+        client = WebSearchClient(region="us-east-1", backend=_RecordingBackend(), include_domains=["a.example"])
+
+        with pytest.raises(ValueError, match="non-empty"):
+            client.search("", include_domains=["other.com"])
+        with pytest.raises(ValueError, match="max_results"):
+            client.search("q", include_domains=["other.com"], max_results=0)
+
+    def test_combined_exclude_limit_names_the_client_list(self):
+        client = WebSearchClient(
+            region="us-east-1", backend=_RecordingBackend(), exclude_domains=[f"f{i}.example" for i in range(90)]
+        )
+
+        with pytest.raises(ValueError, match="90 set on the client plus 20 from this call is 110"):
+            client.search("q", exclude_domains=[f"c{i}.example" for i in range(20)])
+
+    def test_excludes_are_deduplicated_ignoring_case(self):
+        backend = _RecordingBackend()
+        client = WebSearchClient(region="us-east-1", backend=backend, exclude_domains=["b.example"])
+
+        client.search("q", exclude_domains=["B.example", "c.example"])
+
+        assert backend.arguments["filters"]["domainFilter"]["exclude"] == ["b.example", "c.example"]
+
+    @pytest.mark.parametrize("argument", ["published_after", "published_before"])
+    def test_unparseable_fixed_bound_is_rejected(self, argument):
+        with pytest.raises(ValueError, match=argument):
+            WebSearchClient(region="us-east-1", backend=_RecordingBackend(), **{argument: "yesterday"})
+
+    def test_fixed_bound_with_short_fraction_still_narrows(self):
+        backend = _RecordingBackend()
+        client = WebSearchClient(region="us-east-1", backend=backend, published_after="2026-11-01T00:00:00.5Z")
+
+        client.search("q", published_after="2026-11-02T00:00:00Z")
+
+        assert backend.arguments["filters"]["publishedDateFilter"] == {"from": "2026-11-02T00:00:00Z"}

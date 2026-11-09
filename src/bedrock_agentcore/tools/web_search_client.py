@@ -19,6 +19,7 @@ target instead. The transport lives behind :class:`WebSearchBackend`, so the sam
 
 import json
 import logging
+import re
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -76,7 +77,44 @@ _ZONE_OFFSETS = {
     "CST": -6,
     "EDT": -4,
     "EST": -5,
+    "BST": 1,
+    "CET": 1,
+    "CEST": 2,
+    "JST": 9,
+    "KST": 9,
+    "AEST": 10,
+    "AEDT": 11,
 }
+
+#: English names in the gateway connector's dates, parsed without the process locale.
+_MONTHS = {
+    name: number
+    for number, name in enumerate(
+        (
+            "january",
+            "february",
+            "march",
+            "april",
+            "may",
+            "june",
+            "july",
+            "august",
+            "september",
+            "october",
+            "november",
+            "december",
+        ),
+        start=1,
+    )
+}
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+_GATEWAY_DATE = re.compile(
+    r"(?P<hour>\d{1,2}):(?P<minute>\d{2})\s*(?P<half>AM|PM),\s*(?P<weekday>[A-Za-z]+),\s*"
+    r"(?P<month>[A-Za-z]+)\s+(?P<day>\d{1,2})\s+(?P<year>\d{4})",
+    re.IGNORECASE,
+)
+_DATE_ONLY = re.compile(r"\d{4}-\d{2}-\d{2}")
+_FRACTION = re.compile(r"(T\d{2}:\d{2}:\d{2})\.(\d+)")
 
 _MCP_PROTOCOL_VERSION = "2025-06-18"
 _DEFAULT_TIMEOUT = 30
@@ -126,34 +164,56 @@ class WebSearchResult:
         )
 
 
+def _as_aware_utc(value: datetime) -> datetime:
+    """Convert to UTC, taking a naive datetime as already UTC."""
+    return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _parse_iso(text: str) -> Optional[datetime]:
+    """Parse ISO 8601, including a ``Z`` suffix and any number of fractional digits."""
+    text = _FRACTION.sub(lambda m: f"{m.group(1)}.{(m.group(2) + '000000')[:6]}", text)
+    try:
+        return datetime.fromisoformat(text[:-1] + "+00:00" if text.endswith("Z") else text)
+    except ValueError:
+        return None
+
+
+def _parse_gateway_date(text: str) -> Optional[datetime]:
+    """Parse the connector's form, "05:00PM, Tuesday, October 06 2026, PDT", in any locale."""
+    stamp, _, zone = text.rpartition(", ")
+    match = _GATEWAY_DATE.fullmatch(stamp.strip())
+    month = _MONTHS.get(match.group("month").lower()) if match else None
+    if not match or month is None or zone.upper() not in _ZONE_OFFSETS:
+        return None
+    if match.group("weekday").lower() not in _WEEKDAYS:
+        return None
+    hour = int(match.group("hour"))
+    if not 1 <= hour <= 12:
+        return None
+    hour = hour % 12 + (12 if match.group("half").upper() == "PM" else 0)
+    try:
+        local = datetime(int(match.group("year")), month, int(match.group("day")), hour, int(match.group("minute")))
+    except ValueError:
+        return None
+    return (local - timedelta(hours=_ZONE_OFFSETS[zone.upper()])).replace(tzinfo=timezone.utc)
+
+
 def _parse_timestamp(value: Any) -> Optional[datetime]:
     """Parse a date from either transport into an aware UTC datetime, or ``None``."""
     if isinstance(value, datetime):
-        return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return _as_aware_utc(value)
     if not isinstance(value, str) or not value.strip():
         return None
     text = value.strip()
-    try:
-        parsed = datetime.fromisoformat(text[:-1] + "+00:00" if text.endswith("Z") else text)
-    except ValueError:
-        parsed = None
+    parsed = _parse_iso(text)
     if parsed is not None:
-        return parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-    # The gateway connector's form: "05:00PM, Tuesday, October 06 2026, PDT".
-    stamp, _, zone = text.rpartition(", ")
-    if zone not in _ZONE_OFFSETS:
-        return None
-    try:
-        local = datetime.strptime(stamp, "%I:%M%p, %A, %B %d %Y")
-    except ValueError:
-        return None
-    return (local - timedelta(hours=_ZONE_OFFSETS[zone])).replace(tzinfo=timezone.utc)
+        return _as_aware_utc(parsed)
+    return _parse_gateway_date(text)
 
 
 def _format_timestamp(value: datetime) -> str:
-    """Format a datetime as ISO 8601 UTC with a ``Z`` suffix."""
-    utc = value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    return utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    """Format a datetime as ISO 8601 UTC with a ``Z`` suffix, keeping fractional seconds."""
+    return _as_aware_utc(value).isoformat().replace("+00:00", "Z")
 
 
 @dataclass(frozen=True)
@@ -565,6 +625,7 @@ class WebSearchApiBackend(WebSearchBackend):
         client: Optional[Any] = None,
         web_search_id: str = DEFAULT_WEB_SEARCH_ID,
         integration_source: Optional[str] = None,
+        timeout: float = _DEFAULT_TIMEOUT,
     ):
         """Initialize the backend.
 
@@ -575,6 +636,7 @@ class WebSearchApiBackend(WebSearchBackend):
             client: A ``bedrock-agentcore`` boto3 client to use as is, instead of building one.
             web_search_id: Identifier of the web search tool to invoke.
             integration_source: Optional framework identifier for the User-Agent.
+            timeout: Connect and read timeout in seconds for the client this backend builds.
         """
         self._web_search_id = web_search_id
         if client is None:
@@ -585,17 +647,26 @@ class WebSearchApiBackend(WebSearchBackend):
             # code interpreter clients.
             kwargs: Dict[str, Any] = {
                 "region_name": validate_region(region),
-                "config": Config(user_agent_extra=build_user_agent_suffix(integration_source)),
+                "config": Config(
+                    user_agent_extra=build_user_agent_suffix(integration_source),
+                    connect_timeout=timeout,
+                    read_timeout=timeout,
+                ),
             }
             if DP_ENDPOINT_OVERRIDE:
                 kwargs["endpoint_url"] = DP_ENDPOINT_OVERRIDE
             client = (boto3_session or boto3.Session()).client("bedrock-agentcore", **kwargs)
         self._client = client
-        self._query_field = _query_field(client)
 
     def search(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Run one search and return the decoded payload."""
-        request: Dict[str, Any] = {"webSearchId": self._web_search_id, self._query_field: arguments["query"]}
+        """Run one search and return the decoded payload.
+
+        Raises:
+            botocore.exceptions.ClientError: If the service rejects the call, for example
+                with ``ThrottlingException`` or ``AccessDeniedException``. It is not wrapped,
+                matching the browser and code interpreter clients.
+        """
+        request: Dict[str, Any] = {"webSearchId": self._web_search_id, "searchQuery": arguments["query"]}
         if "maxResults" in arguments:
             request["maxResults"] = arguments["maxResults"]
 
@@ -610,22 +681,13 @@ class WebSearchApiBackend(WebSearchBackend):
         if "from" in dates:
             published["publishedAfter"] = _as_utc(dates["from"])
         if "to" in dates:
-            published["publishedBefore"] = _as_utc(dates["to"])
+            published["publishedBefore"] = _exclusive_upper_bound(dates["to"])
         if published:
             filters["publishedDateFilter"] = published
         if filters:
             request["filters"] = filters
 
-        invoke = getattr(self._client, "invoke_web_search", None)
-        if invoke is None:
-            raise WebSearchError(
-                "This boto3 version has no bedrock-agentcore invoke_web_search operation. "
-                "Upgrade boto3 and botocore to a release that includes the Web Search API."
-            )
-        try:
-            response = invoke(**request)
-        except Exception as exc:
-            raise WebSearchError(f"Web search failed: {exc}") from exc
+        response = self._client.invoke_web_search(**request)
 
         results = []
         for item in response.get("results") or []:
@@ -638,23 +700,22 @@ class WebSearchApiBackend(WebSearchBackend):
         return {"results": results}
 
 
-def _query_field(client: Any) -> str:
-    """Name of the search text field in the client's InvokeWebSearch model.
-
-    The released API takes ``searchQuery``. Pre-release models named it ``query``, so the
-    field is read from the installed model rather than assumed.
-    """
-    try:
-        members = client.meta.service_model.operation_model("InvokeWebSearch").input_shape.members
-    except Exception:
-        return "searchQuery"
-    return "query" if "query" in members and "searchQuery" not in members else "searchQuery"
-
-
 def _as_utc(value: Any) -> Any:
     """Return a date bound as an ISO 8601 UTC string when it can be parsed, else unchanged."""
     parsed = _parse_timestamp(value)
     return _format_timestamp(parsed) if parsed is not None else value
+
+
+def _exclusive_upper_bound(value: Any) -> Any:
+    """Return ``published_before`` for the API, whose upper bound is exclusive.
+
+    A date-only bound means "through that day", as the gateway connector reads it, so it
+    becomes the start of the next day in UTC instead of the start of the same day.
+    """
+    if isinstance(value, str) and _DATE_ONLY.fullmatch(value.strip()):
+        next_day = datetime.fromisoformat(value.strip()).replace(tzinfo=timezone.utc) + timedelta(days=1)
+        return _format_timestamp(next_day)
+    return _as_utc(value)
 
 
 def _decode_jsonrpc(content_type: str, data: bytes, expected_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
@@ -801,8 +862,8 @@ class WebSearchClient:
                 ISO 8601 UTC.
 
         Raises:
-            ValueError: If more than one gateway is identified, or a filter list is longer
-                than the documented maximum.
+            ValueError: If more than one gateway is identified, a filter list is longer
+                than the documented maximum, or a date bound can't be parsed.
             InvalidGatewayIdentifierError: If ``gateway_id`` is not a gateway ID.
             InvalidRegionError: If the region is malformed, or a supplied
                 ``gateway_endpoint`` does not point at an AWS host.
@@ -811,8 +872,8 @@ class WebSearchClient:
         self._owns_backend = backend is None
         self._fixed_include = _checked_domains("include_domains", include_domains) if include_domains else None
         self._fixed_exclude = _checked_domains("exclude_domains", exclude_domains) if exclude_domains else None
-        self._fixed_after = published_after
-        self._fixed_before = published_before
+        self._fixed_after = _checked_bound("published_after", published_after)
+        self._fixed_before = _checked_bound("published_before", published_before)
 
         if backend is not None:
             if any(value is not None for value in (gateway_id, gateway_arn, gateway_endpoint)):
@@ -855,6 +916,7 @@ class WebSearchClient:
                 boto3_session=self._resolve_session(),
                 web_search_id=web_search_id,
                 integration_source=integration_source,
+                timeout=timeout,
             )
             return
 
@@ -924,26 +986,36 @@ class WebSearchClient:
             exclude_domains: Drop results from these domains. Up to 100.
             published_after: Earliest publication date, ISO-8601 UTC, inclusive.
                 Applies to web results only.
-            published_before: Latest publication date, ISO-8601 UTC, inclusive.
-                Applies to web results only.
+            published_before: Latest publication date, ISO-8601 UTC. Applies to web
+                results only. The Web Search API treats a date-time as exclusive, and a
+                date-only value such as ``2026-11-01`` as through the end of that day.
 
         Returns:
             The search results.
 
         Raises:
             ValueError: If the query, max_results or either domain list is outside the
-                documented limits.
-            WebSearchError: If the call fails or the response cannot be decoded.
+                documented limits, including an exclude list that goes over 100 once
+                combined with the client's own.
+            WebSearchError: If a gateway call fails or its response cannot be decoded.
+            botocore.exceptions.ClientError: If the Web Search API rejects the call.
         """
+        # Validate the caller's own arguments first, so bad input raises even when the
+        # fixed filters would leave nothing to search.
+        _build_arguments(
+            query=query, max_results=max_results, include_domains=include_domains, exclude_domains=exclude_domains
+        )
+        nothing_allowed = False
         if self._fixed_include and include_domains:
-            include_domains = [domain for domain in include_domains if domain in self._fixed_include]
-            if not include_domains:
-                # Nothing the caller asked for is allowed, so there's nothing to search.
-                return WebSearchResponse()
+            include_domains = [domain for domain in include_domains if _covered(domain, self._fixed_include)]
+            nothing_allowed = not include_domains
         else:
             include_domains = include_domains or self._fixed_include
         if self._fixed_exclude:
-            exclude_domains = list(dict.fromkeys([*self._fixed_exclude, *(exclude_domains or [])]))
+            exclude_domains = _combined_excludes(self._fixed_exclude, exclude_domains or [])
+        if nothing_allowed:
+            # None of the requested domains is inside the client's include list.
+            return WebSearchResponse()
         arguments = _build_arguments(
             query=query,
             max_results=max_results,
@@ -966,6 +1038,42 @@ class WebSearchClient:
     def __exit__(self, *exc_info: Any) -> None:
         """Close the client on exit."""
         self.close()
+
+
+def _checked_bound(argument: str, value: Optional[str]) -> Optional[str]:
+    """Return a fixed date bound, rejecting one that can't be parsed."""
+    if value is not None and _parse_timestamp(value) is None:
+        raise ValueError(f"{argument} must be an ISO 8601 date or date-time, got {value!r}")
+    return value
+
+
+def _covered(domain: str, allowed: Sequence[str]) -> bool:
+    """Whether a domain equals or is a subdomain of one in ``allowed``, ignoring case.
+
+    This matches the service, where a root domain also covers its subdomains.
+    """
+    name = domain.strip().lower().rstrip(".")
+    for root in allowed:
+        root = root.strip().lower().rstrip(".")
+        if name == root or name.endswith("." + root):
+            return True
+    return False
+
+
+def _combined_excludes(fixed: Sequence[str], requested: Sequence[str]) -> List[str]:
+    """Combine the client's and the call's exclude lists, within the API's limit."""
+    combined: List[str] = []
+    seen = set()
+    for domain in [*fixed, *requested]:
+        if domain.lower() not in seen:
+            seen.add(domain.lower())
+            combined.append(domain)
+    if len(combined) > MAX_DOMAIN_FILTER_ENTRIES:
+        raise ValueError(
+            f"exclude_domains accepts at most {MAX_DOMAIN_FILTER_ENTRIES} domains including the client's own: "
+            f"{len(fixed)} set on the client plus {len(combined) - len(fixed)} from this call is {len(combined)}"
+        )
+    return combined
 
 
 def _stricter(fixed: Optional[str], requested: Optional[str], *, later: bool) -> Optional[str]:

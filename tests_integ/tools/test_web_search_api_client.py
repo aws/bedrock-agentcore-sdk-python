@@ -1,8 +1,7 @@
 """Integration tests for WebSearchClient over the Web Search API (InvokeWebSearch).
 
 These tests call the real API with the default backend, so they need credentials allowed to
-call bedrock-agentcore:InvokeWebSearch, and a botocore release that includes the operation.
-They skip rather than fail when botocore predates the operation.
+call bedrock-agentcore:InvokeWebSearch.
 
 Run with:
     uv run pytest tests_integ/tools/test_web_search_api_client.py -xvs
@@ -16,7 +15,6 @@ import os
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
-import boto3
 import pytest
 
 from bedrock_agentcore.tools.web_search_client import WebSearchApiBackend, WebSearchClient
@@ -29,8 +27,6 @@ class TestWebSearchApiClient:
     @classmethod
     def setup_class(cls):
         cls.region = os.environ.get("BEDROCK_TEST_REGION", "us-east-1")
-        if not hasattr(boto3.client("bedrock-agentcore", region_name=cls.region), "invoke_web_search"):
-            pytest.skip("this botocore release has no invoke_web_search operation")
 
     def test_default_backend_is_the_api(self):
         with WebSearchClient(region=self.region) as client:
