@@ -681,7 +681,7 @@ class WebSearchApiBackend(WebSearchBackend):
         if "from" in dates:
             published["publishedAfter"] = _as_utc(dates["from"])
         if "to" in dates:
-            published["publishedBefore"] = _exclusive_upper_bound(dates["to"])
+            published["publishedBefore"] = _inclusive_upper_bound(dates["to"])
         if published:
             filters["publishedDateFilter"] = published
         if filters:
@@ -706,16 +706,23 @@ def _as_utc(value: Any) -> Any:
     return _format_timestamp(parsed) if parsed is not None else value
 
 
-def _exclusive_upper_bound(value: Any) -> Any:
-    """Return ``published_before`` for the API, whose upper bound is exclusive.
+def _end_of_day(value: Any) -> Optional[datetime]:
+    """For a date-only string, the last instant of that day in UTC, else ``None``."""
+    if isinstance(value, str) and _DATE_ONLY.fullmatch(value.strip()):
+        day = datetime.fromisoformat(value.strip()).replace(tzinfo=timezone.utc)
+        return day + timedelta(days=1) - timedelta(microseconds=1)
+    return None
+
+
+def _inclusive_upper_bound(value: Any) -> Any:
+    """Return ``published_before`` for the API, where both bounds are inclusive.
 
     A date-only bound means "through that day", as the gateway connector reads it, so it
-    becomes the start of the next day in UTC instead of the start of the same day.
+    becomes the last instant of that day in UTC. boto3 would otherwise send midnight at
+    the start of the day and drop the rest of it.
     """
-    if isinstance(value, str) and _DATE_ONLY.fullmatch(value.strip()):
-        next_day = datetime.fromisoformat(value.strip()).replace(tzinfo=timezone.utc) + timedelta(days=1)
-        return _format_timestamp(next_day)
-    return _as_utc(value)
+    end = _end_of_day(value)
+    return _format_timestamp(end) if end is not None else _as_utc(value)
 
 
 def _decode_jsonrpc(content_type: str, data: bytes, expected_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
@@ -980,15 +987,16 @@ class WebSearchClient:
 
         Args:
             query: What to search for. 200 characters or fewer.
-            max_results: How many results to return, 1 to 25. Service default is 10.
+            max_results: How many results to return, 1 to 25. If unset, the Web Search API
+                returns up to 25 and the gateway tool up to 10.
             include_domains: Restrict results to these domains. Up to 100. A root
                 domain matches its subdomains.
             exclude_domains: Drop results from these domains. Up to 100.
             published_after: Earliest publication date, ISO-8601 UTC, inclusive.
                 Applies to web results only.
             published_before: Latest publication date, ISO-8601 UTC. Applies to web
-                results only. The Web Search API treats a date-time as exclusive, and a
-                date-only value such as ``2026-11-01`` as through the end of that day.
+                results only. Inclusive. A date-only value such as ``2026-11-01`` covers
+                that whole day.
 
         Returns:
             The search results.
@@ -1080,7 +1088,12 @@ def _stricter(fixed: Optional[str], requested: Optional[str], *, later: bool) ->
     """Return whichever date bound is stricter, keeping ``fixed`` when they can't be compared."""
     if not fixed or not requested:
         return fixed or requested
-    fixed_at, requested_at = _parse_timestamp(fixed), _parse_timestamp(requested)
+    if later:
+        fixed_at, requested_at = _parse_timestamp(fixed), _parse_timestamp(requested)
+    else:
+        # A date-only upper bound covers that whole day, so compare it at the day's end.
+        fixed_at = _end_of_day(fixed) or _parse_timestamp(fixed)
+        requested_at = _end_of_day(requested) or _parse_timestamp(requested)
     if fixed_at is None or requested_at is None:
         return fixed
     if later:

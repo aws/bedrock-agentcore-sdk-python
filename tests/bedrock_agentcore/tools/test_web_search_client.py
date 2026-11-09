@@ -1067,7 +1067,10 @@ class TestWebSearchApiBackend:
         )
 
         assert boto_client.invoke_web_search.call_args.kwargs["filters"] == {
-            "publishedDateFilter": {"publishedAfter": "2026-11-01T00:00:00Z", "publishedBefore": "2026-11-02T00:00:00Z"}
+            "publishedDateFilter": {
+                "publishedAfter": "2026-11-01T00:00:00Z",
+                "publishedBefore": "2026-11-01T23:59:59.999999Z",
+            }
         }
 
     def test_fractional_seconds_are_kept(self):
@@ -1253,3 +1256,13 @@ class TestFixedFilters:
         client.search("q", published_after="2026-11-02T00:00:00Z")
 
         assert backend.arguments["filters"]["publishedDateFilter"] == {"from": "2026-11-02T00:00:00Z"}
+
+    def test_date_only_upper_bounds_compare_at_the_end_of_the_day(self):
+        backend = _RecordingBackend()
+        client = WebSearchClient(region="us-east-1", backend=backend, published_before="2026-11-01")
+
+        client.search("q", published_before="2026-11-01T12:00:00Z")
+        assert backend.arguments["filters"]["publishedDateFilter"] == {"to": "2026-11-01T12:00:00Z"}
+
+        client.search("q", published_before="2026-11-02")
+        assert backend.arguments["filters"]["publishedDateFilter"] == {"to": "2026-11-01"}
