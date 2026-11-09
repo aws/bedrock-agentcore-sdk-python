@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.25.4] - 2026-11-06
+
+### Other Changes
+- fix(memory): preserve guardrail redactions (#735) (1da7aab)
+
 ## [1.25.3] - 2026-11-03
 
 ### Other Changes
