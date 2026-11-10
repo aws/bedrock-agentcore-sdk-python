@@ -15,7 +15,7 @@ from typing import Any, List, Optional, Type
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
 
-from .dataset_types import Scenario, SimulatedScenario, SimulationConfig
+from .dataset_types import ActorProfile, Scenario, SimulatedScenario, SimulationConfig
 from .invoker_types import AgentInvokerFn, AgentInvokerInput
 from .prompts import render_template_file, render_template_string
 
@@ -152,7 +152,6 @@ class SimulatedScenarioExecutor(ScenarioExecutor):
 
         try:
             try:
-                from strands_evals.simulation.tools.goal_completion import get_conversation_goal_completion
                 from strands_evals.types.simulation import ActorProfile as StrandsActorProfile
             except ImportError as e:
                 raise ImportError(
@@ -166,7 +165,7 @@ class SimulatedScenarioExecutor(ScenarioExecutor):
                 actor_goal=scenario.actor_profile.goal,
             )
 
-            system_prompt = _render_system_prompt(sim_config, strands_profile, scenario.scenario_description)
+            system_prompt = _render_system_prompt(sim_config, scenario.actor_profile, scenario.scenario_description)
 
             input_type = sim_config.input_type if sim_config else None
             output_type = sim_config.output_type if sim_config else None
@@ -177,7 +176,6 @@ class SimulatedScenarioExecutor(ScenarioExecutor):
                 input_type=input_type,
                 model=sim_config.model_id if sim_config else None,
                 max_turns=scenario.max_turns,
-                tools=[get_conversation_goal_completion],
             )
 
             next_payload = _build_payload(scenario.input, sim_config)
@@ -389,7 +387,7 @@ def _make_response_model(input_type: Optional[Type[BaseModel]]) -> Type[BaseMode
 
 def _render_system_prompt(
     sim_config: Optional[SimulationConfig],
-    strands_profile: Any,
+    actor_profile: ActorProfile,
     scenario_description: str = "",
 ) -> str:
     """Render the actor system prompt from a Jinja2 template.
@@ -402,10 +400,14 @@ def _render_system_prompt(
     set) are injected as template variables. Structured input typing is enforced via
     the response model's tool-use schema rather than the system prompt.
     """
-    actor_profile_data = strands_profile.model_dump()
-
     if sim_config and sim_config.system_prompt_template:
-        kwargs: dict = {"actor_profile": actor_profile_data, "scenario_description": scenario_description}
+        # Custom templates keep the Strands ActorProfile field names they were written against.
+        strands_profile = {
+            "traits": actor_profile.traits,
+            "context": actor_profile.context,
+            "actor_goal": actor_profile.goal,
+        }
+        kwargs: dict = {"actor_profile": strands_profile, "scenario_description": scenario_description}
         if sim_config.output_type:
             kwargs["output_schema"] = json.dumps(sim_config.output_type.model_json_schema(), indent=2)
         return render_template_string(sim_config.system_prompt_template, **kwargs)
@@ -417,7 +419,8 @@ def _render_system_prompt(
     )
     return render_template_file(
         "structured_user_simulator.j2",
-        actor_profile=actor_profile_data,
+        # Compact JSON with the dataset's field names, as the service writes the profile into its prompt.
+        actor_profile=json.dumps(actor_profile.model_dump(), separators=(",", ":"), ensure_ascii=False),
         scenario_description=scenario_description,
         output_schema=output_schema,
     )
