@@ -177,6 +177,10 @@ class TestDatasetManagementServiceProvider:
                 "both 'turns' and 'actor_profile'",
             ),
             ({"scenario_id": "s1"}, "none of 'turns', 'actor_profile' or 'input'"),
+            (
+                {"scenario_id": "s1", "actorProfile": {"context": "c", "goal": "g"}, "input": "Hi", "max_turns": 3},
+                r"\['max_turns'\] but no 'actor_profile'",
+            ),
         ],
     )
     def test_ambiguous_example_raises(self, example, match):

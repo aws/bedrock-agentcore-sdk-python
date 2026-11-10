@@ -30,6 +30,11 @@ def _parse_scenario(raw: Dict[str, Any]) -> PredefinedScenario | SimulatedScenar
         raise ValueError(f"Scenario '{scenario_id}' has both 'turns' and 'actor_profile'; a scenario must have one")
     if not any(k in raw for k in ("turns", "actor_profile", "input")):
         raise ValueError(f"Scenario '{scenario_id}' has none of 'turns', 'actor_profile' or 'input'")
+    # An input-only row runs as a single turn, so a simulated row with a misspelled 'actor_profile'
+    # would silently become the wrong test; its simulated-only fields give the mistake away.
+    simulated_fields = [k for k in ("max_turns", "scenario_description") if k in raw]
+    if "turns" not in raw and "actor_profile" not in raw and simulated_fields:
+        raise ValueError(f"Scenario '{scenario_id}' has {simulated_fields} but no 'actor_profile'")
     if "actor_profile" not in raw:
         turns = raw.get("turns", [{"input": raw.get("input")}])
         return PredefinedScenario(

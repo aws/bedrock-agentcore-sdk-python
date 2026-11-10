@@ -159,11 +159,7 @@ class SimulatedScenarioExecutor(ScenarioExecutor):
                     "Install it with: pip install 'bedrock-agentcore[simulation]'"
                 ) from e
 
-            strands_profile = StrandsActorProfile(
-                traits=scenario.actor_profile.traits,
-                context=scenario.actor_profile.context,
-                actor_goal=scenario.actor_profile.goal,
-            )
+            strands_profile = StrandsActorProfile(**_strands_profile_fields(scenario.actor_profile))
 
             system_prompt = _render_system_prompt(sim_config, scenario.actor_profile, scenario.scenario_description)
 
@@ -385,6 +381,11 @@ def _make_response_model(input_type: Optional[Type[BaseModel]]) -> Type[BaseMode
     )
 
 
+def _strands_profile_fields(actor_profile: ActorProfile) -> dict:
+    """Map the dataset ActorProfile onto the Strands ActorProfile field names."""
+    return {"traits": actor_profile.traits, "context": actor_profile.context, "actor_goal": actor_profile.goal}
+
+
 def _render_system_prompt(
     sim_config: Optional[SimulationConfig],
     actor_profile: ActorProfile,
@@ -402,12 +403,10 @@ def _render_system_prompt(
     """
     if sim_config and sim_config.system_prompt_template:
         # Custom templates keep the Strands ActorProfile field names they were written against.
-        strands_profile = {
-            "traits": actor_profile.traits,
-            "context": actor_profile.context,
-            "actor_goal": actor_profile.goal,
+        kwargs: dict = {
+            "actor_profile": _strands_profile_fields(actor_profile),
+            "scenario_description": scenario_description,
         }
-        kwargs: dict = {"actor_profile": strands_profile, "scenario_description": scenario_description}
         if sim_config.output_type:
             kwargs["output_schema"] = json.dumps(sim_config.output_type.model_json_schema(), indent=2)
         return render_template_string(sim_config.system_prompt_template, **kwargs)
