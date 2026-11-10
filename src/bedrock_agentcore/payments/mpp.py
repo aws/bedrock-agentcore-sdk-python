@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional
 from .constants import (
     MPP_AUTH_SCHEME,
     MPP_METHOD_BLOCKCHAIN,
+    MPP_PAYMENT_AUTHORIZATION_HEADER,
     MPP_SOLANA_DEFAULT_NETWORK,
     MPP_SOLANA_NETWORK_ALIASES,
     MPP_SUPPORTED_INTENT,
@@ -311,6 +312,9 @@ def _is_valid_challenge(challenge: Dict[str, Any]) -> bool:
 
     method = challenge["method"]
     if not method.isascii() or not method.isalpha() or method.lower() != method:
+        return False
+
+    if "header" in challenge and challenge["header"] != MPP_PAYMENT_AUTHORIZATION_HEADER:
         return False
 
     return bool(decode_challenge_request(challenge))
