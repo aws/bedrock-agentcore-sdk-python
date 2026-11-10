@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.26.0] - 2026-11-10
+
+### Other Changes
+- feat(tools): call the Web Search API (InvokeWebSearch) from WebSearchClient (#738) (62dae87)
+- fix(payments): use plugin HTTP tool in Strands integration test (#736) (8900cb5)
+
 ## [1.25.4] - 2026-11-06
 
 ### Other Changes
