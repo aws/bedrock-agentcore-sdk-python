@@ -1621,6 +1621,65 @@ class TestSessionManager:
                 assert result["failedRecords"][0]["memoryRecordId"] == "rec-2"
                 assert result["failedRecords"][0]["errorMessage"] == "Access denied"
 
+    def test_delete_all_long_term_memories_in_namespace_paginated(self):
+        """Test delete_all_long_term_memories_in_namespace deletes all records across pages."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            # Mock paginator returning 25 records over 3 pages (exceeding default max_results=10)
+            mock_paginator = MagicMock()
+            mock_client_instance.get_paginator.return_value = mock_paginator
+            records = [{"memoryRecordId": f"rec-{i:03d}"} for i in range(25)]
+            mock_paginator.paginate.return_value = [
+                {"memoryRecordSummaries": records[0:10]},
+                {"memoryRecordSummaries": records[10:20]},
+                {"memoryRecordSummaries": records[20:25]},
+            ]
+            mock_client_instance.batch_delete_memory_records.side_effect = lambda memoryId, records: {
+                "successfulRecords": [{"memoryRecordId": r["memoryRecordId"]} for r in records],
+                "failedRecords": [],
+            }
+
+            result = manager.delete_all_long_term_memories_in_namespace("test/namespace/")
+
+            assert len(result["successfulRecords"]) == 25
+            assert len(result["failedRecords"]) == 0
+            mock_client_instance.batch_delete_memory_records.assert_called_once_with(
+                memoryId="testMemory-1234567890",
+                records=[{"memoryRecordId": f"rec-{i:03d}"} for i in range(25)],
+            )
+
+    def test_list_long_term_memory_records_unlimited(self):
+        """Test list_long_term_memory_records with max_results=None returns all records."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            mock_paginator = MagicMock()
+            mock_client_instance.get_paginator.return_value = mock_paginator
+            records = [{"memoryRecordId": f"rec-{i:03d}"} for i in range(25)]
+            mock_paginator.paginate.return_value = [
+                {"memoryRecordSummaries": records[0:10]},
+                {"memoryRecordSummaries": records[10:20]},
+                {"memoryRecordSummaries": records[20:25]},
+            ]
+
+            result = manager.list_long_term_memory_records(namespace="test/namespace/", max_results=None)
+
+            assert len(result) == 25
+            assert all(isinstance(record, MemoryRecord) for record in result)
+
     def test_list_actor_sessions_success(self):
         """Test list_actor_sessions successful execution."""
         with patch("boto3.Session") as mock_session_class:
