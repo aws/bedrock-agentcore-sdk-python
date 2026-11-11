@@ -40,7 +40,7 @@ def _parse_scenario(raw: Dict[str, Any]) -> PredefinedScenario | SimulatedScenar
             metadata=raw.get("metadata"),
         )
     else:
-        missing = [k for k in ("scenario_id", "actor_profile", "input") if k not in raw]
+        missing = [k for k in ("scenario_id", "actor_profile") if k not in raw]
         if missing:
             raise ValueError(
                 f"Scenario '{raw.get('scenario_id', '?')}' is missing required fields for SimulatedScenario: {missing}"
@@ -49,7 +49,7 @@ def _parse_scenario(raw: Dict[str, Any]) -> PredefinedScenario | SimulatedScenar
             scenario_id=raw["scenario_id"],
             scenario_description=raw.get("scenario_description", ""),
             actor_profile=ActorProfile(**raw["actor_profile"]),
-            input=raw["input"],
+            input=raw.get("input"),
             max_turns=raw.get("max_turns", 10),
             assertions=raw.get("assertions"),
             metadata=raw.get("metadata"),

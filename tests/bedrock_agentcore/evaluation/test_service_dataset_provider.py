@@ -169,6 +169,13 @@ class TestDatasetManagementServiceProvider:
         dataset, _, _ = self._run_provider(content)
         assert [type(s) for s in dataset.scenarios] == [PredefinedScenario, SimulatedScenario]
 
+    def test_simulated_example_without_input(self):
+        content = _jsonl({"scenario_id": "s1", "actor_profile": {"context": "c", "goal": "g"}})
+        dataset, _, _ = self._run_provider(content)
+        scenario = dataset.scenarios[0]
+        assert isinstance(scenario, SimulatedScenario)
+        assert scenario.input is None
+
     @pytest.mark.parametrize(
         "example, match",
         [

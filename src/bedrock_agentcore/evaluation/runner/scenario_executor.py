@@ -167,14 +167,17 @@ class SimulatedScenarioExecutor(ScenarioExecutor):
             output_type = sim_config.output_type if sim_config else None
             simulator = AgentCoreActorSimulator(
                 actor_profile=strands_profile,
-                initial_query=_to_string(scenario.input),
+                initial_query=None if scenario.input is None else _to_string(scenario.input),
                 system_prompt=system_prompt,
                 input_type=input_type,
                 model=sim_config.model_id if sim_config else None,
                 max_turns=scenario.max_turns,
             )
 
-            next_payload = _build_payload(scenario.input, sim_config)
+            if scenario.input is None:
+                next_payload = simulator.opening_message()
+            else:
+                next_payload = _build_payload(scenario.input, sim_config)
 
             while True:
                 turn_count += 1
@@ -271,13 +274,14 @@ class AgentCoreActorSimulator:
     question, so the first real ``act()`` call — which delivers the agent's
     actual response to that question — arrives with a coherent conversation
     history. The greeting is never sent to the real agent; it exists only to
-    orient the actor.
+    orient the actor. With no ``initial_query`` the history starts empty and
+    ``opening_message()`` has the actor answer the greeting with its own opener.
     """
 
     def __init__(
         self,
         actor_profile: Any,
-        initial_query: str,
+        initial_query: Optional[str],
         system_prompt: str,
         input_type: Optional[Type[BaseModel]] = None,
         model: Optional[str] = None,
@@ -292,10 +296,13 @@ class AgentCoreActorSimulator:
         self._turn_count = 0
         self._response_model = _make_response_model(input_type)
 
-        conversation_history = [
-            {"role": "user", "content": [{"text": random.choice(_INITIAL_GREETINGS)}]},
-            {"role": "assistant", "content": [{"text": initial_query.strip()}]},
-        ]
+        # Without an initial query the actor writes its own opening, in reply to the greeting.
+        conversation_history = []
+        if initial_query is not None:
+            conversation_history = [
+                {"role": "user", "content": [{"text": random.choice(_INITIAL_GREETINGS)}]},
+                {"role": "assistant", "content": [{"text": initial_query.strip()}]},
+            ]
 
         self._agent = Agent(
             system_prompt=system_prompt,
@@ -304,6 +311,14 @@ class AgentCoreActorSimulator:
             model=model,
             callback_handler=None,
         )
+
+    def opening_message(self) -> Any:
+        """Have the actor write the first message from the scenario; it does not count as a turn."""
+        response = self._agent(random.choice(_INITIAL_GREETINGS), structured_output_model=self._response_model)
+        message = response.structured_output.message
+        if message is None:
+            raise ValueError("Simulated actor produced no opening message")
+        return message
 
     def act(self, agent_message: str) -> SimulatorResult:
         """Send the agent's response to the actor and return a SimulatorResult."""

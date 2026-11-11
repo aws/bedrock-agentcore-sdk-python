@@ -531,6 +531,34 @@ class TestSimulatedScenarioExecutor:
         assert result.start_time < result.end_time
         assert len(invoker_calls) == 1
 
+    def test_no_input_actor_writes_opening_message(self, actor_profile, mock_strands):
+        """Without input the actor's opening message is the first payload, and the history starts empty."""
+        mock_agent_cls, mock_agent_instance, _ = mock_strands
+        mock_agent_instance.side_effect = _make_actor_side_effect(messages=["I'd like a pizza", None])
+        scenario = SimulatedScenario(scenario_id="s-open", actor_profile=actor_profile, max_turns=5)
+
+        invoker_calls = []
+
+        def invoker(inp):
+            invoker_calls.append(inp)
+            return AgentInvokerOutput(agent_output="What size?")
+
+        result = SimulatedScenarioExecutor(agent_invoker=invoker).run_scenario(scenario)
+
+        assert result.status == "COMPLETED"
+        assert [c.payload for c in invoker_calls] == ["I'd like a pizza"]
+        assert mock_agent_cls.call_args.kwargs["messages"] == []
+
+    def test_no_input_without_opening_message_fails(self, actor_profile, mock_strands):
+        _, mock_agent_instance, _ = mock_strands
+        mock_agent_instance.side_effect = _make_actor_side_effect(messages=[None])
+        scenario = SimulatedScenario(scenario_id="s-open", actor_profile=actor_profile)
+
+        result = SimulatedScenarioExecutor(agent_invoker=MagicMock()).run_scenario(scenario)
+
+        assert result.status == "FAILED"
+        assert "no opening message" in result.error
+
     def test_successful_multi_turn(self, simulated_scenario, mock_strands):
         """Actor continues for 2 turns then stops — 3 agent calls total."""
         mock_agent_cls, mock_agent_instance, _ = mock_strands
