@@ -77,7 +77,11 @@ select = [
   "G", # logging format
   "I", # isort
   "LOG", # logging
+  "TID251", # flake8-tidy-imports banned-api
 ]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"strands.experimental" = { msg = "Use stable Strands APIs instead." }
 
 [tool.ruff.lint.per-file-ignores]
 "!src/**/*.py" = ["D"]
