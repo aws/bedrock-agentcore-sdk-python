@@ -5,7 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bedrock_agentcore.runtime.tracing import BaggageSpanProcessor, _ensure_baggage_processor_registered
+from bedrock_agentcore.runtime.tracing import (
+    BaggageSpanProcessor,
+    _ensure_baggage_processor_registered,
+    _stamp_current_span,
+)
 
 # ---------------------------------------------------------------------------
 # BaggageSpanProcessor.on_start
@@ -331,6 +335,41 @@ class TestEnsureBaggageProcessorRegistered:
         assert mock_provider.add_span_processor.call_count == 1
 
 
+class TestStampCurrentSpan:
+    """_stamp_current_span retroactively tags the already-started root span."""
+
+    def test_sets_attribute_on_current_span(self):
+        mock_span = MagicMock()
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            _stamp_current_span("enduser.id", "user-1")
+
+        mock_span.set_attribute.assert_called_once_with("enduser.id", "user-1")
+
+    def test_noop_when_value_is_none(self):
+        mock_span = MagicMock()
+
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            _stamp_current_span("enduser.id", None)
+
+        mock_span.set_attribute.assert_not_called()
+
+    def test_noop_when_opentelemetry_not_installed(self):
+        import sys
+
+        saved = {k: v for k, v in sys.modules.items() if k == "opentelemetry" or k.startswith("opentelemetry.")}
+        for key in saved:
+            del sys.modules[key]
+        try:
+            _stamp_current_span("enduser.id", "user-1")  # must not raise
+        finally:
+            sys.modules.update(saved)
+
+    def test_noop_when_get_current_span_raises(self):
+        with patch("opentelemetry.trace.get_current_span", side_effect=RuntimeError("boom")):
+            _stamp_current_span("enduser.id", "user-1")  # must not raise
+
+
 # ---------------------------------------------------------------------------
 # End-to-end: baggage header → ContextVar → span attribute (via app.py)
 # ---------------------------------------------------------------------------
@@ -422,6 +461,27 @@ class TestBaggageEndToEnd:
         client.post("/invocations", json={}, headers={USER_ID_HEADER: "explicit-user-99"})
 
         assert captured["enduser_id"] == "explicit-user-99"
+
+    def test_enduser_id_also_stamped_on_the_already_started_root_span(self):
+        """The root ASGI span (started before _build_request_context runs)
+        gets enduser.id too, via _stamp_current_span -- not just the ContextVar."""
+        from starlette.testclient import TestClient
+
+        from bedrock_agentcore.runtime import BedrockAgentCoreApp
+        from bedrock_agentcore.runtime.models import USER_ID_HEADER
+
+        app = BedrockAgentCoreApp()
+
+        @app.entrypoint
+        def handler(payload):
+            return {"ok": True}
+
+        mock_span = MagicMock()
+        client = TestClient(app)
+        with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+            client.post("/invocations", json={}, headers={USER_ID_HEADER: "explicit-user-99"})
+
+        mock_span.set_attribute.assert_any_call("enduser.id", "explicit-user-99")
 
     def test_enduser_id_extracted_from_jwt_sub_claim(self):
         """Bearer JWT in Authorization header → sub claim sets enduser.id ContextVar."""

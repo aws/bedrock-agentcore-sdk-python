@@ -35,7 +35,7 @@ from .models import (
     PingStatus,
     is_forwardable_header,
 )
-from .tracing import _ensure_baggage_processor_registered
+from .tracing import _ensure_baggage_processor_registered, _stamp_current_span
 from .utils import extract_sub_from_bearer
 
 logger = logging.getLogger(__name__)
@@ -169,6 +169,8 @@ class AGUIApp(Starlette):
             headers.get(AUTHORIZATION_HEADER) or headers.get(_AUTHORIZATION_HEADER_LOWER)
         )
         BedrockAgentCoreContext.set_enduser_id(enduser_id)
+        # Tag the already-started root span too — see tracing.py's module docstring.
+        _stamp_current_span("enduser.id", enduser_id)
 
         workload_access_token = headers.get(ACCESS_TOKEN_HEADER)
         if workload_access_token:
