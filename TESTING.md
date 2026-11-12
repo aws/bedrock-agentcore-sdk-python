@@ -77,9 +77,9 @@ uv run pytest tests_integ/tools -xvs
 
 ## CI
 
-Integration tests run via `integration-testing.yml` on PRs to main. The workflow runs runtime, memory (stream delivery only), and evaluation tests in parallel.
+Integration tests run via `integration-testing.yml` on PRs to main, with one parallel job per module: runtime, memory, evaluation, services, policy, gateway, identity, payments and tools. The memory job runs `test_controlplane.py`, `test_memory_client.py` and `integrations/test_session_manager.py`. Jobs run in `us-west-2`, and PRs from forks wait for maintainer approval before they start.
 
-Stream delivery tests fail in CI unless `MEMORY_KINESIS_ARN` and `MEMORY_ROLE_ARN` secrets are configured on the repo. Other memory integration tests are not yet run in CI due to provisioning times and flaky LLM-dependent assertions — CI support is planned once test stability is addressed.
+Stream delivery tests fail in CI unless `MEMORY_KINESIS_ARN` and `MEMORY_ROLE_ARN` secrets are configured on the repo. The rest of `tests_integ/memory` is not yet run in CI because of provisioning times and flaky LLM-dependent assertions.
 
 ## Conventions
 
@@ -87,6 +87,11 @@ Stream delivery tests fail in CI unless `MEMORY_KINESIS_ARN` and `MEMORY_ROLE_AR
 - Each test class should correspond to the object under test (e.g. `TestMemoryClient`).
 - Expensive resources (e.g. memories) should be created the minimum number of times, ideally once in `setup_class`.
 - All resources created during tests must be cleaned up in `teardown_class`.
+- Default the region to `BEDROCK_TEST_REGION`, falling back to `us-west-2`, so every test runs in the region CI uses. If a feature is not offered there, say why in the module docstring.
+- Wait for state with the `*_and_wait` helpers or `wait_until` from `bedrock_agentcore._utils.polling`, not `time.sleep`.
+- After an update, assert that the resource changed.
+- Check whether a test can run (region, account entitlement) before creating resources, and skip the whole class if it cannot.
+- A test that mocks the service is a unit test; put it in `tests/`, not `tests_integ/`.
 
 ## Anti-Patterns
 
