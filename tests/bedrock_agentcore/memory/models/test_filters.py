@@ -1,17 +1,62 @@
 """Unit tests for memory record metadata filter models."""
 
 from datetime import datetime
+from typing import get_type_hints
 
 import pytest
 
 from bedrock_agentcore.memory.models import (
+    EventMetadataFilter,
     IndexedKey,
+    LeftExpression,
     MemoryMetadataFilter,
     MemoryRecordLeftExpression,
     MemoryRecordOperatorType,
     MemoryRecordRightExpression,
     MetadataValueType,
+    OperatorType,
+    RightExpression,
 )
+
+
+class TestEventMetadataFilter:
+    """Test cases for EventMetadataFilter."""
+
+    def test_operator_is_annotated_as_str(self):
+        """The stored `operator` is the enum's string value, so the field is typed `str`.
+
+        Regression for #240: `build_expression` stores `operator.value` (a string),
+        but the field was annotated `OperatorType` (the enum), which mis-typed every
+        constructed filter. This mirrors the already-correct `MemoryMetadataFilter`.
+        """
+        assert get_type_hints(EventMetadataFilter)["operator"] is str
+
+    def test_build_expression_equals_string(self):
+        """build_expression stores the operator's string value, not the enum."""
+        result = EventMetadataFilter.build_expression(
+            LeftExpression.build("location"),
+            OperatorType.EQUALS_TO,
+            RightExpression.build("NYC"),
+        )
+
+        assert result == {
+            "left": {"metadataKey": "location"},
+            "operator": "EQUALS_TO",
+            "right": {"metadataValue": {"stringValue": "NYC"}},
+        }
+
+    def test_build_expression_exists_no_right_operand(self):
+        """An EXISTS filter omits the right operand."""
+        result = EventMetadataFilter.build_expression(
+            LeftExpression.build("location"),
+            OperatorType.EXISTS,
+        )
+
+        assert result == {
+            "left": {"metadataKey": "location"},
+            "operator": "EXISTS",
+        }
+        assert "right" not in result
 
 
 class TestMemoryRecordLeftExpression:
