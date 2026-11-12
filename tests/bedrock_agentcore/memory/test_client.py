@@ -3569,6 +3569,42 @@ def test_get_last_k_turns_explicit_max_results():
         assert total_fetched <= 50  # Should stop after fetching 50 events worth of calls
 
 
+def test_get_last_k_turns_orders_messages_chronologically():
+    """Turns are grouped chronologically even when list_events returns newest-first.
+
+    Regression for #320/#253: the ListEvents API returns events newest-first, but
+    get_last_k_turns grouped them in arrival order, yielding turns whose messages
+    were misaligned (ASSISTANT before its USER, orphaned leading turn). Single-message
+    events (e.g. a toolUse split across events) make the misalignment visible.
+    """
+    with patch("boto3.Session"):
+        client = MemoryClient()
+
+        mock_gmdp = MagicMock()
+        client.gmdp_client = mock_gmdp
+
+        # As returned by the real API: newest event first.
+        mock_events = [
+            {
+                "eventId": "event-2",
+                "eventTimestamp": datetime(2023, 1, 1, 10, 5, 0),
+                "payload": [{"conversational": {"role": "ASSISTANT", "content": {"text": "It's sunny"}}}],
+            },
+            {
+                "eventId": "event-1",
+                "eventTimestamp": datetime(2023, 1, 1, 10, 0, 0),
+                "payload": [{"conversational": {"role": "USER", "content": {"text": "Weather?"}}}],
+            },
+        ]
+        mock_gmdp.list_events.return_value = {"events": mock_events, "nextToken": None}
+
+        turns = client.get_last_k_turns(memory_id="mem-123", actor_id="user-123", session_id="session-456", k=5)
+
+        # One turn: USER then ASSISTANT, in chronological order.
+        assert len(turns) == 1
+        assert [m["role"] for m in turns[0]] == ["USER", "ASSISTANT"]
+
+
 # ============================================================================
 # LTM Metadata: indexed_keys and metadata_filters tests
 # ============================================================================
