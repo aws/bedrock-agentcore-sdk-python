@@ -16,6 +16,7 @@ import threading
 import time
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional
 
 from starlette.applications import Starlette
@@ -23,7 +24,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.responses import JSONResponse, Response, StreamingResponse
-from starlette.routing import Route, WebSocketRoute
+from starlette.routing import BaseRoute, Route, WebSocketRoute
 from starlette.types import Lifespan
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
@@ -46,7 +47,10 @@ from .models import (
     TASK_ACTION_FORCE_HEALTHY,
     TASK_ACTION_JOB_STATUS,
     TASK_ACTION_PING_STATUS,
+    WARMUP_TYPE_HEADER,
+    HookConfig,
     PingStatus,
+    WarmupType,
     is_forwardable_header,
 )
 from .tracing import _ensure_baggage_processor_registered
@@ -155,6 +159,29 @@ class RequestContextFormatter(logging.Formatter):
         return json.dumps(log_entry, ensure_ascii=False)
 
 
+def _add_route(route: Route, routes: list[BaseRoute]) -> None:
+    """Append route to routes, raising ValueError if one of its (method, path) pairs is already served.
+
+    Only HTTP routes count: a WebSocketRoute serves WebSocket connections (a GET upgrade), never a POST.
+    """
+    served = {(method, r.path) for r in routes if isinstance(r, Route) for method in r.methods or ()}
+    clashes = sorted({(method, route.path) for method in route.methods or ()} & served)
+    if clashes:
+        raise ValueError(f"Route {', '.join(m for m, _ in clashes)} {route.path} is already served by the app")
+    routes.append(route)
+
+
+@dataclass
+class _Hook:
+    """One lifecycle hook: where it's served, its handlers, and the lock that keeps its calls from overlapping."""
+
+    config: HookConfig
+    handlers: Dict[Any, Callable] = field(default_factory=dict)  # warmup: WarmupType -> handler
+    # One lock per hook, so its calls never overlap. A waiting call awaits the lock rather than
+    # blocking, so the server keeps answering /ping.
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)  # used only by this hook's route
+
+
 class BedrockAgentCoreApp(Starlette):
     """Bedrock AgentCore application class that extends Starlette for AI agent deployment."""
 
@@ -163,6 +190,8 @@ class BedrockAgentCoreApp(Starlette):
         debug: bool = False,
         lifespan: Optional[Lifespan] = None,
         middleware: Sequence[Middleware] | None = None,
+        *,
+        warmup_hook: Optional[HookConfig] = None,
     ):
         """Initialize Bedrock AgentCore application.
 
@@ -170,6 +199,13 @@ class BedrockAgentCoreApp(Starlette):
             debug: Enable debug actions for task management (default: False)
             lifespan: Optional lifespan context manager for startup/shutdown
             middleware: Optional sequence of Starlette Middleware objects (or Middleware(...) entries)
+            warmup_hook: Where to serve the build warmup hook (``POST``), registered with ``@app.warmup``.
+                ``warmup_hook.path`` must equal ``hooksConfiguration.build.warmup.action.httpPost.path``, which
+                the API requires. The hook is served on the serving port, so leave ``httpPost.port`` unset or
+                set it to the serving port. ``None`` (the default) adds no warmup route.
+
+        Raises:
+            ValueError: If ``warmup_hook.path`` clashes with an existing ``POST`` route such as ``/invocations``.
         """
         self.handlers: Dict[str, Callable] = {}
         self._ping_handler: Optional[Callable] = None
@@ -181,6 +217,10 @@ class BedrockAgentCoreApp(Starlette):
         self._worker_loop: Optional[asyncio.AbstractEventLoop] = None
         self._worker_thread: Optional[threading.Thread] = None
         self._worker_loop_lock: threading.Lock = threading.Lock()
+        self._hooks: Dict[str, _Hook] = {}
+        if warmup_hook is not None:
+            self._hooks["warmup"] = _Hook(warmup_hook)
+        self.warmup_hook = warmup_hook
 
         # Config bundle client — created lazily on first use.
         # _resolve_bundle_config is wrapped with lru_cache(maxsize=30), keyed by
@@ -192,11 +232,13 @@ class BedrockAgentCoreApp(Starlette):
             self._resolve_bundle_config
         )
 
-        routes = [
+        routes: list[BaseRoute] = [
             Route("/invocations", self._handle_invocation, methods=["POST"]),
             Route("/ping", self._handle_ping, methods=["GET"]),
             WebSocketRoute("/ws", self._handle_websocket),
         ]
+        if warmup_hook is not None:
+            _add_route(Route(warmup_hook.path, self._handle_warmup, methods=["POST"]), routes)
         super().__init__(routes=routes, lifespan=lifespan, middleware=middleware)
         self.debug = debug  # Set after super().__init__ to avoid override
 
@@ -261,6 +303,53 @@ class BedrockAgentCoreApp(Starlette):
         """
         self._websocket_handler = func
         return func
+
+    def warmup(self, type: WarmupType | str) -> Callable[[Callable], Callable]:
+        """Decorator to register a build warmup handler for one warmup type.
+
+        AgentCore Runtime calls the build warmup hook (``POST`` to ``warmup_hook.path``) twice while it prepares
+        the agent during ``CreateAgentRuntime`` and ``UpdateAgentRuntime``: first ``memory``, then ``disk``.
+        Register a handler for zero, one or both types. A type without a handler is answered with 200, so
+        it has nothing to do. The handler takes no arguments and may be sync or async: sync handlers run in a
+        worker thread and async handlers on a separate event loop, so the server keeps answering ``/ping``
+        while they run. The response is sent after the handler returns. An exception in the handler returns
+        500, which fails the create or update. Handlers never run concurrently with each other in one process.
+
+        See https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-hooks.html
+
+        Args:
+            type: The warmup type to handle, a ``WarmupType`` or its string value (``"memory"`` or ``"disk"``)
+
+        Returns:
+            A decorator that registers the function and returns it unchanged
+
+        Raises:
+            ValueError: If the app has no ``warmup_hook``, ``type`` isn't a valid warmup type, or a handler is
+                already registered for it.
+
+        Example:
+            app = BedrockAgentCoreApp(warmup_hook=HookConfig(path="/warmup"))
+
+            @app.warmup(WarmupType.MEMORY)
+            def load_model():
+                global MODEL
+                MODEL = load("/opt/model.bin")
+        """
+        if "warmup" not in self._hooks:
+            raise ValueError(
+                "@app.warmup needs BedrockAgentCoreApp(warmup_hook=HookConfig(path=...)) matching "
+                "hooksConfiguration.build.warmup.action.httpPost.path"
+            )
+        warmup_type = WarmupType(type)
+        handlers = self._hooks["warmup"].handlers
+        if warmup_type in handlers:
+            raise ValueError(f"A {warmup_type.value} warmup handler is already registered")
+
+        def register(func: Callable) -> Callable:
+            handlers[warmup_type] = func
+            return func
+
+        return register
 
     def async_task(self, func: Callable) -> Callable:
         """Decorator to track async tasks for ping status.
@@ -623,6 +712,36 @@ class BedrockAgentCoreApp(Starlette):
             self.logger.exception("Ping endpoint failed")
             return JSONResponse({"status": PingStatus.HEALTHY.value, "time_of_last_update": int(time.time())})
 
+    async def _handle_warmup(self, request):
+        raw_type = request.headers.get(WARMUP_TYPE_HEADER, "").strip().lower()
+        try:
+            warmup_type = WarmupType(raw_type)
+        except ValueError:
+            self.logger.warning("Warmup request with invalid %s header: %r", WARMUP_TYPE_HEADER, raw_type)
+            return JSONResponse(
+                {"error": f"{WARMUP_TYPE_HEADER} must be 'memory' or 'disk', got {raw_type!r}"}, status_code=400
+            )
+
+        hook = self._hooks["warmup"]
+        handler = hook.handlers.get(warmup_type)
+        if handler is None:
+            self.logger.info("Warmup (%s): no handler registered, nothing to do", warmup_type.value)
+            return JSONResponse({"status": "ok", "type": warmup_type.value, "result": "skipped"})
+
+        async with hook.lock:
+            start_time = time.time()
+            try:
+                result = await self._dispatch_handler(handler, ())
+                if inspect.isawaitable(result):
+                    if inspect.iscoroutine(result):
+                        result.close()  # never awaited on purpose; close it so Python doesn't warn
+                    raise TypeError("warmup handler returned an awaitable; declare it with async def")
+            except Exception as e:
+                self.logger.exception("Warmup (%s) failed (%.3fs)", warmup_type.value, time.time() - start_time)
+                return JSONResponse({"error": str(e), "type": warmup_type.value}, status_code=500)
+            self.logger.info("Warmup (%s) completed (%.3fs)", warmup_type.value, time.time() - start_time)
+        return JSONResponse({"status": "ok", "type": warmup_type.value, "result": "completed"})
+
     async def _handle_websocket(self, websocket: WebSocket):
         """Handle WebSocket connections."""
         request_context = self._build_request_context(websocket)
@@ -806,7 +925,12 @@ class BedrockAgentCoreApp(Starlette):
             worker_loop.call_soon_threadsafe(_cancel)
 
     async def _invoke_handler(self, handler: Callable, request_context: Any, takes_context: bool, payload: Any) -> Any:
-        """Dispatch handler execution based on handler type.
+        """Build the handler arguments, ``(payload[, context])``, and call it through ``_dispatch_handler``."""
+        args = (payload, request_context) if takes_context else (payload,)
+        return await self._dispatch_handler(handler, args)
+
+    async def _dispatch_handler(self, handler: Callable, args: tuple) -> Any:
+        """Call ``handler(*args)`` based on the handler type.
 
         - Async generator functions: bridged through the worker loop as a sync generator
         - Regular async functions: run on the dedicated worker event loop
@@ -816,7 +940,6 @@ class BedrockAgentCoreApp(Starlette):
         regardless of whether handlers contain blocking operations.
         """
         try:
-            args = (payload, request_context) if takes_context else (payload,)
             ctx = contextvars.copy_context()
 
             if _is_async_gen_callable(handler):
