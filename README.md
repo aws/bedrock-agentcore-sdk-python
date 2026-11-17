@@ -75,6 +75,49 @@ text to the agent.
 - 📊 **Observability** - OpenTelemetry tracing: **[Get started](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability-get-started.html)**
 - 🔐 **Identity** - AWS & third-party auth: **[Get started](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/identity-getting-started.html)**
 
+## Build Warmup Hook
+
+On platform version V2, AgentCore Runtime can call a [build warmup hook](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-hooks.html) while it prepares your agent, before the runtime is `READY`. It sends two `POST` requests, first `memory` (load what every session needs, such as imports, models and caches) and then `disk` (read the files that sessions read at start). Register a handler for either, both or none:
+
+```python
+from bedrock_agentcore import BedrockAgentCoreApp, HookConfig, WarmupType
+
+app = BedrockAgentCoreApp(warmup_hook=HookConfig(path="/warmup"))  # serves the hook at POST /warmup
+MODEL = None
+
+@app.warmup(WarmupType.MEMORY)
+def load_model():
+    global MODEL
+    MODEL = load_my_model()  # runs before the runtime is READY; sessions see what's loaded here
+
+@app.warmup(WarmupType.DISK)
+def read_startup_files():
+    for path in ["/app/config/agent.json"]:
+        with open(path, "rb") as f:
+            while f.read(1 << 20):
+                pass
+
+@app.entrypoint
+def invoke(payload):
+    return MODEL.predict(payload)
+
+app.run()
+```
+
+Handlers run off the event loop, so `/ping` keeps answering. A type without a handler returns 200; an exception returns 500, which fails the create or update. The two calls share a 120-second limit. Configure the hook on the runtime:
+
+```python
+client.create_agent_runtime(
+    ...,
+    platformVersion="V2",
+    hooksConfiguration={"build": {"warmup": {"action": {"httpPost": {"path": "/warmup"}}}}},
+)
+```
+
+- `HookConfig.path` must equal `hooksConfiguration.build.warmup.action.httpPost.path`. The API requires the path, and the SDK has no default. Without `warmup_hook`, the app adds no warmup route and `@app.warmup` raises `ValueError`.
+- Leave `httpPost.port` unset, or set it to the port the app serves on (`app.run(port=...)`, default 8080). The app doesn't serve the hook on a different port, so the hook call fails.
+- Serve the hook from one server process. The memory call reaches one process. That process may start child processes (for example a browser or a model server) and keep them, but other worker processes (for example `uvicorn --workers N`) don't receive the call.
+
 ## AG-UI Protocol Support
 
 Deploy agents using the [AG-UI protocol](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-agui.html) with zero boilerplate. A single `entrypoint` handler is served over both SSE (`POST /invocations`) and WebSocket (`/ws`).
