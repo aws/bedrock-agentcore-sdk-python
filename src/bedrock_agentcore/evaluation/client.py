@@ -66,7 +66,9 @@ class EvaluationClient:
         )
 
         for r in results:
-            print(f"{r['evaluatorId']}: {r.get('value')} - {r.get('explanation')}")
+            dim = r.get("evaluationDimensionName")
+            name = f"{r['evaluatorId']}/{dim}" if dim else r["evaluatorId"]
+            print(f"{name}: {r.get('value')} - {r.get('explanation')}")
     """
 
     def __init__(

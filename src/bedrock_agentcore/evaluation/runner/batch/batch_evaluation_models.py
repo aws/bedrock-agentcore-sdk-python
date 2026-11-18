@@ -192,6 +192,11 @@ class EvaluatorSummary(BaseModel):
 
     Attributes:
         evaluator_id: Evaluator identifier.
+        evaluation_dimension_name: Dimension name, set for each dimension of a
+            multi-dimension evaluator. A separate entry for the evaluator, without
+            a dimension name, counts failures not tied to one dimension. Sessions
+            that fail as a whole, such as when no spans are found, are counted only
+            in ``number_of_sessions_failed``.
         statistics: Aggregated statistics (average score).
         total_evaluated: Number of items evaluated.
         total_failed: Number of evaluation failures.
@@ -200,6 +205,7 @@ class EvaluatorSummary(BaseModel):
     model_config = ConfigDict(alias_generator=alias_generators.to_camel, populate_by_name=True)
 
     evaluator_id: Optional[str] = None
+    evaluation_dimension_name: Optional[str] = None
     statistics: Optional[EvaluatorStatistics] = None
     total_evaluated: Optional[int] = None
     total_failed: Optional[int] = None
