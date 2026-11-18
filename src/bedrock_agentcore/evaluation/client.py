@@ -112,6 +112,10 @@ class EvaluationClient:
         "list_batch_evaluations",
         "stop_batch_evaluation",
         "delete_batch_evaluation",
+        "start_dataset_generation",
+        "get_dataset_generation",
+        "list_dataset_generation",
+        "delete_dataset_generation",
     }
 
     _ALLOWED_CP_METHODS = {
