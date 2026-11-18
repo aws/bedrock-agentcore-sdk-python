@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.26.1] - 2026-11-18
+
+### Other Changes
+- feat(evaluation): keep the dimension on batch evaluator summaries (#744) (afcaa98)
+
 ## [1.26.0] - 2026-11-10
 
 ### Other Changes
