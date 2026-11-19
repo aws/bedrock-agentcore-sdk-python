@@ -80,7 +80,6 @@ class TestDatasetClientCreateAndWait:
         result = client.create_dataset_and_wait(
             wait_config=WaitConfig(max_wait=10, poll_interval=1),
             datasetName="test",
-            schemaType="AGENTCORE_EVALUATION_PREDEFINED_V1",
         )
 
         assert result["status"] == "ACTIVE"
@@ -167,8 +166,8 @@ class TestDatasetClientDeleteAndWait:
 class TestDatasetClientVersionAndWait:
     def test_create_version_and_wait_success(self, client_and_cp):
         client, mock_cp = client_and_cp
-        mock_cp.create_dataset_version.return_value = {"datasetId": "ds-123"}
-        mock_cp.get_dataset.return_value = {"datasetId": "ds-123", "status": "ACTIVE"}
+        mock_cp.create_dataset_version.return_value = {"datasetId": "ds-123", "datasetVersion": "2"}
+        mock_cp.get_dataset.return_value = {"datasetId": "ds-123", "datasetVersion": "2", "status": "ACTIVE"}
 
         result = client.create_dataset_version_and_wait(
             wait_config=WaitConfig(max_wait=10, poll_interval=1),
@@ -176,6 +175,7 @@ class TestDatasetClientVersionAndWait:
         )
 
         assert result["status"] == "ACTIVE"
+        mock_cp.get_dataset.assert_called_with(datasetId="ds-123", datasetVersion="2")
 
 
 class TestDatasetClientExamplesAndWait:

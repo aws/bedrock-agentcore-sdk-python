@@ -35,7 +35,6 @@ class TestDatasetManagementServiceProvider:
         # Create a PREDEFINED_TURNS dataset
         predefined = cls.client.create_dataset_and_wait(
             datasetName=f"{cls.test_prefix}_predefined",
-            schemaType="AGENTCORE_EVALUATION_PREDEFINED_V1",
             source={
                 "inlineExamples": {
                     "examples": [
@@ -67,7 +66,6 @@ class TestDatasetManagementServiceProvider:
         # Create a SYNTHETIC dataset
         synthetic = cls.client.create_dataset_and_wait(
             datasetName=f"{cls.test_prefix}_synthetic",
-            schemaType="AGENTCORE_EVALUATION_SIMULATED_V1",
             source={
                 "inlineExamples": {
                     "examples": [

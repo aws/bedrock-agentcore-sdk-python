@@ -76,7 +76,6 @@ class TestOnDemandRunnerWithServiceDataset:
 
         ds = cls.client.create_dataset_and_wait(
             datasetName=f"{cls.test_prefix}_ondemand",
-            schemaType="AGENTCORE_EVALUATION_PREDEFINED_V1",
             source={
                 "inlineExamples": {
                     "examples": [

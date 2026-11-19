@@ -69,7 +69,8 @@ class SimulatedScenario(Scenario):
         actor_profile: Profile defining the simulated actor's traits, context, and goal.
         input: The initial payload sent to the agent to start the conversation.
             Accepts a plain string, a structured dict, or a ``pydantic.BaseModel``
-            instance (e.g. an instance of ``SimulationConfig.input_type``).
+            instance (e.g. an instance of ``SimulationConfig.input_type``). When
+            None, the simulated actor writes the opening message from the scenario.
         max_turns: Maximum number of conversation turns before the simulation stops.
             Defaults to 10.
     """
@@ -80,7 +81,7 @@ class SimulatedScenario(Scenario):
 
     scenario_description: str = ""
     actor_profile: ActorProfile
-    input: Union[str, Dict[str, Any], BaseModel]
+    input: Optional[Union[str, Dict[str, Any], BaseModel]] = None
     max_turns: int = 10
 
     @model_validator(mode="after")
