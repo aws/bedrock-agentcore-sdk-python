@@ -1214,6 +1214,11 @@ class MemoryClient:
 
                 total_fetched += len(events)
 
+                # ListEvents returns events newest-first; group them oldest-first so a
+                # turn's USER message precedes its ASSISTANT response(s). See issue #320.
+                if all(e.get("eventTimestamp") is not None for e in events):
+                    events = sorted(events, key=lambda e: e["eventTimestamp"])
+
                 for event in events:
                     if len(turns) >= k:
                         break
