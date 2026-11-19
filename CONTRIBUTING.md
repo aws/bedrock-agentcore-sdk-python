@@ -87,6 +87,10 @@ pre-commit run --hook-stage pre-push --all-files
 uv run pytest tests/ --cov=src
 ```
 
+If you change dependencies in `pyproject.toml`, run `uv lock` and commit `uv.lock`; otherwise the `uv-lock` hook rewrites it and fails the commit.
+
+Coding conventions, CI gates and test rules are in [AGENTS.md](AGENTS.md). Integration test setup is in [TESTING.md](TESTING.md).
+
 ## How You Can Help
 
 Although we don't accept code contributions, your feedback is invaluable! Here's how you can help improve the SDK:
@@ -107,7 +111,7 @@ Have an idea for a new feature? Please [open a feature request](https://github.c
 - Any alternative solutions you've considered
 
 ### Improve Documentation
-Spot an error or unclear explanation in our docs? Please [open a documentation issue](https://github.com/aws/bedrock-agentcore-sdk-python/issues/new?template=documentation.md) with:
+Spot an error or unclear explanation in our docs? Please [open a documentation issue](https://github.com/aws/bedrock-agentcore-sdk-python/issues/new/choose) with:
 - Link to the documentation page
 - Description of the issue or improvement
 - Suggested changes (if applicable)
