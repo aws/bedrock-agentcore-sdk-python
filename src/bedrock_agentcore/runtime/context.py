@@ -34,6 +34,7 @@ class BedrockAgentCoreContext:
     _oauth2_callback_url: ContextVar[Optional[str]] = ContextVar("oauth2_callback_url")
     _request_id: ContextVar[Optional[str]] = ContextVar("request_id")
     _session_id: ContextVar[Optional[str]] = ContextVar("session_id")
+    _enduser_id: ContextVar[Optional[str]] = ContextVar("enduser_id", default=None)
     _request_headers: ContextVar[Optional[Dict[str, str]]] = ContextVar("request_headers")
     _routing_experiment_arn: ContextVar[Optional[str]] = ContextVar("routing_experiment_arn", default=None)
     _routing_experiment_variant: ContextVar[Optional[str]] = ContextVar("routing_experiment_variant", default=None)
@@ -92,6 +93,23 @@ class BedrockAgentCoreContext:
             return cls._session_id.get()
         except LookupError:
             return None
+
+    @classmethod
+    def set_enduser_id(cls, enduser_id: Optional[str]) -> None:
+        """Set the end-user identity for the current request.
+
+        The value is stamped onto every OpenTelemetry span as the ``enduser.id``
+        attribute (OTel semantic convention).  It is extracted automatically from
+        the ``X-Amzn-Bedrock-AgentCore-Runtime-User-Id`` request header, or from
+        the ``sub`` claim of a Bearer JWT in the ``Authorization`` header.
+        Applications can also set it explicitly to override the inferred value.
+        """
+        cls._enduser_id.set(enduser_id)
+
+    @classmethod
+    def get_enduser_id(cls) -> Optional[str]:
+        """Return the end-user identity for the current request, or None."""
+        return cls._enduser_id.get()
 
     @classmethod
     def set_request_headers(cls, headers: Dict[str, str]):
