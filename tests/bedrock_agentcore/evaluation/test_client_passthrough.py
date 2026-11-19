@@ -66,6 +66,10 @@ class TestEvaluationClientPassthrough:
             "list_batch_evaluations",
             "stop_batch_evaluation",
             "delete_batch_evaluation",
+            "start_dataset_generation",
+            "get_dataset_generation",
+            "list_dataset_generation",
+            "delete_dataset_generation",
         }
         assert expected == EvaluationClient._ALLOWED_DP_METHODS
 
