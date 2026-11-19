@@ -1,5 +1,6 @@
 """Bedrock AgentCore runtime utilities for object conversion and serialization."""
 
+import base64
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
@@ -10,13 +11,14 @@ def convert_complex_objects(obj: Any, _depth: int = 0) -> Any:
     if _depth > 50:
         return f"<too_deep:{type(obj).__name__}>"
 
-    # Handle Pydantic models (like AIMessage)
+    # Handle Pydantic models (like AIMessage). The dump can still hold bytes or
+    # sets, so it is converted too.
     if hasattr(obj, "model_dump"):
-        return obj.model_dump()
+        return convert_complex_objects(obj.model_dump(), _depth + 1)
 
-    # Handle dataclasses (like AgentResult)
+    # Handle dataclasses (like AgentResult), converting the dump for the same reason
     elif is_dataclass(obj):
-        return asdict(obj)
+        return convert_complex_objects(asdict(obj), _depth + 1)
 
     # Handle dictionaries recursively
     elif isinstance(obj, dict):
@@ -29,6 +31,10 @@ def convert_complex_objects(obj: Any, _depth: int = 0) -> Any:
     # Handle sets (convert to list)
     elif isinstance(obj, set):
         return [convert_complex_objects(item, _depth + 1) for item in obj]
+
+    # Handle binary data (base64, since JSON has no bytes type)
+    elif isinstance(obj, (bytes, bytearray)):
+        return base64.b64encode(obj).decode("ascii")
 
     # Return primitives as-is
     else:
