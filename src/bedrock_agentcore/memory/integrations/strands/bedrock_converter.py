@@ -104,7 +104,7 @@ class AgentCoreMemoryConverter:
                     try:
                         blob_data = json.loads(payload_item["blob"])
                     except (TypeError, ValueError, RecursionError):
-                        logger.error("Failed to parse blob content: %s", payload_item)
+                        logger.error("Failed to parse blob content in event %s", event.get("eventId"))
                         continue
                     if not (isinstance(blob_data, list) and len(blob_data) == 2):
                         continue

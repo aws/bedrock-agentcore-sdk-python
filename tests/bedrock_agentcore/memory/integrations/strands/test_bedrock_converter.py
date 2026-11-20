@@ -391,6 +391,20 @@ class TestAgentCoreMemoryConverter:
         mock_logger.error.assert_called()
 
     @patch("bedrock_agentcore.memory.integrations.strands.bedrock_converter.logger")
+    def test_events_to_messages_unparseable_blob_does_not_log_content(self, mock_logger):
+        events = [
+            {"eventId": "evt-1", "payload": [{"blob": {"secret": "do-not-log"}}]},
+            {"eventId": "evt-2", "payload": [{"blob": "do-not-log"}]},
+        ]
+
+        result = AgentCoreMemoryConverter.events_to_messages(events)
+
+        assert result == []
+        assert mock_logger.error.call_count == 2
+        assert "do-not-log" not in str(mock_logger.error.call_args_list)
+        assert {c.args[-1] for c in mock_logger.error.call_args_list} == {"evt-1", "evt-2"}
+
+    @patch("bedrock_agentcore.memory.integrations.strands.bedrock_converter.logger")
     def test_events_to_messages_malformed_payload_does_not_break_batch(self, mock_logger):
         """Test a malformed blob payload between two valid conversational payloads in a single event."""
         msg1 = SessionMessage(
