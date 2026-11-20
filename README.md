@@ -153,7 +153,7 @@ from strands import Agent
 from strands.a2a import StrandsA2AExecutor
 from bedrock_agentcore.runtime import serve_a2a
 
-agent = Agent(model="us.anthropic.claude-sonnet-4-20250514", system_prompt="You are a helpful assistant.")
+agent = Agent(model="global.anthropic.claude-sonnet-4-6", system_prompt="You are a helpful assistant.")
 serve_a2a(StrandsA2AExecutor(agent))
 ```
 
