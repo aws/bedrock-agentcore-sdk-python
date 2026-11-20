@@ -3,6 +3,7 @@
 import json
 from unittest.mock import patch
 
+import pytest
 from strands.types.session import SessionMessage
 
 from bedrock_agentcore.memory.integrations.strands.bedrock_converter import AgentCoreMemoryConverter
@@ -342,6 +343,52 @@ class TestAgentCoreMemoryConverter:
         assert len(result) == 2
         assert result[0].message["content"][0]["text"] == "First"
         assert result[1].message["content"][0]["text"] == "Second"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "I prefer window seats",
+            "3",
+            "null",
+            "[]",
+            '{"note": "x"}',
+            '{"role": "user", "content": "hi"}',
+            '{"message": "hi", "message_id": 0}',
+            '{"message": {"role": "user", "content": "hi"}, "message_id": 0}',
+            '{"message": {"role": "user", "content": ["hi"]}, "message_id": 0}',
+            '{"message": {"role": "user", "content": [{"text": 5}]}, "message_id": 0}',
+            '{"message": {"role": "system", "content": [{"text": "hi"}]}, "message_id": 0}',
+            '{"message": {"content": [{"text": "hi"}]}, "message_id": 0}',
+            '{"message": {"role": "user", "content": [{"text": "hi"}]}, "message_id": 0, "redact_message": "x"}',
+            '{"message": {"role": "user", "content": [{"image": {"__bytes_encoded__": true, "data": "a"}}]},'
+            ' "message_id": 0}',
+            pytest.param("[" * 50000 + "]" * 50000, id="deep-nesting"),
+        ],
+    )
+    @pytest.mark.parametrize("wrap", ["conversational", "blob"])
+    @patch("bedrock_agentcore.memory.integrations.strands.bedrock_converter.logger")
+    def test_events_to_messages_non_session_message_does_not_break_batch(self, mock_logger, wrap, text):
+        msg = SessionMessage(message_id=1, message={"role": "user", "content": [{"text": "msg1"}]})
+        valid = {"conversational": {"content": {"text": json.dumps(msg.to_dict())}, "role": "USER"}}
+        if wrap == "conversational":
+            other = {"conversational": {"content": {"text": text}, "role": "USER"}}
+        else:
+            other = {"blob": json.dumps([text, "user"])}
+
+        result = AgentCoreMemoryConverter.events_to_messages([{"payload": [other, valid]}])
+
+        assert [m.message["content"][0]["text"] for m in result] == ["msg1"]
+        mock_logger.error.assert_called()
+
+    @patch("bedrock_agentcore.memory.integrations.strands.bedrock_converter.logger")
+    def test_events_to_messages_blob_non_string_entry_does_not_break_batch(self, mock_logger):
+        msg = SessionMessage(message_id=1, message={"role": "user", "content": [{"text": "msg1"}]})
+        valid = {"conversational": {"content": {"text": json.dumps(msg.to_dict())}, "role": "USER"}}
+
+        result = AgentCoreMemoryConverter.events_to_messages([{"payload": [{"blob": "[3, 4]"}, valid]}])
+
+        assert [m.message["content"][0]["text"] for m in result] == ["msg1"]
+        mock_logger.error.assert_called()
 
     @patch("bedrock_agentcore.memory.integrations.strands.bedrock_converter.logger")
     def test_events_to_messages_malformed_payload_does_not_break_batch(self, mock_logger):
