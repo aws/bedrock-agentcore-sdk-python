@@ -2,6 +2,8 @@ import asyncio
 import concurrent.futures
 import contextlib
 import contextvars
+import dataclasses
+import inspect
 import json
 import os
 import threading
@@ -10,6 +12,7 @@ from datetime import datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from starlette.testclient import TestClient
 
@@ -18,7 +21,7 @@ from bedrock_agentcore.config_bundle.bundle import ConfigBundleRef
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from bedrock_agentcore.runtime.app import _parse_runtime_arn
 from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
-from bedrock_agentcore.runtime.models import is_forwardable_header
+from bedrock_agentcore.runtime.models import HookConfig, WarmupType, is_forwardable_header
 
 
 class TestBedrockAgentCoreApp:
@@ -3196,3 +3199,381 @@ class TestStreamingBridgeDeadlock:
             "producer parked in a mid-await was not torn down on disconnect — "
             "source generator's finally never ran (task leaked)"
         )
+
+
+class TestWarmup:
+    """Tests for the @app.warmup build warmup hook decorator and its POST route."""
+
+    HEADER = "X-Amzn-Bedrock-AgentCore-Runtime-Warmup-Type"
+
+    @staticmethod
+    def _app(path="/warmup"):
+        return BedrockAgentCoreApp(warmup_hook=HookConfig(path=path))
+
+    def _post(self, client, warmup_type=None, path="/warmup"):
+        headers = {self.HEADER: warmup_type} if warmup_type is not None else {}
+        return client.post(path, headers=headers)
+
+    @contextlib.asynccontextmanager
+    async def _async_client(self, app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            yield client
+
+    # --- Route and handler results ---
+
+    def test_warmup_route_registered_with_hook(self):
+        app = self._app()
+        assert "/warmup" in [route.path for route in app.routes]  # type: ignore
+        assert app.warmup_hook == HookConfig(path="/warmup")
+
+    def test_memory_only_app(self):
+        app = self._app()
+        calls = []
+
+        @app.warmup(WarmupType.MEMORY)
+        def load():
+            calls.append("memory")
+
+        client = TestClient(app)
+        memory = self._post(client, "memory")
+        assert memory.status_code == 200
+        assert memory.json() == {"status": "ok", "type": "memory", "result": "completed"}
+        disk = self._post(client, "disk")
+        assert disk.status_code == 200
+        assert disk.json() == {"status": "ok", "type": "disk", "result": "skipped"}
+        assert calls == ["memory"]
+
+    def test_both_handlers_run_for_their_type(self):
+        app = self._app()
+        calls = []
+
+        @app.warmup(WarmupType.MEMORY)
+        def memory():
+            calls.append("memory")
+
+        @app.warmup(WarmupType.DISK)
+        def disk():
+            calls.append("disk")
+
+        client = TestClient(app)
+        assert self._post(client, "memory").json()["result"] == "completed"
+        assert self._post(client, "disk").json()["result"] == "completed"
+        assert calls == ["memory", "disk"]
+
+    def test_no_handlers_skips_both(self):
+        client = TestClient(self._app())
+        for warmup_type in ("memory", "disk"):
+            response = self._post(client, warmup_type)
+            assert response.status_code == 200
+            assert response.json() == {"status": "ok", "type": warmup_type, "result": "skipped"}
+
+    @pytest.mark.parametrize("value", ["Memory", "MEMORY", " memory ", "DiSk"])
+    def test_header_is_case_and_whitespace_insensitive(self, value):
+        app = self._app()
+        calls = []
+
+        @app.warmup("memory")
+        def memory():
+            calls.append("memory")
+
+        @app.warmup("disk")
+        def disk():
+            calls.append("disk")
+
+        response = self._post(TestClient(app), value)
+        assert response.status_code == 200
+        assert response.json()["type"] == value.strip().lower()
+        assert calls == [value.strip().lower()]
+
+    @pytest.mark.parametrize("value", [None, "", "cpu", "memory,disk"])
+    def test_missing_or_invalid_header_returns_400(self, value):
+        app = self._app()
+        calls = []
+
+        @app.warmup(WarmupType.MEMORY)
+        def memory():
+            calls.append("memory")
+
+        response = self._post(TestClient(app), value)
+        assert response.status_code == 400
+        assert self.HEADER in response.json()["error"]
+        assert calls == []
+
+    @pytest.mark.parametrize("is_async", [False, True], ids=["sync", "async"])
+    def test_raising_handler_returns_500(self, is_async):
+        app = self._app()
+
+        def fail():
+            raise RuntimeError("model load failed")
+
+        async def fail_async():
+            fail()
+
+        app.warmup(WarmupType.MEMORY)(fail_async if is_async else fail)
+        response = self._post(TestClient(app), "memory")
+        assert response.status_code == 500
+        assert response.json() == {"error": "model load failed", "type": "memory"}
+
+    def test_sync_handler_returning_coroutine_returns_500(self):
+        app = self._app()
+        returned = []
+
+        async def load():
+            pass  # pragma: no cover - never awaited
+
+        def handler():
+            returned.append(load())
+            return returned[0]
+
+        app.warmup(WarmupType.MEMORY)(handler)
+        response = self._post(TestClient(app), "memory")
+        assert response.status_code == 500
+        assert response.json()["type"] == "memory"
+        assert "async def" in response.json()["error"]
+        # Closed, so it never warns "coroutine ... was never awaited" when it's collected. (The warning
+        # itself fires at garbage collection, which the captured log record's traceback delays past the test.)
+        assert inspect.getcoroutinestate(returned[0]) == inspect.CORO_CLOSED
+
+    def test_sync_handler_returning_other_awaitable_returns_500(self):
+        class Awaitable:
+            def __await__(self):
+                yield  # pragma: no cover - never awaited
+
+        app = self._app()
+        app.warmup(WarmupType.DISK)(lambda: Awaitable())
+        response = self._post(TestClient(app), "disk")
+        assert response.status_code == 500
+        assert "async def" in response.json()["error"]
+
+    # --- Dispatch ---
+
+    def test_sync_handler_runs_in_thread_pool(self):
+        app = self._app()
+        seen = {}
+
+        @app.warmup(WarmupType.MEMORY)
+        def memory():
+            seen["thread"] = threading.current_thread().ident
+
+        client = TestClient(app)
+        assert self._post(client, "memory").status_code == 200
+        assert seen["thread"] is not None
+        assert app._worker_loop is None  # sync handlers don't use the worker loop
+
+    def test_async_handler_runs_on_worker_loop(self):
+        app = self._app()
+        seen = {}
+
+        @app.warmup(WarmupType.MEMORY)
+        async def memory():
+            seen["loop"] = asyncio.get_running_loop()
+
+        response = self._post(TestClient(app), "memory")
+        assert response.status_code == 200
+        assert response.json()["result"] == "completed"
+        assert seen["loop"] is app._worker_loop
+
+    def test_ping_stays_healthy_after_warmup(self):
+        app = self._app()
+        app.warmup(WarmupType.MEMORY)(lambda: None)
+        client = TestClient(app)
+        assert self._post(client, "memory").status_code == 200
+        assert client.get("/ping").json()["status"] == "Healthy"
+
+    async def test_blocking_sync_handler_does_not_delay_ping(self):
+        """A sync warmup handler that blocks must not delay a concurrent GET /ping."""
+        app = self._app()
+        started = threading.Event()
+
+        @app.warmup(WarmupType.MEMORY)
+        def memory():
+            started.set()
+            time.sleep(1.5)
+
+        async with self._async_client(app) as client:
+            warmup_task = asyncio.create_task(client.post("/warmup", headers={self.HEADER: "memory"}))
+            for _ in range(100):
+                if started.is_set():
+                    break
+                await asyncio.sleep(0.01)
+            assert started.is_set()
+
+            ping_start = time.monotonic()
+            ping = await client.get("/ping")
+            ping_duration = time.monotonic() - ping_start
+
+            assert not warmup_task.done()
+            warmup = await warmup_task
+
+        assert ping.status_code == 200
+        assert ping.json()["status"] == "Healthy"  # not marked busy during warmup
+        assert ping_duration < 0.5
+        assert warmup.status_code == 200
+        assert warmup.json()["result"] == "completed"
+
+    def test_lock_is_per_hook(self):
+        first, second = self._app(), self._app()
+        assert isinstance(first._hooks["warmup"].lock, asyncio.Lock)
+        assert first._hooks["warmup"].lock is not second._hooks["warmup"].lock
+
+    async def test_overlapping_warmups_run_sequentially(self):
+        app = self._app()
+        lock = threading.Lock()
+        state = {"active": 0, "max_active": 0}
+        intervals = []
+
+        def _work(name):
+            with lock:
+                state["active"] += 1
+                state["max_active"] = max(state["max_active"], state["active"])
+            start = time.monotonic()
+            time.sleep(0.3)
+            end = time.monotonic()
+            with lock:
+                state["active"] -= 1
+                intervals.append((start, end, name))
+
+        app.warmup(WarmupType.MEMORY)(lambda: _work("memory"))
+        app.warmup(WarmupType.DISK)(lambda: _work("disk"))
+
+        async with self._async_client(app) as client:
+            responses = await asyncio.gather(
+                client.post("/warmup", headers={self.HEADER: "memory"}),
+                client.post("/warmup", headers={self.HEADER: "disk"}),
+                client.post("/warmup", headers={self.HEADER: "memory"}),
+            )
+
+        assert [r.status_code for r in responses] == [200, 200, 200]
+        assert state["max_active"] == 1
+        intervals.sort()
+        for (_, prev_end, _), (next_start, _, _) in zip(intervals, intervals[1:], strict=False):
+            assert next_start >= prev_end
+
+    # --- Decorator ---
+
+    def test_decorator_returns_function_unchanged(self):
+        app = self._app()
+
+        def memory():
+            return 42
+
+        assert app.warmup(WarmupType.MEMORY)(memory) is memory
+        assert memory() == 42
+
+    def test_duplicate_registration_raises(self):
+        app = self._app()
+
+        @app.warmup(WarmupType.MEMORY)
+        def first():
+            pass
+
+        with pytest.raises(ValueError, match="already registered"):
+
+            @app.warmup("memory")
+            def second():
+                pass
+
+        assert app._hooks["warmup"].handlers[WarmupType.MEMORY] is first
+
+    @pytest.mark.parametrize("value", ["cpu", "", "Memory", None])
+    def test_unknown_type_raises_at_decoration(self, value):
+        app = self._app()
+        with pytest.raises(ValueError):
+            app.warmup(value)  # type: ignore[arg-type]
+
+    def test_warmup_type_accepts_string_form(self):
+        assert WarmupType("memory") is WarmupType.MEMORY
+        assert WarmupType("disk") is WarmupType.DISK
+        assert WarmupType.MEMORY == "memory"
+        app = self._app()
+        app.warmup("memory")(lambda: None)
+        app.warmup("disk")(lambda: None)
+        assert set(app._hooks["warmup"].handlers) == {WarmupType.MEMORY, WarmupType.DISK}
+
+    def test_warmup_type_and_hook_config_exported(self):
+        import bedrock_agentcore.runtime
+
+        assert bedrock_agentcore.runtime.WarmupType is WarmupType
+        assert bedrock_agentcore.runtime.HookConfig is HookConfig
+
+    # --- warmup_hook constructor argument ---
+
+    def test_custom_hook_path(self):
+        app = self._app("/prepare")
+        calls = []
+
+        @app.warmup(WarmupType.MEMORY)
+        def memory():
+            calls.append("memory")
+
+        client = TestClient(app)
+        response = self._post(client, "memory", path="/prepare")
+        assert response.status_code == 200
+        assert response.json()["result"] == "completed"
+        assert self._post(client, "memory", path="/warmup").status_code in (404, 405)
+        assert calls == ["memory"]
+
+    def test_post_ping_hook_path_keeps_get_ping(self):
+        """POST /ping doesn't clash with GET /ping; both must keep working."""
+        client = TestClient(self._app("/ping"))
+        assert self._post(client, "memory", path="/ping").json()["result"] == "skipped"
+        assert client.get("/ping").json()["status"] == "Healthy"
+
+    def test_post_ws_hook_path_allowed(self):
+        """The WebSocket route has no HTTP methods, so POST /ws doesn't clash."""
+        client = TestClient(self._app("/ws"))
+        assert self._post(client, "disk", path="/ws").json()["result"] == "skipped"
+
+    def test_invocations_hook_path_conflicts(self):
+        with pytest.raises(ValueError, match="POST /invocations is already served"):
+            self._app("/invocations")
+
+    def test_no_warmup_hook_adds_no_route_and_decorator_raises(self):
+        app = BedrockAgentCoreApp()
+        assert app.warmup_hook is None
+        assert self._post(TestClient(app), "memory").status_code in (404, 405)
+        with pytest.raises(ValueError, match=r"warmup_hook=HookConfig\(path=\.\.\.\)"):
+            app.warmup(WarmupType.MEMORY)
+        assert "warmup" not in app._hooks
+
+    def test_existing_positional_args_unchanged(self):
+        app = BedrockAgentCoreApp(True, None, None)
+        assert app.debug is True
+        assert app.warmup_hook is None
+
+    # --- HookConfig validation ---
+
+    @pytest.mark.parametrize("path", ["/", "/warmup", "/a/b-c_d.e~f", "/" + "a" * 31, "/a.b", "/..a"])
+    def test_hook_config_valid_paths(self, path):
+        assert HookConfig(path=path).path == path
+
+    @pytest.mark.parametrize(
+        ("path", "message"),
+        [
+            (None, "must be a string"),
+            ("", "must be between 1 and 32"),
+            ("/" + "a" * 32, "must be between 1 and 32"),
+            ("warmup", "must start with '/'"),
+            ("/bad path", "must start with '/'"),
+            ("/a?b", "must start with '/'"),
+            ("/warmup/", "must be canonical"),
+            ("//warmup", "must be canonical"),
+            ("/a//b", "must be canonical"),
+            ("/./warmup", "must be canonical"),
+            ("/a/../b", "must be canonical"),
+            ("/a/.", "must be canonical"),
+            ("/a/..", "must be canonical"),
+        ],
+    )
+    def test_hook_config_invalid_paths(self, path, message):
+        with pytest.raises(ValueError, match=f"^HookConfig.path {message}"):
+            HookConfig(path=path)  # type: ignore[arg-type]
+
+    def test_hook_config_has_no_port(self):
+        with pytest.raises(TypeError):
+            HookConfig(path="/warmup", port=9000)  # type: ignore[call-arg]
+
+    def test_hook_config_is_frozen(self):
+        config = HookConfig(path="/warmup")
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            config.path = "/other"  # type: ignore[misc]

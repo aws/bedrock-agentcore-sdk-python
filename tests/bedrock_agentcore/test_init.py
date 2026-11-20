@@ -26,5 +26,7 @@ def test_all_exports():
         "RequestContext",
         "BedrockAgentCoreContext",
         "PingStatus",
+        "WarmupType",
+        "HookConfig",
     ]
     assert sorted(bedrock_agentcore.__all__) == sorted(expected_all)
