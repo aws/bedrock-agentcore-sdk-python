@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.27.0] - 2026-11-20
+
+### Other Changes
+- feat(evaluation): adopt GA dataset API (no schemaType, inferred scenario type) (#748) (f3eb006)
+- feat(eval): add dataset generation APIs to DP allowlist (#747) (01d79d4)
+
 ## [1.26.1] - 2026-11-18
 
 ### Other Changes
