@@ -13,6 +13,15 @@ logger = logging.getLogger(__name__)
 CONVERSATIONAL_MAX_SIZE = 100000
 
 
+def _is_message(value: Any) -> bool:
+    if not isinstance(value, dict) or value.get("role") not in ("user", "assistant"):
+        return False
+    content = value.get("content")
+    return isinstance(content, list) and all(
+        isinstance(block, dict) and isinstance(block.get("text", ""), str) for block in content
+    )
+
+
 class AgentCoreMemoryConverter:
     """Handles conversion between Strands and Bedrock AgentCore Memory formats."""
 
@@ -43,6 +52,19 @@ class AgentCoreMemoryConverter:
             return []
         session_dict["message"] = filtered_message
         return [(json.dumps(session_dict), filtered_message["role"])]
+
+    @staticmethod
+    def _parse_session_message(text: Any) -> SessionMessage | None:
+        try:
+            data = json.loads(text)
+            session_msg = SessionMessage.from_dict(data) if isinstance(data, dict) else None
+        except (TypeError, ValueError, RecursionError):
+            return None
+        if session_msg is None or not _is_message(session_msg.message):
+            return None
+        if session_msg.redact_message is not None and not _is_message(session_msg.redact_message):
+            return None
+        return session_msg
 
     @staticmethod
     def events_to_messages(events: list[dict[str, Any]]) -> list[SessionMessage]:
@@ -77,24 +99,26 @@ class AgentCoreMemoryConverter:
         for event in reversed(events):
             for payload_item in event.get("payload", []):
                 if "conversational" in payload_item:
-                    conv = payload_item["conversational"]
-                    session_msg = SessionMessage.from_dict(json.loads(conv["content"]["text"]))
-                    session_msg.message = AgentCoreMemoryConverter._filter_empty_text(session_msg.message)
-                    if session_msg.message.get("content"):
-                        messages.append(session_msg)
+                    text = payload_item["conversational"].get("content", {}).get("text")
                 elif "blob" in payload_item:
                     try:
                         blob_data = json.loads(payload_item["blob"])
-                        if isinstance(blob_data, (tuple, list)) and len(blob_data) == 2:
-                            try:
-                                session_msg = SessionMessage.from_dict(json.loads(blob_data[0]))
-                                session_msg.message = AgentCoreMemoryConverter._filter_empty_text(session_msg.message)
-                                if session_msg.message.get("content"):
-                                    messages.append(session_msg)
-                            except (json.JSONDecodeError, ValueError):
-                                logger.error("This is not a SessionMessage but just a blob message. Ignoring")
-                    except (json.JSONDecodeError, ValueError):
-                        logger.error("Failed to parse blob content: %s", payload_item)
+                    except (TypeError, ValueError, RecursionError):
+                        logger.error("Failed to parse blob content in event %s", event.get("eventId"))
+                        continue
+                    if not (isinstance(blob_data, list) and len(blob_data) == 2):
+                        continue
+                    text = blob_data[0]
+                else:
+                    continue
+
+                session_msg = AgentCoreMemoryConverter._parse_session_message(text)
+                if session_msg is None:
+                    logger.error("Skipping a payload that is not a SessionMessage in event %s", event.get("eventId"))
+                    continue
+                session_msg.message = AgentCoreMemoryConverter._filter_empty_text(session_msg.message)
+                if session_msg.message.get("content"):
+                    messages.append(session_msg)
         return messages
 
     @staticmethod
