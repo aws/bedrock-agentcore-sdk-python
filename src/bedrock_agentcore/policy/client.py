@@ -15,6 +15,7 @@ from .._utils.user_agent import build_user_agent_suffix
 logger = logging.getLogger(__name__)
 
 _FAILED_STATUSES = {"CREATE_FAILED", "UPDATE_FAILED", "DELETE_FAILED"}
+_GENERATION_FAILED_STATUSES = frozenset({"GENERATE_FAILED", "DELETE_FAILED"})
 
 
 class PolicyEngineClient:
@@ -271,14 +272,13 @@ class PolicyEngineClient:
         generation_id = generation["policyGenerationId"]
         logger.info("Started policy generation %s, waiting for completion...", generation_id)
 
-        _generation_failed = {"GENERATE_FAILED", "DELETE_FAILED"}
         result = wait_until(
             lambda: self.cp_client.get_policy_generation(
                 policyEngineId=policy_engine_id,
                 policyGenerationId=generation_id,
             ),
             "GENERATED",
-            _generation_failed,
+            _GENERATION_FAILED_STATUSES,
             wait_config,
         )
 
