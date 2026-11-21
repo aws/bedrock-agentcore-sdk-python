@@ -8,7 +8,10 @@ import inspect
 import json
 import logging
 import os
+import random
 import re
+import signal
+import socket
 import threading
 import time
 from datetime import datetime
@@ -17,6 +20,9 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+import uvicorn
+from starlette.applications import Starlette
+from starlette.routing import Route
 from starlette.testclient import TestClient
 
 import bedrock_agentcore.runtime.app as _app_module
@@ -3682,11 +3688,399 @@ class TestWarmup:
         with pytest.raises(ValueError, match=f"^HookConfig.path {message}"):
             HookConfig(path=path)  # type: ignore[arg-type]
 
-    def test_hook_config_has_no_port(self):
-        with pytest.raises(TypeError):
-            HookConfig(path="/warmup", port=9000)  # type: ignore[call-arg]
-
     def test_hook_config_is_frozen(self):
         config = HookConfig(path="/warmup")
         with pytest.raises(dataclasses.FrozenInstanceError):
             config.path = "/other"  # type: ignore[misc]
+
+
+def _free_hook_port(*exclude):
+    """A port in the range HookConfig.port accepts (8000-12000) that's free on 127.0.0.1."""
+    for port in random.sample(range(8000, 12001), 4001):
+        if port in exclude:
+            continue
+        with socket.socket() as sock:
+            try:
+                sock.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return port
+    raise RuntimeError("no free port")  # pragma: no cover
+
+
+def _is_listening(port):
+    with socket.socket() as sock:
+        sock.settimeout(0.5)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
+class TestWarmupHookPort:
+    """Tests for HookConfig.port: the warmup hook served on its own port."""
+
+    HEADER = "X-Amzn-Bedrock-AgentCore-Runtime-Warmup-Type"
+    NEEDS_RUN = (
+        "Hook ports are only served by app.run(); start the agent with app.run(), or leave HookConfig.port unset"
+    )
+
+    @staticmethod
+    def _app(port, path="/warmup", **kwargs):
+        return BedrockAgentCoreApp(warmup_hook=HookConfig(path=path, port=port), **kwargs)
+
+    # --- HookConfig.port validation ---
+
+    @pytest.mark.parametrize("port", [None, 8000, 9000, 12000])
+    def test_hook_config_valid_ports(self, port):
+        assert HookConfig(path="/warmup", port=port).port == port
+
+    def test_hook_config_port_defaults_to_none(self):
+        assert HookConfig(path="/warmup").port is None
+        assert HookConfig("/warmup", 9000) == HookConfig(path="/warmup", port=9000)
+
+    @pytest.mark.parametrize("port", [7999, 12001, 0, -1, 80, True, False, "8080", 8080.0])
+    def test_hook_config_invalid_ports(self, port):
+        with pytest.raises(ValueError, match=r"^HookConfig.port must be an integer between 8000 and 12000, got "):
+            HookConfig(path="/warmup", port=port)  # type: ignore[arg-type]
+
+    def test_hook_config_path_checked_before_port(self):
+        with pytest.raises(ValueError, match=r"^HookConfig.path "):
+            HookConfig(path="warmup", port=1)
+
+    # --- Routes per port ---
+
+    def test_port_unset_goes_on_main_app(self):
+        app = BedrockAgentCoreApp(warmup_hook=HookConfig(path="/warmup"))
+        assert "/warmup" in [route.path for route in app.routes]  # type: ignore[attr-defined]
+        assert app._hook_port_routes == {}
+
+    def test_port_set_goes_on_its_own_port(self):
+        app = self._app(9000)
+        assert "/warmup" not in [route.path for route in app.routes]  # type: ignore[attr-defined]
+        assert list(app._hook_port_routes) == [9000]
+        [route] = app._hook_port_routes[9000]
+        assert (route.path, route.methods) == ("/warmup", {"POST"})
+        assert app.warmup_hook == HookConfig(path="/warmup", port=9000)
+
+    def test_hook_port_path_not_checked_against_main_routes(self):
+        """On its own port, /invocations doesn't clash with the main app's POST /invocations."""
+        app = self._app(9000, path="/invocations")
+        assert [route.path for route in app._hook_port_routes[9000]] == ["/invocations"]
+
+    def test_routes_conflict_per_port(self):
+        app = self._app(9000)
+        main_routes = list(app.router.routes)
+        app._add_hook_route(
+            HookConfig(path="/warmup", port=9001), Route("/warmup", lambda r: None, methods=["POST"]), main_routes
+        )
+        with pytest.raises(ValueError, match="POST /warmup is already served on port 9000"):
+            app._add_hook_route(
+                HookConfig(path="/warmup", port=9000), Route("/warmup", lambda r: None, methods=["POST"]), main_routes
+            )
+        assert [len(app._hook_port_routes[port]) for port in (9000, 9001)] == [1, 1]
+        app._add_hook_route(
+            HookConfig(path="/other", port=9000), Route("/other", lambda r: None, methods=["POST"]), main_routes
+        )
+        assert [route.path for route in app._hook_port_routes[9000]] == ["/warmup", "/other"]
+        assert main_routes == list(app.router.routes)
+
+    def test_hook_port_app_serves_only_hook_routes(self):
+        app = self._app(9000)
+        app.warmup(WarmupType.MEMORY)(lambda: None)
+        client = TestClient(Starlette(routes=app._hook_port_routes[9000]))
+        assert client.post("/warmup", headers={self.HEADER: "memory"}).json()["result"] == "completed"
+        assert client.get("/ping").status_code == 404
+        assert client.post("/invocations", json={}).status_code == 404
+
+    def test_lifespan_installed_only_with_a_hook_port(self):
+        default = BedrockAgentCoreApp().router.lifespan_context
+        assert type(BedrockAgentCoreApp(warmup_hook=HookConfig(path="/warmup")).router.lifespan_context) is type(
+            default
+        )
+        assert type(self._app(9000).router.lifespan_context) is not type(default)
+
+    # --- run() ---
+
+    @patch("uvicorn.run")
+    def test_run_with_hook_on_serving_port_merges_onto_main_app(self, mock_uvicorn):
+        app = self._app(9000)
+        app.warmup(WarmupType.MEMORY)(lambda: None)
+        app.run(port=9000)
+        mock_uvicorn.assert_called_once()
+        assert app._hook_port_routes == {}
+        assert "/warmup" in [route.path for route in app.routes]  # type: ignore[attr-defined]
+        response = TestClient(app).post("/warmup", headers={self.HEADER: "memory"})
+        assert response.json()["result"] == "completed"
+
+    @patch("uvicorn.run")
+    def test_run_merge_is_checked_against_main_routes(self, mock_uvicorn):
+        app = self._app(9000, path="/invocations")
+        with pytest.raises(ValueError, match="POST /invocations is already served by the app"):
+            app.run(port=9000)
+        mock_uvicorn.assert_not_called()
+
+    @patch("uvicorn.run")
+    def test_run_with_hook_on_other_port_keeps_it_off_main_app(self, mock_uvicorn):
+        app = self._app(9000)
+        app.run(port=8080, host="0.0.0.0")
+        mock_uvicorn.assert_called_once_with(app, host="0.0.0.0", port=8080, access_log=False, log_level="warning")
+        assert list(app._hook_port_routes) == [9000]
+        assert "/warmup" not in [route.path for route in app.routes]  # type: ignore[attr-defined]
+        assert app._started_by_run is True
+
+    @pytest.mark.parametrize("port", [9000, 8080])
+    @patch("uvicorn.run")
+    def test_run_lifespan_off_rejected(self, mock_uvicorn, port):
+        app = self._app(port)
+        with pytest.raises(ValueError, match='lifespan="off"'):
+            app.run(port=8080, lifespan="off")
+        mock_uvicorn.assert_not_called()
+        assert app._started_by_run is False
+
+    @patch("uvicorn.run")
+    def test_run_lifespan_off_allowed_without_hook_port(self, mock_uvicorn):
+        app = BedrockAgentCoreApp(warmup_hook=HookConfig(path="/warmup"))
+        app.run(port=8080, lifespan="off")
+        mock_uvicorn.assert_called_once()
+
+    @patch("uvicorn.run")
+    def test_run_lifespan_on_allowed_with_hook_port(self, mock_uvicorn):
+        app = self._app(9000)
+        app.run(port=8080, lifespan="on")
+        assert mock_uvicorn.call_args.kwargs["lifespan"] == "on"
+
+    # --- Without app.run() ---
+
+    def test_lifespan_without_run_fails_startup(self):
+        app = self._app(_free_hook_port())
+        with pytest.raises(RuntimeError, match=re.escape(self.NEEDS_RUN)):
+            with TestClient(app):
+                pass  # pragma: no cover - startup fails
+        assert app._hook_servers_running is False
+
+    @pytest.mark.parametrize(("method", "path"), [("GET", "/ping"), ("POST", "/invocations"), ("POST", "/warmup")])
+    def test_requests_get_503_when_hook_servers_never_started(self, method, path):
+        """No lifespan ran (e.g. uvicorn --lifespan off), so the hook port isn't served: say so on every request."""
+        app = self._app(9000)
+        app.entrypoint(lambda payload: {"ok": True})
+        response = TestClient(app).request(method, path, json={})
+        assert response.status_code == 503
+        assert response.json() == {"error": self.NEEDS_RUN}
+
+    def test_no_503_without_hook_port(self):
+        app = BedrockAgentCoreApp(warmup_hook=HookConfig(path="/warmup"))
+        assert TestClient(app).get("/ping").status_code == 200
+
+    @patch("uvicorn.run")
+    def test_no_503_once_serving_port_hook_is_merged(self, mock_uvicorn):
+        app = self._app(9000)
+        app.run(port=9000)
+        assert TestClient(app).get("/ping").status_code == 200
+
+    def test_websocket_not_answered_with_503(self):
+        app = self._app(9000)
+
+        @app.websocket
+        async def handler(websocket, context):
+            await websocket.accept()
+            await websocket.send_text("hi")
+            await websocket.close()
+
+        with TestClient(app).websocket_connect("/ws") as ws:
+            assert ws.receive_text() == "hi"
+
+    # --- Lifespan starts and stops the hook servers ---
+
+    @patch("uvicorn.run")
+    def test_lifespan_starts_and_stops_hook_server(self, _mock_uvicorn, caplog):
+        port = _free_hook_port()
+        app = self._app(port)
+        app.run(port=0)  # 0 never matches a hook port, so no hook moves onto the main app
+        calls = []
+        app.warmup(WarmupType.MEMORY)(lambda: calls.append("memory"))
+
+        with caplog.at_level(logging.INFO, logger="bedrock_agentcore.app"):
+            with TestClient(app) as client:
+                assert app._hook_servers_running is True
+                assert _is_listening(port)
+                response = httpx.post(f"http://127.0.0.1:{port}/warmup", headers={self.HEADER: "memory"}, timeout=5)
+                assert response.status_code == 200
+                assert response.json() == {"status": "ok", "type": "memory", "result": "completed"}
+                assert httpx.get(f"http://127.0.0.1:{port}/ping", timeout=5).status_code == 404
+                # The serving port serves the app, but not the hook.
+                assert client.get("/ping").json()["status"] == "Healthy"
+                assert client.post("/warmup", headers={self.HEADER: "memory"}).status_code == 404
+
+        assert calls == ["memory"]
+        assert app._hook_servers_running is False
+        assert not _is_listening(port)
+        assert f"Hook server listening on http://127.0.0.1:{port} (POST /warmup)" in caplog.messages
+        assert "Hook servers stopped" in caplog.messages
+
+    def test_lifespan_with_no_hook_servers_left(self):
+        """run() moved the only hook port onto the main app, so the lifespan has nothing to start."""
+        app = self._app(9000)
+        with patch("uvicorn.run"):
+            app.run(port=9000)
+        with TestClient(app) as client:
+            assert client.post("/warmup", headers={self.HEADER: "disk"}).json()["result"] == "skipped"
+
+    @patch("uvicorn.run")
+    def test_hook_servers_leave_signal_handlers_to_main_server(self, _mock_uvicorn):
+        # Runs serve() on the main thread, where uvicorn would install its handlers.
+        app = self._app(_free_hook_port())
+        app.run(port=0)
+        sigs = (signal.SIGINT, signal.SIGTERM)
+
+        async def check():
+            # Captured inside the loop: asyncio.run() installs its own SIGINT handler on 3.11+.
+            before = {sig: signal.getsignal(sig) for sig in sigs}
+            hook_servers = await app._start_hook_servers()
+            try:
+                assert {sig: signal.getsignal(sig) for sig in sigs} == before
+            finally:
+                await app._stop_hook_servers(hook_servers)
+            assert {sig: signal.getsignal(sig) for sig in sigs} == before
+
+        asyncio.run(check())
+
+    @patch("uvicorn.run")
+    def test_hook_server_binds_loopback_only(self, _mock_uvicorn):
+        port = _free_hook_port()
+        app = self._app(port)
+        app.run(port=8080, host="0.0.0.0")
+
+        async def check():
+            hook_servers = await app._start_hook_servers()
+            try:
+                (listener,) = hook_servers[0].server.servers[0].sockets
+                assert listener.getsockname()[0] == "127.0.0.1"
+            finally:
+                await app._stop_hook_servers(hook_servers)
+
+        asyncio.run(check())
+
+    # --- The user's lifespan ---
+
+    @patch("uvicorn.run")
+    def test_user_async_context_manager_lifespan_runs_inside(self, _mock_uvicorn):
+        port = _free_hook_port()
+        events = []
+
+        @contextlib.asynccontextmanager
+        async def lifespan(app):
+            events.append(("startup", _is_listening(port)))  # hook servers start first
+            yield {"resource": "ready"}
+            events.append(("shutdown", _is_listening(port)))  # and stop after
+
+        app = self._app(port, lifespan=lifespan)
+        app.run(port=0)
+
+        @app.entrypoint
+        def invoke(payload, context):
+            return {"resource": context.request.state.resource}
+
+        with TestClient(app) as client:
+            assert client.post("/invocations", json={}).json() == {"resource": "ready"}
+        assert events == [("startup", True), ("shutdown", True)]
+        assert not _is_listening(port)
+
+    @patch("uvicorn.run")
+    def test_user_generator_lifespan_runs_through_starlette_conversion(self, _mock_uvicorn):
+        port = _free_hook_port()
+        events = []
+
+        def lifespan(app):
+            events.append("startup")
+            yield
+            events.append("shutdown")
+
+        with pytest.warns(Warning, match="generator function lifespans are deprecated"):
+            app = self._app(port, lifespan=lifespan)
+            app.run(port=0)
+        with TestClient(app):
+            assert events == ["startup"]
+        assert events == ["startup", "shutdown"]
+
+    @patch("uvicorn.run")
+    def test_failing_user_lifespan_stops_hook_servers(self, _mock_uvicorn):
+        port = _free_hook_port()
+
+        @contextlib.asynccontextmanager
+        async def lifespan(app):
+            raise RuntimeError("user startup failed")
+            yield  # pragma: no cover
+
+        app = self._app(port, lifespan=lifespan)
+        app.run(port=0)
+        with pytest.raises(RuntimeError, match="user startup failed"):
+            with TestClient(app):
+                pass  # pragma: no cover
+        assert app._hook_servers_running is False
+        assert not _is_listening(port)
+
+    # --- Startup failures ---
+
+    @patch("uvicorn.run")
+    def test_taken_hook_port_gives_clear_error(self, _mock_uvicorn):
+        port = _free_hook_port()
+        app = self._app(port)
+        app.run(port=0)
+        with socket.socket() as taken:
+            taken.bind(("127.0.0.1", port))
+            taken.listen()
+            with pytest.raises(
+                RuntimeError, match=rf"^Can't serve the hook on HookConfig.port {port}: binding 127.0.0.1:{port} failed"
+            ):
+                with TestClient(app):
+                    pass  # pragma: no cover - startup fails
+        assert app._hook_servers_running is False
+
+    @patch("uvicorn.run")
+    def test_taken_second_port_closes_first_socket(self, _mock_uvicorn):
+        first, second = _free_hook_port(), None
+        second = _free_hook_port(first)
+        app = self._app(first)
+        app.run(port=0)
+        app._add_hook_route(
+            HookConfig(path="/other", port=second), Route("/other", lambda r: None, methods=["POST"]), []
+        )
+        with socket.socket() as taken:
+            taken.bind(("127.0.0.1", second))
+            taken.listen()
+            with pytest.raises(RuntimeError, match=f"HookConfig.port {second}"):
+                with TestClient(app):
+                    pass  # pragma: no cover - startup fails
+        # The first port's socket was closed, so it can be bound again.
+        with socket.socket() as again:
+            again.bind(("127.0.0.1", first))
+
+    @patch("uvicorn.run")
+    def test_hook_server_that_stops_during_startup_fails_startup(self, _mock_uvicorn):
+        port = _free_hook_port()
+        app = self._app(port)
+        app.run(port=0)
+
+        async def serve_and_return(self, sockets=None):
+            return None
+
+        with patch.object(_app_module._HookPortServer, "serve", serve_and_return):
+            with pytest.raises(RuntimeError, match="A hook server failed to start"):
+                with TestClient(app):
+                    pass  # pragma: no cover - startup fails
+        assert app._hook_servers_running is False
+
+    def test_hook_server_error_is_logged_on_shutdown(self, caplog):
+        app = self._app(9000)
+
+        async def boom():
+            raise RuntimeError("hook server crashed")
+
+        async def stop():
+            task = asyncio.create_task(boom())
+            await asyncio.sleep(0)
+            server = _app_module._HookPortServer(uvicorn.Config(Starlette()))
+            await app._stop_hook_servers([_app_module._RunningHookServer(server, task)])
+            assert server.should_exit is True
+
+        with caplog.at_level(logging.ERROR, logger="bedrock_agentcore.app"):
+            asyncio.run(stop())
+        assert any("hook server crashed" in message for message in caplog.messages)
