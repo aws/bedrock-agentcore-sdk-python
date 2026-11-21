@@ -121,6 +121,5 @@ def test_list_messages_filters_restored_tool_context():
 
         assert [m.message for m in messages] == [
             {"role": "user", "content": [{"text": "hello"}]},
-            {"role": "assistant", "content": [{"text": "calling tool"}]},
-            {"role": "assistant", "content": [{"text": "done"}]},
+            {"role": "assistant", "content": [{"text": "calling tool"}, {"text": "done"}]},
         ]
