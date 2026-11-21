@@ -121,8 +121,16 @@ client.create_agent_runtime(
 ```
 
 - `HookConfig.path` must equal `hooksConfiguration.build.warmup.action.httpPost.path`. The API requires the path, and the SDK has no default. Without `warmup_hook`, the app adds no warmup route and `@app.warmup` raises `ValueError`.
-- Leave `httpPost.port` unset, or set it to the port the app serves on (`app.run(port=...)`, default 8080). The app doesn't serve the hook on a different port, so the hook call fails.
-- Serve the hook from one server process. The memory call reaches one process. That process may start child processes (for example a browser or a model server) and keep them, but other worker processes (for example `uvicorn --workers N`) don't receive the call.
+- `HookConfig.port` must equal `httpPost.port`. Omit both to serve the hook on the port the app serves on (`app.run(port=...)`, default 8080), next to `/invocations` and `/ping`.
+- To serve the hook on its own port (8000-12000), for example when you run your own server on 8080, set both:
+
+  ```python
+  app = BedrockAgentCoreApp(warmup_hook=HookConfig(path="/warmup", port=9000))
+  # hooksConfiguration={"build": {"warmup": {"action": {"httpPost": {"path": "/warmup", "port": 9000}}}}}
+  ```
+
+  The app then serves `POST /warmup` on port 9000 only, from a second listener on `127.0.0.1` in the same process that `app.run()` opens before the serving port and closes after it. A separate port requires starting the agent with `app.run()`: started another way (for example `uvicorn agent:app`), the app fails its startup with a message saying so, and `app.run(lifespan="off")` raises `ValueError`. If the hook port is taken, the app exits before the serving port opens. A `HookConfig.port` equal to the serving port is served on the serving port, as if it were unset.
+- Serve the hook from one server process. The memory call reaches one process. That process may start child processes (for example a browser or a model server) and keep them, but other worker processes (for example `uvicorn --workers N`) don't receive the call, and would each try to open the hook port.
 
 ## AG-UI Protocol Support
 

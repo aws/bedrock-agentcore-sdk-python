@@ -6,6 +6,7 @@ Contains data models and enums used throughout the runtime system.
 import re
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 
 class PingStatus(str, Enum):
@@ -30,30 +31,33 @@ class WarmupType(str, Enum):
 # Mirrors the public API constraints for HttpPostLifecycleHookAction.
 _LIFECYCLE_HOOK_PATH_MAX_LENGTH = 32
 _LIFECYCLE_HOOK_PATH_PATTERN = re.compile(r"^/[A-Za-z0-9._~/-]*$")
+_LIFECYCLE_HOOK_PORT_MIN = 8000
+_LIFECYCLE_HOOK_PORT_MAX = 12000
 
 
 @dataclass(frozen=True)
 class HookConfig:
-    """Where the app serves a lifecycle hook, matching the runtime's ``hooksConfiguration``.
+    """Where the app serves a lifecycle hook, as ``POST`` on ``path``.
 
-    The app serves the hook as ``POST`` on ``path``, on the app's serving port (``app.run(port=...)``, default
-    8080). Leave ``hooksConfiguration.<hook>.action.httpPost.port`` unset, or set it to the app's serving port.
+    Without ``port`` the hook is served on the serving port. With ``port`` it's served on that port by a
+    separate listener on 127.0.0.1 in the same process, which needs ``app.run()``.
 
     See https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-hooks.html
 
     Attributes:
-        path: Path of the hook route. Must equal ``hooksConfiguration.<hook>.action.httpPost.path``, which the
-            API requires: 1-32 characters, starting with ``/``, from ``A-Z a-z 0-9 . _ ~ / -``, and in canonical
-            form: no trailing ``/`` (except the path ``/`` itself), no ``//``, and no ``.`` or ``..`` segments.
+        path: Path of the hook route: 1-32 characters from ``A-Z a-z 0-9 . _ ~ / -``, starting with ``/``,
+            with no trailing ``/`` (except ``/`` itself), no ``//``, and no ``.`` or ``..`` segments.
+        port: Port of the hook route, 8000-12000. ``None`` (the default) serves it on the serving port.
 
     Raises:
-        ValueError: If ``path`` doesn't meet the API constraints.
+        ValueError: If ``path`` or ``port`` is invalid.
     """
 
     path: str
+    port: Optional[int] = None
 
     def __post_init__(self):
-        """Validate ``path`` against the API constraints."""
+        """Validate ``path`` and ``port`` against the API constraints."""
         path = self.path
         if not isinstance(path, str):
             raise ValueError(f"HookConfig.path must be a string, got {path!r}")
@@ -71,6 +75,16 @@ class HookConfig:
             raise ValueError(
                 "HookConfig.path must be canonical: no trailing '/' (except '/' itself), no '//', "
                 f"and no '.' or '..' segments, got {path!r}"
+            )
+        port = self.port
+        if port is not None and (
+            isinstance(port, bool)
+            or not isinstance(port, int)
+            or not _LIFECYCLE_HOOK_PORT_MIN <= port <= _LIFECYCLE_HOOK_PORT_MAX
+        ):
+            raise ValueError(
+                f"HookConfig.port must be an integer between {_LIFECYCLE_HOOK_PORT_MIN} and "
+                f"{_LIFECYCLE_HOOK_PORT_MAX}, got {port!r}"
             )
 
 
