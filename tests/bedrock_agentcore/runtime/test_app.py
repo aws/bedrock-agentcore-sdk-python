@@ -3,9 +3,12 @@ import concurrent.futures
 import contextlib
 import contextvars
 import dataclasses
+import functools
 import inspect
 import json
+import logging
 import os
+import re
 import threading
 import time
 from datetime import datetime
@@ -3285,8 +3288,8 @@ class TestWarmup:
         assert response.json()["type"] == value.strip().lower()
         assert calls == [value.strip().lower()]
 
-    @pytest.mark.parametrize("value", [None, "", "cpu", "memory,disk"])
-    def test_missing_or_invalid_header_returns_400(self, value):
+    @pytest.mark.parametrize("value", [None, "", "   "])
+    def test_missing_or_empty_header_returns_400(self, value):
         app = self._app()
         calls = []
 
@@ -3296,8 +3299,31 @@ class TestWarmup:
 
         response = self._post(TestClient(app), value)
         assert response.status_code == 400
-        assert self.HEADER in response.json()["error"]
+        assert response.json() == {"error": "X-Amzn-Bedrock-AgentCore-Runtime-Warmup-Type header is missing or empty"}
         assert calls == []
+
+    @pytest.mark.parametrize(
+        ("value", "expected_type"), [("cpu", "cpu"), ("memory,disk", "memory,disk"), (" Network ", "network")]
+    )
+    def test_unknown_type_is_skipped(self, value, expected_type, caplog):
+        """A type this SDK version doesn't know (say, one the service adds later) must not fail the create."""
+        app = self._app()
+        calls = []
+
+        @app.warmup(WarmupType.MEMORY)
+        def memory():
+            calls.append("memory")
+
+        @app.warmup(WarmupType.DISK)
+        def disk():
+            calls.append("disk")
+
+        with caplog.at_level(logging.INFO, logger="bedrock_agentcore.app"):
+            response = self._post(TestClient(app), value)
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok", "type": expected_type, "result": "skipped"}
+        assert calls == []
+        assert f"Warmup ({expected_type}): unknown type, nothing to do" in caplog.messages
 
     @pytest.mark.parametrize("is_async", [False, True], ids=["sync", "async"])
     def test_raising_handler_returns_500(self, is_async):
@@ -3333,6 +3359,45 @@ class TestWarmup:
         # Closed, so it never warns "coroutine ... was never awaited" when it's collected. (The warning
         # itself fires at garbage collection, which the captured log record's traceback delays past the test.)
         assert inspect.getcoroutinestate(returned[0]) == inspect.CORO_CLOSED
+
+    @pytest.mark.parametrize("is_async", [False, True], ids=["sync", "async"])
+    def test_handler_returning_generator_returns_500(self, is_async):
+        """A non-generator handler that returns a generator passes registration; the call must still fail."""
+        app = self._app()
+        ran = {"body": False}
+
+        def gen():
+            ran["body"] = True  # pragma: no cover - never iterated
+            yield  # pragma: no cover
+
+        async def async_gen():
+            ran["body"] = True  # pragma: no cover - never iterated
+            yield  # pragma: no cover
+
+        app.warmup(WarmupType.MEMORY)((lambda: async_gen()) if is_async else (lambda: gen()))
+        response = self._post(TestClient(app), "memory")
+        assert response.status_code == 500
+        assert response.json()["type"] == "memory"
+        assert "yield" in response.json()["error"]
+        assert ran["body"] is False
+
+    def test_async_handler_returning_async_generator_returns_500(self):
+        """``_dispatch_handler`` bridges a returned async generator into a sync generator; reject that too."""
+        app = self._app()
+        ran = {"body": False}
+
+        async def async_gen():
+            ran["body"] = True  # pragma: no cover - never iterated
+            yield  # pragma: no cover
+
+        async def handler():
+            return async_gen()
+
+        app.warmup(WarmupType.DISK)(handler)
+        response = self._post(TestClient(app), "disk")
+        assert response.status_code == 500
+        assert "yield" in response.json()["error"]
+        assert ran["body"] is False
 
     def test_sync_handler_returning_other_awaitable_returns_500(self):
         class Awaitable:
@@ -3474,6 +3539,54 @@ class TestWarmup:
                 pass
 
         assert app._hooks["warmup"].handlers[WarmupType.MEMORY] is first
+
+    @staticmethod
+    def _gen():
+        yield  # pragma: no cover - never iterated
+
+    @staticmethod
+    async def _async_gen():
+        yield  # pragma: no cover - never iterated
+
+    class _GenCallable:
+        def __call__(self):
+            yield  # pragma: no cover - never iterated
+
+    class _AsyncGenCallable:
+        async def __call__(self):
+            yield  # pragma: no cover - never iterated
+
+    @pytest.mark.parametrize(
+        ("make_handler", "name"),
+        [
+            (lambda cls: cls._gen, "TestWarmup._gen"),
+            (lambda cls: cls._async_gen, "TestWarmup._async_gen"),
+            (lambda cls: functools.partial(cls._gen), "TestWarmup._gen"),
+            (lambda cls: functools.partial(functools.partial(cls._async_gen)), "TestWarmup._async_gen"),
+            (lambda cls: cls._GenCallable(), "TestWarmup._GenCallable"),
+            (lambda cls: cls._AsyncGenCallable(), "TestWarmup._AsyncGenCallable"),
+        ],
+        ids=["def-yield", "async-def-yield", "partial", "nested-partial", "callable-class", "async-callable-class"],
+    )
+    def test_generator_handler_rejected_at_registration(self, make_handler, name):
+        app = self._app()
+        handler = make_handler(type(self))
+        with pytest.raises(ValueError, match=rf"^warmup handler {re.escape(name)} is a generator function: .*`yield`"):
+            app.warmup(WarmupType.MEMORY)(handler)
+        assert app._hooks["warmup"].handlers == {}
+
+    def test_non_generator_handlers_accepted(self):
+        class Callable:
+            def __call__(self):
+                return None
+
+        async def load():
+            return None
+
+        app = self._app()
+        app.warmup(WarmupType.MEMORY)(functools.partial(load))
+        app.warmup(WarmupType.DISK)(Callable())
+        assert set(app._hooks["warmup"].handlers) == {WarmupType.MEMORY, WarmupType.DISK}
 
     @pytest.mark.parametrize("value", ["cpu", "", "Memory", None])
     def test_unknown_type_raises_at_decoration(self, value):

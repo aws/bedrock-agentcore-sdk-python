@@ -18,7 +18,8 @@ class PingStatus(str, Enum):
 class WarmupType(str, Enum):
     """Build warmup call type, sent by AgentCore Runtime in the ``WARMUP_TYPE_HEADER`` header.
 
-    AgentCore Runtime calls the build warmup hook twice, first with ``memory`` and then with ``disk``.
+    AgentCore Runtime calls the build warmup hook twice, first with ``memory`` and then with ``disk``. The app
+    answers a type it doesn't know with 200 ``skipped``, so a type added later doesn't fail the call.
     See https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-hooks.html
     """
 
