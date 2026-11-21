@@ -92,8 +92,13 @@ class TestSDKWarmupAgent(BaseSDKRuntimeTest):
             assert disk.status_code == 200
             assert disk.json() == {"status": "ok", "type": "disk", "result": "skipped"}
 
-            bad = requests.post(f"{base_url}/warmup", headers={WARMUP_HEADER: "cpu"}, timeout=10)
-            assert bad.status_code == 400
+            # A type this SDK version doesn't know is skipped, so a future type can't fail the create.
+            unknown = requests.post(f"{base_url}/warmup", headers={WARMUP_HEADER: "cpu"}, timeout=10)
+            assert unknown.status_code == 200
+            assert unknown.json() == {"status": "ok", "type": "cpu", "result": "skipped"}
+
+            missing = requests.post(f"{base_url}/warmup", timeout=10)
+            assert missing.status_code == 400
 
             response = client.invoke_endpoint("{}")
             logger.info(response)

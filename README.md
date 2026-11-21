@@ -104,7 +104,13 @@ def invoke(payload):
 app.run()
 ```
 
-Handlers run off the event loop, so `/ping` keeps answering. A type without a handler returns 200; an exception returns 500, which fails the create or update. The two calls share a 120-second limit. Configure the hook on the runtime:
+- Handlers run off the event loop, so `/ping` keeps answering.
+- A type without a handler, or one this SDK doesn't recognize, returns 200 (`"result": "skipped"`). Only a missing type header returns 400.
+- An exception returns 500, which fails the create or update.
+- Handlers can't be generators: `@app.warmup` raises `ValueError` for a function with `yield`.
+- Both calls share a 120-second limit.
+
+Configure the hook on the runtime:
 
 ```python
 client.create_agent_runtime(

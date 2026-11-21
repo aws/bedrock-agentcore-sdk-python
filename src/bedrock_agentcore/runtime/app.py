@@ -115,6 +115,24 @@ def _is_async_gen_callable(obj: Any) -> bool:
     return inspect.isasyncgenfunction(obj) or (callable(obj) and inspect.isasyncgenfunction(obj.__call__))
 
 
+def _is_generator_callable(obj: Any) -> bool:
+    """Check if obj is a generator or async generator function, unwrapping functools.partial.
+
+    A callable object counts when its ``__call__`` is one.
+    """
+    while isinstance(obj, functools.partial):
+        obj = obj.func
+    obj = obj.__call__ if callable(obj) and not inspect.isroutine(obj) else obj
+    return inspect.isgeneratorfunction(obj) or inspect.isasyncgenfunction(obj)
+
+
+def _callable_name(obj: Any) -> str:
+    """Name a callable for error messages, unwrapping functools.partial."""
+    while isinstance(obj, functools.partial):
+        obj = obj.func
+    return getattr(obj, "__qualname__", None) or type(obj).__qualname__
+
+
 def _restore_context(ctx: contextvars.Context) -> None:
     """Restore context variables from a snapshot (Django asgiref pattern)."""
     for var, value in ctx.items():
@@ -310,10 +328,13 @@ class BedrockAgentCoreApp(Starlette):
         AgentCore Runtime calls the build warmup hook (``POST`` to ``warmup_hook.path``) twice while it prepares
         the agent during ``CreateAgentRuntime`` and ``UpdateAgentRuntime``: first ``memory``, then ``disk``.
         Register a handler for zero, one or both types. A type without a handler is answered with 200, so
-        it has nothing to do. The handler takes no arguments and may be sync or async: sync handlers run in a
-        worker thread and async handlers on a separate event loop, so the server keeps answering ``/ping``
-        while they run. The response is sent after the handler returns. An exception in the handler returns
-        500, which fails the create or update. Handlers never run concurrently with each other in one process.
+        it has nothing to do, and so is a type this SDK version doesn't know; only a missing or empty type
+        header is answered with 400. The handler takes no arguments and may be sync or async, but not a
+        generator (no ``yield``): sync handlers run in a worker thread and async handlers on a separate event
+        loop, so the server keeps answering ``/ping`` while they run. The response is sent after the handler
+        returns. An exception in the handler returns 500, which fails the create or update, and so does a
+        handler that returns a generator or an awaitable it didn't await. Handlers never run concurrently with
+        each other in one process.
 
         See https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-hooks.html
 
@@ -321,7 +342,10 @@ class BedrockAgentCoreApp(Starlette):
             type: The warmup type to handle, a ``WarmupType`` or its string value (``"memory"`` or ``"disk"``)
 
         Returns:
-            A decorator that registers the function and returns it unchanged
+            A decorator that registers the function and returns it unchanged. The decorator raises
+            ``ValueError`` if the function is a generator function (``def`` or ``async def`` with ``yield``,
+            also through ``functools.partial`` or a callable object's ``__call__``), since its body would
+            never run.
 
         Raises:
             ValueError: If the app has no ``warmup_hook``, ``type`` isn't a valid warmup type, or a handler is
@@ -346,6 +370,11 @@ class BedrockAgentCoreApp(Starlette):
             raise ValueError(f"A {warmup_type.value} warmup handler is already registered")
 
         def register(func: Callable) -> Callable:
+            if _is_generator_callable(func):
+                raise ValueError(
+                    f"warmup handler {_callable_name(func)} is a generator function: its body would never run. "
+                    "Remove the `yield`."
+                )
             handlers[warmup_type] = func
             return func
 
@@ -714,13 +743,16 @@ class BedrockAgentCoreApp(Starlette):
 
     async def _handle_warmup(self, request):
         raw_type = request.headers.get(WARMUP_TYPE_HEADER, "").strip().lower()
+        if not raw_type:
+            self.logger.warning("Warmup request without a %s header", WARMUP_TYPE_HEADER)
+            return JSONResponse({"error": f"{WARMUP_TYPE_HEADER} header is missing or empty"}, status_code=400)
         try:
             warmup_type = WarmupType(raw_type)
         except ValueError:
-            self.logger.warning("Warmup request with invalid %s header: %r", WARMUP_TYPE_HEADER, raw_type)
-            return JSONResponse(
-                {"error": f"{WARMUP_TYPE_HEADER} must be 'memory' or 'disk', got {raw_type!r}"}, status_code=400
-            )
+            # A type this SDK version doesn't know, perhaps added by the service later: there's nothing to do,
+            # and failing it would fail the create or update of every agent on this version.
+            self.logger.info("Warmup (%s): unknown type, nothing to do", raw_type)
+            return JSONResponse({"status": "ok", "type": raw_type, "result": "skipped"})
 
         hook = self._hooks["warmup"]
         handler = hook.handlers.get(warmup_type)
@@ -732,6 +764,13 @@ class BedrockAgentCoreApp(Starlette):
             start_time = time.time()
             try:
                 result = await self._dispatch_handler(handler, ())
+                if inspect.isgenerator(result) or inspect.isasyncgen(result):
+                    # Never iterated, so the body never ran; close it so it doesn't linger.
+                    if inspect.isgenerator(result):
+                        result.close()
+                    else:
+                        await result.aclose()
+                    raise TypeError("warmup handler returned a generator, so its body never ran; remove the `yield`")
                 if inspect.isawaitable(result):
                     if inspect.iscoroutine(result):
                         result.close()  # never awaited on purpose; close it so Python doesn't warn
