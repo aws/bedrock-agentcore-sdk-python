@@ -192,7 +192,6 @@ def _add_route(route: Route, routes: list[BaseRoute], where: str = "by the app")
     routes.append(route)
 
 
-_HOOK_HOST = "127.0.0.1"  # the runtime calls hooks on loopback
 _HOOK_PORTS_NEED_RUN = (
     "Hook ports are only served by app.run(); start the agent with app.run(), or leave HookConfig.port unset"
 )
@@ -214,16 +213,16 @@ class _RunningHookServer(NamedTuple):
     task: asyncio.Task
 
 
-def _bind_hook_socket(port: int) -> socket.socket:
-    """Bind a hook port's socket on loopback, raising a RuntimeError that names the port if it can't be bound."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+def _bind_hook_socket(host: str, port: int) -> socket.socket:
+    """Bind a hook port's socket, raising a RuntimeError that names the port if it can't be bound."""
+    sock = socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET, socket.SOCK_STREAM)
     try:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind((_HOOK_HOST, port))
+        sock.bind((host, port))
     except OSError as e:
         sock.close()
         raise RuntimeError(
-            f"Can't serve the hook on HookConfig.port {port}: binding {_HOOK_HOST}:{port} failed: {e.strerror or e}"
+            f"Can't serve the hook on HookConfig.port {port}: binding {host}:{port} failed: {e.strerror or e}"
         ) from e
     sock.set_inheritable(True)
     return sock
@@ -288,6 +287,7 @@ class BedrockAgentCoreApp(Starlette):
         # except the serving port, whose routes it moves onto this app.
         self._hook_port_routes: Dict[int, list[BaseRoute]] = {}
         self._started_by_run = False  # set by run(); hook ports are only served then
+        self._hook_host: Optional[str] = None  # the serving host, set by run(); hook ports bind to it too
         self._hook_servers_running = False
 
         # Config bundle client — created lazily on first use.
@@ -374,10 +374,11 @@ class BedrockAgentCoreApp(Starlette):
 
         The lifespan runs before the main server binds the serving port, so hook ports listen first.
         """
+        host = self._hook_host or "127.0.0.1"
         sockets: list[socket.socket] = []
         try:
             for port in self._hook_port_routes:
-                sockets.append(_bind_hook_socket(port))
+                sockets.append(_bind_hook_socket(host, port))
         except Exception:
             for sock in sockets:
                 sock.close()
@@ -387,7 +388,7 @@ class BedrockAgentCoreApp(Starlette):
         for (port, routes), sock in zip(self._hook_port_routes.items(), sockets, strict=True):
             config = uvicorn.Config(
                 Starlette(routes=routes),
-                host=_HOOK_HOST,
+                host=host,
                 port=port,
                 lifespan="off",
                 log_config=None,  # keep the main server's logging config
@@ -401,12 +402,12 @@ class BedrockAgentCoreApp(Starlette):
                 await self._stop_hook_servers(hook_servers)
                 for sock in sockets:
                     sock.close()
-                raise RuntimeError(f"A hook server failed to start on ports {list(self._hook_port_routes)}")
+                raise RuntimeError(f"A hook server failed to start on {host}, ports {list(self._hook_port_routes)}")
             await asyncio.sleep(0.01)
         self._hook_servers_running = True
         for port, routes in self._hook_port_routes.items():
             paths = ", ".join(f"POST {route.path}" for route in routes if isinstance(route, Route))
-            self.logger.info("Hook server listening on http://%s:%d (%s)", _HOOK_HOST, port, paths)
+            self.logger.info("Hook server listening on http://%s:%d (%s)", host, port, paths)
         return hook_servers
 
     async def _stop_hook_servers(self, hook_servers: list[_RunningHookServer]) -> None:
@@ -961,7 +962,7 @@ class BedrockAgentCoreApp(Starlette):
 
         Args:
             port: Port to serve on, defaults to 8080
-            host: Host to bind to, auto-detected if None. Hook ports bind to 127.0.0.1 only.
+            host: Host to bind to, auto-detected if None. Hook ports bind to the same host.
             **kwargs: Additional arguments passed to uvicorn.run()
 
         Raises:
@@ -998,6 +999,7 @@ class BedrockAgentCoreApp(Starlette):
         for route in self._hook_port_routes.pop(port, []):
             _add_route(route, self.router.routes)
         self._started_by_run = True
+        self._hook_host = host
 
         uvicorn.run(self, **uvicorn_params)
 

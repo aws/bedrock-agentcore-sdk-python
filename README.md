@@ -129,7 +129,7 @@ client.create_agent_runtime(
   # hooksConfiguration={"build": {"warmup": {"action": {"httpPost": {"path": "/warmup", "port": 9000}}}}}
   ```
 
-  The app then serves `POST /warmup` on port 9000 only, from a second listener on `127.0.0.1` in the same process that `app.run()` opens before the serving port and closes after it. A separate port requires starting the agent with `app.run()`: started another way (for example `uvicorn agent:app`), the app fails its startup with a message saying so, and `app.run(lifespan="off")` raises `ValueError`. If the hook port is taken, the app exits before the serving port opens. A `HookConfig.port` equal to the serving port is served on the serving port, as if it were unset.
+  The app then serves `POST /warmup` on port 9000 only, from a second listener in the same process, on the same host as the serving port, that `app.run()` opens before the serving port and closes after it. A separate port requires starting the agent with `app.run()`: started another way (for example `uvicorn agent:app`), the app fails its startup with a message saying so, and `app.run(lifespan="off")` raises `ValueError`. If the hook port is taken, the app exits before the serving port opens. A `HookConfig.port` equal to the serving port is served on the serving port, as if it were unset.
 - Serve the hook from one server process. The memory call reaches one process. That process may start child processes (for example a browser or a model server) and keep them, but other worker processes (for example `uvicorn --workers N`) don't receive the call, and would each try to open the hook port.
 
 ## AG-UI Protocol Support
