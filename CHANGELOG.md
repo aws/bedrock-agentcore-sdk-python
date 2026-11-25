@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.28.0] - 2026-11-25
+
+### Other Changes
+- feat(runtime): add @app.warmup decorator for build warmup lifecycle hooks (#754) (62f8fc6)
+- ci: bump open-PR digest workflow pin to list every open PR (#753) (140321a)
+
 ## [1.27.0] - 2026-11-20
 
 ### Other Changes
