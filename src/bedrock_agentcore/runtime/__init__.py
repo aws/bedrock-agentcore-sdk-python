@@ -12,7 +12,7 @@ from .agent_core_runtime_client import AgentCoreRuntimeClient
 from .app import BedrockAgentCoreApp
 from .context import BedrockAgentCoreContext, RequestContext
 from .local_endpoint import LocalEndpoint
-from .models import PingStatus
+from .models import HookConfig, PingStatus, WarmupType
 from .session_endpoint import (
     InvalidSessionEndpointError,
     SessionEndpointClient,
@@ -45,6 +45,8 @@ __all__ = [
     "ReconnectConfig",
     "RequestContext",
     "PingStatus",
+    "WarmupType",
+    "HookConfig",
     "SessionEndpointClient",
     "SessionEndpointResponse",
     "LocalEndpoint",
