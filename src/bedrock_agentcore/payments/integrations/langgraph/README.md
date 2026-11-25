@@ -53,7 +53,7 @@ payments = AgentCorePaymentsMiddleware(config)
 
 # 3. Agent — that's it
 agent = create_agent(
-    model="claude-sonnet-4-20250514",
+    model="claude-sonnet-4-6",
     tools=[],  # middleware auto-registers http_request + payment query tools
     middleware=[payments],
 )
@@ -479,7 +479,7 @@ app = FastAPI()
 async def chat(message: str):
     config = AgentCorePaymentsConfig(...)
     payments = AgentCorePaymentsMiddleware(config)
-    agent = create_agent(model="claude-sonnet-4-20250514", tools=[], middleware=[payments])
+    agent = create_agent(model="claude-sonnet-4-6", tools=[], middleware=[payments])
 
     # Uses awrap_tool_call automatically — won't block other requests
     result = await agent.ainvoke({"messages": [{"role": "user", "content": message}]})
