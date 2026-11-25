@@ -3825,6 +3825,7 @@ class TestWarmupHookPort:
         assert list(app._hook_port_routes) == [9000]
         assert "/warmup" not in [route.path for route in app.routes]  # type: ignore[attr-defined]
         assert app._started_by_run is True
+        assert app._hook_host == "0.0.0.0"
 
     @pytest.mark.parametrize("port", [9000, 8080])
     @patch("uvicorn.run")
@@ -3943,7 +3944,7 @@ class TestWarmupHookPort:
         asyncio.run(check())
 
     @patch("uvicorn.run")
-    def test_hook_server_binds_loopback_only(self, _mock_uvicorn):
+    def test_hook_server_binds_the_serving_host(self, _mock_uvicorn):
         port = _free_hook_port()
         app = self._app(port)
         app.run(port=8080, host="0.0.0.0")
@@ -3952,7 +3953,7 @@ class TestWarmupHookPort:
             hook_servers = await app._start_hook_servers()
             try:
                 (listener,) = hook_servers[0].server.servers[0].sockets
-                assert listener.getsockname()[0] == "127.0.0.1"
+                assert listener.getsockname()[0] == "0.0.0.0"  # reachable through a container's published port
             finally:
                 await app._stop_hook_servers(hook_servers)
 

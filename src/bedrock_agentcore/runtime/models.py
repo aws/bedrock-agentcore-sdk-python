@@ -40,7 +40,7 @@ class HookConfig:
     """Where the app serves a lifecycle hook, as ``POST`` on ``path``.
 
     Without ``port`` the hook is served on the serving port. With ``port`` it's served on that port by a
-    separate listener on 127.0.0.1 in the same process, which needs ``app.run()``.
+    separate listener in the same process, on the serving host, which needs ``app.run()``.
 
     See https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-hooks.html
 
