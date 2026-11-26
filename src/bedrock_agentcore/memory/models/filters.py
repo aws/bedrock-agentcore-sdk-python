@@ -86,7 +86,9 @@ class EventMetadataFilter(TypedDict):
     """
 
     left: LeftExpression
-    operator: OperatorType
+    # Stored as the operator's string value (e.g. "EQUALS_TO"), not the enum itself,
+    # since this dict is serialized directly to the AgentCore service.
+    operator: str
     right: Optional[RightExpression]
 
     def build_expression(
