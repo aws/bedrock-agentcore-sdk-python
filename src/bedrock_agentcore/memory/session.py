@@ -965,7 +965,7 @@ class MemorySessionManager:
         self,
         namespace_prefix: Optional[str] = None,
         strategy_id: Optional[str] = None,
-        max_results: int = 10,
+        max_results: Optional[int] = 10,
         namespace: Optional[str] = None,
         namespace_path: Optional[str] = None,
     ) -> List[MemoryRecord]:
@@ -980,7 +980,7 @@ class MemorySessionManager:
         Args:
             namespace_prefix: DEPRECATED. Use ``namespace`` or ``namespace_path`` instead.
             strategy_id: Optional strategy filter
-            max_results: Maximum records to return
+            max_results: Maximum records to return. Pass ``None`` to retrieve all records.
             namespace: Exact-match namespace (preserves pre-redesign behavior during the
                 service grace period)
             namespace_path: Hierarchical path-prefix namespace
@@ -1014,11 +1014,13 @@ class MemorySessionManager:
                 all_records.extend([MemoryRecord(record) for record in memory_records])
 
                 # Stop if we've reached max_results
-                if len(all_records) >= max_results:
+                if max_results is not None and len(all_records) >= max_results:
                     break
 
             logger.info("     ✅ Found a total of %d long-term records.", len(all_records))
-            return all_records[:max_results]
+            if max_results is not None:
+                return all_records[:max_results]
+            return all_records
 
         except ClientError as e:
             logger.error("     ❌ Error listing long-term records: %s", e)
@@ -1106,7 +1108,7 @@ class MemorySessionManager:
 
         # Retrieve all memory records in the specified namespace
         # TODO: revisit after full deprecation of namespace fields
-        memory_records = self.list_long_term_memory_records(namespace=namespace)
+        memory_records = self.list_long_term_memory_records(namespace=namespace, max_results=None)
         logger.info("  -> Found %d memory records to delete", len(memory_records))
 
         if not memory_records:
