@@ -428,6 +428,41 @@ class TestSessionManager:
                     assert "Response to: Hello with 1 memories" in response
                     assert event["eventId"] == "event-123"
 
+    def test_process_turn_with_llm_resolves_memory_strategy_id(self):
+        """Namespace templates may use {memoryStrategyId} per the docstring and defaults."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = MagicMock()
+            mock_session.region_name = "us-west-2"
+            mock_client_instance = MagicMock()
+            mock_session.client.return_value = mock_client_instance
+            mock_session_class.return_value = mock_session
+
+            manager = MemorySessionManager(memory_id="testMemory-1234567890", region_name="us-west-2")
+
+            mock_memories = [{"content": {"text": "ctx"}, "memoryRecordId": "rec-123"}]
+            with patch.object(manager, "search_long_term_memories", return_value=mock_memories) as mock_search:
+                mock_event = {"eventId": "event-123", "memoryId": "testMemory-1234567890"}
+                with patch.object(manager, "add_turns", return_value=Event(mock_event)):
+
+                    def mock_llm_callback(user_input: str, memories: List[Dict[str, Any]]) -> str:
+                        return "response"
+
+                    retrieval_config = {
+                        "/strategies/{memoryStrategyId}/actors/{actorId}/": RetrievalConfig(
+                            top_k=5, strategy_id="strat-abc"
+                        )
+                    }
+                    memories, _, _ = manager.process_turn_with_llm(
+                        actor_id="user-123",
+                        session_id="session-456",
+                        user_input="Hello",
+                        llm_callback=mock_llm_callback,
+                        retrieval_config=retrieval_config,
+                    )
+
+                    assert len(memories) == 1
+                    assert mock_search.call_args.kwargs["namespace"] == "/strategies/strat-abc/actors/user-123/"
+
     def test_process_turn_with_llm_no_retrieval(self):
         """Test process_turn_with_llm without memory retrieval."""
         with patch("boto3.Session") as mock_session_class:
