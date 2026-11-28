@@ -28,6 +28,7 @@ from .config import (
 )
 from .web_search_client import (
     GatewayMcpBackend,
+    WebSearchApiBackend,
     WebSearchBackend,
     WebSearchClient,
     WebSearchError,
@@ -62,6 +63,7 @@ __all__ = [
     "SessionConfiguration",
     "ViewportConfiguration",
     "VpcConfig",
+    "WebSearchApiBackend",
     "WebSearchBackend",
     "WebSearchClient",
     "WebSearchError",

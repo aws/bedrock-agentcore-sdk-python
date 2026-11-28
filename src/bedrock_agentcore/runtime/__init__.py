@@ -11,7 +11,14 @@ from bedrock_agentcore._utils.config import WaitConfig
 from .agent_core_runtime_client import AgentCoreRuntimeClient
 from .app import BedrockAgentCoreApp
 from .context import BedrockAgentCoreContext, RequestContext
-from .models import PingStatus
+from .local_endpoint import LocalEndpoint
+from .models import HookConfig, PingStatus, WarmupType
+from .session_endpoint import (
+    InvalidSessionEndpointError,
+    SessionEndpointClient,
+    SessionEndpointResponse,
+    session_endpoint_url,
+)
 from .shell import (
     AuthMode,
     OAuthAuth,
@@ -22,6 +29,7 @@ from .shell import (
     ShellFramer,
     ShellSession,
 )
+from .streaming import iter_events
 
 __all__ = [
     "WaitConfig",
@@ -31,11 +39,19 @@ __all__ = [
     "BedrockAgentCoreApp",
     "BedrockCallContextBuilder",
     "BedrockAgentCoreContext",
+    "InvalidSessionEndpointError",
     "OAuthAuth",
     "PresignedAuth",
     "ReconnectConfig",
     "RequestContext",
     "PingStatus",
+    "WarmupType",
+    "HookConfig",
+    "SessionEndpointClient",
+    "SessionEndpointResponse",
+    "LocalEndpoint",
+    "session_endpoint_url",
+    "iter_events",
     "ShellChannel",
     "ShellFrame",
     "ShellFramer",

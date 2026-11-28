@@ -27,7 +27,6 @@ class DatasetClient:
         # Create a dataset and wait for ACTIVE
         dataset = client.create_dataset_and_wait(
             datasetName="my-dataset",
-            schemaType="AGENTCORE_EVALUATION_PREDEFINED_V1",
             source={"inlineExamples": {"examples": [...]}},
         )
 
@@ -180,7 +179,7 @@ class DatasetClient:
             **kwargs: Arguments forwarded to the create_dataset_version API.
 
         Returns:
-            Dataset details when ACTIVE.
+            Details of the new dataset version once the dataset is ACTIVE.
 
         Raises:
             RuntimeError: If the dataset reaches UPDATE_FAILED status.
@@ -188,12 +187,15 @@ class DatasetClient:
         """
         response = self._cp_client.create_dataset_version(**convert_kwargs(kwargs))
         dataset_id = response["datasetId"]
-        return wait_until(
+        # The new version only exists once the DRAFT finishes updating, and GetDataset without
+        # datasetVersion returns the DRAFT, so wait on the DRAFT and then read the version itself.
+        wait_until(
             lambda: self._cp_client.get_dataset(datasetId=dataset_id),
             "ACTIVE",
             {"UPDATE_FAILED"},
             wait_config,
         )
+        return self._cp_client.get_dataset(datasetId=dataset_id, datasetVersion=response["datasetVersion"])
 
     def add_examples_and_wait(
         self,

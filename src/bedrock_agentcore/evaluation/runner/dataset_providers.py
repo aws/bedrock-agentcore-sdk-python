@@ -15,24 +15,32 @@ from .dataset_types import (
     Turn,
 )
 
-SUPPORTED_SCHEMA_TYPES = {
-    "AGENTCORE_EVALUATION_PREDEFINED_V1",
-    "AGENTCORE_EVALUATION_SIMULATED_V1",
-}
-
 
 def _parse_scenario(raw: Dict[str, Any]) -> PredefinedScenario | SimulatedScenario:
-    """Parse a raw dict into a PredefinedScenario or SimulatedScenario."""
-    if "turns" in raw:
+    """Parse a raw dict into a PredefinedScenario or SimulatedScenario.
+
+    The type is inferred from the fields present, matching the service: ``actor_profile`` makes a
+    scenario simulated, ``turns`` makes it predefined, and a bare ``input`` is a single-turn predefined
+    scenario. Fields the SDK does not know are ignored.
+    """
+    scenario_id = raw.get("scenario_id", "?")
+    # Datasets no longer declare a type, so this is the only guard against a mislabeled example
+    # being run as the wrong kind of scenario.
+    if "actor_profile" in raw and "turns" in raw:
+        raise ValueError(f"Scenario '{scenario_id}' has both 'turns' and 'actor_profile'; a scenario must have one")
+    if not any(k in raw for k in ("turns", "actor_profile", "input")):
+        raise ValueError(f"Scenario '{scenario_id}' has none of 'turns', 'actor_profile' or 'input'")
+    if "actor_profile" not in raw:
+        turns = raw.get("turns", [{"input": raw.get("input")}])
         return PredefinedScenario(
             scenario_id=raw["scenario_id"],
-            turns=[Turn(input=t["input"], expected_response=t.get("expected_response")) for t in raw["turns"]],
+            turns=[Turn(input=t["input"], expected_response=t.get("expected_response")) for t in turns],
             expected_trajectory=raw.get("expected_trajectory"),
             assertions=raw.get("assertions"),
             metadata=raw.get("metadata"),
         )
     else:
-        missing = [k for k in ("scenario_id", "actor_profile", "input") if k not in raw]
+        missing = [k for k in ("scenario_id", "actor_profile") if k not in raw]
         if missing:
             raise ValueError(
                 f"Scenario '{raw.get('scenario_id', '?')}' is missing required fields for SimulatedScenario: {missing}"
@@ -41,7 +49,7 @@ def _parse_scenario(raw: Dict[str, Any]) -> PredefinedScenario | SimulatedScenar
             scenario_id=raw["scenario_id"],
             scenario_description=raw.get("scenario_description", ""),
             actor_profile=ActorProfile(**raw["actor_profile"]),
-            input=raw["input"],
+            input=raw.get("input"),
             max_turns=raw.get("max_turns", 10),
             assertions=raw.get("assertions"),
             metadata=raw.get("metadata"),
@@ -107,7 +115,7 @@ class DatasetManagementServiceProvider(DatasetProvider):
         The URL points to a JSONL file where each line is one example.
 
         Raises:
-            ValueError: If the dataset has no downloadUrl or has an unsupported schemaType.
+            ValueError: If the dataset has no downloadUrl.
             RuntimeError: If the dataset content cannot be downloaded.
         """
         kwargs: Dict[str, Any] = {"datasetId": self._dataset_id}
@@ -115,13 +123,6 @@ class DatasetManagementServiceProvider(DatasetProvider):
             kwargs["datasetVersion"] = self._version_id
 
         response = self._client.get_dataset(**kwargs)
-
-        schema_type = response.get("schemaType")
-        if schema_type and schema_type not in SUPPORTED_SCHEMA_TYPES:
-            raise ValueError(
-                f"Dataset schema type '{schema_type}' is not supported by the "
-                f"evaluation runners. Supported types: {sorted(SUPPORTED_SCHEMA_TYPES)}"
-            )
 
         download_url = response.get("downloadUrl")
         if not download_url:

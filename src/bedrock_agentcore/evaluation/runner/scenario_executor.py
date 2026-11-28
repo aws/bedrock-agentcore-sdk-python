@@ -15,7 +15,7 @@ from typing import Any, List, Optional, Type
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
 
-from .dataset_types import Scenario, SimulatedScenario, SimulationConfig
+from .dataset_types import ActorProfile, Scenario, SimulatedScenario, SimulationConfig
 from .invoker_types import AgentInvokerFn, AgentInvokerInput
 from .prompts import render_template_file, render_template_string
 
@@ -152,7 +152,6 @@ class SimulatedScenarioExecutor(ScenarioExecutor):
 
         try:
             try:
-                from strands_evals.simulation.tools.goal_completion import get_conversation_goal_completion
                 from strands_evals.types.simulation import ActorProfile as StrandsActorProfile
             except ImportError as e:
                 raise ImportError(
@@ -160,27 +159,25 @@ class SimulatedScenarioExecutor(ScenarioExecutor):
                     "Install it with: pip install 'bedrock-agentcore[simulation]'"
                 ) from e
 
-            strands_profile = StrandsActorProfile(
-                traits=scenario.actor_profile.traits,
-                context=scenario.actor_profile.context,
-                actor_goal=scenario.actor_profile.goal,
-            )
+            strands_profile = StrandsActorProfile(**_strands_profile_fields(scenario.actor_profile))
 
-            system_prompt = _render_system_prompt(sim_config, strands_profile, scenario.scenario_description)
+            system_prompt = _render_system_prompt(sim_config, scenario.actor_profile, scenario.scenario_description)
 
             input_type = sim_config.input_type if sim_config else None
             output_type = sim_config.output_type if sim_config else None
             simulator = AgentCoreActorSimulator(
                 actor_profile=strands_profile,
-                initial_query=_to_string(scenario.input),
+                initial_query=None if scenario.input is None else _to_string(scenario.input),
                 system_prompt=system_prompt,
                 input_type=input_type,
                 model=sim_config.model_id if sim_config else None,
                 max_turns=scenario.max_turns,
-                tools=[get_conversation_goal_completion],
             )
 
-            next_payload = _build_payload(scenario.input, sim_config)
+            if scenario.input is None:
+                next_payload = simulator.opening_message()
+            else:
+                next_payload = _build_payload(scenario.input, sim_config)
 
             while True:
                 turn_count += 1
@@ -277,13 +274,14 @@ class AgentCoreActorSimulator:
     question, so the first real ``act()`` call — which delivers the agent's
     actual response to that question — arrives with a coherent conversation
     history. The greeting is never sent to the real agent; it exists only to
-    orient the actor.
+    orient the actor. With no ``initial_query`` the history starts empty and
+    ``opening_message()`` has the actor answer the greeting with its own opener.
     """
 
     def __init__(
         self,
         actor_profile: Any,
-        initial_query: str,
+        initial_query: Optional[str],
         system_prompt: str,
         input_type: Optional[Type[BaseModel]] = None,
         model: Optional[str] = None,
@@ -298,10 +296,13 @@ class AgentCoreActorSimulator:
         self._turn_count = 0
         self._response_model = _make_response_model(input_type)
 
-        conversation_history = [
-            {"role": "user", "content": [{"text": random.choice(_INITIAL_GREETINGS)}]},
-            {"role": "assistant", "content": [{"text": initial_query.strip()}]},
-        ]
+        # Without an initial query the actor writes its own opening, in reply to the greeting.
+        conversation_history = []
+        if initial_query is not None:
+            conversation_history = [
+                {"role": "user", "content": [{"text": random.choice(_INITIAL_GREETINGS)}]},
+                {"role": "assistant", "content": [{"text": initial_query.strip()}]},
+            ]
 
         self._agent = Agent(
             system_prompt=system_prompt,
@@ -310,6 +311,14 @@ class AgentCoreActorSimulator:
             model=model,
             callback_handler=None,
         )
+
+    def opening_message(self) -> Any:
+        """Have the actor write the first message from the scenario; it does not count as a turn."""
+        response = self._agent(random.choice(_INITIAL_GREETINGS), structured_output_model=self._response_model)
+        message = response.structured_output.message
+        if message is None:
+            raise ValueError("Simulated actor produced no opening message")
+        return message
 
     def act(self, agent_message: str) -> SimulatorResult:
         """Send the agent's response to the actor and return a SimulatorResult."""
@@ -387,9 +396,14 @@ def _make_response_model(input_type: Optional[Type[BaseModel]]) -> Type[BaseMode
     )
 
 
+def _strands_profile_fields(actor_profile: ActorProfile) -> dict:
+    """Map the dataset ActorProfile onto the Strands ActorProfile field names."""
+    return {"traits": actor_profile.traits, "context": actor_profile.context, "actor_goal": actor_profile.goal}
+
+
 def _render_system_prompt(
     sim_config: Optional[SimulationConfig],
-    strands_profile: Any,
+    actor_profile: ActorProfile,
     scenario_description: str = "",
 ) -> str:
     """Render the actor system prompt from a Jinja2 template.
@@ -402,10 +416,12 @@ def _render_system_prompt(
     set) are injected as template variables. Structured input typing is enforced via
     the response model's tool-use schema rather than the system prompt.
     """
-    actor_profile_data = strands_profile.model_dump()
-
     if sim_config and sim_config.system_prompt_template:
-        kwargs: dict = {"actor_profile": actor_profile_data, "scenario_description": scenario_description}
+        # Custom templates keep the Strands ActorProfile field names they were written against.
+        kwargs: dict = {
+            "actor_profile": _strands_profile_fields(actor_profile),
+            "scenario_description": scenario_description,
+        }
         if sim_config.output_type:
             kwargs["output_schema"] = json.dumps(sim_config.output_type.model_json_schema(), indent=2)
         return render_template_string(sim_config.system_prompt_template, **kwargs)
@@ -417,7 +433,8 @@ def _render_system_prompt(
     )
     return render_template_file(
         "structured_user_simulator.j2",
-        actor_profile=actor_profile_data,
+        # Compact JSON with the dataset's field names, as the service writes the profile into its prompt.
+        actor_profile=json.dumps(actor_profile.model_dump(), separators=(",", ":"), ensure_ascii=False),
         scenario_description=scenario_description,
         output_schema=output_schema,
     )

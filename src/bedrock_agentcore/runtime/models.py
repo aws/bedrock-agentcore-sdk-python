@@ -3,7 +3,10 @@
 Contains data models and enums used throughout the runtime system.
 """
 
+import re
+from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 
 class PingStatus(str, Enum):
@@ -11,6 +14,78 @@ class PingStatus(str, Enum):
 
     HEALTHY = "Healthy"
     HEALTHY_BUSY = "HealthyBusy"
+
+
+class WarmupType(str, Enum):
+    """Build warmup call type, sent by AgentCore Runtime in the ``WARMUP_TYPE_HEADER`` header.
+
+    AgentCore Runtime calls the build warmup hook twice, first with ``memory`` and then with ``disk``. The app
+    answers a type it doesn't know with 200 ``skipped``, so a type added later doesn't fail the call.
+    See https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-hooks.html
+    """
+
+    MEMORY = "memory"
+    DISK = "disk"
+
+
+# Mirrors the public API constraints for HttpPostLifecycleHookAction.
+_LIFECYCLE_HOOK_PATH_MAX_LENGTH = 32
+_LIFECYCLE_HOOK_PATH_PATTERN = re.compile(r"^/[A-Za-z0-9._~/-]*$")
+_LIFECYCLE_HOOK_PORT_MIN = 8000
+_LIFECYCLE_HOOK_PORT_MAX = 12000
+
+
+@dataclass(frozen=True)
+class HookConfig:
+    """Where the app serves a lifecycle hook, as ``POST`` on ``path``.
+
+    Without ``port`` the hook is served on the serving port. With ``port`` it's served on that port by a
+    separate listener on 127.0.0.1 in the same process, which needs ``app.run()``.
+
+    See https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-hooks.html
+
+    Attributes:
+        path: Path of the hook route: 1-32 characters from ``A-Z a-z 0-9 . _ ~ / -``, starting with ``/``,
+            with no trailing ``/`` (except ``/`` itself), no ``//``, and no ``.`` or ``..`` segments.
+        port: Port of the hook route, 8000-12000. ``None`` (the default) serves it on the serving port.
+
+    Raises:
+        ValueError: If ``path`` or ``port`` is invalid.
+    """
+
+    path: str
+    port: Optional[int] = None
+
+    def __post_init__(self):
+        """Validate ``path`` and ``port`` against the API constraints."""
+        path = self.path
+        if not isinstance(path, str):
+            raise ValueError(f"HookConfig.path must be a string, got {path!r}")
+        if not 1 <= len(path) <= _LIFECYCLE_HOOK_PATH_MAX_LENGTH:
+            raise ValueError(
+                f"HookConfig.path must be between 1 and {_LIFECYCLE_HOOK_PATH_MAX_LENGTH} characters, got {path!r}"
+            )
+        if not _LIFECYCLE_HOOK_PATH_PATTERN.fullmatch(path):
+            raise ValueError(
+                "HookConfig.path must start with '/' and contain only letters, numbers, '.', '_', '~', '/' and '-', "
+                f"got {path!r}"
+            )
+        segments = path[1:].split("/")
+        if path != "/" and (path.endswith("/") or "//" in path or any(seg in (".", "..") for seg in segments)):
+            raise ValueError(
+                "HookConfig.path must be canonical: no trailing '/' (except '/' itself), no '//', "
+                f"and no '.' or '..' segments, got {path!r}"
+            )
+        port = self.port
+        if port is not None and (
+            isinstance(port, bool)
+            or not isinstance(port, int)
+            or not _LIFECYCLE_HOOK_PORT_MIN <= port <= _LIFECYCLE_HOOK_PORT_MAX
+        ):
+            raise ValueError(
+                f"HookConfig.port must be an integer between {_LIFECYCLE_HOOK_PORT_MIN} and "
+                f"{_LIFECYCLE_HOOK_PORT_MAX}, got {port!r}"
+            )
 
 
 # Header constants
@@ -22,6 +97,7 @@ IDENTITY_WAT_HEADER = "X-Amz-Bedrock-AgentCore-Identity-WAT"  # nosec
 OAUTH2_CALLBACK_URL_HEADER = "OAuth2CallbackUrl"
 AUTHORIZATION_HEADER = "Authorization"
 CUSTOM_HEADER_PREFIX = "X-Amzn-Bedrock-AgentCore-Runtime-Custom-"
+WARMUP_TYPE_HEADER = "X-Amzn-Bedrock-AgentCore-Runtime-Warmup-Type"
 AGENTCORE_RUNTIME_URL_ENV = "AGENTCORE_RUNTIME_URL"
 
 # Headers that cannot be forwarded to agent code.

@@ -2,15 +2,27 @@ import asyncio
 import concurrent.futures
 import contextlib
 import contextvars
+import dataclasses
+import functools
+import inspect
 import json
+import logging
 import os
+import random
+import re
+import signal
+import socket
 import threading
 import time
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
+import uvicorn
+from starlette.applications import Starlette
+from starlette.routing import Route
 from starlette.testclient import TestClient
 
 import bedrock_agentcore.runtime.app as _app_module
@@ -18,7 +30,7 @@ from bedrock_agentcore.config_bundle.bundle import ConfigBundleRef
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from bedrock_agentcore.runtime.app import _parse_runtime_arn
 from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
-from bedrock_agentcore.runtime.models import is_forwardable_header
+from bedrock_agentcore.runtime.models import HookConfig, WarmupType, is_forwardable_header
 
 
 class TestBedrockAgentCoreApp:
@@ -3196,3 +3208,879 @@ class TestStreamingBridgeDeadlock:
             "producer parked in a mid-await was not torn down on disconnect — "
             "source generator's finally never ran (task leaked)"
         )
+
+
+class TestWarmup:
+    """Tests for the @app.warmup build warmup hook decorator and its POST route."""
+
+    HEADER = "X-Amzn-Bedrock-AgentCore-Runtime-Warmup-Type"
+
+    @staticmethod
+    def _app(path="/warmup"):
+        return BedrockAgentCoreApp(warmup_hook=HookConfig(path=path))
+
+    def _post(self, client, warmup_type=None, path="/warmup"):
+        headers = {self.HEADER: warmup_type} if warmup_type is not None else {}
+        return client.post(path, headers=headers)
+
+    @contextlib.asynccontextmanager
+    async def _async_client(self, app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            yield client
+
+    # --- Route and handler results ---
+
+    def test_warmup_route_registered_with_hook(self):
+        app = self._app()
+        assert "/warmup" in [route.path for route in app.routes]  # type: ignore
+        assert app.warmup_hook == HookConfig(path="/warmup")
+
+    def test_memory_only_app(self):
+        app = self._app()
+        calls = []
+
+        @app.warmup(WarmupType.MEMORY)
+        def load():
+            calls.append("memory")
+
+        client = TestClient(app)
+        memory = self._post(client, "memory")
+        assert memory.status_code == 200
+        assert memory.json() == {"status": "ok", "type": "memory", "result": "completed"}
+        disk = self._post(client, "disk")
+        assert disk.status_code == 200
+        assert disk.json() == {"status": "ok", "type": "disk", "result": "skipped"}
+        assert calls == ["memory"]
+
+    def test_both_handlers_run_for_their_type(self):
+        app = self._app()
+        calls = []
+
+        @app.warmup(WarmupType.MEMORY)
+        def memory():
+            calls.append("memory")
+
+        @app.warmup(WarmupType.DISK)
+        def disk():
+            calls.append("disk")
+
+        client = TestClient(app)
+        assert self._post(client, "memory").json()["result"] == "completed"
+        assert self._post(client, "disk").json()["result"] == "completed"
+        assert calls == ["memory", "disk"]
+
+    def test_no_handlers_skips_both(self):
+        client = TestClient(self._app())
+        for warmup_type in ("memory", "disk"):
+            response = self._post(client, warmup_type)
+            assert response.status_code == 200
+            assert response.json() == {"status": "ok", "type": warmup_type, "result": "skipped"}
+
+    @pytest.mark.parametrize("value", ["Memory", "MEMORY", " memory ", "DiSk"])
+    def test_header_is_case_and_whitespace_insensitive(self, value):
+        app = self._app()
+        calls = []
+
+        @app.warmup("memory")
+        def memory():
+            calls.append("memory")
+
+        @app.warmup("disk")
+        def disk():
+            calls.append("disk")
+
+        response = self._post(TestClient(app), value)
+        assert response.status_code == 200
+        assert response.json()["type"] == value.strip().lower()
+        assert calls == [value.strip().lower()]
+
+    @pytest.mark.parametrize("value", [None, "", "   "])
+    def test_missing_or_empty_header_returns_400(self, value):
+        app = self._app()
+        calls = []
+
+        @app.warmup(WarmupType.MEMORY)
+        def memory():
+            calls.append("memory")
+
+        response = self._post(TestClient(app), value)
+        assert response.status_code == 400
+        assert response.json() == {"error": "X-Amzn-Bedrock-AgentCore-Runtime-Warmup-Type header is missing or empty"}
+        assert calls == []
+
+    @pytest.mark.parametrize(
+        ("value", "expected_type"), [("cpu", "cpu"), ("memory,disk", "memory,disk"), (" Network ", "network")]
+    )
+    def test_unknown_type_is_skipped(self, value, expected_type, caplog):
+        """A type this SDK version doesn't know (say, one the service adds later) must not fail the create."""
+        app = self._app()
+        calls = []
+
+        @app.warmup(WarmupType.MEMORY)
+        def memory():
+            calls.append("memory")
+
+        @app.warmup(WarmupType.DISK)
+        def disk():
+            calls.append("disk")
+
+        with caplog.at_level(logging.INFO, logger="bedrock_agentcore.app"):
+            response = self._post(TestClient(app), value)
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok", "type": expected_type, "result": "skipped"}
+        assert calls == []
+        assert f"Warmup ({expected_type}): unknown type, nothing to do" in caplog.messages
+
+    @pytest.mark.parametrize("is_async", [False, True], ids=["sync", "async"])
+    def test_raising_handler_returns_500(self, is_async):
+        app = self._app()
+
+        def fail():
+            raise RuntimeError("model load failed")
+
+        async def fail_async():
+            fail()
+
+        app.warmup(WarmupType.MEMORY)(fail_async if is_async else fail)
+        response = self._post(TestClient(app), "memory")
+        assert response.status_code == 500
+        assert response.json() == {"error": "model load failed", "type": "memory"}
+
+    def test_sync_handler_returning_coroutine_returns_500(self):
+        app = self._app()
+        returned = []
+
+        async def load():
+            pass  # pragma: no cover - never awaited
+
+        def handler():
+            returned.append(load())
+            return returned[0]
+
+        app.warmup(WarmupType.MEMORY)(handler)
+        response = self._post(TestClient(app), "memory")
+        assert response.status_code == 500
+        assert response.json()["type"] == "memory"
+        assert "async def" in response.json()["error"]
+        # Closed, so it never warns "coroutine ... was never awaited" when it's collected. (The warning
+        # itself fires at garbage collection, which the captured log record's traceback delays past the test.)
+        assert inspect.getcoroutinestate(returned[0]) == inspect.CORO_CLOSED
+
+    @pytest.mark.parametrize("is_async", [False, True], ids=["sync", "async"])
+    def test_handler_returning_generator_returns_500(self, is_async):
+        """A non-generator handler that returns a generator passes registration; the call must still fail."""
+        app = self._app()
+        ran = {"body": False}
+
+        def gen():
+            ran["body"] = True  # pragma: no cover - never iterated
+            yield  # pragma: no cover
+
+        async def async_gen():
+            ran["body"] = True  # pragma: no cover - never iterated
+            yield  # pragma: no cover
+
+        app.warmup(WarmupType.MEMORY)((lambda: async_gen()) if is_async else (lambda: gen()))
+        response = self._post(TestClient(app), "memory")
+        assert response.status_code == 500
+        assert response.json()["type"] == "memory"
+        assert "yield" in response.json()["error"]
+        assert ran["body"] is False
+
+    def test_async_handler_returning_async_generator_returns_500(self):
+        """``_dispatch_handler`` bridges a returned async generator into a sync generator; reject that too."""
+        app = self._app()
+        ran = {"body": False}
+
+        async def async_gen():
+            ran["body"] = True  # pragma: no cover - never iterated
+            yield  # pragma: no cover
+
+        async def handler():
+            return async_gen()
+
+        app.warmup(WarmupType.DISK)(handler)
+        response = self._post(TestClient(app), "disk")
+        assert response.status_code == 500
+        assert "yield" in response.json()["error"]
+        assert ran["body"] is False
+
+    def test_sync_handler_returning_other_awaitable_returns_500(self):
+        class Awaitable:
+            def __await__(self):
+                yield  # pragma: no cover - never awaited
+
+        app = self._app()
+        app.warmup(WarmupType.DISK)(lambda: Awaitable())
+        response = self._post(TestClient(app), "disk")
+        assert response.status_code == 500
+        assert "async def" in response.json()["error"]
+
+    # --- Dispatch ---
+
+    def test_sync_handler_runs_in_thread_pool(self):
+        app = self._app()
+        seen = {}
+
+        @app.warmup(WarmupType.MEMORY)
+        def memory():
+            seen["thread"] = threading.current_thread().ident
+
+        client = TestClient(app)
+        assert self._post(client, "memory").status_code == 200
+        assert seen["thread"] is not None
+        assert app._worker_loop is None  # sync handlers don't use the worker loop
+
+    def test_async_handler_runs_on_worker_loop(self):
+        app = self._app()
+        seen = {}
+
+        @app.warmup(WarmupType.MEMORY)
+        async def memory():
+            seen["loop"] = asyncio.get_running_loop()
+
+        response = self._post(TestClient(app), "memory")
+        assert response.status_code == 200
+        assert response.json()["result"] == "completed"
+        assert seen["loop"] is app._worker_loop
+
+    def test_ping_stays_healthy_after_warmup(self):
+        app = self._app()
+        app.warmup(WarmupType.MEMORY)(lambda: None)
+        client = TestClient(app)
+        assert self._post(client, "memory").status_code == 200
+        assert client.get("/ping").json()["status"] == "Healthy"
+
+    async def test_blocking_sync_handler_does_not_delay_ping(self):
+        """A sync warmup handler that blocks must not delay a concurrent GET /ping."""
+        app = self._app()
+        started = threading.Event()
+
+        @app.warmup(WarmupType.MEMORY)
+        def memory():
+            started.set()
+            time.sleep(1.5)
+
+        async with self._async_client(app) as client:
+            warmup_task = asyncio.create_task(client.post("/warmup", headers={self.HEADER: "memory"}))
+            for _ in range(100):
+                if started.is_set():
+                    break
+                await asyncio.sleep(0.01)
+            assert started.is_set()
+
+            ping_start = time.monotonic()
+            ping = await client.get("/ping")
+            ping_duration = time.monotonic() - ping_start
+
+            assert not warmup_task.done()
+            warmup = await warmup_task
+
+        assert ping.status_code == 200
+        assert ping.json()["status"] == "Healthy"  # not marked busy during warmup
+        assert ping_duration < 0.5
+        assert warmup.status_code == 200
+        assert warmup.json()["result"] == "completed"
+
+    def test_lock_is_per_hook(self):
+        first, second = self._app(), self._app()
+        assert isinstance(first._hooks["warmup"].lock, asyncio.Lock)
+        assert first._hooks["warmup"].lock is not second._hooks["warmup"].lock
+
+    async def test_overlapping_warmups_run_sequentially(self):
+        app = self._app()
+        lock = threading.Lock()
+        state = {"active": 0, "max_active": 0}
+        intervals = []
+
+        def _work(name):
+            with lock:
+                state["active"] += 1
+                state["max_active"] = max(state["max_active"], state["active"])
+            start = time.monotonic()
+            time.sleep(0.3)
+            end = time.monotonic()
+            with lock:
+                state["active"] -= 1
+                intervals.append((start, end, name))
+
+        app.warmup(WarmupType.MEMORY)(lambda: _work("memory"))
+        app.warmup(WarmupType.DISK)(lambda: _work("disk"))
+
+        async with self._async_client(app) as client:
+            responses = await asyncio.gather(
+                client.post("/warmup", headers={self.HEADER: "memory"}),
+                client.post("/warmup", headers={self.HEADER: "disk"}),
+                client.post("/warmup", headers={self.HEADER: "memory"}),
+            )
+
+        assert [r.status_code for r in responses] == [200, 200, 200]
+        assert state["max_active"] == 1
+        intervals.sort()
+        for (_, prev_end, _), (next_start, _, _) in zip(intervals, intervals[1:], strict=False):
+            assert next_start >= prev_end
+
+    # --- Decorator ---
+
+    def test_decorator_returns_function_unchanged(self):
+        app = self._app()
+
+        def memory():
+            return 42
+
+        assert app.warmup(WarmupType.MEMORY)(memory) is memory
+        assert memory() == 42
+
+    def test_duplicate_registration_raises(self):
+        app = self._app()
+
+        @app.warmup(WarmupType.MEMORY)
+        def first():
+            pass
+
+        with pytest.raises(ValueError, match="already registered"):
+
+            @app.warmup("memory")
+            def second():
+                pass
+
+        assert app._hooks["warmup"].handlers[WarmupType.MEMORY] is first
+
+    @staticmethod
+    def _gen():
+        yield  # pragma: no cover - never iterated
+
+    @staticmethod
+    async def _async_gen():
+        yield  # pragma: no cover - never iterated
+
+    class _GenCallable:
+        def __call__(self):
+            yield  # pragma: no cover - never iterated
+
+    class _AsyncGenCallable:
+        async def __call__(self):
+            yield  # pragma: no cover - never iterated
+
+    @pytest.mark.parametrize(
+        ("make_handler", "name"),
+        [
+            (lambda cls: cls._gen, "TestWarmup._gen"),
+            (lambda cls: cls._async_gen, "TestWarmup._async_gen"),
+            (lambda cls: functools.partial(cls._gen), "TestWarmup._gen"),
+            (lambda cls: functools.partial(functools.partial(cls._async_gen)), "TestWarmup._async_gen"),
+            (lambda cls: cls._GenCallable(), "TestWarmup._GenCallable"),
+            (lambda cls: cls._AsyncGenCallable(), "TestWarmup._AsyncGenCallable"),
+        ],
+        ids=["def-yield", "async-def-yield", "partial", "nested-partial", "callable-class", "async-callable-class"],
+    )
+    def test_generator_handler_rejected_at_registration(self, make_handler, name):
+        app = self._app()
+        handler = make_handler(type(self))
+        with pytest.raises(ValueError, match=rf"^warmup handler {re.escape(name)} is a generator function: .*`yield`"):
+            app.warmup(WarmupType.MEMORY)(handler)
+        assert app._hooks["warmup"].handlers == {}
+
+    def test_non_generator_handlers_accepted(self):
+        class Callable:
+            def __call__(self):
+                return None
+
+        async def load():
+            return None
+
+        app = self._app()
+        app.warmup(WarmupType.MEMORY)(functools.partial(load))
+        app.warmup(WarmupType.DISK)(Callable())
+        assert set(app._hooks["warmup"].handlers) == {WarmupType.MEMORY, WarmupType.DISK}
+
+    @pytest.mark.parametrize("value", ["cpu", "", "Memory", None])
+    def test_unknown_type_raises_at_decoration(self, value):
+        app = self._app()
+        with pytest.raises(ValueError):
+            app.warmup(value)  # type: ignore[arg-type]
+
+    def test_warmup_type_accepts_string_form(self):
+        assert WarmupType("memory") is WarmupType.MEMORY
+        assert WarmupType("disk") is WarmupType.DISK
+        assert WarmupType.MEMORY == "memory"
+        app = self._app()
+        app.warmup("memory")(lambda: None)
+        app.warmup("disk")(lambda: None)
+        assert set(app._hooks["warmup"].handlers) == {WarmupType.MEMORY, WarmupType.DISK}
+
+    def test_warmup_type_and_hook_config_exported(self):
+        import bedrock_agentcore.runtime
+
+        assert bedrock_agentcore.runtime.WarmupType is WarmupType
+        assert bedrock_agentcore.runtime.HookConfig is HookConfig
+
+    # --- warmup_hook constructor argument ---
+
+    def test_custom_hook_path(self):
+        app = self._app("/prepare")
+        calls = []
+
+        @app.warmup(WarmupType.MEMORY)
+        def memory():
+            calls.append("memory")
+
+        client = TestClient(app)
+        response = self._post(client, "memory", path="/prepare")
+        assert response.status_code == 200
+        assert response.json()["result"] == "completed"
+        assert self._post(client, "memory", path="/warmup").status_code in (404, 405)
+        assert calls == ["memory"]
+
+    def test_post_ping_hook_path_keeps_get_ping(self):
+        """POST /ping doesn't clash with GET /ping; both must keep working."""
+        client = TestClient(self._app("/ping"))
+        assert self._post(client, "memory", path="/ping").json()["result"] == "skipped"
+        assert client.get("/ping").json()["status"] == "Healthy"
+
+    def test_post_ws_hook_path_allowed(self):
+        """The WebSocket route has no HTTP methods, so POST /ws doesn't clash."""
+        client = TestClient(self._app("/ws"))
+        assert self._post(client, "disk", path="/ws").json()["result"] == "skipped"
+
+    def test_invocations_hook_path_conflicts(self):
+        with pytest.raises(ValueError, match="POST /invocations is already served"):
+            self._app("/invocations")
+
+    def test_no_warmup_hook_adds_no_route_and_decorator_raises(self):
+        app = BedrockAgentCoreApp()
+        assert app.warmup_hook is None
+        assert self._post(TestClient(app), "memory").status_code in (404, 405)
+        with pytest.raises(ValueError, match=r"warmup_hook=HookConfig\(path=\.\.\.\)"):
+            app.warmup(WarmupType.MEMORY)
+        assert "warmup" not in app._hooks
+
+    def test_existing_positional_args_unchanged(self):
+        app = BedrockAgentCoreApp(True, None, None)
+        assert app.debug is True
+        assert app.warmup_hook is None
+
+    # --- HookConfig validation ---
+
+    @pytest.mark.parametrize("path", ["/", "/warmup", "/a/b-c_d.e~f", "/" + "a" * 31, "/a.b", "/..a"])
+    def test_hook_config_valid_paths(self, path):
+        assert HookConfig(path=path).path == path
+
+    @pytest.mark.parametrize(
+        ("path", "message"),
+        [
+            (None, "must be a string"),
+            ("", "must be between 1 and 32"),
+            ("/" + "a" * 32, "must be between 1 and 32"),
+            ("warmup", "must start with '/'"),
+            ("/bad path", "must start with '/'"),
+            ("/a?b", "must start with '/'"),
+            ("/warmup/", "must be canonical"),
+            ("//warmup", "must be canonical"),
+            ("/a//b", "must be canonical"),
+            ("/./warmup", "must be canonical"),
+            ("/a/../b", "must be canonical"),
+            ("/a/.", "must be canonical"),
+            ("/a/..", "must be canonical"),
+        ],
+    )
+    def test_hook_config_invalid_paths(self, path, message):
+        with pytest.raises(ValueError, match=f"^HookConfig.path {message}"):
+            HookConfig(path=path)  # type: ignore[arg-type]
+
+    def test_hook_config_is_frozen(self):
+        config = HookConfig(path="/warmup")
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            config.path = "/other"  # type: ignore[misc]
+
+
+def _free_hook_port(*exclude):
+    """A port in the range HookConfig.port accepts (8000-12000) that's free on 127.0.0.1."""
+    for port in random.sample(range(8000, 12001), 4001):
+        if port in exclude:
+            continue
+        with socket.socket() as sock:
+            try:
+                sock.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return port
+    raise RuntimeError("no free port")  # pragma: no cover
+
+
+def _is_listening(port):
+    with socket.socket() as sock:
+        sock.settimeout(0.5)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
+class TestWarmupHookPort:
+    """Tests for HookConfig.port: the warmup hook served on its own port."""
+
+    HEADER = "X-Amzn-Bedrock-AgentCore-Runtime-Warmup-Type"
+    NEEDS_RUN = (
+        "Hook ports are only served by app.run(); start the agent with app.run(), or leave HookConfig.port unset"
+    )
+
+    @staticmethod
+    def _app(port, path="/warmup", **kwargs):
+        return BedrockAgentCoreApp(warmup_hook=HookConfig(path=path, port=port), **kwargs)
+
+    # --- HookConfig.port validation ---
+
+    @pytest.mark.parametrize("port", [None, 8000, 9000, 12000])
+    def test_hook_config_valid_ports(self, port):
+        assert HookConfig(path="/warmup", port=port).port == port
+
+    def test_hook_config_port_defaults_to_none(self):
+        assert HookConfig(path="/warmup").port is None
+        assert HookConfig("/warmup", 9000) == HookConfig(path="/warmup", port=9000)
+
+    @pytest.mark.parametrize("port", [7999, 12001, 0, -1, 80, True, False, "8080", 8080.0])
+    def test_hook_config_invalid_ports(self, port):
+        with pytest.raises(ValueError, match=r"^HookConfig.port must be an integer between 8000 and 12000, got "):
+            HookConfig(path="/warmup", port=port)  # type: ignore[arg-type]
+
+    def test_hook_config_path_checked_before_port(self):
+        with pytest.raises(ValueError, match=r"^HookConfig.path "):
+            HookConfig(path="warmup", port=1)
+
+    # --- Routes per port ---
+
+    def test_port_unset_goes_on_main_app(self):
+        app = BedrockAgentCoreApp(warmup_hook=HookConfig(path="/warmup"))
+        assert "/warmup" in [route.path for route in app.routes]  # type: ignore[attr-defined]
+        assert app._hook_port_routes == {}
+
+    def test_port_set_goes_on_its_own_port(self):
+        app = self._app(9000)
+        assert "/warmup" not in [route.path for route in app.routes]  # type: ignore[attr-defined]
+        assert list(app._hook_port_routes) == [9000]
+        [route] = app._hook_port_routes[9000]
+        assert (route.path, route.methods) == ("/warmup", {"POST"})
+        assert app.warmup_hook == HookConfig(path="/warmup", port=9000)
+
+    def test_hook_port_path_not_checked_against_main_routes(self):
+        """On its own port, /invocations doesn't clash with the main app's POST /invocations."""
+        app = self._app(9000, path="/invocations")
+        assert [route.path for route in app._hook_port_routes[9000]] == ["/invocations"]
+
+    def test_routes_conflict_per_port(self):
+        app = self._app(9000)
+        main_routes = list(app.router.routes)
+        app._add_hook_route(
+            HookConfig(path="/warmup", port=9001), Route("/warmup", lambda r: None, methods=["POST"]), main_routes
+        )
+        with pytest.raises(ValueError, match="POST /warmup is already served on port 9000"):
+            app._add_hook_route(
+                HookConfig(path="/warmup", port=9000), Route("/warmup", lambda r: None, methods=["POST"]), main_routes
+            )
+        assert [len(app._hook_port_routes[port]) for port in (9000, 9001)] == [1, 1]
+        app._add_hook_route(
+            HookConfig(path="/other", port=9000), Route("/other", lambda r: None, methods=["POST"]), main_routes
+        )
+        assert [route.path for route in app._hook_port_routes[9000]] == ["/warmup", "/other"]
+        assert main_routes == list(app.router.routes)
+
+    def test_hook_port_app_serves_only_hook_routes(self):
+        app = self._app(9000)
+        app.warmup(WarmupType.MEMORY)(lambda: None)
+        client = TestClient(Starlette(routes=app._hook_port_routes[9000]))
+        assert client.post("/warmup", headers={self.HEADER: "memory"}).json()["result"] == "completed"
+        assert client.get("/ping").status_code == 404
+        assert client.post("/invocations", json={}).status_code == 404
+
+    def test_lifespan_installed_only_with_a_hook_port(self):
+        default = BedrockAgentCoreApp().router.lifespan_context
+        assert type(BedrockAgentCoreApp(warmup_hook=HookConfig(path="/warmup")).router.lifespan_context) is type(
+            default
+        )
+        assert type(self._app(9000).router.lifespan_context) is not type(default)
+
+    # --- run() ---
+
+    @patch("uvicorn.run")
+    def test_run_with_hook_on_serving_port_merges_onto_main_app(self, mock_uvicorn):
+        app = self._app(9000)
+        app.warmup(WarmupType.MEMORY)(lambda: None)
+        app.run(port=9000)
+        mock_uvicorn.assert_called_once()
+        assert app._hook_port_routes == {}
+        assert "/warmup" in [route.path for route in app.routes]  # type: ignore[attr-defined]
+        response = TestClient(app).post("/warmup", headers={self.HEADER: "memory"})
+        assert response.json()["result"] == "completed"
+
+    @patch("uvicorn.run")
+    def test_run_merge_is_checked_against_main_routes(self, mock_uvicorn):
+        app = self._app(9000, path="/invocations")
+        with pytest.raises(ValueError, match="POST /invocations is already served by the app"):
+            app.run(port=9000)
+        mock_uvicorn.assert_not_called()
+
+    @patch("uvicorn.run")
+    def test_run_with_hook_on_other_port_keeps_it_off_main_app(self, mock_uvicorn):
+        app = self._app(9000)
+        app.run(port=8080, host="0.0.0.0")
+        mock_uvicorn.assert_called_once_with(app, host="0.0.0.0", port=8080, access_log=False, log_level="warning")
+        assert list(app._hook_port_routes) == [9000]
+        assert "/warmup" not in [route.path for route in app.routes]  # type: ignore[attr-defined]
+        assert app._started_by_run is True
+
+    @pytest.mark.parametrize("port", [9000, 8080])
+    @patch("uvicorn.run")
+    def test_run_lifespan_off_rejected(self, mock_uvicorn, port):
+        app = self._app(port)
+        with pytest.raises(ValueError, match='lifespan="off"'):
+            app.run(port=8080, lifespan="off")
+        mock_uvicorn.assert_not_called()
+        assert app._started_by_run is False
+
+    @patch("uvicorn.run")
+    def test_run_lifespan_off_allowed_without_hook_port(self, mock_uvicorn):
+        app = BedrockAgentCoreApp(warmup_hook=HookConfig(path="/warmup"))
+        app.run(port=8080, lifespan="off")
+        mock_uvicorn.assert_called_once()
+
+    @patch("uvicorn.run")
+    def test_run_lifespan_on_allowed_with_hook_port(self, mock_uvicorn):
+        app = self._app(9000)
+        app.run(port=8080, lifespan="on")
+        assert mock_uvicorn.call_args.kwargs["lifespan"] == "on"
+
+    # --- Without app.run() ---
+
+    def test_lifespan_without_run_fails_startup(self):
+        app = self._app(_free_hook_port())
+        with pytest.raises(RuntimeError, match=re.escape(self.NEEDS_RUN)):
+            with TestClient(app):
+                pass  # pragma: no cover - startup fails
+        assert app._hook_servers_running is False
+
+    @pytest.mark.parametrize(("method", "path"), [("GET", "/ping"), ("POST", "/invocations"), ("POST", "/warmup")])
+    def test_requests_get_503_when_hook_servers_never_started(self, method, path):
+        """No lifespan ran (e.g. uvicorn --lifespan off), so the hook port isn't served: say so on every request."""
+        app = self._app(9000)
+        app.entrypoint(lambda payload: {"ok": True})
+        response = TestClient(app).request(method, path, json={})
+        assert response.status_code == 503
+        assert response.json() == {"error": self.NEEDS_RUN}
+
+    def test_no_503_without_hook_port(self):
+        app = BedrockAgentCoreApp(warmup_hook=HookConfig(path="/warmup"))
+        assert TestClient(app).get("/ping").status_code == 200
+
+    @patch("uvicorn.run")
+    def test_no_503_once_serving_port_hook_is_merged(self, mock_uvicorn):
+        app = self._app(9000)
+        app.run(port=9000)
+        assert TestClient(app).get("/ping").status_code == 200
+
+    def test_websocket_not_answered_with_503(self):
+        app = self._app(9000)
+
+        @app.websocket
+        async def handler(websocket, context):
+            await websocket.accept()
+            await websocket.send_text("hi")
+            await websocket.close()
+
+        with TestClient(app).websocket_connect("/ws") as ws:
+            assert ws.receive_text() == "hi"
+
+    # --- Lifespan starts and stops the hook servers ---
+
+    @patch("uvicorn.run")
+    def test_lifespan_starts_and_stops_hook_server(self, _mock_uvicorn, caplog):
+        port = _free_hook_port()
+        app = self._app(port)
+        app.run(port=0)  # 0 never matches a hook port, so no hook moves onto the main app
+        calls = []
+        app.warmup(WarmupType.MEMORY)(lambda: calls.append("memory"))
+
+        with caplog.at_level(logging.INFO, logger="bedrock_agentcore.app"):
+            with TestClient(app) as client:
+                assert app._hook_servers_running is True
+                assert _is_listening(port)
+                response = httpx.post(f"http://127.0.0.1:{port}/warmup", headers={self.HEADER: "memory"}, timeout=5)
+                assert response.status_code == 200
+                assert response.json() == {"status": "ok", "type": "memory", "result": "completed"}
+                assert httpx.get(f"http://127.0.0.1:{port}/ping", timeout=5).status_code == 404
+                # The serving port serves the app, but not the hook.
+                assert client.get("/ping").json()["status"] == "Healthy"
+                assert client.post("/warmup", headers={self.HEADER: "memory"}).status_code == 404
+
+        assert calls == ["memory"]
+        assert app._hook_servers_running is False
+        assert not _is_listening(port)
+        assert f"Hook server listening on http://127.0.0.1:{port} (POST /warmup)" in caplog.messages
+        assert "Hook servers stopped" in caplog.messages
+
+    def test_lifespan_with_no_hook_servers_left(self):
+        """run() moved the only hook port onto the main app, so the lifespan has nothing to start."""
+        app = self._app(9000)
+        with patch("uvicorn.run"):
+            app.run(port=9000)
+        with TestClient(app) as client:
+            assert client.post("/warmup", headers={self.HEADER: "disk"}).json()["result"] == "skipped"
+
+    @patch("uvicorn.run")
+    def test_hook_servers_leave_signal_handlers_to_main_server(self, _mock_uvicorn):
+        # Runs serve() on the main thread, where uvicorn would install its handlers.
+        app = self._app(_free_hook_port())
+        app.run(port=0)
+        sigs = (signal.SIGINT, signal.SIGTERM)
+
+        async def check():
+            # Captured inside the loop: asyncio.run() installs its own SIGINT handler on 3.11+.
+            before = {sig: signal.getsignal(sig) for sig in sigs}
+            hook_servers = await app._start_hook_servers()
+            try:
+                assert {sig: signal.getsignal(sig) for sig in sigs} == before
+            finally:
+                await app._stop_hook_servers(hook_servers)
+            assert {sig: signal.getsignal(sig) for sig in sigs} == before
+
+        asyncio.run(check())
+
+    @patch("uvicorn.run")
+    def test_hook_server_binds_loopback_only(self, _mock_uvicorn):
+        port = _free_hook_port()
+        app = self._app(port)
+        app.run(port=8080, host="0.0.0.0")
+
+        async def check():
+            hook_servers = await app._start_hook_servers()
+            try:
+                (listener,) = hook_servers[0].server.servers[0].sockets
+                assert listener.getsockname()[0] == "127.0.0.1"
+            finally:
+                await app._stop_hook_servers(hook_servers)
+
+        asyncio.run(check())
+
+    # --- The user's lifespan ---
+
+    @patch("uvicorn.run")
+    def test_user_async_context_manager_lifespan_runs_inside(self, _mock_uvicorn):
+        port = _free_hook_port()
+        events = []
+
+        @contextlib.asynccontextmanager
+        async def lifespan(app):
+            events.append(("startup", _is_listening(port)))  # hook servers start first
+            yield {"resource": "ready"}
+            events.append(("shutdown", _is_listening(port)))  # and stop after
+
+        app = self._app(port, lifespan=lifespan)
+        app.run(port=0)
+
+        @app.entrypoint
+        def invoke(payload, context):
+            return {"resource": context.request.state.resource}
+
+        with TestClient(app) as client:
+            assert client.post("/invocations", json={}).json() == {"resource": "ready"}
+        assert events == [("startup", True), ("shutdown", True)]
+        assert not _is_listening(port)
+
+    @patch("uvicorn.run")
+    def test_user_generator_lifespan_runs_through_starlette_conversion(self, _mock_uvicorn):
+        port = _free_hook_port()
+        events = []
+
+        def lifespan(app):
+            events.append("startup")
+            yield
+            events.append("shutdown")
+
+        with pytest.warns(Warning, match="generator function lifespans are deprecated"):
+            app = self._app(port, lifespan=lifespan)
+            app.run(port=0)
+        with TestClient(app):
+            assert events == ["startup"]
+        assert events == ["startup", "shutdown"]
+
+    @patch("uvicorn.run")
+    def test_failing_user_lifespan_stops_hook_servers(self, _mock_uvicorn):
+        port = _free_hook_port()
+
+        @contextlib.asynccontextmanager
+        async def lifespan(app):
+            raise RuntimeError("user startup failed")
+            yield  # pragma: no cover
+
+        app = self._app(port, lifespan=lifespan)
+        app.run(port=0)
+        with pytest.raises(RuntimeError, match="user startup failed"):
+            with TestClient(app):
+                pass  # pragma: no cover
+        assert app._hook_servers_running is False
+        assert not _is_listening(port)
+
+    # --- Startup failures ---
+
+    @patch("uvicorn.run")
+    def test_taken_hook_port_gives_clear_error(self, _mock_uvicorn):
+        port = _free_hook_port()
+        app = self._app(port)
+        app.run(port=0)
+        with socket.socket() as taken:
+            taken.bind(("127.0.0.1", port))
+            taken.listen()
+            with pytest.raises(
+                RuntimeError, match=rf"^Can't serve the hook on HookConfig.port {port}: binding 127.0.0.1:{port} failed"
+            ):
+                with TestClient(app):
+                    pass  # pragma: no cover - startup fails
+        assert app._hook_servers_running is False
+
+    @patch("uvicorn.run")
+    def test_taken_second_port_closes_first_socket(self, _mock_uvicorn):
+        first, second = _free_hook_port(), None
+        second = _free_hook_port(first)
+        app = self._app(first)
+        app.run(port=0)
+        app._add_hook_route(
+            HookConfig(path="/other", port=second), Route("/other", lambda r: None, methods=["POST"]), []
+        )
+        with socket.socket() as taken:
+            taken.bind(("127.0.0.1", second))
+            taken.listen()
+            with pytest.raises(RuntimeError, match=f"HookConfig.port {second}"):
+                with TestClient(app):
+                    pass  # pragma: no cover - startup fails
+        # The first port's socket was closed, so it can be bound again.
+        with socket.socket() as again:
+            again.bind(("127.0.0.1", first))
+
+    @patch("uvicorn.run")
+    def test_hook_server_that_stops_during_startup_fails_startup(self, _mock_uvicorn):
+        port = _free_hook_port()
+        app = self._app(port)
+        app.run(port=0)
+
+        async def serve_and_return(self, sockets=None):
+            return None
+
+        with patch.object(_app_module._HookPortServer, "serve", serve_and_return):
+            with pytest.raises(RuntimeError, match="A hook server failed to start"):
+                with TestClient(app):
+                    pass  # pragma: no cover - startup fails
+        assert app._hook_servers_running is False
+
+    def test_hook_server_error_is_logged_on_shutdown(self, caplog):
+        app = self._app(9000)
+
+        async def boom():
+            raise RuntimeError("hook server crashed")
+
+        async def stop():
+            task = asyncio.create_task(boom())
+            await asyncio.sleep(0)
+            server = _app_module._HookPortServer(uvicorn.Config(Starlette()))
+            await app._stop_hook_servers([_app_module._RunningHookServer(server, task)])
+            assert server.should_exit is True
+
+        with caplog.at_level(logging.ERROR, logger="bedrock_agentcore.app"):
+            asyncio.run(stop())
+        assert any("hook server crashed" in message for message in caplog.messages)

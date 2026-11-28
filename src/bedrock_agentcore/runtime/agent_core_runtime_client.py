@@ -15,6 +15,7 @@ from urllib.parse import quote, urlencode, urlparse
 from .shell._validation import parse_runtime_arn, validate_shell_id
 
 if TYPE_CHECKING:
+    from .session_endpoint import SessionEndpointClient
     from .shell import AuthMode, ReconnectConfig, ShellSession
 
 import boto3
@@ -185,15 +186,23 @@ class AgentCoreRuntimeClient:
         https_url: str,
         signed_headers: Optional[Dict[str, str]] = None,
         unsigned_headers: Optional[Dict[str, str]] = None,
+        method: str = "GET",
+        body: Optional[bytes] = None,
     ) -> Dict[str, str]:
-        """SigV4-sign a WebSocket upgrade URL and return the full header dict.
+        """SigV4-sign a request URL and return the full header dict.
+
+        Used for WebSocket upgrades and, through ``session_endpoint``, for any request
+        to a session URL.
 
         Args:
-            https_url: The https:// form of the wss:// URL to sign.
+            https_url: The https:// form of the URL to sign.
             signed_headers: Headers to include inside the AWSRequest so they
                 are covered by the SigV4 signature.
             unsigned_headers: Headers appended to the result after signing
                 (not covered by the signature).
+            method: The HTTP method of the request being signed.
+            body: The request body. Its hash is the canonical payload unless
+                ``signed_headers`` carries ``X-Amz-Content-SHA256``.
 
         Returns:
             Dict with Host, X-Amz-Date, Authorization, optionally
@@ -210,7 +219,7 @@ class AgentCoreRuntimeClient:
         }
         if signed_headers:
             req_headers.update({k.lower(): v for k, v in signed_headers.items()})
-        request = AWSRequest(method="GET", url=https_url, headers=req_headers)
+        request = AWSRequest(method=method.upper(), url=https_url, headers=req_headers, data=body)
         SigV4Auth(frozen, "bedrock-agentcore", self.region).add_auth(request)
         headers: Dict[str, str] = {
             "Host": host,
@@ -245,6 +254,90 @@ class AgentCoreRuntimeClient:
         request = AWSRequest(method="GET", url=https_url, headers={"host": urlparse(https_url).hostname})
         SigV4QueryAuth(frozen, "bedrock-agentcore", self.region, expires=expires).add_auth(request)
         return request.url.replace("https://", "wss://")
+
+    def _url_auth_headers(
+        self,
+        https_url: str,
+        auth: "AuthMode" = "sigv4",
+        method: str = "GET",
+        signed_headers: Optional[Dict[str, str]] = None,
+        unsigned_headers: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, str]:
+        """Return the headers that authenticate one request to a runtime URL.
+
+        The one place that turns an ``AuthMode`` into request headers, for the
+        InvokeAgentRuntime WebSocket, shells, and session endpoints alike.
+
+        Args:
+            https_url: The https:// URL of the request.
+            auth: ``"sigv4"`` or ``OAuthAuth(bearer_token=...)``. ``PresignedAuth`` puts
+                the signature in the URL instead; use ``_presign`` for it.
+            method: The HTTP method of the request.
+            signed_headers: Headers that SigV4 covers. Sent as they are with a bearer token.
+            unsigned_headers: Headers added after signing.
+
+        Returns:
+            The headers to send, including ``Host``.
+
+        Raises:
+            ValueError: For ``PresignedAuth`` or an empty bearer token.
+            RuntimeError: If SigV4 is requested and no AWS credentials are found.
+        """
+        from .auth import OAuthAuth, PresignedAuth
+
+        if isinstance(auth, PresignedAuth):
+            raise ValueError("PresignedAuth authenticates in the URL, not in headers")
+        if not isinstance(auth, OAuthAuth):
+            return self._sigv4_sign(
+                https_url, signed_headers=signed_headers, unsigned_headers=unsigned_headers, method=method
+            )
+        if not auth.bearer_token:
+            raise ValueError("Bearer token cannot be empty")
+        headers: Dict[str, str] = {"Host": urlparse(https_url).netloc, "Authorization": f"Bearer {auth.bearer_token}"}
+        headers.update({k: v for k, v in (signed_headers or {}).items() if k.lower() != "authorization"})
+        if unsigned_headers:
+            headers.update(unsigned_headers)
+        return headers
+
+    def _websocket_auth_headers(
+        self,
+        https_url: str,
+        auth: "AuthMode" = "sigv4",
+        signed_headers: Optional[Dict[str, str]] = None,
+        unsigned_headers: Optional[Dict[str, str]] = None,
+        handshake: bool = False,
+    ) -> Dict[str, str]:
+        """Return the headers that authenticate a WebSocket upgrade to a runtime URL.
+
+        Args:
+            https_url: The URL of the upgrade request, with the https:// scheme.
+            auth: ``"sigv4"`` or ``OAuthAuth(bearer_token=...)``.
+            signed_headers: Headers that SigV4 covers.
+            unsigned_headers: Headers added after signing.
+            handshake: Include the upgrade headers (``Upgrade``, ``Connection``,
+                ``Sec-WebSocket-Version``, ``Sec-WebSocket-Key``) and ``Host``, for a
+                client that writes the handshake itself. Leave False for a WebSocket
+                library such as ``websockets``, which writes those headers itself and
+                would otherwise send ``Host`` twice.
+
+        Returns:
+            The headers to send with the upgrade request.
+        """
+        headers = self._url_auth_headers(
+            https_url, auth=auth, method="GET", signed_headers=signed_headers, unsigned_headers=unsigned_headers
+        )
+        if handshake:
+            headers.update(
+                {
+                    "Upgrade": "websocket",
+                    "Connection": "Upgrade",
+                    "Sec-WebSocket-Version": "13",
+                    "Sec-WebSocket-Key": base64.b64encode(secrets.token_bytes(16)).decode(),
+                }
+            )
+        else:
+            headers.pop("Host", None)
+        return headers
 
     def generate_ws_connection(
         self,
@@ -289,16 +382,13 @@ class AgentCoreRuntimeClient:
 
         # Build WebSocket URL
         ws_url = self._build_websocket_url(runtime_arn, endpoint_name)
-        headers = self._sigv4_sign(
+        headers = self._websocket_auth_headers(
             ws_url.replace("wss://", "https://"),
             unsigned_headers={
                 "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id,
-                "Upgrade": "websocket",
-                "Connection": "Upgrade",
-                "Sec-WebSocket-Version": "13",
-                "Sec-WebSocket-Key": base64.b64encode(secrets.token_bytes(16)).decode(),
                 "User-Agent": "AgentCoreRuntimeClient/1.0",
             },
+            handshake=True,
         )
         self.logger.info("✓ WebSocket connection credentials generated (Session: %s)", session_id)
         return ws_url, headers
@@ -422,24 +512,17 @@ class AgentCoreRuntimeClient:
         # Build WebSocket URL
         ws_url = self._build_websocket_url(runtime_arn, endpoint_name)
 
-        # Convert wss:// to https:// to get host
-        https_url = ws_url.replace("wss://", "https://")
-        parsed = urlparse(https_url)
+        from .auth import OAuthAuth
 
-        # Generate WebSocket key
-        ws_key = base64.b64encode(secrets.token_bytes(16)).decode()
-
-        # Build OAuth headers
-        headers = {
-            "Authorization": f"Bearer {bearer_token}",
-            "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id,
-            "Host": parsed.netloc,
-            "Connection": "Upgrade",
-            "Upgrade": "websocket",
-            "Sec-WebSocket-Key": ws_key,
-            "Sec-WebSocket-Version": "13",
-            "User-Agent": "OAuth-WebSocket-Client/1.0",
-        }
+        headers = self._websocket_auth_headers(
+            ws_url.replace("wss://", "https://"),
+            auth=OAuthAuth(bearer_token=bearer_token),
+            unsigned_headers={
+                "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id,
+                "User-Agent": "OAuth-WebSocket-Client/1.0",
+            },
+            handshake=True,
+        )
 
         self.logger.info("✓ OAuth WebSocket connection credentials generated (Session: %s)", session_id)
         self.logger.debug("Bearer token length: %d characters", len(bearer_token))
@@ -773,6 +856,55 @@ class AgentCoreRuntimeClient:
             endpoint_name=endpoint_name,
             auth=auth,
             reconnect_config=reconnect_config,
+        )
+
+    # Session endpoint URL
+    # -------------------------------------------------------------------------
+    def session_endpoint_client(
+        self,
+        session_url: str,
+        auth: "AuthMode" = "sigv4",
+    ) -> "SessionEndpointClient":
+        """Return a client for one session's Session endpoint URL.
+
+        A runtime created with ``allowedPorts`` returns a session URL on the
+        InvokeAgentRuntime response. Requests to it reach any path, with any HTTP
+        method, on the allowed ports. The client sends those requests with ``request``,
+        returns signed headers for your own HTTP or WebSocket client with ``sign`` and
+        ``sign_websocket``, and opens a local endpoint for a browser with
+        ``open_local_endpoint``.
+
+        Args:
+            session_url: The session URL. ``session_endpoint_url(response)`` reads it from
+                the modeled ``sessionEndpointUrl`` member or the response header.
+            auth: The same ``AuthMode`` as ``open_shell``: ``"sigv4"`` (default) or
+                ``OAuthAuth(bearer_token=...)``. ``PresignedAuth`` is not accepted.
+
+        Returns:
+            A ``SessionEndpointClient`` bound to this client's Region, credentials and
+            user-agent.
+
+        Raises:
+            InvalidSessionEndpointError: If the URL does not resolve to an AWS host.
+
+        Example:
+            from bedrock_agentcore.runtime import session_endpoint_url
+
+            response = client.invoke_agent_runtime(...)
+            endpoint = client.session_endpoint_client(session_endpoint_url(response))
+            status = endpoint.request("GET", "/status", port=8081)
+            with endpoint.open_local_endpoint(port=8090) as local:
+                print("Open", local.url)
+        """
+        from .session_endpoint import SessionEndpointClient
+
+        return SessionEndpointClient(
+            url=session_url,
+            region=self.region,
+            session=self.session,
+            integration_source=self.integration_source,
+            client=self,
+            auth=auth,
         )
 
     # *_and_wait methods

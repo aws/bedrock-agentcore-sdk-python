@@ -12,19 +12,22 @@ import json
 import logging
 import os
 import queue
+import socket
 import threading
 import time
 import uuid
-from collections.abc import Sequence
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, NamedTuple, Optional
 
+import uvicorn
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.responses import JSONResponse, Response, StreamingResponse
-from starlette.routing import Route, WebSocketRoute
-from starlette.types import Lifespan
+from starlette.routing import BaseRoute, Route, Router, WebSocketRoute
+from starlette.types import ASGIApp, Lifespan, Receive, Scope, Send
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from ..config_bundle.baggage import _extract_baggage, _parse_config_bundle_baggage
@@ -46,7 +49,10 @@ from .models import (
     TASK_ACTION_FORCE_HEALTHY,
     TASK_ACTION_JOB_STATUS,
     TASK_ACTION_PING_STATUS,
+    WARMUP_TYPE_HEADER,
+    HookConfig,
     PingStatus,
+    WarmupType,
     is_forwardable_header,
 )
 from .tracing import _ensure_baggage_processor_registered
@@ -111,6 +117,24 @@ def _is_async_gen_callable(obj: Any) -> bool:
     return inspect.isasyncgenfunction(obj) or (callable(obj) and inspect.isasyncgenfunction(obj.__call__))
 
 
+def _is_generator_callable(obj: Any) -> bool:
+    """Check if obj is a generator or async generator function, unwrapping functools.partial.
+
+    A callable object counts when its ``__call__`` is one.
+    """
+    while isinstance(obj, functools.partial):
+        obj = obj.func
+    obj = obj.__call__ if callable(obj) and not inspect.isroutine(obj) else obj
+    return inspect.isgeneratorfunction(obj) or inspect.isasyncgenfunction(obj)
+
+
+def _callable_name(obj: Any) -> str:
+    """Name a callable for error messages, unwrapping functools.partial."""
+    while isinstance(obj, functools.partial):
+        obj = obj.func
+    return getattr(obj, "__qualname__", None) or type(obj).__qualname__
+
+
 def _restore_context(ctx: contextvars.Context) -> None:
     """Restore context variables from a snapshot (Django asgiref pattern)."""
     for var, value in ctx.items():
@@ -155,6 +179,67 @@ class RequestContextFormatter(logging.Formatter):
         return json.dumps(log_entry, ensure_ascii=False)
 
 
+def _add_route(route: Route, routes: list[BaseRoute], where: str = "by the app") -> None:
+    """Append route to routes, raising ValueError if one of its (method, path) pairs is already served.
+
+    Only HTTP routes count: a WebSocketRoute serves WebSocket connections (a GET upgrade), never a POST.
+    ``where`` names the routes in the error, e.g. ``"on port 9000"``.
+    """
+    served = {(method, r.path) for r in routes if isinstance(r, Route) for method in r.methods or ()}
+    clashes = sorted({(method, route.path) for method in route.methods or ()} & served)
+    if clashes:
+        raise ValueError(f"Route {', '.join(m for m, _ in clashes)} {route.path} is already served {where}")
+    routes.append(route)
+
+
+_HOOK_HOST = "127.0.0.1"  # the runtime calls hooks on loopback
+_HOOK_PORTS_NEED_RUN = (
+    "Hook ports are only served by app.run(); start the agent with app.run(), or leave HookConfig.port unset"
+)
+
+
+class _HookPortServer(uvicorn.Server):
+    """Serves one hook port on the main server's event loop, started and stopped by the app's lifespan."""
+
+    @contextlib.contextmanager
+    def capture_signals(self) -> Iterator[None]:
+        """Leave SIGINT and SIGTERM to the main server; its lifespan shutdown stops this server."""
+        yield
+
+
+class _RunningHookServer(NamedTuple):
+    """A hook port's server and the task serving it."""
+
+    server: _HookPortServer
+    task: asyncio.Task
+
+
+def _bind_hook_socket(port: int) -> socket.socket:
+    """Bind a hook port's socket on loopback, raising a RuntimeError that names the port if it can't be bound."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((_HOOK_HOST, port))
+    except OSError as e:
+        sock.close()
+        raise RuntimeError(
+            f"Can't serve the hook on HookConfig.port {port}: binding {_HOOK_HOST}:{port} failed: {e.strerror or e}"
+        ) from e
+    sock.set_inheritable(True)
+    return sock
+
+
+@dataclass
+class _Hook:
+    """One lifecycle hook: where it's served, its handlers, and the lock that keeps its calls from overlapping."""
+
+    config: HookConfig
+    handlers: Dict[Any, Callable] = field(default_factory=dict)  # warmup: WarmupType -> handler
+    # One lock per hook, so its calls never overlap. A waiting call awaits the lock rather than
+    # blocking, so the server keeps answering /ping.
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)  # used only by this hook's route
+
+
 class BedrockAgentCoreApp(Starlette):
     """Bedrock AgentCore application class that extends Starlette for AI agent deployment."""
 
@@ -163,13 +248,27 @@ class BedrockAgentCoreApp(Starlette):
         debug: bool = False,
         lifespan: Optional[Lifespan] = None,
         middleware: Sequence[Middleware] | None = None,
+        *,
+        warmup_hook: Optional[HookConfig] = None,
     ):
         """Initialize Bedrock AgentCore application.
 
         Args:
             debug: Enable debug actions for task management (default: False)
-            lifespan: Optional lifespan context manager for startup/shutdown
-            middleware: Optional sequence of Starlette Middleware objects (or Middleware(...) entries)
+            lifespan: Optional lifespan for startup/shutdown, preferably an async context manager factory
+                (``@contextlib.asynccontextmanager``); any style Starlette accepts works. When a hook has a
+                ``port``, it runs nested inside the app's own lifespan, which starts the hook servers before
+                it and stops them after it.
+            middleware: Optional sequence of Starlette Middleware objects (or Middleware(...) entries). They
+                apply to the serving port, not to a hook served on its own port.
+            warmup_hook: Where to serve the build warmup hook (``POST``), registered with ``@app.warmup``.
+                It's served on ``warmup_hook.port`` when set, otherwise on the serving port. A separate port
+                needs ``app.run()``: started another way, the app fails its startup, or answers 503 if the
+                lifespan is off. ``None`` (the default) adds no warmup route.
+
+        Raises:
+            ValueError: If ``warmup_hook.path`` clashes with an existing ``POST`` route on its port, such as
+                ``/invocations`` on the serving port.
         """
         self.handlers: Dict[str, Callable] = {}
         self._ping_handler: Optional[Callable] = None
@@ -181,6 +280,15 @@ class BedrockAgentCoreApp(Starlette):
         self._worker_loop: Optional[asyncio.AbstractEventLoop] = None
         self._worker_thread: Optional[threading.Thread] = None
         self._worker_loop_lock: threading.Lock = threading.Lock()
+        self._hooks: Dict[str, _Hook] = {}
+        if warmup_hook is not None:
+            self._hooks["warmup"] = _Hook(warmup_hook)
+        self.warmup_hook = warmup_hook
+        # Routes of hooks with their own port, by port. app.run() serves each port with its own small app,
+        # except the serving port, whose routes it moves onto this app.
+        self._hook_port_routes: Dict[int, list[BaseRoute]] = {}
+        self._started_by_run = False  # set by run(); hook ports are only served then
+        self._hook_servers_running = False
 
         # Config bundle client — created lazily on first use.
         # _resolve_bundle_config is wrapped with lru_cache(maxsize=30), keyed by
@@ -192,11 +300,15 @@ class BedrockAgentCoreApp(Starlette):
             self._resolve_bundle_config
         )
 
-        routes = [
+        routes: list[BaseRoute] = [
             Route("/invocations", self._handle_invocation, methods=["POST"]),
             Route("/ping", self._handle_ping, methods=["GET"]),
             WebSocketRoute("/ws", self._handle_websocket),
         ]
+        if warmup_hook is not None:
+            self._add_hook_route(warmup_hook, Route(warmup_hook.path, self._handle_warmup, methods=["POST"]), routes)
+        if self._hook_port_routes:
+            lifespan = self._lifespan_with_hook_servers(lifespan)
         super().__init__(routes=routes, lifespan=lifespan, middleware=middleware)
         self.debug = debug  # Set after super().__init__ to avoid override
 
@@ -212,6 +324,102 @@ class BedrockAgentCoreApp(Starlette):
         # In the managed runtime ADOT sets up the TracerProvider before __init__ runs,
         # so this call lands on the real provider rather than the no-op default.
         _ensure_baggage_processor_registered()
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Serve the app, or answer 503 if a hook has its own port but the hook servers aren't running.
+
+        That happens when the server skips the app's lifespan (e.g. ``uvicorn agent:app --lifespan off``),
+        which is what starts them.
+        """
+        if scope["type"] == "http" and self._hook_port_routes and not self._hook_servers_running:
+            await JSONResponse({"error": _HOOK_PORTS_NEED_RUN}, status_code=503)(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+    def _add_hook_route(self, config: HookConfig, route: Route, main_routes: list[BaseRoute]) -> None:
+        """Add a hook's route to the main app's routes, or, if the hook has a port, to that port's routes.
+
+        Either way it's checked against the routes already served there. A hook on a port that turns out to
+        be the serving port is checked against the main routes by ``run()``, which moves it there.
+        """
+        if config.port is None:
+            _add_route(route, main_routes)
+            return
+        _add_route(route, self._hook_port_routes.setdefault(config.port, []), where=f"on port {config.port}")
+
+    def _lifespan_with_hook_servers(self, user_lifespan: Optional[Lifespan]) -> Lifespan:
+        """Wrap the user's lifespan in one that starts the hook servers before it and stops them after it."""
+        # Starlette's Router turns every lifespan style it accepts into an async context manager factory.
+        user_context = None if user_lifespan is None else Router(lifespan=user_lifespan).lifespan_context
+
+        @contextlib.asynccontextmanager
+        async def lifespan(app: ASGIApp):
+            # Raising here makes Starlette report lifespan.startup.failed, so the server exits.
+            if not self._started_by_run:
+                raise RuntimeError(_HOOK_PORTS_NEED_RUN)
+            hook_servers = await self._start_hook_servers()
+            try:
+                if user_context is None:
+                    yield None
+                else:
+                    async with user_context(app) as state:
+                        yield state
+            finally:
+                await self._stop_hook_servers(hook_servers)
+
+        return lifespan
+
+    async def _start_hook_servers(self) -> list[_RunningHookServer]:
+        """Start one server per hook port on this event loop, and return once every hook port listens.
+
+        The lifespan runs before the main server binds the serving port, so hook ports listen first.
+        """
+        sockets: list[socket.socket] = []
+        try:
+            for port in self._hook_port_routes:
+                sockets.append(_bind_hook_socket(port))
+        except Exception:
+            for sock in sockets:
+                sock.close()
+            raise
+
+        hook_servers: list[_RunningHookServer] = []
+        for (port, routes), sock in zip(self._hook_port_routes.items(), sockets, strict=True):
+            config = uvicorn.Config(
+                Starlette(routes=routes),
+                host=_HOOK_HOST,
+                port=port,
+                lifespan="off",
+                log_config=None,  # keep the main server's logging config
+                access_log=True,  # uvicorn.access is set up (or silenced) by the main server
+            )
+            server = _HookPortServer(config)
+            hook_servers.append(_RunningHookServer(server, asyncio.create_task(server.serve(sockets=[sock]))))
+
+        while not all(hook_server.server.started for hook_server in hook_servers):
+            if any(hook_server.task.done() for hook_server in hook_servers):
+                await self._stop_hook_servers(hook_servers)
+                for sock in sockets:
+                    sock.close()
+                raise RuntimeError(f"A hook server failed to start on ports {list(self._hook_port_routes)}")
+            await asyncio.sleep(0.01)
+        self._hook_servers_running = True
+        for port, routes in self._hook_port_routes.items():
+            paths = ", ".join(f"POST {route.path}" for route in routes if isinstance(route, Route))
+            self.logger.info("Hook server listening on http://%s:%d (%s)", _HOOK_HOST, port, paths)
+        return hook_servers
+
+    async def _stop_hook_servers(self, hook_servers: list[_RunningHookServer]) -> None:
+        """Stop the hook servers and wait for them to finish their in-flight requests."""
+        self._hook_servers_running = False
+        for hook_server in hook_servers:
+            hook_server.server.should_exit = True
+        results = await asyncio.gather(*(hook_server.task for hook_server in hook_servers), return_exceptions=True)
+        for result in results:
+            if isinstance(result, BaseException):
+                self.logger.error("Hook server failed: %r", result)
+        if hook_servers:
+            self.logger.info("Hook servers stopped")
 
     def entrypoint(self, func: Callable) -> Callable:
         """Decorator to register a function as the main entrypoint.
@@ -261,6 +469,64 @@ class BedrockAgentCoreApp(Starlette):
         """
         self._websocket_handler = func
         return func
+
+    def warmup(self, type: WarmupType | str) -> Callable[[Callable], Callable]:
+        """Decorator to register a build warmup handler for one warmup type.
+
+        AgentCore Runtime calls the build warmup hook (``POST`` to ``warmup_hook.path``) twice while it prepares
+        the agent during ``CreateAgentRuntime`` and ``UpdateAgentRuntime``: first ``memory``, then ``disk``.
+        Register a handler for zero, one or both types. A type without a handler is answered with 200, so
+        it has nothing to do, and so is a type this SDK version doesn't know; only a missing or empty type
+        header is answered with 400. The handler takes no arguments and may be sync or async, but not a
+        generator (no ``yield``): sync handlers run in a worker thread and async handlers on a separate event
+        loop, so the server keeps answering ``/ping`` while they run. The response is sent after the handler
+        returns. An exception in the handler returns 500, which fails the create or update, and so does a
+        handler that returns a generator or an awaitable it didn't await. Handlers never run concurrently with
+        each other in one process.
+
+        See https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-hooks.html
+
+        Args:
+            type: The warmup type to handle, a ``WarmupType`` or its string value (``"memory"`` or ``"disk"``)
+
+        Returns:
+            A decorator that registers the function and returns it unchanged. The decorator raises
+            ``ValueError`` if the function is a generator function (``def`` or ``async def`` with ``yield``,
+            also through ``functools.partial`` or a callable object's ``__call__``), since its body would
+            never run.
+
+        Raises:
+            ValueError: If the app has no ``warmup_hook``, ``type`` isn't a valid warmup type, or a handler is
+                already registered for it.
+
+        Example:
+            app = BedrockAgentCoreApp(warmup_hook=HookConfig(path="/warmup"))
+
+            @app.warmup(WarmupType.MEMORY)
+            def load_model():
+                global MODEL
+                MODEL = load("/opt/model.bin")
+        """
+        if "warmup" not in self._hooks:
+            raise ValueError(
+                "@app.warmup needs BedrockAgentCoreApp(warmup_hook=HookConfig(path=...)) matching "
+                "hooksConfiguration.build.warmup.action.httpPost.path"
+            )
+        warmup_type = WarmupType(type)
+        handlers = self._hooks["warmup"].handlers
+        if warmup_type in handlers:
+            raise ValueError(f"A {warmup_type.value} warmup handler is already registered")
+
+        def register(func: Callable) -> Callable:
+            if _is_generator_callable(func):
+                raise ValueError(
+                    f"warmup handler {_callable_name(func)} is a generator function: its body would never run. "
+                    "Remove the `yield`."
+                )
+            handlers[warmup_type] = func
+            return func
+
+        return register
 
     def async_task(self, func: Callable) -> Callable:
         """Decorator to track async tasks for ping status.
@@ -623,6 +889,46 @@ class BedrockAgentCoreApp(Starlette):
             self.logger.exception("Ping endpoint failed")
             return JSONResponse({"status": PingStatus.HEALTHY.value, "time_of_last_update": int(time.time())})
 
+    async def _handle_warmup(self, request):
+        raw_type = request.headers.get(WARMUP_TYPE_HEADER, "").strip().lower()
+        if not raw_type:
+            self.logger.warning("Warmup request without a %s header", WARMUP_TYPE_HEADER)
+            return JSONResponse({"error": f"{WARMUP_TYPE_HEADER} header is missing or empty"}, status_code=400)
+        try:
+            warmup_type = WarmupType(raw_type)
+        except ValueError:
+            # A type this SDK version doesn't know, perhaps added by the service later: there's nothing to do,
+            # and failing it would fail the create or update of every agent on this version.
+            self.logger.info("Warmup (%s): unknown type, nothing to do", raw_type)
+            return JSONResponse({"status": "ok", "type": raw_type, "result": "skipped"})
+
+        hook = self._hooks["warmup"]
+        handler = hook.handlers.get(warmup_type)
+        if handler is None:
+            self.logger.info("Warmup (%s): no handler registered, nothing to do", warmup_type.value)
+            return JSONResponse({"status": "ok", "type": warmup_type.value, "result": "skipped"})
+
+        async with hook.lock:
+            start_time = time.time()
+            try:
+                result = await self._dispatch_handler(handler, ())
+                if inspect.isgenerator(result) or inspect.isasyncgen(result):
+                    # Never iterated, so the body never ran; close it so it doesn't linger.
+                    if inspect.isgenerator(result):
+                        result.close()
+                    else:
+                        await result.aclose()
+                    raise TypeError("warmup handler returned a generator, so its body never ran; remove the `yield`")
+                if inspect.isawaitable(result):
+                    if inspect.iscoroutine(result):
+                        result.close()  # never awaited on purpose; close it so Python doesn't warn
+                    raise TypeError("warmup handler returned an awaitable; declare it with async def")
+            except Exception as e:
+                self.logger.exception("Warmup (%s) failed (%.3fs)", warmup_type.value, time.time() - start_time)
+                return JSONResponse({"error": str(e), "type": warmup_type.value}, status_code=500)
+            self.logger.info("Warmup (%s) completed (%.3fs)", warmup_type.value, time.time() - start_time)
+        return JSONResponse({"status": "ok", "type": warmup_type.value, "result": "completed"})
+
     async def _handle_websocket(self, websocket: WebSocket):
         """Handle WebSocket connections."""
         request_context = self._build_request_context(websocket)
@@ -649,14 +955,20 @@ class BedrockAgentCoreApp(Starlette):
     def run(self, port: int = 8080, host: Optional[str] = None, **kwargs):
         """Start the Bedrock AgentCore server.
 
+        A hook with its own ``HookConfig.port`` is served on that port by a separate server in this process,
+        started from the app's lifespan before the serving port opens, and stopped after the main server
+        shuts down. A hook whose port equals ``port`` is served on the main server.
+
         Args:
             port: Port to serve on, defaults to 8080
-            host: Host to bind to, auto-detected if None
+            host: Host to bind to, auto-detected if None. Hook ports bind to 127.0.0.1 only.
             **kwargs: Additional arguments passed to uvicorn.run()
+
+        Raises:
+            ValueError: If a hook has a ``port`` and ``lifespan="off"`` is passed, since the lifespan starts the
+                hook servers, or if a hook on ``port`` clashes with a route of the main server.
         """
         import os
-
-        import uvicorn
 
         if host is None:
             if os.path.exists("/.dockerenv") or os.environ.get("DOCKER_CONTAINER"):
@@ -672,6 +984,20 @@ class BedrockAgentCoreApp(Starlette):
             "log_level": "info" if self.debug else "warning",
         }
         uvicorn_params.update(kwargs)
+
+        if (
+            any(hook.config.port is not None for hook in self._hooks.values())
+            and uvicorn_params.get("lifespan") == "off"
+        ):
+            raise ValueError(
+                "app.run(lifespan=\"off\") can't serve HookConfig.port: the app's lifespan starts the hook servers"
+            )
+        # The serving port is only known here, so a hook set to that port couldn't be placed in __init__.
+        # Serve it from the main app (a second server can't bind the same port); this is its first check
+        # against the main routes.
+        for route in self._hook_port_routes.pop(port, []):
+            _add_route(route, self.router.routes)
+        self._started_by_run = True
 
         uvicorn.run(self, **uvicorn_params)
 
@@ -806,7 +1132,12 @@ class BedrockAgentCoreApp(Starlette):
             worker_loop.call_soon_threadsafe(_cancel)
 
     async def _invoke_handler(self, handler: Callable, request_context: Any, takes_context: bool, payload: Any) -> Any:
-        """Dispatch handler execution based on handler type.
+        """Build the handler arguments, ``(payload[, context])``, and call it through ``_dispatch_handler``."""
+        args = (payload, request_context) if takes_context else (payload,)
+        return await self._dispatch_handler(handler, args)
+
+    async def _dispatch_handler(self, handler: Callable, args: tuple) -> Any:
+        """Call ``handler(*args)`` based on the handler type.
 
         - Async generator functions: bridged through the worker loop as a sync generator
         - Regular async functions: run on the dedicated worker event loop
@@ -816,7 +1147,6 @@ class BedrockAgentCoreApp(Starlette):
         regardless of whether handlers contain blocking operations.
         """
         try:
-            args = (payload, request_context) if takes_context else (payload,)
             ctx = contextvars.copy_context()
 
             if _is_async_gen_callable(handler):

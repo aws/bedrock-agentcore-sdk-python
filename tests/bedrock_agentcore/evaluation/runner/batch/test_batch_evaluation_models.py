@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from bedrock_agentcore.evaluation.runner.batch.batch_evaluation_models import (
+    BatchEvaluationSummary,
     CloudWatchDataSourceConfig,
     OnlineEvaluationDataSourceConfig,
 )
@@ -56,3 +57,28 @@ def test_online_to_data_source_config_omits_time_range_when_disabled():
 def test_online_config_arn_must_be_non_empty():
     with pytest.raises(ValidationError):
         OnlineEvaluationDataSourceConfig(online_evaluation_config_arn="")
+
+
+def test_evaluator_summaries_keep_the_dimension_of_each_multi_dimension_summary():
+    summary = BatchEvaluationSummary.model_validate(
+        {
+            "evaluatorSummaries": [
+                {
+                    "evaluatorId": "SupportQuality-a1b2c3",
+                    "evaluationDimensionName": "Accuracy",
+                    "statistics": {"averageScore": 4.2},
+                },
+                {"evaluatorId": "SupportQuality-a1b2c3", "evaluationDimensionName": "Tone", "statistics": {}},
+                {"evaluatorId": "SupportQuality-a1b2c3", "totalEvaluated": 0, "totalFailed": 1},
+                {"evaluatorId": "Builtin.Helpfulness", "statistics": {"averageScore": 0.8}},
+            ]
+        }
+    )
+
+    assert [(s.evaluator_id, s.evaluation_dimension_name) for s in summary.evaluator_summaries] == [
+        ("SupportQuality-a1b2c3", "Accuracy"),
+        ("SupportQuality-a1b2c3", "Tone"),
+        ("SupportQuality-a1b2c3", None),
+        ("Builtin.Helpfulness", None),
+    ]
+    assert summary.evaluator_summaries[2].total_failed == 1

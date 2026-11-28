@@ -77,7 +77,6 @@ Once your payment resources are ready, wire up the plugin:
 ```python
 import os
 from strands import Agent
-from strands_tools import http_request
 from bedrock_agentcore.payments.integrations.strands import (
     AgentCorePaymentsPlugin,
     AgentCorePaymentsPluginConfig,
@@ -93,7 +92,6 @@ plugin = AgentCorePaymentsPlugin(config=AgentCorePaymentsPluginConfig(
 
 agent = Agent(
     system_prompt="You are a helpful assistant that can access paid APIs.",
-    tools=[http_request],
     plugins=[plugin],
 )
 
@@ -257,7 +255,6 @@ config = AgentCorePaymentsPluginConfig(
 plugin = AgentCorePaymentsPlugin(config=config)
 agent = Agent(
     system_prompt="You are a helpful assistant.",
-    tools=[http_request],
     plugins=[plugin],
 )
 
@@ -383,7 +380,6 @@ config = AgentCorePaymentsPluginConfig(
 plugin = AgentCorePaymentsPlugin(config=config)
 agent = Agent(
     system_prompt="You are a helpful assistant that can access paid APIs.",
-    tools=[http_request],
     plugins=[plugin],
 )
 ```
@@ -420,7 +416,6 @@ config = AgentCorePaymentsPluginConfig(
 plugin = AgentCorePaymentsPlugin(config=config)
 agent = Agent(
     system_prompt="You are a helpful assistant that can access paid APIs.",
-    tools=[http_request],
     plugins=[plugin],
 )
 

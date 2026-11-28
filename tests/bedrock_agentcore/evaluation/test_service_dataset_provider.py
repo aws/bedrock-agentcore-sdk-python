@@ -25,14 +25,11 @@ def _jsonl(*examples):
 
 
 class TestDatasetManagementServiceProvider:
-    def _run_provider(
-        self, jsonl_content, dataset_id="ds-123", version_id=None, schema_type="AGENTCORE_EVALUATION_PREDEFINED_V1"
-    ):
+    def _run_provider(self, jsonl_content, dataset_id="ds-123", version_id=None):
         mock_client = MagicMock()
         mock_client.get_dataset.return_value = {
             "datasetId": dataset_id,
             "status": "ACTIVE",
-            "schemaType": schema_type,
             "downloadUrl": "https://example.com/dataset.jsonl",
         }
 
@@ -97,9 +94,7 @@ class TestDatasetManagementServiceProvider:
             },
         )
 
-        dataset, _, _ = self._run_provider(
-            content, dataset_id="ds-456", schema_type="AGENTCORE_EVALUATION_SIMULATED_V1"
-        )
+        dataset, _, _ = self._run_provider(content, dataset_id="ds-456")
 
         assert isinstance(dataset, Dataset)
         assert len(dataset.scenarios) == 1
@@ -130,7 +125,6 @@ class TestDatasetManagementServiceProvider:
         mock_client.get_dataset.return_value = {
             "datasetId": "ds-123",
             "status": "CREATING",
-            "schemaType": "AGENTCORE_EVALUATION_PREDEFINED_V1",
         }
 
         provider = DatasetManagementServiceProvider(dataset_id="ds-123", client=mock_client)
@@ -142,7 +136,6 @@ class TestDatasetManagementServiceProvider:
         mock_client.get_dataset.return_value = {
             "datasetId": "ds-empty",
             "status": "ACTIVE",
-            "schemaType": "AGENTCORE_EVALUATION_PREDEFINED_V1",
             "downloadUrl": "https://example.com/dataset.jsonl",
         }
 
@@ -156,18 +149,46 @@ class TestDatasetManagementServiceProvider:
             with pytest.raises(ValueError, match="scenarios must not be empty"):
                 provider.get_dataset()
 
-    def test_unsupported_schema_type_raises(self):
-        mock_client = MagicMock()
-        mock_client.get_dataset.return_value = {
-            "datasetId": "ds-123",
-            "status": "ACTIVE",
-            "schemaType": "RAGAS_V1",
-            "downloadUrl": "https://example.com/dataset.jsonl",
-        }
+    def test_input_only_example_is_single_turn(self):
+        content = _jsonl({"scenario_id": "s1", "input": "Hi", "assertions": ["a"]})
+        dataset, _, _ = self._run_provider(content)
+        scenario = dataset.scenarios[0]
+        assert isinstance(scenario, PredefinedScenario)
+        assert [t.input for t in scenario.turns] == ["Hi"]
+        assert scenario.assertions == ["a"]
 
-        provider = DatasetManagementServiceProvider(dataset_id="ds-123", client=mock_client)
-        with pytest.raises(ValueError, match="not supported by the evaluation runners"):
-            provider.get_dataset()
+    def test_type_inferred_from_fields_and_extra_fields_ignored(self):
+        content = _jsonl(
+            {"scenario_id": "fixed", "turns": [{"input": "Hi"}], "braintrust_tags": ["refunds"]},
+            {
+                "scenario_id": "dynamic",
+                "actor_profile": {"context": "c", "goal": "g"},
+                "input": "Where is my refund?",
+            },
+        )
+        dataset, _, _ = self._run_provider(content)
+        assert [type(s) for s in dataset.scenarios] == [PredefinedScenario, SimulatedScenario]
+
+    def test_simulated_example_without_input(self):
+        content = _jsonl({"scenario_id": "s1", "actor_profile": {"context": "c", "goal": "g"}})
+        dataset, _, _ = self._run_provider(content)
+        scenario = dataset.scenarios[0]
+        assert isinstance(scenario, SimulatedScenario)
+        assert scenario.input is None
+
+    @pytest.mark.parametrize(
+        "example, match",
+        [
+            (
+                {"scenario_id": "s1", "turns": [{"input": "Hi"}], "actor_profile": {"context": "c", "goal": "g"}},
+                "both 'turns' and 'actor_profile'",
+            ),
+            ({"scenario_id": "s1"}, "none of 'turns', 'actor_profile' or 'input'"),
+        ],
+    )
+    def test_ambiguous_example_raises(self, example, match):
+        with pytest.raises(ValueError, match=match):
+            self._run_provider(_jsonl(example))
 
     def test_missing_requests_raises_helpful_import_error(self):
         import sys
@@ -176,7 +197,6 @@ class TestDatasetManagementServiceProvider:
         mock_client.get_dataset.return_value = {
             "datasetId": "ds-123",
             "status": "ACTIVE",
-            "schemaType": "AGENTCORE_EVALUATION_PREDEFINED_V1",
             "downloadUrl": "https://example.com/dataset.jsonl",
         }
 
@@ -194,7 +214,6 @@ class TestDatasetManagementServiceProvider:
         mock_client.get_dataset.return_value = {
             "datasetId": "ds-123",
             "status": "ACTIVE",
-            "schemaType": "AGENTCORE_EVALUATION_PREDEFINED_V1",
             "downloadUrl": "https://example.com/dataset.jsonl",
         }
 

@@ -1,5 +1,52 @@
 # Changelog
 
+## [1.28.0] - 2026-11-25
+
+### Other Changes
+- feat(runtime): add @app.warmup decorator for build warmup lifecycle hooks (#754) (62f8fc6)
+- ci: bump open-PR digest workflow pin to list every open PR (#753) (140321a)
+
+## [1.27.0] - 2026-11-20
+
+### Other Changes
+- feat(evaluation): adopt GA dataset API (no schemaType, inferred scenario type) (#748) (f3eb006)
+- feat(eval): add dataset generation APIs to DP allowlist (#747) (01d79d4)
+
+## [1.26.1] - 2026-11-18
+
+### Other Changes
+- feat(evaluation): keep the dimension on batch evaluator summaries (#744) (afcaa98)
+
+## [1.26.0] - 2026-11-10
+
+### Other Changes
+- feat(tools): call the Web Search API (InvokeWebSearch) from WebSearchClient (#738) (62dae87)
+- fix(payments): use plugin HTTP tool in Strands integration test (#736) (8900cb5)
+
+## [1.25.4] - 2026-11-06
+
+### Other Changes
+- fix(memory): preserve guardrail redactions (#735) (1da7aab)
+
+## [1.25.3] - 2026-11-03
+
+### Other Changes
+- revert(runtime): flush tracing spans after invocations (#721) (#731) (62c3c73)
+
+## [1.25.2] - 2026-10-30
+
+### Other Changes
+- feat(runtime): add session endpoint client and local endpoint (#724) (f885dc8)
+- fix(a2a): run follow-up task messages in their own request contextvars (#693) (dcca518)
+- fix(runtime): flush tracing spans after invocations (#721) (343da26)
+- fix(memory): encode bytes in OpenAI converter reasoning blocks (#718) (a6baec6)
+
+## [1.25.1] - 2026-10-27
+
+### Other Changes
+- fix(evaluation): isolate custom simulation template rendering (#714) (813ab45)
+- ci: run Python SDK CI on CodeBuild runners (#712) (969d9eb)
+
 ## [1.25.0] - 2026-10-23
 
 ### Other Changes

@@ -8,7 +8,7 @@ import json
 import logging
 from typing import Any, Tuple
 
-from strands.types.session import SessionMessage
+from strands.types.session import SessionMessage, decode_bytes_values, encode_bytes_values
 
 from .protocol import exceeds_conversational_limit
 
@@ -45,7 +45,7 @@ def _bedrock_to_openai(message: dict) -> dict:
         elif "reasoningContent" in item:
             # OpenAI message shape does not have a stable multi-turn reasoning block field.
             # Preserve original block(s) in storage-only extension field for lossless restore.
-            reasoning_blocks.append(item)
+            reasoning_blocks.append(encode_bytes_values(item))
         elif "toolUse" in item:
             tu = item["toolUse"]
             tool_calls.append(
@@ -120,7 +120,7 @@ def _openai_to_bedrock(openai_msg: dict) -> dict:
 
     for rc in openai_msg.get("_strands_reasoning_content", []):
         if isinstance(rc, dict) and "reasoningContent" in rc:
-            reasoning_items.append(rc)
+            reasoning_items.append(decode_bytes_values(rc))
 
     bedrock_role = "assistant" if role == "assistant" else "user"
 

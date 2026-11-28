@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   call:
-    uses: aws/agentcore-devx-devtools/.github/workflows/reusable-slack-open-prs-notification.yml@458c0a684af0f9e3a013ec05cd23851def4f9cab
+    uses: aws/agentcore-devx-devtools/.github/workflows/reusable-slack-open-prs-notification.yml@db12e119f4802fc59da3f8e48cc02c43b225d71d
     with:
       runner: ubuntu
     secrets: inherit
