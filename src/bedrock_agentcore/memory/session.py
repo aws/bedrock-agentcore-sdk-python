@@ -398,6 +398,9 @@ class MemorySessionManager:
                     actorId=actor_id,
                     sessionId=session_id,
                     strategyId=config.strategy_id or "",
+                    # Documented template variable used by every default
+                    # namespace the SDK creates (memory/constants.py).
+                    memoryStrategyId=config.strategy_id or "",
                 )
                 search_query = f"{config.retrieval_query} {user_input}" if config.retrieval_query else user_input
                 # TODO: revisit after full deprecation of namespace fields
